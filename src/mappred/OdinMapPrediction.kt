@@ -407,6 +407,18 @@ object OdinMapPrediction {
             for (t in tiles) exact[t] = true
             exactRoom(g, tiles, names)
         }
+        // the rooms whose size and place are sure, named or not: drawn in full in their type's colour (or the
+        // kinds a dead end can still be), with no text
+        if (exactRooms.value) for (tiles in MapPredictor.certainShapes(p)) {
+            if (tiles.any { known[it] || exact[it] || it in blood }) continue
+            for (t in tiles) exact[t] = true
+            val q = p.raw[tiles[0]]
+            val types = if (tiles.size > 1 || q == null) listOf(-1) else {
+                val room = q.sum()
+                (0 until Cls.COUNT).filter { q[it] >= 0.05f * room }.sortedByDescending { q[it] }.take(3).map { if (it == Cls.NORMAL || it == Cls.BIG) -1 else it }.distinct()
+            }
+            exactFill(g, tiles, types)
+        }
         // the big rooms it's sure of, greyed out at their whole size (likeliest first, never two on one tile)
         val inBig = arrayOfNulls<BigRoom>(W * W)
         val bigAt = bigChance.value / 100f
@@ -504,19 +516,43 @@ object OdinMapPrediction {
      * the secrets if every name that fits has the same count.
      */
     private fun exactRoom(g: GuiGraphicsExtractor, tiles: IntArray, names: List<NamedRoom>) {
-        val best = names.maxBy { it.chance }
-        val type = when (best.name.pool) {
-            MapStats.POOL_PUZZLE -> Cls.PUZZLE
-            MapStats.POOL_TRAP -> Cls.TRAP
-            MapStats.POOL_YELLOW -> Cls.YELLOW
-            MapStats.POOL_BLOOD -> Cls.BLOOD
-            MapStats.POOL_FAIRY -> Cls.FAIRY
-            else -> -1
-        }
-        val color = if (lcm) (if (type < 0) LcmStyle.NORMAL else lcmColor(type)) and 0xFFFFFF or (0xBF shl 24)
-            else Color((if (type < 0) DungeonMap.normalRoomColor else colorOf(type)).rgba, 0.75f).rgba
-        fillTiles(g, tiles, color)
+        // a dead end that can still be more than one kind (its names from more than one pool) shows each kind it can be
+        val byType = names.groupBy { typeOfPool(it.name.pool) }.mapValues { (_, n) -> n.sumOf { it.chance.toDouble() } }
+        val types = byType.filter { it.value >= 0.05 }.entries.sortedByDescending { it.value }.take(3).map { it.key }
+        exactFill(g, tiles, types.ifEmpty { listOf(typeOfPool(names.maxBy { it.chance }.name.pool)) })
         roomText(g, tiles, names)
+    }
+
+    private fun typeOfPool(pool: Int): Int = when (pool) {
+        MapStats.POOL_PUZZLE -> Cls.PUZZLE
+        MapStats.POOL_TRAP -> Cls.TRAP
+        MapStats.POOL_YELLOW -> Cls.YELLOW
+        MapStats.POOL_BLOOD -> Cls.BLOOD
+        MapStats.POOL_FAIRY -> Cls.FAIRY
+        MapStats.POOL_RARE -> Cls.RARE
+        else -> -1
+    }
+
+    /** An exact room's colour for a type (-1: a normal room), a little see-through as nobody has opened it. */
+    private fun exactColor(type: Int): Int =
+        if (lcm) (if (type < 0) LcmStyle.NORMAL else lcmColor(type)) and 0xFFFFFF or (0xBF shl 24)
+        else Color((if (type < 0) DungeonMap.normalRoomColor else colorOf(type)).rgba, 0.75f).rgba
+
+    /**
+     * An exact room's shape in its type's colour; a 1x1 that can still be more than one kind (likeliest first) as a
+     * guess tile in their colours: dtMap's in LCM Style, else side by side as Odin's.
+     */
+    private fun exactFill(g: GuiGraphicsExtractor, tiles: IntArray, types: List<Int>) {
+        if (types.size <= 1 || tiles.size > 1) { fillTiles(g, tiles, exactColor(types.firstOrNull() ?: -1)); return }
+        val x = (tiles[0] % W) * TILE; val y = (tiles[0] / W) * TILE
+        if (lcm) {
+            // dtMap's order: puzzle on the outside, trap, yellow in the middle
+            val order = listOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE, Cls.BLOOD, Cls.FAIRY, -1)
+            LcmStyle.guessTile(g, x, y, types.sortedBy { order.indexOf(it) }.map { exactColor(it) }.toIntArray())
+            return
+        }
+        val part = ROOM / types.size
+        types.forEachIndexed { i, c -> g.fill(x + i * part, y, if (i == types.lastIndex) x + ROOM else x + (i + 1) * part, y + ROOM, exactColor(c)) }
     }
 
     /** The map names the room on tile [t] itself (it's open: [LcmStyle.knownName]). */

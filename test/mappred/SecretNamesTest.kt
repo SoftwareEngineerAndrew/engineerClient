@@ -171,4 +171,46 @@ class SecretNamesTest {
         // every way the names can go adds up to the 30 the named rooms leave
         assertEquals(30.0, names.sumOf { it.chance.toDouble() * it.name.secrets }, 1e-3)
     }
+
+    @Test fun deadEndsOfUnsureKindStillNameTheMap() {
+        // the puzzle at 12 and the yellow at 32 unopened, sure dead ends but 50/50 which is which; the 1x2 at 28-29 sure
+        val v0 = lastRoom(0)
+        val v = MapView(6, 6, 4)
+        var named = 0
+        for (i in v0.kinds.indices) {
+            val t = v0.roomTiles[i]
+            if (t[0] == 12 || t[0] == 32) continue
+            named += MapStats.NAMES.firstOrNull { it.name == v0.names[i] }?.secrets ?: 0
+            assertNotNull(v.addRoom(v0.kinds[i], t, v0.names[i]))
+        }
+        v.closeEdges { a, b -> v0.edge(a, b).takeIf { Edge.isDoor(it) } }
+        v.secretTotals = IntArray(40) { named + it }
+        val raw = arrayOfNulls<FloatArray>(36)
+        for (t in intArrayOf(12, 32)) raw[t] = FloatArray(Cls.COUNT).also { it[Cls.PUZZLE] = 0.5f; it[Cls.YELLOW] = 0.5f }
+        for (t in intArrayOf(28, 29)) raw[t] = FloatArray(Cls.COUNT).also { it[Cls.BIG] = 1f }
+        val p = Prediction(6, 6, raw, emptyList(), 1, 0, bigRooms = listOf(BigRoom(intArrayOf(28, 29), 1f)), raw = raw)
+        val names = assertNotNull(MapPredictor(v, gameProcess = false).certainNames(p))
+        val rooms = names.groupBy { it.tiles.toList() }
+        assertEquals(setOf(listOf(12), listOf(32), listOf(28, 29)), rooms.keys)
+        for ((tiles, ns) in rooms) assertEquals(1.0, ns.sumOf { it.chance.toDouble() }, 1e-4, "room $tiles")
+        // each unsure dead end gets both kinds' names, never a puzzle on both or a yellow on both
+        for (t in listOf(12, 32)) {
+            val byPool = rooms.getValue(listOf(t)).groupBy { it.name.pool }.mapValues { (_, n) -> n.sumOf { it.chance.toDouble() } }
+            assertEquals(setOf(MapStats.POOL_PUZZLE, MapStats.POOL_YELLOW), byPool.keys, "tile $t")
+        }
+        val yellow12 = rooms.getValue(listOf(12)).filter { it.name.pool == MapStats.POOL_YELLOW }.sumOf { it.chance.toDouble() }
+        val puzzle32 = rooms.getValue(listOf(32)).filter { it.name.pool == MapStats.POOL_PUZZLE }.sumOf { it.chance.toDouble() }
+        assertEquals(yellow12, puzzle32, 1e-4)
+    }
+
+    @Test fun certainShapesAreTheRoomsEverySampleAgreesOn() {
+        val raw = arrayOfNulls<FloatArray>(36)
+        raw[12] = FloatArray(Cls.COUNT).also { it[Cls.PUZZLE] = 0.5f; it[Cls.YELLOW] = 0.5f }  // sure 1x1, unsure kind
+        for (t in intArrayOf(28, 29)) raw[t] = FloatArray(Cls.COUNT).also { it[Cls.BIG] = 1f }  // sure 1x2
+        raw[5] = FloatArray(Cls.COUNT).also { it[Cls.PUZZLE] = 0.6f }                         // maybe no room at all
+        for (t in intArrayOf(3, 4)) raw[t] = FloatArray(Cls.COUNT).also { it[Cls.BIG] = 1f }    // big, but not one placement
+        val p = Prediction(6, 6, raw, emptyList(), 1, 0,
+            bigRooms = listOf(BigRoom(intArrayOf(28, 29), 1f), BigRoom(intArrayOf(3, 4), 0.7f)), raw = raw)
+        assertEquals(setOf(listOf(28, 29), listOf(12)), MapPredictor.certainShapes(p).map { it.toList() }.toSet())
+    }
 }
