@@ -176,9 +176,9 @@ object OdinState {
         }
         j.safe("totalSecrets") { it.append(DungeonUtils.totalSecrets) }
         j.safe("totalRooms") { it.append(DungeonUtils.totalRooms) }
-        j.safe("neededSecrets") { it.append(DungeonUtils.neededSecretsAmount) }
-        j.safe("bonus") { it.append(DungeonUtils.getBonusScore) }
-        j.safe("score") { it.append(DungeonUtils.score) }
+        j.safe("neededSecrets") { it.append(com.engineerclient.OdinCompat.neededSecretsAmount()) }
+        j.safe("bonus") { it.append(com.engineerclient.OdinCompat.bonusScore()) }
+        j.safe("score") { it.append(com.engineerclient.OdinCompat.score()) }
         return j.toString()
     }
 
