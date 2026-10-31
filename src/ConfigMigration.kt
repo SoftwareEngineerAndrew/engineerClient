@@ -67,6 +67,7 @@ object ConfigMigration {
      *  - BR Roles' Doorer Kills is its Door Kills: on is Always, off Never.
      *  - Timers' Necron Drop HUD is its Necron DPS (where it was, on or off as it was).
      *  - ADS's Shortbow Cooldown is its Shortbow Shot Cooldown (the wrong default 2 dropped, so it reads 5).
+     *  - ADR's Private Runs is its Unlisted Runs (2026-10-30, ADM 1.0.10).
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -98,6 +99,16 @@ object ConfigMigration {
             val old = ads.remove("Shortbow Cooldown") ?: return@let
             changed = true
             if (!ads.has("Shortbow Shot Cooldown") && old.isJsonPrimitive && old.asDouble != 2.0) ads.add("Shortbow Shot Cooldown", old)
+        }
+
+        // ADR's Private Runs is its Unlisted Runs. The choice comes with it, so the once-per-install site check that puts
+        // it back where the saved choice was already lost (ADR.checkUnlisted) is marked done. The old key goes, so this runs once.
+        module(modules, "ADR")?.let(::settings)?.let { adr ->
+            val old = adr.remove("Private Runs") ?: return@let
+            changed = true
+            if (adr.has("Unlisted Runs")) return@let
+            adr.add("Unlisted Runs", old)
+            adr.addProperty("Unlisted Runs Checked", true)
         }
 
         module(modules, "Random Stuff")?.let(::settings)?.let { rs ->
