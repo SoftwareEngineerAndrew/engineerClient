@@ -7,6 +7,7 @@ import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDepe
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.SpecialColumn
@@ -33,7 +34,7 @@ import net.minecraft.world.entity.player.PlayerSkin
  * LCM Style on Odin's Dungeon Map: the map drawn the way LCM's map, dtMap (github.com/ricedotwho/dtMap), draws
  * its own, in its Legit Mode with its default look, from what Odin's map already knows.
  *
- * - Background: dtMap's translucent black, no outline, sized to the floor's rooms plus 5 on each side.
+ * - Background: dtMap's translucent black, no outline (both changed under LCM Colors), sized to the floor's rooms plus 5 on each side.
  * - Rooms: dtMap's colours (fairy pink, rare gold) unless changed under LCM Colors, drawn tile by tile with
  *   the gaps inside a room filled.
  *   A room nobody has opened shows only where Odin shows it: dark grey, dark red for blood, or the special
@@ -67,6 +68,12 @@ object LcmStyle {
     private val entranceColor = colorSetting("Entrance", 0xFF148500.toInt(), "the entrance")
     private val fairyColor = colorSetting("Fairy", 0xFFF4138B.toInt(), "the fairy room")
     private val rareColor = colorSetting("Rare", 0xFFFFCB59.toInt(), "rare rooms")
+    private val backgroundColor = ColorSetting("LCM Background", Color(0x46000000), true,
+        desc = "LCM Style's colour behind the map (dtMap's translucent black to begin with).").withDependency { style.value && colors.value }
+    private val borderColor = ColorSetting("LCM Border", Color(0x00000000), true,
+        desc = "LCM Style's outline around the map. See-through to begin with, as dtMap has none: raise its alpha to show it.").withDependency { style.value && colors.value }
+    private val borderWidth = NumberSetting("LCM Border Width", 1, 1..5, 1,
+        desc = "How thick LCM Style's outline is, drawn inside the map's edge.").withDependency { style.value && colors.value }
 
     private fun colorSetting(type: String, default: Int, what: String) =
         ColorSetting("LCM $type Room", Color(default), true, desc = "LCM Style's colour for $what.").withDependency { style.value && colors.value }
@@ -78,7 +85,7 @@ object LcmStyle {
     private const val DARKEN = 0.4f
 
     // the room colours (LCM Colors, dtMap's by default) and dtMap's other default colours (C1Map)
-    private const val BACKGROUND = 0x46000000
+    private val BACKGROUND: Int get() = backgroundColor.value.rgba
     val UNOPENED: Int get() = unopenedColor.value.rgba
     val BLOOD: Int get() = bloodColor.value.rgba
     val NORMAL: Int get() = normalColor.value.rgba
@@ -116,7 +123,8 @@ object LcmStyle {
     fun install() {
         DungeonMap.registerSetting(style)
         // right below LCM Style
-        for (s in listOf(colors, unopenedColor, normalColor, puzzleColor, trapColor, yellowColor, bloodColor, entranceColor, fairyColor, rareColor)) DungeonMap.registerSetting(s)
+        for (s in listOf(colors, unopenedColor, normalColor, puzzleColor, trapColor, yellowColor, bloodColor, entranceColor, fairyColor, rareColor,
+            backgroundColor, borderColor, borderWidth)) DungeonMap.registerSetting(s)
     }
 
     /** True while the map HUD is drawn here instead of by Odin (LcmStyleMixin). */
@@ -133,6 +141,7 @@ object LcmStyle {
         g.pose().pushMatrix()
         try {
             g.fill(0, 0, width, height, BACKGROUND)
+            border(g, width, height)
             g.pose().translate(PAD.toFloat(), PAD.toFloat())
             if (example) drawMap(g, exampleRooms, exampleDoors, emptyList(), true)
             else {
@@ -198,6 +207,17 @@ object LcmStyle {
         DungeonMap.bloodRoomColor.rgba, DungeonMap.bloodDoorColor.rgba -> RoomType.BLOOD
         DungeonMap.fairyRoomColor.rgba, DungeonMap.fairyDoorColor.rgba -> RoomType.FAIRY
         else -> RoomType.NORMAL
+    }
+
+    /** The LCM Border outline, inside the map's [width] x [height]; nothing while it's fully see-through. */
+    private fun border(g: GuiGraphicsExtractor, width: Int, height: Int) {
+        val c = borderColor.value.rgba
+        if (c ushr 24 == 0) return
+        val w = borderWidth.value.coerceIn(1, minOf(width, height) / 2)
+        g.fill(0, 0, width, w, c)
+        g.fill(0, height - w, width, height, c)
+        g.fill(0, w, w, height - w, c)
+        g.fill(width - w, w, width, height - w, c)
     }
 
     /** dtMap's darkening: each channel times the multiplier, alpha kept. */
