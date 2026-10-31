@@ -152,8 +152,11 @@ object OdinMapPrediction {
     private const val ROOM = 16
     /** From this sure (percent) a dead end always gets Odin's guess tile, whatever Dead End Chance is. */
     private const val ALWAYS_DEAD_END = 95
-    /** An exact last room: every sample agrees (allowing for float sums). */
-    private const val EXACT = 0.999f
+    /**
+     * Shown as 100% (the chances are drawn rounded): from here anything predicted is drawn as an exact room, and a name
+     * as the room's name.
+     */
+    private const val SURE = 0.995f
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
@@ -401,23 +404,24 @@ object OdinMapPrediction {
         // (every room, discovered ones nobody has opened too, once the map is known for sure)
         if (exactRooms.value) for ((_, names) in (shownNames ?: p.namedRooms).groupBy { it.tiles.joinToString(",") }) {
             val tiles = names[0].tiles
-            if (names.sumOf { it.chance.toDouble() } < EXACT) continue
+            if (names.sumOf { it.chance.toDouble() } < SURE) continue
             if (tiles.all { known[it] }) { if (!namedOnMap(tiles[0])) roomText(g, tiles, names); continue }
             if (tiles.any { known[it] || exact[it] || it in blood }) continue
             for (t in tiles) exact[t] = true
             exactRoom(g, tiles, names)
         }
-        // the rooms whose size and place are sure, named or not: drawn in full in their type's colour (or the
-        // kinds a dead end can still be), with no text
-        if (exactRooms.value) for (tiles in MapPredictor.certainShapes(p)) {
+        // anything shown at 100% (a room's size and place), named or not: drawn in full in its type's colour (or the
+        // kinds a dead end can still be), keeping the split's label on its door's tile
+        if (exactRooms.value) for (tiles in MapPredictor.certainShapes(p, SURE)) {
             if (tiles.any { known[it] || exact[it] || it in blood }) continue
             for (t in tiles) exact[t] = true
-            val q = p.raw[tiles[0]]
+            val q = p.probs[tiles[0]] ?: p.raw[tiles[0]]
             val types = if (tiles.size > 1 || q == null) listOf(-1) else {
                 val room = q.sum()
                 (0 until Cls.COUNT).filter { q[it] >= 0.05f * room }.sortedByDescending { q[it] }.take(3).map { if (it == Cls.NORMAL || it == Cls.BIG) -1 else it }.distinct()
             }
             exactFill(g, tiles, types)
+            for (t in tiles) splits[t]?.let { overlay(g, (t % W) * TILE, (t / W) * TILE, it, null, false) }
         }
         // the big rooms it's sure of, greyed out at their whole size (likeliest first, never two on one tile)
         val inBig = arrayOfNulls<BigRoom>(W * W)
@@ -565,7 +569,7 @@ object OdinMapPrediction {
         val cx = tiles.map { (it % W) * TILE + ROOM / 2f }.average().toFloat()
         val cz = tiles.map { (it / W) * TILE + ROOM / 2f }.average().toFloat()
         val secrets = names.map { it.name.secrets }.distinct().singleOrNull()
-        val name = if (best.chance >= EXACT) best.name.name else if (lcm || tiles.all { knownTile(it) }) "" else "?"
+        val name = if (best.chance >= SURE) best.name.name else if (lcm || tiles.all { knownTile(it) }) "" else "?"
         val text = name + if (secrets != null && secrets > 0) " 0/$secrets" else ""
         val lines = text.trim().split(" ").filter { it.isNotEmpty() }
         val fontH = mc.font.lineHeight
