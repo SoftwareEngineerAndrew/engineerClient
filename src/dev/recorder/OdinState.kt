@@ -170,7 +170,7 @@ object OdinState {
             o.n("secretsFound", st.secretsFound).n("secretsPercent", st.secretsPercent).n("knownSecrets", st.knownSecrets)
                 .n("crypts", st.crypts).n("openedRooms", st.openedRooms).n("completedRooms", st.completedRooms)
                 .n("deaths", st.deaths).n("percentCleared", st.percentCleared).s("elapsed", st.elapsedTime)
-                .b("mimic", st.mimicKilled).b("prince", st.princeKilled).b("bat", st.batKilled > 0).n("batKills", st.batKilled)
+                .b("mimic", st.mimicKilled).b("prince", st.princeKilled).b("bat", com.engineerclient.OdinCompat.batsKilled(st) > 0).n("batKills", com.engineerclient.OdinCompat.batsKilled(st))
                 .s("doorOpener", st.doorOpener).b("bloodDone", st.bloodDone).n("puzzleCount", st.puzzleCount)
             out.append('{').append(o.sb).append('}')
         }
