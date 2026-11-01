@@ -6,6 +6,8 @@ name: Release
 on:
   push:
     branches: [main, "mc/**"]
+    # Text only: the jar would be the same.
+    paths-ignore: ["**.md", "docs/**"]
 
 permissions:
   contents: write
@@ -85,4 +87,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download 37808382947 -R odtheking/OdinFabric -n Odin-0.3.7.jar -D libs/odin
+      # Its own compiler state, as the release job's (above), so it doesn't compile everything cold first (a minute); the
+      # first run starts from the release job's.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .gradle
+            build/kotlin
+            build/classes
+            build/tmp
+          key: ec-test-compile-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ec-test-compile-${{ github.ref_name }}-
+            ec-compile-${{ github.ref_name }}-
       - run: gradle test --console=plain -Dorg.gradle.jvmargs=-Xmx6G -Pkotlin.daemon.jvmargs=-Xmx6G
