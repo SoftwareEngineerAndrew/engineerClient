@@ -130,6 +130,8 @@ object PosePov : Module(
     private const val NAME_RANGE = 16.0
 
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
+    private val sharePov by BooleanSetting("Share POV", true, desc = "Sends your view to teammates watching theirs (only while someone is). Works with Pose POV itself off too.")
+    private val useShared by BooleanSetting("Use shared POVs", true, desc = "Draws teammates who share from their own view (exact and smooth). Off: only from what your game sees of them, and the map's guess out of range.")
     private val optimizeLocation by BooleanSetting("Optimize server location", true, desc = "Times each teammate's two ways separately (Cloudflare's nearest location to each of you, or undonecoffee.com's relay) and sends your view to them by whichever is quicker right now. Off: Cloudflare's whenever it's up. Nobody ever sees your IP either way.")
     private val shareFps by NumberSetting("Sharing FPS", 60, 20..240, 1, desc = "How many times a second your look goes to teammates. Higher is smoother for them.")
     private val skipTiny by BooleanSetting("Skip tiny look changes", true, desc = "Doesn't send a look change under 0.05° (too small to see in a view; mostly hand jitter at high FPS). The exact look still goes with every tick. Cuts what you send when your mouse barely moves.")
@@ -181,14 +183,16 @@ object PosePov : Module(
             DevgineerClient.safely("pose pov look") { if (enabled && DungeonUtils.inDungeons) PovPerf.time(PovPerf.LOOKS) { sampleLooks() } }
             // Sharing runs for everyone in a dungeon, this on or not; it only sends while a linked teammate is watching.
             DevgineerClient.safely("pose share") {
-                PoseShare.watching = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
+                watchingSoon = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
+                PoseShare.watching = watchingSoon && useShared
+                PoseShare.send = sharePov
                 PoseShare.optimize = optimizeLocation
                 PoseShare.skipTiny = skipTiny
                 PoseShare.debug = enabled && debugInfo
                 PoseShare.frameNs = 1_000_000_000L / shareFps.toLong().coerceIn(20L, 240L)
                 PovPerf.time(PovPerf.SHARE) { PoseShare.tick() }
             }
-            DevgineerClient.safely("pose pov warm up") { if (enabled && DungeonUtils.inDungeons && PoseShare.watching && !wants()) PovPerf.time(PovPerf.WARM) { warmUp() } }
+            DevgineerClient.safely("pose pov warm up") { if (watchingSoon && !wants()) PovPerf.time(PovPerf.WARM) { warmUp() } }
             DevgineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) PovPerf.time(PovPerf.PRERENDER) { build(PRERENDER_BUDGET_NS, emptyList()) } }
             DevgineerClient.safely("pose pov export") { exportTick() }
             // From the first world joined (not the first dungeon), every room's geometry onto disk in the background (once;
@@ -299,6 +303,13 @@ object PosePov : Module(
         return screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player")
     }
 
+    private var badEyeAt = 0L
+    private var eyeLogAt = 0L
+    private val eyeLog = ArrayList<String>()
+
+    /** The leap menu is open or about to be (the views warm up). */
+    private var watchingSoon = false
+
     private fun releaseFeeds() {
         queued.clear()
         allViews?.destroyBuffers(); allViews = null
@@ -329,8 +340,8 @@ object PosePov : Module(
             // In clear the map says roughly where they are: a shared pose far from their icon is someone lying, and isn't used.
             // Peer-to-peer, they're drawn from their own frames even in range (smoother than the game's 20 a second), while
             // those put them where the server does (a few blocks' lead for the delay).
-            val d = if (p != null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { it.direct && it.pos.distanceToSqr(p.position()) < 16.0 } else null
-            val s = d ?: if (p == null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { DungeonUtils.inBoss || slot.mapPos.data == 0L || near(slot, it.pos) } else null
+            val d = if (useShared && p != null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { it.direct && it.pos.distanceToSqr(p.position()) < 16.0 } else null
+            val s = d ?: if (useShared && p == null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { DungeonUtils.inBoss || slot.mapPos.data == 0L || near(slot, it.pos) } else null
             val e = if (p != null && d == null) {
                 players[i] = p
                 val real = look(slot.name, p, pt, now)
@@ -345,6 +356,14 @@ object PosePov : Module(
             // (In boss the map stops: its icon would put them back where they were in clear.)
             } else if (!slot.isDead && slot.mapPos.data != 0L && !DungeonUtils.inBoss) ghostEye(level, slot, now) else null
             if (e != null) eyes[i] = ghosts.getOrPut(slot.name) { Ghost() }.blended(e, now)
+            // A camera that isn't a number can draw a view smeared into streaks: not drawn (logged once a few seconds).
+            eyes[i]?.let { c ->
+                if (!(c.pos.x.isFinite() && c.pos.y.isFinite() && c.pos.z.isFinite() && c.yaw.isFinite() && c.pitch.isFinite())) {
+                    eyes[i] = null
+                    if (now - badEyeAt > 5_000_000_000L) { badEyeAt = now; DevgineerClient.logger.warn("[pose pov] {}: camera not a number ({}, {}, {}) - not drawn", slot.name, c.pos, c.yaw, c.pitch) }
+                }
+            }
+            if (debugInfo && now - eyeLogAt > 10_000_000_000L) eyeLog += "${slot.name}: ${if (d != null) "shared fast" else if (s != null) "shared" else if (p != null) "game" else "map"} ${eyes[i]?.let { "%.3f %.3f %.3f yaw %.2f pitch %.2f%s".format(java.util.Locale.ROOT, it.pos.x, it.pos.y, it.pos.z, it.yaw, it.pitch, if (it.subject != null) " (behind)" else "") } ?: "none"}"
             // An out-of-range teammate's body, in every feed: where they're shared at (but their own), or the guess (their
             // own included, seen from behind).
             val g = ghosts[slot.name]
@@ -353,6 +372,7 @@ object PosePov : Module(
             else if (p == null && guess != null && g != null) slot.playerSkin?.let { bodies += Body(guess.subtract(0.0, 1.62, 0.0), g.yaw, g.walkPos, g.walkSpeed, it, -1) }
         }
 
+        if (eyeLog.isNotEmpty()) { eyeLogAt = now; DevgineerClient.logger.info("[pose pov] cameras: {}", eyeLog.joinToString(" | ")); eyeLog.clear() }
         lap = PovPerf.lap(PovPerf.EYES, lap)
 
         // Every entity near any eye, extracted once for all the feeds (only those near enough to one to be drawn in full): full
