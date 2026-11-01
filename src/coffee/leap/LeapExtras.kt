@@ -51,7 +51,6 @@ object LeapExtras : Module(
     description = "Adds to Odin's Leap Menu: a click delay when it opens, an outline of where each person will be, and Map Leap (the dungeon map as the leap menu, in the clear).",
     toggled = true,
 ) {
-    private val instantOpen by BooleanSetting("Instant Open", true, desc = "The leap menu opens the moment you right-click a leap, drawn from what's already known of your party, and can be clicked straight away; the leap you pick is clicked in the real menu the instant it arrives.")
     private val clickDelay by NumberSetting("Click Delay", 1, 0..10, 1, desc = "Ticks after the leap menu opens during which mouse clicks are ignored, so letting go of the right-click that opened it can't leap you by accident.", unit = "t")
 
     private val showIn by SelectorSetting("Show In", ShowIn.Option.EVERYWHERE, desc = "Where Click Delay and Leap Outline work. Blood rush is from the dungeon starting until the blood door opens.")
@@ -98,8 +97,12 @@ object LeapExtras : Module(
 
     private var openedAt = 0L
 
-    /** Instant Open is on ([InstantLeap]). */
-    fun instantOpenOn(): Boolean = enabled && instantOpen
+    /**
+     * Instant Open ([InstantLeap]), in Odin's own Leap Menu settings (it changes how that menu opens), not this module's:
+     * added there by CoffeeClient before Odin's config is read again.
+     */
+    val instantOpen = BooleanSetting("Instant Open", true, desc = "The leap menu opens the moment you right-click a leap, drawn from what's already known of your party, and can be clicked straight away; the leap you pick is clicked in the real menu the instant it arrives. Off: the menu opens when Hypixel sends it. Added by Coffee Client.")
+    fun instantOpenOn(): Boolean = instantOpen.value
 
     /** Within Click Delay of the leap menu opening. Read by the click mixins. */
     @JvmStatic

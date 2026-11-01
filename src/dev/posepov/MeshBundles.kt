@@ -391,6 +391,14 @@ object PiecePool {
         epoch++; version++
     }
 
+    /** Debug: whether vertices [first, first + n) of [buffer] are all in use (none free, so none unwritten); null: not a pool. */
+    fun allUsed(buffer: GpuBuffer, first: Int, n: Int): Boolean? {
+        val pl = pools.firstOrNull { it.buffer === buffer } ?: return null
+        if (first < 0 || first + n > pl.vertices) return false
+        val e = pl.free.floorEntry(first + n - 1) ?: return true
+        return e.key + e.value <= first
+    }
+
     val poolCount get() = pools.size
     val residentCount get() = resident.size
     /** Bytes the pieces take, and the pools hold. */

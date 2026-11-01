@@ -210,7 +210,7 @@ object PoseShare {
     private val tracks = ConcurrentHashMap<String, Track>()
 
     /** A shared teammate's pose for drawing now: [via] is who relayed it (null when they share it themselves). */
-    class Pose(val pos: Vec3, val yaw: Float, val pitch: Float, val item: ItemStack, val swingAt: Long, val sneaking: Boolean, val via: String?, val direct: Boolean, val delayMs: Int, val bufferNs: Long)
+    class Pose(val pos: Vec3, val yaw: Float, val pitch: Float, val item: ItemStack, val swingAt: Long, val sneaking: Boolean, val via: String?, val direct: Boolean, val delayMs: Int, val bufferNs: Long, val timed: Boolean)
 
     fun pose(name: String, now: Long): Pose? {
         val t = tracks[name.lowercase()] ?: return null
@@ -248,7 +248,7 @@ object PoseShare {
             }
             val item = BuiltInRegistries.ITEM.byId(itemId).takeIf { itemId != 0 && it !== Items.AIR }?.let { ItemStack(it) } ?: ItemStack.EMPTY
             val delay = (t.buffer / 1_000_000).toInt() + b.delayMs + (if (!b.direct && rttMs > 0) (rttMs / 2).toInt() else 0)
-            return Pose(pos, yaw, pitch, item, t.swingAt, sneaking, t.via, b.direct, delay, t.buffer)
+            return Pose(pos, yaw, pitch, item, t.swingAt, sneaking, t.via, b.direct, delay, t.buffer, t.timed)
         }
     }
 
