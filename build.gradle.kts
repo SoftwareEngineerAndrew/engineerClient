@@ -85,8 +85,10 @@ tasks {
     test {
         useJUnitPlatform()
         // Test classes run in parallel JVMs (one class at a time in each: the pack tests share global state, so not threads in one JVM).
-        // A serial run was 30 s of test time; the box is shared, so the forks are few and their heaps capped.
-        maxParallelForks = (Runtime.getRuntime().availableProcessors() / 4).coerceIn(1, 6)
+        // A serial run was 30 s of test time; the box is shared, so the forks are few and their heaps capped. CI's runner has
+        // nothing else on it (4 cores, 16 GB): a fork per core, where a quarter of them was one fork and 95 s of tests.
+        val cores = Runtime.getRuntime().availableProcessors()
+        maxParallelForks = if (System.getenv("CI") != null) cores else (cores / 4).coerceIn(1, 6)
         maxHeapSize = "1g"
         // The optional pack checks (SamplePackTest, RealPackTest) read these folders; without them as inputs a green run would be
         // reused from the cache when only the packs or the variable changed. Both are skipped when the variable is not set.
