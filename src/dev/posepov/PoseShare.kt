@@ -169,7 +169,11 @@ object PoseShare {
          * positions (time, where), with the held item and sneaking from the newest tick.
          */
         var timed = false
+        /** Positions keyed by when their game drew them there: a tick after the tick was due (see [heard]). */
         val ticks = ArrayDeque<Pair<Long, Vec3>>()
+        /** The newest ticks' ms past each 50: a tick runs at the first frame after it's due, so the earliest of these is when they're due. */
+        val phases = IntArray(16)
+        var phaseN = 0
         var item = 0
         var sneaking = false
         var lastArrived = 0L
@@ -184,6 +188,16 @@ object PoseShare {
         var arrivals = 0L
         @Volatile var gui: Gui? = null
         fun at(s: Sample) = s.time + offset
+
+        /** When the tick their game ran at [ms] was due: on the 50 ms grid where the newest ticks' lateness starts (the end of the widest gap). */
+        fun due(ms: Long): Long {
+            phases[phaseN++ % phases.size] = Math.floorMod(ms, 50L).toInt()
+            val n = minOf(phaseN, phases.size)
+            val r = phases.copyOf(n).also { it.sort() }
+            var start = r[0]; var widest = -1
+            for (i in 0 until n) { val gap = if (i == 0) r[0] + 50 - r[n - 1] else r[i] - r[i - 1]; if (gap > widest) { widest = gap; start = r[i] } }
+            return ms - Math.floorMod(ms - start, 50L)
+        }
     }
 
     /**
@@ -232,7 +246,7 @@ object PoseShare {
             }
             var itemId = b.item; var sneaking = b.flags and 2 != 0
             if (t.timed) {
-                // Where they are: between the two ticks either side, or past the newest by its move (as their game would have it).
+                // Where they are: between the two ticks either side (as their game drew them), or past the newest by its move.
                 val p1 = t.ticks.lastOrNull() ?: return null
                 val p0 = t.ticks.lastOrNull { it.first < p1.first }
                 val t1 = p1.first + t.offset
@@ -805,9 +819,17 @@ object PoseShare {
             t.samples.add(i, sample)
             while (t.samples.size > 32) t.samples.removeFirst()
             if (timed && pos != null) {
+                // Their game draws them between their last two ticks by how far it is into the next, so a tick's position is
+                // where they're drawn a tick after it was due; and it's timed by when it was due, not when it ran (the first
+                // frame after, up to a frame late, which made their speed surge and drop).
+                val key = (t.due(s) + 50) * 1_000_000L
                 var j = t.ticks.size
-                while (j > 0 && t.ticks[j - 1].first > time) j--
-                if (j == 0 || t.ticks[j - 1].first != time) t.ticks.add(j, time to pos)
+                while (j > 0 && t.ticks[j - 1].first > key) j--
+                if (j > 0 && t.ticks[j - 1].first == key && t.ticks[j - 1].second != pos && (j < 2 || t.ticks[j - 2].first < key - TICK_NS)) {
+                    // Two ticks in one frame (theirs caught up after a slow one): the first was due a tick earlier.
+                    t.ticks[j - 1] = (key - TICK_NS) to t.ticks[j - 1].second
+                }
+                if (j == 0 || t.ticks[j - 1].first != key) t.ticks.add(j, key to pos)
                 while (t.ticks.size > 8) t.ticks.removeFirst()
                 if (j >= t.ticks.size - 1) { if (item >= 0) t.item = item; t.sneaking = flags and 2 != 0 }
             }
@@ -816,7 +838,7 @@ object PoseShare {
         }
     }
 
-    private fun reset(t: Track) { t.samples.clear(); t.ticks.clear(); t.offset = Long.MAX_VALUE; t.lastSeq = -1 }
+    private fun reset(t: Track) { t.samples.clear(); t.ticks.clear(); t.offset = Long.MAX_VALUE; t.lastSeq = -1; t.phaseN = 0 }
 
     /** A terminal frame, kept only if it is one a real terminal could be: its grid's cells, no more than it has. */
     private fun gui(sender: String, b: ByteBuffer, now: Long) {
