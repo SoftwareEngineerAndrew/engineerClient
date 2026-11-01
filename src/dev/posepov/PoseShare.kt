@@ -110,6 +110,8 @@ object PoseShare {
     private var wasWanted = false
 
 
+    /** "Share POV": your view goes to teammates who watch (set by [PosePov] each tick, its module on or off). */
+    @Volatile var send = true
     /** Whether you're looking at your teammates' views, or about to (set by [PosePov] each tick). */
     @Volatile var watching = false
     /**
@@ -303,7 +305,7 @@ object PoseShare {
         // have reached): when they change or someone new links. Whether or not anyone is watching.
         if (seq % 10 == 0) shareRooms(nowMs)
 
-        if (!wanted) { wasWanted = false; if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }; return }
+        if (!wanted || !send) { wasWanted = false; if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }; return }
         if (!wasWanted) { wasWanted = true; selfAt = 0L; guiAt = 0L }
 
         // Yourself: every tick while moving, every [STILL_NS] while still, and the still pose again just before moving off
@@ -361,7 +363,7 @@ object PoseShare {
     fun frameSafely() = DevgineerClient.safely("pose share frame") { frame() }
 
     fun frame() {
-        if (!ready || !wanted || !turn.ready) return
+        if (!ready || !wanted || !send || !turn.ready) return
         val fast = turnSlots()
         if (fast.isEmpty()) return
         val me = mc.player ?: return
