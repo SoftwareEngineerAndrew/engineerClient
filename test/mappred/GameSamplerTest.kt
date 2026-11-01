@@ -1,5 +1,7 @@
 package com.engineerclient.mappred
 
+import org.junit.jupiter.api.parallel.Execution
+import org.junit.jupiter.api.parallel.ExecutionMode
 import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.test.Test
@@ -9,6 +11,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** The game-process sampler (every floor's), on synthetic maps only. */
+@Execution(ExecutionMode.CONCURRENT)
 class GameSamplerTest {
 
     /**

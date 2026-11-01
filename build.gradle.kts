@@ -88,8 +88,12 @@ tasks {
         // A serial run was 30 s of test time; the box is shared, so the forks are few and their heaps capped. CI's runner has
         // nothing else on it (4 cores, 16 GB): a fork per core, where a quarter of them was one fork and 95 s of tests.
         val cores = Runtime.getRuntime().availableProcessors()
-        maxParallelForks = if (System.getenv("CI") != null) cores else (cores / 4).coerceIn(1, 6)
-        maxHeapSize = "1g"
+        val ci = System.getenv("CI") != null
+        maxParallelForks = if (ci) cores else (cores / 4).coerceIn(1, 6)
+        maxHeapSize = if (ci) "3g" else "1g"
+        // On CI the classes marked @Execution(CONCURRENT) (the map prediction ones: 84 of the 86 s, each test its own session)
+        // also run their tests side by side, so the longest class isn't the whole wait. Everything else stays one at a time.
+        if (ci) systemProperty("junit.jupiter.execution.parallel.enabled", "true")
         // The optional pack checks (SamplePackTest, RealPackTest) read these folders; without them as inputs a green run would be
         // reused from the cache when only the packs or the variable changed. Both are skipped when the variable is not set.
         for (name in listOf("ADS_SAMPLE_PACKS", "ADS_REAL_PACKS", "ADS_BLOOD_FIGHTS")) {
