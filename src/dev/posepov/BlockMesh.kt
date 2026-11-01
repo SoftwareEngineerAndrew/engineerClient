@@ -532,24 +532,20 @@ object BlockMesh {
     private val exportDir get() = FabricLoader.getInstance().gameDir.resolve("devgineerclient").resolve("posepov-export").resolve(MeshBundles.version)
 
     /**
-     * Every bundle onto disk in the background ([MeshBundles.prefetch]), once: the arena first on a floor that has it, then
-     * the designs, smallest first (the common one-tile rooms), then the variants. Any thread; needs the room pack (render thread: the disk is opened here).
+     * The bundles' version (their address and disk key), once the room pack and the disk are ready, and the disk file rid of
+     * other versions' bundles. Nothing is fetched ahead: a bundle comes from disk or the site when its room is placed (prerender
+     * asks for every room of the run as Odin names it, well before the leap menu needs it), so a player only ever downloads and
+     * keeps the rooms they've been in, not every room there is (about 120 MB). Render thread: the disk is opened here.
      */
-    fun prefetchAll(floor7: Boolean) {
+    fun prepare() {
         val pack = KnownWorld.roomPack ?: return
         if (!MeshDisk.ready) { MeshDisk.check(); return }
         MeshBundles.version = "$BUNDLE_FORMAT-${pack.version}"
-        val names = ArrayList<String>()
-        if (floor7) names += ARENA
-        val designs = pack.designs.sortedBy { it.w.toLong() * it.d * it.h }
-        for (d in designs) names += d.id
-        for (d in designs) for (v in d.variants) names += "${d.id}@${v.id}"
-        if (!floor7) names += ARENA
-        MeshBundles.prefetch(names)
-        prefetchStarted = true
+        MeshDisk.compact("b/${MeshBundles.version}/")
+        prepared = true
     }
-    /** [prefetchAll] has handed its list over (for this launch). */
-    var prefetchStarted = false; private set
+    /** [prepare] has run (for this launch). */
+    var prepared = false; private set
 
     /** Starts building every bundle (the arena, each design, each variant) to files; the number queued, or -1 without the pack. */
     fun startExport(): Int {

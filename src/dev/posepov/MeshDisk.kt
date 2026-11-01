@@ -92,14 +92,59 @@ object MeshDisk {
 
     fun has(key: String) = index.containsKey(key)
 
-    /** The entry: null when it isn't on disk, otherwise its count and bytes (empty for an empty one). Any thread. */
+    /**
+     * The entry: null when it isn't on disk, otherwise its count and bytes (empty for an empty one). Any thread. Tried again
+     * once when [compact] swapped the file under it (the old reader is closed then).
+     */
     fun read(key: String): Pair<Int, ByteArray>? {
-        val e = index[key] ?: return null
-        if (e.length == 0) return e.count to ByteArray(0)
-        val r = reader ?: return null
-        val bytes = ByteArray(e.length)
-        synchronized(r) { r.seek(e.offset); r.readFully(bytes) }
-        return e.count to bytes
+        repeat(2) {
+            val e = index[key] ?: return null
+            if (e.length == 0) return e.count to ByteArray(0)
+            val r = reader ?: return null
+            val bytes = ByteArray(e.length)
+            if (runCatching { synchronized(r) { r.seek(e.offset); r.readFully(bytes) } }.isSuccess) return e.count to bytes
+        }
+        return null
+    }
+
+    /**
+     * The file without other versions' bundles (keys under "b/" not starting with [live]), once those are over a quarter of
+     * it: the file is append-only, so every new room pack or bundle format otherwise left the last one's 120 MB in it.
+     * On the writer thread, so no write lands in between.
+     */
+    fun compact(live: String) {
+        writer.execute {
+            val path = file ?: return@execute
+            val r = reader ?: return@execute
+            runCatching {
+                fun head(k: String) = 2L + k.toByteArray(Charsets.UTF_8).size + 8
+                val total = Files.size(path)
+                val keep = index.entries.filter { !it.key.startsWith("b/") || it.key.startsWith(live) }.map { it.key to it.value }
+                if (keep.sumOf { (k, e) -> head(k) + e.length } > total * 3 / 4) return@execute
+                val tmp = path.resolveSibling(path.fileName.toString() + ".tmp")
+                val fresh = HashMap<String, Entry>()
+                DataOutputStream(Files.newOutputStream(tmp).buffered()).use { out ->
+                    var at = 0L
+                    for ((k, e) in keep) {
+                        val bytes = ByteArray(e.length)
+                        synchronized(r) { r.seek(e.offset); r.readFully(bytes) }
+                        out.writeUTF(k); out.writeInt(e.count); out.writeInt(e.length); out.write(bytes)
+                        fresh[k] = Entry(at + head(k), e.count, e.length)
+                        at += head(k) + e.length
+                    }
+                }
+                synchronized(r) {
+                    r.close()
+                    Files.move(tmp, path, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                    index.keys.retainAll(fresh.keys); index.putAll(fresh)
+                    reader = RandomAccessFile(path.toFile(), "r")
+                }
+            }.onFailure {
+                // The old file stays (the move is the last step): read from it again.
+                com.devgineerclient.DevgineerClient.logger.warn("[pose pov] mesh cache compaction failed", it)
+                reader = runCatching { RandomAccessFile(path.toFile(), "r") }.getOrNull()
+            }
+        }
     }
 
     /** Keeps an entry, once (a key already kept stays as it is). [bytes] must not change after. */
