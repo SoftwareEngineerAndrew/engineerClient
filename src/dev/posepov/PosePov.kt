@@ -302,6 +302,7 @@ object PosePov : Module(
     }
 
     private var badEyeAt = 0L
+    private var badDrawAt = 0L
     private var eyeLogAt = 0L
     private val eyeLog = ArrayList<String>()
 
@@ -348,7 +349,10 @@ object PosePov : Module(
             } else if (s != null) {
                 shared[i] = s
                 if (p != null) players[i] = p
-                val real = Eye(s.pos.add(0.0, if (s.sneaking) 1.27 else 1.62, 0.0), s.yaw, s.pitch, null)
+                val raw = Eye(s.pos.add(0.0, if (s.sneaking) 1.27 else 1.62, 0.0), s.yaw, s.pitch, null)
+                // A teammate without the mod, passed on by one who has: 20 server positions a second, unevenly spaced, so eased like
+                // the entities your own game sees. Their own frames (timed) are smooth already.
+                val real = if (s.timed) raw else eased(slot.name, raw, now)
                 ghosts.getOrPut(slot.name) { Ghost() }.seen(real, now)
                 real
             // (In boss the map stops: its icon would put them back where they were in clear.)
@@ -694,10 +698,29 @@ object PosePov : Module(
      * a view from a teammate's eye does, and every entity near it shook against it. The eye and the entities go through the same
      * easing, so things moving with the teammate stay put relative to them. Jumps over [SMOOTH_SNAP] blocks aren't eased.
      */
-    private class Smooth(var x: Double, var y: Double, var z: Double, var at: Long)
+    private class Smooth(var x: Double, var y: Double, var z: Double, var at: Long) { var x1 = x; var y1 = y; var z1 = z }
+
+    /** A relayed teammate's camera eased like [smoothed] (position) and [look] (yaw and pitch); jumps over [SMOOTH_SNAP] blocks aren't. */
+    private class Eased(var x: Double, var y: Double, var z: Double, var yaw: Float, var pitch: Float, var at: Long)
+    private val eased = HashMap<String, Eased>()
+    private fun eased(name: String, e: Eye, now: Long): Eye {
+        val m = eased[name]
+        val dt = if (m == null) 0.0 else (now - m.at) / 1e9
+        if (m == null || dt > 0.25 || e.pos.distanceToSqr(m.x, m.y, m.z) > SMOOTH_SNAP * SMOOTH_SNAP) {
+            eased[name] = Eased(e.pos.x, e.pos.y, e.pos.z, e.yaw, e.pitch, now); return e
+        }
+        m.at = now
+        if (dt <= 0.0) return Eye(Vec3(m.x, m.y, m.z), m.yaw, m.pitch, null)
+        val k = 1 - Math.exp(-dt / SMOOTH_S); val kl = (1 - Math.exp(-dt / RELAYED_LOOK_S)).toFloat()
+        m.x += (e.pos.x - m.x) * k; m.y += (e.pos.y - m.y) * k; m.z += (e.pos.z - m.z) * k
+        m.yaw += Mth.wrapDegrees(e.yaw - m.yaw) * kl; m.pitch += (e.pitch - m.pitch) * kl
+        return Eye(Vec3(m.x, m.y, m.z), m.yaw, m.pitch, null)
+    }
+    /** A relayed look is a head rotation 20 times a second (in steps of 1.4°): eased a little more than a game-seen one. */
+    private const val RELAYED_LOOK_S = 0.05
     private val smooth = HashMap<Int, Smooth>()
     private var smoothPruned = 0L
-    private const val SMOOTH_S = 0.05
+    private const val SMOOTH_S = 0.04
     private const val SMOOTH_SNAP = 4.0
 
     private fun smoothed(en: Entity, pt: Float, now: Long): Vec3 {
@@ -708,8 +731,14 @@ object PosePov : Module(
         if (dt <= 0.0) return Vec3(m.x, m.y, m.z)
         m.at = now
         val dx = tx - m.x; val dy = ty - m.y; val dz = tz - m.z
-        if (dt > 0.25 || dx * dx + dy * dy + dz * dz > SMOOTH_SNAP * SMOOTH_SNAP) { m.x = tx; m.y = ty; m.z = tz }
-        else { val k = 1 - Math.exp(-dt / SMOOTH_S); m.x += dx * k; m.y += dy * k; m.z += dz * k }
+        if (dt > 0.25 || dx * dx + dy * dy + dz * dz > SMOOTH_SNAP * SMOOTH_SNAP) { m.x = tx; m.y = ty; m.z = tz; m.x1 = tx; m.y1 = ty; m.z1 = tz }
+        else {
+            // Two easings in a row: one alone still jumps in speed at every uneven step (a still tick, then a double one), which
+            // shows as shaking against a smooth camera; through two the speed changes smoothly.
+            val k = 1 - Math.exp(-dt / SMOOTH_S)
+            m.x1 += (tx - m.x1) * k; m.y1 += (ty - m.y1) * k; m.z1 += (tz - m.z1) * k
+            m.x += (m.x1 - m.x) * k; m.y += (m.y1 - m.y) * k; m.z += (m.z1 - m.z) * k
+        }
         return Vec3(m.x, m.y, m.z)
     }
 
@@ -1203,6 +1232,13 @@ object PosePov : Module(
             }
         }
         val complete = PiecePool.asked == asked
+        // Debug info: a draw over pool space nothing was put in draws its zeros as faces stretched to one far corner (streaks).
+        if (debugInfo) for (byBuffer in out.values) for ((buf, cmds) in byBuffer) for (m in cmds) {
+            if (PiecePool.allUsed(buf, m.first, m.count / 6 * 4) == false && System.nanoTime() - badDrawAt > 5_000_000_000L) {
+                badDrawAt = System.nanoTime()
+                DevgineerClient.logger.warn("[pose pov] a draw covers free pool space: vertices {}..{} ({} refs, {} rooms)", m.first, m.first + m.count / 6 * 4, res.refs.size, res.rooms?.size ?: 0)
+            }
+        }
         for (ref in res.around) if (ref.piece >= 0 && ref.bundle != null) PiecePool.get(ref.bundle, ref.piece, ref.rot, ref.w, ref.d, ref.room, 1e9 + ref.dist2)
         c.draws = out; c.drawsFor = res; c.drawsKey = key; c.drawsAt = now; c.drawsComplete = complete
         c.generation++

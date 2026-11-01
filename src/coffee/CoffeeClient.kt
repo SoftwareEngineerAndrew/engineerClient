@@ -43,6 +43,8 @@ object CoffeeClient : ClientModInitializer {
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
         ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim, HighlightLevers, TermInfoHud, Timers2, QuietMedia)
+        // Instant Open lives in Odin's Leap Menu settings; Odin's config is read again so its saved value applies.
+        safely("instant open setting") { com.odtheking.odin.features.impl.dungeon.LeapMenu.registerSetting(LeapExtras.instantOpen); ModuleManager.loadConfigurations() }
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
