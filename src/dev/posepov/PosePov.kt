@@ -130,7 +130,6 @@ object PosePov : Module(
     private const val NAME_RANGE = 16.0
 
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
-    private val sharePov by BooleanSetting("Share POV", true, desc = "Sends your view to teammates watching theirs (only while someone is). Works with Pose POV itself off too.")
     private val useShared by BooleanSetting("Use shared POVs", true, desc = "Draws teammates who share from their own view (exact and smooth). Off: only from what your game sees of them, and the map's guess out of range.")
     private val optimizeLocation by BooleanSetting("Optimize server location", true, desc = "Times each teammate's two ways separately (Cloudflare's nearest location to each of you, or undonecoffee.com's relay) and sends your view to them by whichever is quicker right now. Off: Cloudflare's whenever it's up. Nobody ever sees your IP either way.")
     private val shareFps by NumberSetting("Sharing FPS", 60, 20..240, 1, desc = "How many times a second your look goes to teammates. Higher is smoother for them.")
@@ -185,7 +184,6 @@ object PosePov : Module(
             DevgineerClient.safely("pose share") {
                 watchingSoon = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
                 PoseShare.watching = watchingSoon && useShared
-                PoseShare.send = sharePov
                 PoseShare.optimize = optimizeLocation
                 PoseShare.skipTiny = skipTiny
                 PoseShare.debug = enabled && debugInfo
