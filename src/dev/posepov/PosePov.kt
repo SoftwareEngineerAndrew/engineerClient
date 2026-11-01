@@ -1204,9 +1204,12 @@ object PosePov : Module(
             var v = first; var runFirst = -1; var runQuads = 0
             fun flush() {
                 if (runFirst < 0) return
-                // Runs that sit one after another in the same buffer are one draw.
+                // Runs that sit one after another in the same buffer are one draw, up to what the shared index buffer is asked to
+                // hold (renderQueued: the largest piece). Past its end the indices read as 0, and every face from there on was
+                // drawn to the draw's first vertex: whole views smeared into parallel streaks where many pieces lie in a row.
                 val last = list.lastOrNull()
-                if (last != null && last.first + last.count / 6 * 4 == runFirst) last.count += runQuads * 6 else list += Cmd(buffer, runFirst, runQuads * 6)
+                if (last != null && last.first + last.count / 6 * 4 == runFirst && last.count + runQuads * 6 <= BlockMesh.mostIndices) last.count += runQuads * 6
+                else list += Cmd(buffer, runFirst, runQuads * 6)
                 dbgQuads += runQuads
                 runFirst = -1; runQuads = 0
             }
