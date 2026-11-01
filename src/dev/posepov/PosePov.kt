@@ -508,8 +508,9 @@ object PosePov : Module(
                     TextureSetup.singleTexture(colorView, sampler),
                     pose,
                     x0, y0, x1, y1,
-                    // Its quarter of the shared target; a render target's row 0 is the bottom of its image.
-                    col * 0.5f, 1f - row * 0.5f, col * 0.5f + 0.5f, 0.5f - row * 0.5f,
+                    // Its quarter of the shared target (u0, u1, v0, v1: in that order, not u0 v0 u1 v1, which smeared the top
+                    // left and bottom right views into streaks); a render target's row 0 is the bottom of its image.
+                    col * 0.5f, col * 0.5f + 0.5f, 1f - row * 0.5f, 0.5f - row * 0.5f,
                     -1,
                     null,
                 )
@@ -1204,12 +1205,9 @@ object PosePov : Module(
             var v = first; var runFirst = -1; var runQuads = 0
             fun flush() {
                 if (runFirst < 0) return
-                // Runs that sit one after another in the same buffer are one draw, up to what the shared index buffer is asked to
-                // hold (renderQueued: the largest piece). Past its end the indices read as 0, and every face from there on was
-                // drawn to the draw's first vertex: whole views smeared into parallel streaks where many pieces lie in a row.
+                // Runs that sit one after another in the same buffer are one draw.
                 val last = list.lastOrNull()
-                if (last != null && last.first + last.count / 6 * 4 == runFirst && last.count + runQuads * 6 <= BlockMesh.mostIndices) last.count += runQuads * 6
-                else list += Cmd(buffer, runFirst, runQuads * 6)
+                if (last != null && last.first + last.count / 6 * 4 == runFirst) last.count += runQuads * 6 else list += Cmd(buffer, runFirst, runQuads * 6)
                 dbgQuads += runQuads
                 runFirst = -1; runQuads = 0
             }
