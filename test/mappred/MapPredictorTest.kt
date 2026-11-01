@@ -1,5 +1,7 @@
 package com.engineerclient.mappred
 
+import org.junit.jupiter.api.parallel.Execution
+import org.junit.jupiter.api.parallel.ExecutionMode
 import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.test.Test
@@ -9,6 +11,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Synthetic 6x6 maps (tile = z * 6 + x, as Odin's on every floor), built by hand. */
+@Execution(ExecutionMode.CONCURRENT)
 class MapPredictorTest {
 
     /** [rooms] discovered (kind, tiles), [doors] (a, b, kind) between tiles; every other edge by a discovered tile is a wall. */

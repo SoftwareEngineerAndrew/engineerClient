@@ -1,5 +1,7 @@
 package com.engineerclient.mappred
 
+import org.junit.jupiter.api.parallel.Execution
+import org.junit.jupiter.api.parallel.ExecutionMode
 import kotlin.concurrent.thread
 import kotlin.math.abs
 import kotlin.math.ln
@@ -11,6 +13,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** The pool of samples carried from map to map, the lanes and the session the worker drives ([PredictionSession]), on a made-up F7 map only. */
+@Execution(ExecutionMode.CONCURRENT)
 class PredictionSessionTest {
 
     // the same made-up map as GameSamplerTest's (drawn by the game-process model itself, not a recorded one): each tile's room as a letter
