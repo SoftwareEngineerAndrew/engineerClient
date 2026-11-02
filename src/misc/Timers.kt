@@ -1,6 +1,7 @@
 package com.engineerclient.misc
 
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.HudElement
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.BlockUpdateEvent
@@ -86,6 +87,9 @@ object Timers : Module(
         draw(if (example) "§514.35" else com.engineerclient.practice.TermInfo.sectionTime(sectionSeconds) ?: return@HUD 0 to 0)
     }
     private val sectionSeconds: Double by NumberSetting("Section Time Seconds", 1.5, 0.5..10.0, 0.5, desc = "How long a section's time stays up.", unit = "s").withDependency { sectionHud.enabled }
+    private val sectionDing: Boolean by BooleanSetting("Section Time Ding", true, desc = "A ding when a terminal section ends, as its time goes up.").withDependency { sectionHud.enabled }
+    /** The section time last dinged for (TermInfo.sectionDoneAt). */
+    private var dingedAt = 0L
     private val necronHud by HUD("Necron DPS", "Counts down to Necron first taking damage, 4.45 s after his first line (\"You went further than any human before, congratulations.\").", true, 10, 175, 1.5f) { example ->
         if (example) timer("Necron", 35, NECRON_DPS, true) else left(necronDpsAt, NECRON_DPS)?.let { timer("Necron", it, NECRON_DPS) } ?: (0 to 0)
     }
@@ -242,6 +246,18 @@ object Timers : Module(
      * them; the dead count as in ([DeadPlayers]: a ghost can be anywhere). Someone alive out of view
      * holds it back. Client thread.
      */
+    /**
+     * Section Time Ding: once per section time, on the tick it goes up (Hypixel's or the P3 Sim's), only when
+     * Section Time shows it. A local sound, so Coffee Client's Mute Completion Ding never touches it.
+     */
+    private fun sectionDing() {
+        val at = com.engineerclient.practice.TermInfo.sectionDoneAt
+        if (at == dingedAt) return
+        dingedAt = at
+        if (at == 0L || !sectionDing || !sectionHud.enabled || com.engineerclient.practice.TermInfo.sectionTime(sectionSeconds) == null) return
+        com.odtheking.odin.utils.playSoundAtPlayer(net.minecraft.sounds.SoundEvents.NOTE_BLOCK_BELL.value(), 1f, 1.5f)
+    }
+
     private fun watchCore() {
         if (!coreOpen) return
         val level = mc.level ?: return
@@ -282,7 +298,7 @@ object Timers : Module(
             else if (at - serverTicks <= 0) bossAt = null
         }
 
-        on<TickEvent.End> { watchMaxor(); watchCore() }
+        on<TickEvent.End> { watchMaxor(); watchCore(); sectionDing() }
 
         // Purple's pillar stepping down: its layers go through moving pistons (going back up, they don't).
         on<BlockUpdateEvent> {

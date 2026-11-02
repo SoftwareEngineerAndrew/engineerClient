@@ -2,6 +2,7 @@ package com.coffeeclient.misc
 
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.EntityEvent
+import com.odtheking.odin.events.GuiEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -20,7 +21,11 @@ import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.equalsOneOf
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
+import com.odtheking.odin.utils.skyblock.LocationUtils
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.player.Inventory
+import net.minecraft.world.item.Items
 import net.minecraft.world.entity.EntityTypes
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.phys.Vec3
@@ -50,6 +55,21 @@ object RandomStuff : Module(
     fun mutesSound(): Boolean =
         enabled && muteP4 && DungeonUtils.floor == com.odtheking.odin.utils.skyblock.dungeon.Floor.F7 && DungeonUtils.inBoss &&
             !necron.over && (necron.open || DungeonUtils.getF7Phase() == M7Phases.P4)
+
+    private val blockFillerClicks by BooleanSetting("Block Filler Pane Clicks", true, desc = "Skyblock, outside dungeons: clicks on the black glass panes that fill a menu's empty space do nothing, so a missed click can't pick one up. Your own inventory and every other item are left alone.")
+
+    /**
+     * A Skyblock menu's filler: a black stained glass pane with a blank name, in the menu's own slots
+     * (not your inventory below it). Dungeons are left alone (terminals' panes are Odin's).
+     */
+    private fun isFillerClick(screen: net.minecraft.client.gui.screens.Screen, slotId: Int): Boolean {
+        if (!blockFillerClicks || !LocationUtils.isInSkyblock || DungeonUtils.inDungeons) return false
+        val menu = (screen as? AbstractContainerScreen<*>)?.menu ?: return false
+        val slot = menu.slots.getOrNull(slotId) ?: return false
+        if (slot.container is Inventory) return false
+        val stack = slot.item
+        return stack.item == Items.STAINED_GLASS_PANE.black() && stack.hoverName.string.isBlank()
+    }
 
     private val hideCompletionTitles by BooleanSetting("Hide Completion Titles", true, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals, and the gate destroyed and core entrance opening ones.")
 
@@ -124,6 +144,9 @@ object RandomStuff : Module(
     }
 
     init {
+        // Block Filler Pane Clicks: Odin's slot click event, cancelled before the click reaches the server.
+        on<GuiEvent.SlotClick> { if (isFillerClick(screen, slotIndex)) cancel() }
+
         // Hide Completion Titles: which titles are the terminal ones is Term Info's to say.
         onReceive<net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket> {
             if (hideCompletionTitles && com.engineerclient.practice.TermInfo.isCompletionTitle(text.string)) it.cancel()
