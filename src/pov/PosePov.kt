@@ -187,11 +187,11 @@ object PosePov : Module(
             EngineerClient.safely("pose pov warm up") { if (watchingSoon && !wants()) warmUp() }
             EngineerClient.safely("pose pov prerender") { if (enabled && prerender && DungeonUtils.inDungeons && !wants()) build(PRERENDER_BUDGET_NS, emptyList()) }
             EngineerClient.safely("pose pov export") { exportTick() }
-            // From the first world joined: the bundles' version and the disk cache made ready (rooms are fetched as they're
-            // placed, never all ahead). Looked at every 5 s until it has run.
+            // From the title screen (once the game has loaded its textures): the room pack, the disk cache and every room's
+            // geometry fetched in the background, so all of it is on disk before the first dungeon. Looked at every second until
+            // it has started.
             EngineerClient.safely("pose pov prefetch") {
-                if (enabled && mc.level != null && ++prefetchTicks % 100 == 1 && !BlockMesh.prepared)
-                    { KnownWorld.load {}; BlockMesh.prepare() }
+                if (enabled && mc.isGameLoadFinished && mc.gui.overlay() == null && ++prefetchTicks % 20 == 1 && !BlockMesh.prepared) { KnownWorld.load {}; BlockMesh.prepare() }
             }
         }
         // `/posepov export`: every room, variant and the arena built here and written out, for undonecoffee.com to hand out.
