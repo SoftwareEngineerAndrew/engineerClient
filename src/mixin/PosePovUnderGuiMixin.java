@@ -1,7 +1,7 @@
-package com.devgineerclient.mixin;
+package com.engineerclient.mixin;
 
-import com.devgineerclient.posepov.PosePov;
-import com.devgineerclient.posepov.PoseShare;
+import com.engineerclient.pov.PosePov;
+import com.engineerclient.pov.PoseShare;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.Minecraft;

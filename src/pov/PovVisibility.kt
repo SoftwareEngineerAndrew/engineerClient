@@ -1,4 +1,4 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
 import com.engineerclient.p3sim.Arena
 import net.minecraft.core.SectionPos

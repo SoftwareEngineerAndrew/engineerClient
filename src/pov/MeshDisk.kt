@@ -1,4 +1,4 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.SharedConstants
@@ -25,7 +25,7 @@ object MeshDisk {
 
     class Entry(val offset: Long, val count: Int, val length: Int)
 
-    val dir: Path = FabricLoader.getInstance().gameDir.resolve("devgineerclient").resolve("posepov-cache")
+    val dir: Path = FabricLoader.getInstance().configDir.resolve("engineerclient").resolve("pov-cache")
     private val index = ConcurrentHashMap<String, Entry>()
     private val writer = Executors.newSingleThreadExecutor { r -> Thread(r, "pose pov mesh cache").apply { isDaemon = true } }
     @Volatile private var file: Path? = null
@@ -141,7 +141,7 @@ object MeshDisk {
                 }
             }.onFailure {
                 // The old file stays (the move is the last step): read from it again.
-                com.devgineerclient.DevgineerClient.logger.warn("[pose pov] mesh cache compaction failed", it)
+                com.engineerclient.EngineerClient.logger.warn("[pose pov] mesh cache compaction failed", it)
                 reader = runCatching { RandomAccessFile(path.toFile(), "r") }.getOrNull()
             }
         }

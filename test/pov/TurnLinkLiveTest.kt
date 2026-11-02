@@ -1,4 +1,4 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test

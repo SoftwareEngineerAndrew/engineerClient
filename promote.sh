@@ -42,8 +42,8 @@ rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
   "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/coffeeclient.odin.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json" \
   "$PUB/src/resources/devgineerclient.odin.mixins.json" \
   "$PUB/src/resources/rotation" \
-  "$PUB/src/resources/assets/engineerclient/dungeonpack" "$PUB/src/resources/posepov" \
-  "$PUB/src/resources/assets/engineerclient/shaders"
+  "$PUB/src/resources/assets/engineerclient/dungeonpack/packs"/{layouts.json.gz,mobs.json.gz,doors.json.gz,runstate.json.gz,traps.json,secrets.json.gz}
+# POV Previews keeps the room pack (rooms.index.json.gz, rooms.blocks.bin), its shaders and posepov/.
 
 FMJ="$PUB/src/resources/fabric.mod.json"
 sed -i -E \

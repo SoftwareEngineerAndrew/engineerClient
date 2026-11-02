@@ -1,6 +1,5 @@
 package com.coffeeclient.misc
 
-import com.engineerclient.pov.PovCapture
 import com.odtheking.odin.OdinMod.mc
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.features.Category
@@ -19,9 +18,8 @@ object CameraOffset : Module(
     private val offset by NumberSetting("Offset", 0.0, -1.0..1.0, 0.05, desc = "Blocks: + forward, - back.")
 
     /**
-     * The offset now (0 while off, and during a POV Previews feed pass: a teammate's feed shows their own eyes).
-     * Only while the camera is on them: the restore pass after the feeds puts it back on you and keeps your offset.
+     * The offset now (0 while off).
      */
     @JvmStatic fun blocks(): Float =
-        if (enabled && !(PovCapture.capturing && mc.cameraEntity !== mc.player)) offset.toFloat() else 0f
+        if (enabled) offset.toFloat() else 0f
 }

@@ -5,7 +5,7 @@ import com.engineerclient.misc.AgroSphere
 import com.engineerclient.misc.RandomStuff
 import com.engineerclient.rotation.EcLog
 import com.engineerclient.practice.SimonSaysPractice
-import com.engineerclient.pov.PovPreviews
+import com.engineerclient.pov.PosePov
 
 import com.engineerclient.splits.DungeonSplits
 import com.engineerclient.splits.OdinSplitsLook
@@ -78,7 +78,7 @@ object EngineerClient : ClientModInitializer {
      */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PovPreviews, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore,
+            PosePov, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore,
             com.engineerclient.clearbreakdown.ClearBreakdown,
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning,
             com.engineerclient.practice.TerminalHitboxes,

@@ -1,6 +1,6 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
-import com.devgineerclient.DevgineerClient
+import com.engineerclient.EngineerClient
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -112,10 +112,9 @@ object PoseShare {
 
     /** Whether you're looking at your teammates' views, or about to (set by [PosePov] each tick). */
     @Volatile var watching = false
-    /**
-     * "Optimize server location": each teammate's frames go whichever way is quicker to them right now, TURN or the relay,
-     * measured for each one (otherwise TURN whenever it's up); set by [PosePov].
-     */
+    /** "Sharing FPS" isn't at none: your pose, look, terminal and rooms go to teammates (set by [PosePov] each tick, on or off). Off, nothing of yours is sent; theirs still come. */
+    @Volatile var sharing = true
+    /** Each teammate's frames go whichever way is quicker to them right now, TURN or the relay, measured for each one. */
     @Volatile var optimize = true
     /** "Skip tiny look changes": looks under 0.05° from the last sent aren't sent; set by [PosePov]. */
     @Volatile var skipTiny = true
@@ -128,7 +127,7 @@ object PoseShare {
     /** Frame kinds past the pose relay's own that it says it passes on (its sign-in's "x"); [shareExtra]'s go over TURN only otherwise. */
     @Volatile private var relayExtras: Set<Int> = emptySet()
 
-    private val turn = TurnLink({ slot, kind, body -> DevgineerClient.safely("pose turn") { direct(slot, kind, body) } }, { DevgineerClient.logger.info("[pose share] $it") })
+    private val turn = TurnLink({ slot, kind, body -> EngineerClient.safely("pose turn") { direct(slot, kind, body) } }, { EngineerClient.logger.info("[pose share] $it") })
     /** Whether the relay hands out TURN credentials (it has a key), and the ones it gave. */
     @Volatile private var turnOffered = false
     @Volatile private var creds: Pair<String, String>? = null
@@ -315,9 +314,9 @@ object PoseShare {
         wasSwinging = swinging
         // The rooms this game has named, for teammates (their views need the rooms where they are, which their games may not
         // have reached): when they change or someone new links. Whether or not anyone is watching.
-        if (seq % 10 == 0) shareRooms(nowMs)
+        if (sharing && seq % 10 == 0) shareRooms(nowMs)
 
-        if (!wanted) { wasWanted = false; if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }; return }
+        if (!wanted || !sharing) { wasWanted = false; if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }; return }
         if (!wasWanted) { wasWanted = true; selfAt = 0L; guiAt = 0L }
 
         // Yourself: every tick while moving, every [STILL_NS] while still, and the still pose again just before moving off
@@ -337,10 +336,10 @@ object PoseShare {
         prevFrame = frame; lastSig = sig
 
         // Teammates you can see who don't share for themselves (each tagged by where they are in the party you sent).
-        val sharing = roster.values.toSet()
+        val sharers = roster.values.toSet()
         val level = mc.level
         if (level != null) for ((i, name) in sentParty.withIndex()) {
-            if (name in sharing) continue
+            if (name in sharers) continue
             val p = level.players().firstOrNull { it.name.string.equals(name, ignoreCase = true) } ?: continue
             val f = if (PosePov.swungSince(p.id, now - TICK_NS)) 1 else 0
             sendBinary(pose(2, i, 0, p.x, p.y, p.z, p.yHeadRot, p.xRot, f, p.mainHandItem))
@@ -372,10 +371,10 @@ object PoseShare {
      * drawing it has to stay a whole tick behind; these let them draw only a few ms behind. Where you are only changes a tick at
      * a time, so that goes with the ticks ([D_TICK]), and they carry it on by its move between them.
      */
-    fun frameSafely() = DevgineerClient.safely("pose share frame") { frame() }
+    fun frameSafely() = EngineerClient.safely("pose share frame") { frame() }
 
     fun frame() {
-        if (!ready || !wanted || !turn.ready) return
+        if (!ready || !wanted || !sharing || !turn.ready) return
         val fast = turnSlots()
         if (fast.isEmpty()) return
         val me = mc.player ?: return
@@ -446,8 +445,11 @@ object PoseShare {
         if (!direct.containsAll(roster.keys)) sendBinary(frame)
     }
 
+    /** Who reads kinds 7 and 8 when they come (the dev build's party progress; a sender in lower case, the frame just past its kind), from this object's threads. */
+    @Volatile var extras: ((String, Int, java.nio.ByteBuffer) -> Unit)? = null
+
     /**
-     * One of [com.devgineerclient.party.PartyProgress]'s frames (kind 7 or 8): over TURN as [share], and through the relay only once
+     * One of the party progress frames (kind 7 or 8): over TURN as [share], and through the relay only once
      * it says it takes that kind (one that doesn't would close the socket on it). Sent whether or not anyone is watching.
      */
     fun shareExtra(frame: ByteArray): Int {
@@ -586,7 +588,7 @@ object PoseShare {
     private fun problem(what: String) {
         if (what == lastProblem) return
         lastProblem = what
-        DevgineerClient.logger.warn("[pose share] $what")
+        EngineerClient.logger.warn("[pose share] $what")
     }
 
     /**
@@ -664,11 +666,11 @@ object PoseShare {
     private fun onText(ws: WebSocket, text: String) {
         val m = runCatching { JsonParser.parseString(text).asJsonObject }.getOrNull() ?: return
         when (m["t"]?.asString) {
-            "c" -> m["s"]?.asString?.takeIf { Regex("[0-9a-f]{40}").matches(it) }?.let { s -> mc.execute { DevgineerClient.safely("pose share") { signIn(ws, s) } } }
+            "c" -> m["s"]?.asString?.takeIf { Regex("[0-9a-f]{40}").matches(it) }?.let { s -> mc.execute { EngineerClient.safely("pose share") { signIn(ws, s) } } }
             "ok" -> {
                 ready = true; backoff = 2_000L
                 lastProblem = null
-                DevgineerClient.logger.info("[pose share] signed in (slot ${m["slot"]?.asInt})")
+                EngineerClient.logger.info("[pose share] signed in (slot ${m["slot"]?.asInt})")
                 mySlot = m["slot"]?.asInt ?: 0
                 turnOffered = m["turn"]?.asBoolean == true
                 colo = m["colo"]?.asString?.filter { it in 'A'..'Z' }?.take(8) ?: ""
@@ -722,7 +724,7 @@ object PoseShare {
             3 -> gui(sender, data, now)
             9 -> rooms(sender, data)
             4 -> tracks[sender]?.gui = null
-            7, 8 -> com.devgineerclient.party.PartyProgress.heard(sender, kind, data)
+            7, 8 -> extras?.invoke(sender, kind, data)
         }
     }
 
@@ -750,7 +752,7 @@ object PoseShare {
             3 -> gui(sender, b, now)
             9 -> rooms(sender, b)
             4 -> if (body.isEmpty()) tracks[sender]?.gui = null
-            7, 8 -> com.devgineerclient.party.PartyProgress.heard(sender, kind, b)
+            7, 8 -> extras?.invoke(sender, kind, b)
         }
     }
 
@@ -864,13 +866,13 @@ object PoseShare {
         private var tooBig = false
 
         override fun onOpen(ws: WebSocket) {
-            DevgineerClient.safely("pose share") { opened(ws, lobby) }
+            EngineerClient.safely("pose share") { opened(ws, lobby) }
             ws.request(1)
         }
 
         override fun onText(ws: WebSocket, data: CharSequence, last: Boolean): CompletionStage<*>? {
             if (text.length + data.length <= 4096) text.append(data)
-            if (last) { val whole = text.toString(); text.setLength(0); DevgineerClient.safely("pose share") { onText(ws, whole) } }
+            if (last) { val whole = text.toString(); text.setLength(0); EngineerClient.safely("pose share") { onText(ws, whole) } }
             ws.request(1)
             return null
         }
@@ -878,11 +880,11 @@ object PoseShare {
         override fun onBinary(ws: WebSocket, data: ByteBuffer, last: Boolean): CompletionStage<*>? {
             // Frames are small: one in parts is gathered (to the relay's limit) before it's read, and a bigger one dropped.
             val prev = bin
-            if (prev == null && last && !tooBig) DevgineerClient.safely("pose share") { onBinary(data) }
+            if (prev == null && last && !tooBig) EngineerClient.safely("pose share") { onBinary(data) }
             else if (!tooBig) {
                 if ((prev?.remaining() ?: 0) + data.remaining() > 64) tooBig = true
                 else bin = ByteBuffer.allocate((prev?.remaining() ?: 0) + data.remaining()).also { n -> prev?.let { n.put(it) }; n.put(data); n.flip() }
-                if (last && !tooBig) bin?.let { DevgineerClient.safely("pose share") { onBinary(it) } }
+                if (last && !tooBig) bin?.let { EngineerClient.safely("pose share") { onBinary(it) } }
             }
             if (last) { bin = null; tooBig = false }
             ws.request(1)
@@ -996,7 +998,7 @@ object PoseShare {
             }
             out += sb.toString() to color
         }
-        if (debug && nowMs - dbgLogAt > 10_000) { dbgLogAt = nowMs; DevgineerClient.logger.info("[pose share] debug: " + out.joinToString(" | ") { it.first }) }
+        if (debug && nowMs - dbgLogAt > 10_000) { dbgLogAt = nowMs; EngineerClient.logger.info("[pose share] debug: " + out.joinToString(" | ") { it.first }) }
         return out
     }
 

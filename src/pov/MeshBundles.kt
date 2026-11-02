@@ -1,4 +1,4 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
 import com.engineerclient.dungeonpack.pack.Rot
 import com.mojang.blaze3d.systems.RenderSystem
@@ -264,10 +264,7 @@ object PiecePool {
             inFlight.remove(d.key)
             val p = d.packed
             if (p == null || p.quads == 0) { empty += d.key; continue }
-            val t0 = System.nanoTime()
             upload(d.key, p, d.room)
-            PovPerf.add(PovPerf.UPLOAD, System.nanoTime() - t0)
-            PovPerf.count(PovPerf.C_UPLOADS); PovPerf.count(PovPerf.C_UPLOAD_BYTES, p.bytes.remaining().toLong())
         }
         if (now - idleCheckAt > 1000) { idleCheckAt = now; evict(IDLE_MS, Int.MAX_VALUE) }
         if (wanted.isEmpty()) return
@@ -276,7 +273,6 @@ object PiecePool {
             inFlight += k
             val e = epoch
             workers.execute {
-                val t0 = System.nanoTime()
                 val packed = runCatching {
                     val b = w.bundle
                     val sprites = b.spriteIndices() ?: return@runCatching null
@@ -284,7 +280,6 @@ object PiecePool {
                     MeshCodec.decode(b.data, b.offs[w.piece], b.lens[w.piece], sprites, w.rot, w.w, w.d, q, w.room?.cut(), w.pockets)
                     CompactMesh.pack(q, -(w.room?.x0 ?: 0).toFloat(), -(w.room?.z0 ?: 0).toFloat())
                 }.getOrNull()
-                PovPerf.add(PovPerf.DECODE, System.nanoTime() - t0)
                 // Its room: the key less the piece, so the room's pieces can go side by side.
                 done += Done(k, e, packed, k and (0xFFFFL shl 28).inv())
             }
@@ -351,7 +346,7 @@ object PiecePool {
 
     private fun newPool(atLeast: Int) {
         val n = maxOf(POOL_VERTICES, atLeast)
-        val buf = RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov pieces" }, GpuBuffer.USAGE_VERTEX or GpuBuffer.USAGE_COPY_DST, n.toLong() * CompactMesh.VERTEX)
+        val buf = RenderSystem.getDevice().createBuffer({ "pov previews pieces" }, GpuBuffer.USAGE_VERTEX or GpuBuffer.USAGE_COPY_DST, n.toLong() * CompactMesh.VERTEX)
         if (n / 4 * 6 > mostIndices) mostIndices = n / 4 * 6
         pools += Pool(buf, n)
     }

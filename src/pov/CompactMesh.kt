@@ -1,4 +1,4 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.renderpearl.api.GpuFormat
@@ -69,7 +69,7 @@ object CompactMesh {
             if (list.isEmpty()) b.putFloat(0f).putFloat(0f).putFloat(0f).putFloat(0f)
             b.flip()
             buffer?.close()
-            buffer = RenderSystem.getDevice().createBuffer({ "devgineerclient pose pov sprites" }, GpuBuffer.USAGE_UNIFORM_TEXEL_BUFFER, b)
+            buffer = RenderSystem.getDevice().createBuffer({ "pov previews sprites" }, GpuBuffer.USAGE_UNIFORM_TEXEL_BUFFER, b)
             index = idx
             generation++
             return true
@@ -354,7 +354,7 @@ object PoseShader {
 
     private fun pipeline(name: String, cull: Boolean): RenderPipeline = RenderPipelines.register(
         RenderPipeline.builder()
-            .withLocation(Identifier.fromNamespaceAndPath("devgineerclient", "pipeline/$name"))
+            .withLocation(Identifier.fromNamespaceAndPath("engineerclient", "pipeline/$name"))
             .withVertexShader(Identifier.fromNamespaceAndPath("engineerclient", "core/pose_pov"))
             .withFragmentShader(Identifier.fromNamespaceAndPath("engineerclient", "core/pose_pov"))
             .withBindGroupLayout(BindGroupLayouts.GLOBALS)

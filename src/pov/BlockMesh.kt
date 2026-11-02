@@ -1,4 +1,4 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
 import com.engineerclient.p3sim.Arena
 import com.engineerclient.dungeonpack.rooms.BlockStates
@@ -217,7 +217,7 @@ object BlockMesh {
             if (chunkOnly.contains(key) && key in world && key !in worldPending && key !in stale) {
                 if (building >= IN_FLIGHT) break
                 dirtyAt.remove(key); chunkOnly.remove(key)
-                PovPerf.time(PovPerf.CHUNK_CHECK) { buildWorld(level, SectionPos.x(key), SectionPos.y(key), SectionPos.z(key), key, builtFrom[key]) }
+                buildWorld(level, SectionPos.x(key), SectionPos.y(key), SectionPos.z(key), key, builtFrom[key])
                 continue
             }
             dirtyAt.remove(key); chunkOnly.remove(key)
@@ -236,7 +236,7 @@ object BlockMesh {
                     val own = r.pieceKey(g.lx(i), g.ly(i), g.lz(i))
                     if (own in touchedRoom && (own !in roomOwn || own in staleOwn) && own !in ownPending && dirtyRoom[own] == null) {
                         if (building >= IN_FLIGHT) return
-                        PovPerf.time(PovPerf.MAKE_OWN) { buildOwn(level, r, g, g.lx(i), g.ly(i), g.lz(i), own) }
+                        buildOwn(level, r, g, g.lx(i), g.ly(i), g.lz(i), own)
                         if (overBudget()) return
                     }
                 }
@@ -299,7 +299,7 @@ object BlockMesh {
         allDone = false
         if (key in worldPending) return true
         if (building >= IN_FLIGHT) return false
-        PovPerf.time(PovPerf.MAKE_WORLD) { buildWorld(level, sx, sy, sz, key) }
+        buildWorld(level, sx, sy, sz, key)
         return !overBudget()
     }
 
@@ -413,9 +413,7 @@ object BlockMesh {
     private fun put(b: Built): Mesh? {
         val p = b.packed ?: return null
         if (p.quads * 6 > ownMost) ownMost = p.quads * 6
-        val t0 = System.nanoTime()
         val res = PiecePool.putOwn(p)
-        PovPerf.add(PovPerf.UPLOAD, System.nanoTime() - t0)
         return res?.let { Mesh(it, b.ox, b.oz) }
     }
 
@@ -423,9 +421,7 @@ object BlockMesh {
     private fun submit(failed: Built, job: () -> Built) {
         building++
         builder.execute {
-            val t0 = System.nanoTime()
-            val b = runCatching(job).onFailure { com.devgineerclient.DevgineerClient.logger.warn("[pose pov] a build failed", it) }.getOrNull()
-            PovPerf.add(PovPerf.BUILD_WORKER, System.nanoTime() - t0)
+            val b = runCatching(job).onFailure { com.engineerclient.EngineerClient.logger.warn("[pose pov] a build failed", it) }.getOrNull()
             built += b ?: failed
         }
     }
@@ -457,10 +453,8 @@ object BlockMesh {
     private fun make(level: ClientLevel, name: String): Boolean {
         val m = making.getOrPut(name) { spec(level, name, gameMesher) ?: return true }
         for (i in m.parts.indices) if (m.parts[i] == null) {
-            PovPerf.time(PovPerf.MAKE) {
-                m.parts[i] = m.piece(i, m.names)
-                m.sight?.let { m.sights[i] = it(i) }
-            }
+            m.parts[i] = m.piece(i, m.names)
+            m.sight?.let { m.sights[i] = it(i) }
             if (overBudget()) return false
         }
         making.remove(name)
@@ -529,7 +523,7 @@ object BlockMesh {
 
     private var exportQueue: ArrayDeque<String>? = null
     private var exportTotal = 0
-    private val exportDir get() = FabricLoader.getInstance().gameDir.resolve("devgineerclient").resolve("posepov-export").resolve(MeshBundles.version)
+    private val exportDir get() = FabricLoader.getInstance().configDir.resolve("engineerclient").resolve("pov-export").resolve(MeshBundles.version)
 
     /**
      * The bundles' version (their address and disk key), once the room pack and the disk are ready, and the disk file rid of

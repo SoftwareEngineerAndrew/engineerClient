@@ -1,4 +1,4 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
 import com.engineerclient.dungeonpack.pack.Rot
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -9,7 +9,7 @@ import kotlin.test.assertEquals
 
 /**
  * Every exported bundle's pieces, merged: the faces cover exactly the area they did, side by side, and how much smaller it all
- * gets. Only with POSE_BUNDLES set to an export folder (devgineerclient/posepov-export/<version>).
+ * gets. Only with POSE_BUNDLES set to an export folder (config/engineerclient/pov-export/<version>).
  */
 class CompactMeshBundlesTest {
     @Test fun mergedPiecesCoverTheSameFaces() {
