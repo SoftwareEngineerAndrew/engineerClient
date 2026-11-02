@@ -57,10 +57,6 @@ dependencies {
     // release workflow downloads into libs/odin; kept out of git.
     compileOnly(files("libs/odin"))
 
-    // Sodium replaces the terrain renderer on every team client. Since 26.2 it culls from inside the
-    // level extract, so the POV previews no longer call it; optional at runtime.
-    compileOnly("maven.modrinth:sodium:bAZQdGpg")
-
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

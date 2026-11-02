@@ -1,4 +1,4 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
 import com.engineerclient.dungeonpack.pack.DungeonFrame
 import com.engineerclient.dungeonpack.pack.Rot
@@ -148,7 +148,7 @@ object RoomEdges {
         if (indexing) return
         indexing = true
         val ds = pack.designs
-        val file = FabricLoader.getInstance().gameDir.resolve("devgineerclient").resolve("posepov-cache").resolve("edges-$FORMAT-${pack.version}-${ds.size}.idx")
+        val file = FabricLoader.getInstance().configDir.resolve("engineerclient").resolve("pov-cache").resolve("edges-$FORMAT-${pack.version}-${ds.size}.idx")
         CompletableFuture.runAsync {
             runCatching {
                 if (Files.exists(file)) DataInputStream(Files.newInputStream(file).buffered()).use { inp ->

@@ -1,6 +1,6 @@
-package com.devgineerclient.mixin;
+package com.engineerclient.mixin;
 
-import com.devgineerclient.posepov.PosePov;
+import com.engineerclient.pov.PosePov;
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

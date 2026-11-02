@@ -1,4 +1,4 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -119,7 +119,7 @@ class TurnLink(
         realm = null; nonce = null; authKey = null; authTried = false
         relayed = null; txs.clear()
         for (p in peers.values) p.bound = false
-        Thread.ofPlatform().name("devgineerclient-pose-turn").daemon(true).start {
+        Thread.ofPlatform().name("engineerclient-pov-turn").daemon(true).start {
             // The server's address (prefer IPv4: the relayed addresses are), then the socket, talking to it alone.
             val addr = runCatching { InetAddress.getAllByName(host).let { a -> a.firstOrNull { it is Inet4Address } ?: a.first() } }.getOrNull()
             if (addr == null) { fail("couldn't look up $host"); return@start }

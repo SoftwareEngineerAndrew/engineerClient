@@ -458,8 +458,6 @@ object I4Aims : Module(
      * the board (with a margin, wider once zoomed so the edge doesn't flicker). Eased in and out over [ZOOM_SECONDS].
      */
     @JvmStatic fun zoomFov(fov: Float): Float {
-        // Not on a teammate's POV feed; the restore pass after the feeds is your camera again and keeps the zoom.
-        if (com.engineerclient.pov.PovCapture.capturing && mc.cameraEntity !== mc.player) return fov
         val now = System.nanoTime()
         val dt = if (zoomAt == 0L) 0f else ((now - zoomAt) / 1e9f).coerceAtMost(0.1f)
         zoomAt = now

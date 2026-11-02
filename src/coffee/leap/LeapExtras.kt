@@ -1,7 +1,6 @@
 package com.coffeeclient.leap
 
 import com.coffeeclient.CoffeeClient
-import com.engineerclient.pov.PovPreviews
 import com.engineerclient.pov.ShowIn
 import com.google.gson.JsonParser
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
@@ -141,7 +140,7 @@ object LeapExtras : Module(
         val window = CoffeeClient.mc.window
         val halfW = window.guiScaledWidth / 2
         val halfH = window.guiScaledHeight / 2
-        val scale = menuScale() * PovPreviews.overlayScale
+        val scale = menuScale()
         repeat(4) { i ->
             val clazz = DungeonUtils.leapTeammates.getOrNull(i)?.clazz
             val color = if (clazz == null || clazz == DungeonClass.EMPTY) OUTLINE_GREY else clazz.color.withAlpha(OUTLINE_GREY.alphaFloat)

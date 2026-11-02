@@ -1,4 +1,4 @@
-package com.devgineerclient.posepov
+package com.engineerclient.pov
 
 import com.engineerclient.dungeonpack.pack.DungeonFrame
 import org.junit.jupiter.api.Test

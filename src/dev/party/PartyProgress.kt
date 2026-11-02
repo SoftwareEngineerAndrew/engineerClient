@@ -1,7 +1,7 @@
 package com.devgineerclient.party
 
 import com.devgineerclient.DevgineerClient
-import com.devgineerclient.posepov.PoseShare
+import com.engineerclient.pov.PoseShare
 import com.engineerclient.p3sim.Station
 import com.engineerclient.practice.OdinSimonSays
 import com.engineerclient.practice.TermInfo
@@ -89,6 +89,7 @@ object PartyProgress : Module(
     private val sses = ConcurrentHashMap<String, Ss>()
 
     init {
+        PoseShare.extras = { sender, kind, b -> heard(sender, kind, b) }
         ClientTickEvents.END_CLIENT_TICK.register { DevgineerClient.safely("party progress") { tick() } }
         on<RenderExtractEvent> { DevgineerClient.safely("party progress labels") { if (labels) drawLabels(this) } }
     }
