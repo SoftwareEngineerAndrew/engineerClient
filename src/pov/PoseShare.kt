@@ -1,6 +1,10 @@
 package com.engineerclient.pov
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.mixin.ContainerScreenAccessor
+import com.odtheking.odin.features.impl.boss.TerminalSolver
+import com.odtheking.odin.features.impl.boss.termGUI.TermGui
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -66,6 +70,8 @@ object PoseShare {
     /** A shared view older than this isn't shown: an old frame would pass for where they are now. */
     private const val STALE_NS = 300_000_000L
     private const val GUI_STALE_NS = 3_000_000_000L
+    /** The most a terminal frame may be, its kind included: the relay's MAX_GUI (adr src/pose.js), past which it closes the socket. */
+    private const val MAX_GUI_FRAME = 40
     /** While still, your pose is sent this often rather than every tick (well inside [STALE_NS]). */
     private const val STILL_NS = 100_000_000L
     private val LOBBY = Regex("[A-Za-z0-9]{1,24}")
@@ -206,9 +212,10 @@ object PoseShare {
 
     /**
      * An open terminal as its holder sees it: Odin's type, the letter (Starts With) or colour (Select), and Odin's solution
-     * (slot numbers, in order; Rubix repeats a slot once per click).
+     * (slot numbers, in order; Rubix repeats a slot once per click), and where their mouse is on the window ([mouseU] across
+     * and [mouseV] down, in slots from the first slot's corner; NaN when not known).
      */
-    class Gui(val type: TerminalTypes, val extra: Int, val solution: IntArray, val at: Long)
+    class Gui(val type: TerminalTypes, val extra: Int, val solution: IntArray, val at: Long, val mouseU: Double = Double.NaN, val mouseV: Double = Double.NaN)
 
     /** Each terminal's grid of clickable cells (as Odin lays them out), and how many cells of it a solution may light. */
     class Grid(val rows: Int, val cols: Int, val startRow: Int, val startCol: Int, val maxCells: Int) {
@@ -325,7 +332,32 @@ object PoseShare {
         // have reached): when they change or someone new links. Whether or not anyone is watching.
         if (sharing && seq % 10 == 0) shareRooms(nowMs)
 
-        if (!wanted || !sharing) { wasWanted = false; if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }; return }
+        // The terminal you have open: its type, Odin's solution and where your mouse is on it, when that changes (and every
+        // second, for whoever started looking since); closed once. Whether or not anyone is watching the views: Terminals
+        // Status shows it too.
+        val term = TerminalUtils.currentTerm
+        val grid = term?.let { GRIDS[it.type] }
+        if (sharing && term != null && grid != null && me.containerMenu !== me.inventoryMenu) {
+            val title = mc.gui.screen()?.title?.string ?: ""
+            val extra = when (term.type) {
+                TerminalTypes.STARTS_WITH -> STARTS_WITH.find(title)?.groupValues?.get(1)?.uppercase()?.get(0)?.minus('A') ?: 0
+                TerminalTypes.SELECT -> SELECT.find(title)?.groupValues?.get(1)?.replace("SILVER", "LIGHT GRAY", ignoreCase = true)
+                    ?.let { c -> DyeColor.entries.find { it.name.replace("_", " ").equals(c, true) }?.ordinal } ?: 0
+                else -> 0
+            }
+            val sol = solutionFor(term.type, grid, term.solution)
+            var f = ByteArray(4 + sol.size)
+            f[0] = 3; f[1] = term.type.ordinal.toByte(); f[2] = extra.toByte(); f[3] = sol.size.toByte()
+            sol.forEachIndexed { i, s -> f[4 + i] = s.toByte() }
+            // Then the mouse (two bytes), while the frame stays within what the relay takes.
+            if (f.size + 2 <= MAX_GUI_FRAME) {
+                val mouse = termMouse(term.type)
+                f += byteArrayOf(TerminalsLayout.encodeMouse(mouse?.first ?: Double.NaN).toByte(), TerminalsLayout.encodeMouse(mouse?.second ?: Double.NaN).toByte())
+            }
+            if (!f.contentEquals(guiFrame) || nowMs - guiAt > 1000) { guiFrame = f; guiAt = nowMs; share(f) }
+        } else if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }
+
+        if (!wanted || !sharing) { wasWanted = false; return }
         if (!wasWanted) { wasWanted = true; selfAt = 0L; guiAt = 0L }
 
         // Yourself: every tick while moving, every [STILL_NS] while still, and the still pose again just before moving off
@@ -354,24 +386,6 @@ object PoseShare {
             sendBinary(pose(2, i, 0, p.x, p.y, p.z, p.yHeadRot, p.xRot, f, p.mainHandItem))
         }
 
-        // The terminal you have open: its type and Odin's solution only, when it changes (and every second, for whoever
-        // started watching since); closed once.
-        val term = TerminalUtils.currentTerm
-        val grid = term?.let { GRIDS[it.type] }
-        if (term != null && grid != null && me.containerMenu !== me.inventoryMenu) {
-            val title = mc.gui.screen()?.title?.string ?: ""
-            val extra = when (term.type) {
-                TerminalTypes.STARTS_WITH -> STARTS_WITH.find(title)?.groupValues?.get(1)?.uppercase()?.get(0)?.minus('A') ?: 0
-                TerminalTypes.SELECT -> SELECT.find(title)?.groupValues?.get(1)?.replace("SILVER", "LIGHT GRAY", ignoreCase = true)
-                    ?.let { c -> DyeColor.entries.find { it.name.replace("_", " ").equals(c, true) }?.ordinal } ?: 0
-                else -> 0
-            }
-            val sol = solutionFor(term.type, grid, term.solution)
-            val f = ByteArray(4 + sol.size)
-            f[0] = 3; f[1] = term.type.ordinal.toByte(); f[2] = extra.toByte(); f[3] = sol.size.toByte()
-            sol.forEachIndexed { i, s -> f[4 + i] = s.toByte() }
-            if (!f.contentEquals(guiFrame) || nowMs - guiAt > 1000) { guiFrame = f; guiAt = nowMs; share(f) }
-        } else if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }
     }
 
     /**
@@ -518,6 +532,24 @@ object PoseShare {
     private fun relayPathMs(p: TurnLink.Peer) = if (rttMs > 0 && p.theirRelayMs >= 0) rttMs / 2 + p.theirRelayMs else -1.0
 
     private fun turnSlots(): Set<Int> = viaTurn.filterValues { it }.keys
+
+    /**
+     * Where your mouse is over the terminal's window, in slots ([TerminalsLayout.cursor]'s units): on the vanilla chest from
+     * where its first slot is (8, 18 in from its corner, 18 apart); on Odin's custom terminal GUI, which lays slots out its own
+     * way, the middle of the slot Odin has under the mouse (null off its slots).
+     */
+    private fun termMouse(type: TerminalTypes): Pair<Double, Double>? = runCatching {
+        val screen = mc.gui.screen() as? AbstractContainerScreen<*> ?: return null
+        if (TerminalSolver.customGuiEnabled) {
+            val gui = type.javaClass.getMethod("getGUI").invoke(type) ?: return null
+            val field = hoveredField ?: TermGui::class.java.getDeclaredField("hoveredSlotIndex").also { it.isAccessible = true; hoveredField = it }
+            val slot = field.get(gui) as? Int ?: return null
+            return Pair(slot % 9 + 0.5, slot / 9 + 0.5)
+        }
+        val box = screen as ContainerScreenAccessor
+        Pair((mc.mouseHandler.getScaledXPos(mc.window) - box.adrLeftPos() - 7) / 18.0, (mc.mouseHandler.getScaledYPos(mc.window) - box.adrTopPos() - 17) / 18.0)
+    }.getOrNull()
+    private var hoveredField: java.lang.reflect.Field? = null
 
     /** The solution as it may be sent: cells of the grid only, each once (Rubix: up to 4 times), within the grid's cap. */
     private fun solutionFor(type: TerminalTypes, grid: Grid, solution: List<Int>): List<Int> {
@@ -867,10 +899,13 @@ object PoseShare {
             else -> if (extra != 0) return
         }
         val n = b.get().toInt() and 255
-        if (n > 35 || b.remaining() != n) return
+        // The solution, then (from games since Terminals Status) the mouse's two bytes.
+        if (n > 35 || (b.remaining() != n && b.remaining() != n + 2)) return
         val sol = IntArray(n) { b.get().toInt() and 255 }
         if (solutionFor(type, grid, sol.asList()).size != n) return
-        tracks.getOrPut(sender) { Track() }.gui = Gui(type, extra, sol, now)
+        val u = if (b.hasRemaining()) TerminalsLayout.decodeMouse(b.get().toInt() and 255) else null
+        val v = if (b.hasRemaining()) TerminalsLayout.decodeMouse(b.get().toInt() and 255) else null
+        tracks.getOrPut(sender) { Track() }.gui = Gui(type, extra, sol, now, u ?: Double.NaN, v ?: Double.NaN)
     }
 
     private class Listener(private val lobby: String) : WebSocket.Listener {

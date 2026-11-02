@@ -582,14 +582,7 @@ object PosePov : Module(
         pose.translate((x0 + x1) / 2f - boxW * scale / 2, (y0 + y1) / 2f - gridH * scale / 2)
         pose.scale(scale, scale)
         val left = t.solution.distinct().size
-        val title = when (t.type) {
-            TerminalTypes.PANES -> "Panes"
-            TerminalTypes.RUBIX -> "Rubix"
-            TerminalTypes.NUMBERS -> "Numbers"
-            TerminalTypes.STARTS_WITH -> "Starts With '${'A' + t.extra}'"
-            TerminalTypes.SELECT -> "Select " + net.minecraft.world.item.DyeColor.entries[t.extra].name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
-            TerminalTypes.MELODY -> "Melody"
-        } + if (t.type == TerminalTypes.MELODY) "" else " · $left left"
+        val title = TerminalsStatus.title(t) + if (t.type == TerminalTypes.MELODY) "" else " · $left left"
         gfx.text(title, (boxW - mc.font.width(title)) / 2, 0, Color(255, 255, 255), shadow = true)
         val clicks = HashMap<Int, Int>(); val order = HashMap<Int, Int>()
         t.solution.forEachIndexed { n, s -> clicks.merge(s, 1, Int::plus); order.putIfAbsent(s, n) }
@@ -598,14 +591,7 @@ object PosePov : Module(
             val slot = (grid.startRow + r) * 9 + grid.startCol + c
             val x = gx + c * cell; val y = 12 + r * cell
             val n = order[slot]
-            val color = when (t.type) {
-                // Red: still to click; green: done.
-                TerminalTypes.PANES -> if (n != null) 0xE0D04040.toInt() else 0xE040B040.toInt()
-                TerminalTypes.NUMBERS -> when (n) { null -> 0x60303030; 0 -> 0xF040D040.toInt(); 1 -> 0xE0D0C030.toInt(); 2 -> 0xD0D07020.toInt(); else -> 0xC0A04040.toInt() }
-                // Melody's solution: the lane's green pane, the pointer, and the button when they line up.
-                TerminalTypes.MELODY -> when (n) { 0 -> 0xF040D040.toInt(); 1 -> 0xF0D040D0.toInt(); 2 -> 0xF080FF80.toInt(); else -> 0x40303030 }
-                else -> if (n != null) 0xE040D040.toInt() else 0x60303030
-            }
+            val color = TerminalsStatus.cellColor(t.type, n)
             gfx.fill(x, y, x + cell - 1, y + cell - 1, color)
             if (t.type == TerminalTypes.RUBIX) clicks[slot]?.let { gfx.text("$it", x + (cell - mc.font.width("$it")) / 2, y + 3, Color(255, 255, 255), shadow = true) }
             if (t.type == TerminalTypes.NUMBERS && n != null && n < 3) gfx.text("${n + 1}", x + (cell - mc.font.width("${n + 1}")) / 2, y + 3, Color(255, 255, 255), shadow = true)
