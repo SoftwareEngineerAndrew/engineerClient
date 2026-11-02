@@ -133,7 +133,7 @@ object PosePov : Module(
     private val shareFps by NumberSetting("Sharing FPS", 60, ShareFps.NONE..240, 5, desc = "How many times a second your look goes to teammates (whether or not this module is on). Higher is smoother for them. At the lowest, none: nothing of yours is shared.")
     private val skipTiny by BooleanSetting("Skip tiny look changes", true, desc = "Doesn't send a look change under 0.05° (too small to see in a view; mostly hand jitter at high FPS). The exact look still goes with every tick. Cuts what you send when your mouse barely moves.")
     private val debugInfo by BooleanSetting("Debug info", false, desc = "Over the views: the relay and TURN connections, each teammate's route and one-way delays both ways, frames a second, losses and buffering. Also written to the log every 10 seconds.")
-    private val overHuds by BooleanSetting("Show over HUDs", false, desc = "Draws the views on top of every HUD (yours and every mod's) instead of under them. The leap menu's own boxes and names stay on top either way.")
+    private val showHuds by BooleanSetting("Show HUDs", false, desc = "Vanilla's HUD and every mod's (Odin's map too) drawn over the views. Off: the views cover them; the leap menu's own boxes and names stay on top either way.")
     private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
     private val viewDistance by NumberSetting("View distance", 96, 32..160, 8, unit = " blocks", desc = "How far the views draw, fading into the sky over the last stretch. Lower is faster; past half of it only the bigger faces are drawn.")
 
@@ -259,8 +259,8 @@ object PosePov : Module(
     }
 
     fun drawUnderGui(gfx: GuiGraphicsExtractor) {
-        // "Show over HUDs": left to the screen's render instead (ScreenEvent.Render above), after the HUD.
-        if (overHuds) return
+        // Without "Show HUDs": left to the screen's render instead (ScreenEvent.Render above), after the HUD, so it's covered.
+        if (!showHuds) return
         EngineerClient.safely("pose pov") { if (wants()) { timed(true) { draw(gfx) }; drewUnderGui = true } }
     }
     private var drewUnderGui = false
@@ -272,6 +272,18 @@ object PosePov : Module(
         if (!enabled || !LeapMenu.enabled) return false
         val screen = mc.gui.screen() as? AbstractContainerScreen<*> ?: return false
         return screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player")
+    }
+
+    /**
+     * A shared pose stands for a teammate your game also has within 4 blocks of them, and for a second after up to 30 off:
+     * a fast move or a teleport reaches the two at different moments, and switching to the game's camera and back for it
+     * (with its blend) was a stutter whenever they moved a lot.
+     */
+    private val agreedAt = HashMap<String, Long>()
+    private fun agrees(name: String, d2: Double, now: Long): Boolean {
+        if (d2 < 16.0) { agreedAt[name] = now; return true }
+        val at = agreedAt[name] ?: return false
+        return d2 < 900.0 && now - at < 1_000_000_000L
     }
 
     private var badEyeAt = 0L
@@ -311,7 +323,7 @@ object PosePov : Module(
             // In clear the map says roughly where they are: a shared pose far from their icon is someone lying, and isn't used.
             // Peer-to-peer, they're drawn from their own frames even in range (smoother than the game's 20 a second), while
             // those put them where the server does (a few blocks' lead for the delay).
-            val d = if (useShared && p != null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { it.direct && it.pos.distanceToSqr(p.position()) < 16.0 } else null
+            val d = if (useShared && p != null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { it.direct && agrees(slot.name, it.pos.distanceToSqr(p.position()), now) } else null
             val s = d ?: if (useShared && p == null && !slot.isDead) PoseShare.pose(slot.name, now)?.takeIf { DungeonUtils.inBoss || slot.mapPos.data == 0L || near(slot, it.pos) } else null
             val e = if (p != null && d == null) {
                 players[i] = p
@@ -369,6 +381,11 @@ object PosePov : Module(
                 s.x = at.x; s.y = at.y; s.z = at.z
                 s.lightCoords = LightCoordsUtil.FULL_BRIGHT; s.outlineColor = 0
                 if (closest > NAME_RANGE * NAME_RANGE) s.nameTag = null
+                // Head, body and pitch between our own last two samples ([turns]), not the game's stale previous ones.
+                if (s is net.minecraft.client.renderer.entity.state.LivingEntityRenderState && en !is ArmorStand) turns[en.id]?.takeIf { it.tick == ticks }?.let { t ->
+                    val body = Mth.rotLerp(pt, t.bodyO, t.body)
+                    s.bodyRot = body; s.yRot = Mth.wrapDegrees(Mth.rotLerp(pt, t.headO, t.head) - body); s.xRot = Mth.lerp(pt, t.pitchO, t.pitch)
+                }
             }
             val bx = Mth.floor(en.x); val by = Mth.floor(en.y); val bz = Mth.floor(en.z)
             val b = en.boundingBox.move(at.x - en.x, at.y - en.y, at.z - en.z)
@@ -605,6 +622,12 @@ object PosePov : Module(
                        var outYaw: Float = yaw, var outPitch: Float = pitch, var outAt: Long = 0L)
     private val looks = HashMap<String, Look>()
     private var ticks = 0L
+    /**
+     * Every mob's head yaw, body yaw and pitch at the end of the last two ticks, for the same reason as [looks]: the game's own
+     * previous values aren't kept up for every remote entity, and lerping from a stale one spun their heads in the views.
+     */
+    private class Turn(var headO: Float, var head: Float, var bodyO: Float, var body: Float, var pitchO: Float, var pitch: Float, var tick: Long)
+    private val turns = HashMap<Int, Turn>()
 
     private fun sampleLooks() {
         val level = mc.level ?: return
@@ -619,6 +642,14 @@ object PosePov : Module(
             if (l == null || l.tick != ticks - 1) looks[name] = Look(p.yHeadRot, p.yHeadRot, p.xRot, p.xRot, ticks)
             else { l.yawO = l.yaw; l.yaw = p.yHeadRot; l.pitchO = l.pitch; l.pitch = p.xRot; l.tick = ticks }
         }
+        // Every mob near enough to show, the same way, while the views are up or about to be.
+        if (watchingSoon || wants()) for (en in level.entitiesForRendering()) {
+            if (en !is LivingEntity || en is ArmorStand) continue
+            val t = turns[en.id]
+            if (t == null || t.tick != ticks - 1) turns[en.id] = Turn(en.yHeadRot, en.yHeadRot, en.yBodyRot, en.yBodyRot, en.xRot, en.xRot, ticks)
+            else { t.headO = t.head; t.head = en.yHeadRot; t.bodyO = t.body; t.body = en.yBodyRot; t.pitchO = t.pitch; t.pitch = en.xRot; t.tick = ticks }
+        }
+        if (ticks % 100 == 0L) turns.values.removeIf { ticks - it.tick > 20 }
     }
 
     /**
