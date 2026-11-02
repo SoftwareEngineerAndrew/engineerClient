@@ -47,6 +47,9 @@ object TermInfo {
         return text.takeIf { System.currentTimeMillis() - at <= seconds * 1000 }
     }
 
+    /** When the last section's time went up (ms), 0 for none: Timers' Section Time Ding plays on each new one. */
+    val sectionDoneAt: Long get() = shownTime?.second ?: 0L
+
     private val CONTROL_CODES = Regex("§.")
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
     private const val CORE_OPEN = "The Core entrance is opening!"
