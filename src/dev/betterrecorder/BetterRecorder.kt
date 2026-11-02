@@ -25,6 +25,10 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.SharedConstants
 import net.minecraft.client.KeyMapping
 import net.minecraft.client.player.LocalPlayer
+import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow
+import com.devgineerclient.mixin.BrecArrowAccessor
+import com.odtheking.odin.utils.itemId
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import java.nio.file.Files
 import java.nio.file.Path
@@ -44,7 +48,7 @@ object BetterRecorder : Module(
     name = "Better Recorder",
     key = null,
     category = Category.custom("Devgineer Client", 860, 10),
-    description = "Records every Hypixel dungeon run in full (every packet raw, your inputs and look per tick, your profile at the start) into a folder next to the ADR run, for ADS's replay. Records only while ADR does; local only.",
+    description = "Records every Hypixel dungeon run in full (every packet raw, your inputs and look per tick, your profile at the start) into a folder next to the ADR run, for ADS's replay. Records on its own while ADR does; /brec start [note] and /brec stop record anywhere else (any server, singleplayer). Local only.",
 ) {
     private val openFolder by ActionSetting("Open Folder", desc = "Opens the folder the recordings are saved in.") {
         DevgineerClient.safely("better recorder folder") { Files.createDirectories(dir); com.mojang.blaze3d.Blaze3D.openPath(dir) }
@@ -62,7 +66,11 @@ object BetterRecorder : Module(
 
     private val dir: Path get() = DevgineerClient.mc.gameDirectory.toPath().resolve("devgineerclient-recordings").resolve("better")
 
-    private class Session(val run: RunRecorder, val rec: RecorderSession) {
+    /**
+     * A recording: of an ADR run ([run], named after it), or one started with `/brec start` ([run] null, named
+     * manual-<stamp>[-note]). [name] is the folder it gets when it closes.
+     */
+    private class Session(val run: RunRecorder?, val rec: RecorderSession, val name: String) {
         /** The last value written per input field. */
         val last = HashMap<String, String>()
         var lastTickNs = 0L
@@ -96,6 +104,8 @@ object BetterRecorder : Module(
         ClientCommandRegistrationCallback.EVENT.register { d, _ ->
             d.register(literal("brec")
                 .executes { DevgineerClient.msg(status()); 1 }
+                .then(literal("start").executes { startManual(null); 1 }.then(argument("note", StringArgumentType.greedyString()).executes { c -> startManual(StringArgumentType.getString(c, "note")); 1 }))
+                .then(literal("stop").executes { stopManual(); 1 })
                 .then(literal("mark").executes { mark(null); 1 }.then(argument("note", StringArgumentType.greedyString()).executes { c -> mark(StringArgumentType.getString(c, "note")); 1 })))
         }
 
@@ -133,12 +143,19 @@ object BetterRecorder : Module(
 
     private fun tickEnd() {
         BrecWire.on = enabled
-        BrecWire.buffering = enabled && ADR.onHypixel()
+        // The world's packets are kept on every server (not only Hypixel), so a `/brec start` anywhere has the chunks and
+        // entities sent before it.
+        BrecWire.buffering = enabled
         if (!BrecWire.buffering) BrecWire.dropWorld()
-        val run = if (enabled && ADR.onHypixel()) ADR.recording else null
-        if (session?.run !== run) { stop(wait = false); if (run != null && run !== stoppedRun) start(run) }
+        val manual = session?.let { it.run == null } == true
+        if (manual && !enabled) stop(wait = false)
+        // ADR runs record themselves as before; a manual recording runs until `/brec stop` (an ADR run meanwhile isn't recorded twice).
+        if (!manual) {
+            val run = if (enabled && ADR.onHypixel()) ADR.recording else null
+            if (session?.run !== run) { stop(wait = false); if (run != null && run !== stoppedRun) start(run, null) }
+        }
         val s = session ?: return
-        if (!s.rec.running) { stoppedRun = s.run; stop(wait = false); return }
+        if (!s.rec.running) { if (s.run != null) stoppedRun = s.run; stop(wait = false); return }
         val now = System.nanoTime()
         val sb = StringBuilder(160)
         sb.append(",\"dt\":").append((now - s.lastTickNs) / 1000)
@@ -156,6 +173,7 @@ object BetterRecorder : Module(
         }
         val input = input(s)
         if (input.isNotEmpty()) sb.append(",\"in\":{").append(input).append('}')
+        DevgineerClient.mc.player?.let { p -> use(sb, p); arrows(sb, p) }
         line(s, "tk", sb)
         s.ticks++
     }
@@ -178,6 +196,7 @@ object BetterRecorder : Module(
         val p = mc.player
         if (p != null) {
             put("sl", p.inventory.selectedSlot.toString())
+            put("h", held(p.mainHandItem))
             put("r", "[${p.yRot},${p.xRot}]")
             put("p", "[${p.x},${p.y},${p.z}]")
             val v = p.deltaMovement
@@ -192,15 +211,73 @@ object BetterRecorder : Module(
         return out.toString()
     }
 
-    private fun start(run: RunRecorder) {
+    /** An item as `[minecraft id, SkyBlock id or null]` (null for none). */
+    private fun held(stack: net.minecraft.world.item.ItemStack): String =
+        if (stack.isEmpty) "null" else "[${RecorderFiles.q(BuiltInRegistries.ITEM.getKey(stack.item).toString())},${RecorderFiles.q(stack.itemId.takeIf { it.isNotEmpty() })}]"
+
+    /** While you're using an item (drawing a bow): `"use":[item, ticks using it so far, ticks left, hand 0 main / 1 off]`, every tick. */
+    private fun use(sb: StringBuilder, p: LocalPlayer) {
+        if (!p.isUsingItem) return
+        sb.append(",\"use\":[").append(held(p.useItem)).append(',').append(p.ticksUsingItem).append(',').append(p.useItemRemainingTicks)
+            .append(',').append(if (p.usedItemHand == net.minecraft.world.InteractionHand.MAIN_HAND) 0 else 1).append(']')
+    }
+
+    /**
+     * Every arrow the client has within [ARROW_RANGE] blocks, every tick one exists, as the client has it at the tick's end:
+     * `"ar":[[id, type, x, y, z, vx, vy, vz, yaw, pitch, age, in ground, ticks in ground, owner id or -1], ...]`.
+     */
+    private fun arrows(sb: StringBuilder, p: LocalPlayer) {
+        val level = DevgineerClient.mc.level ?: return
+        var n = 0
+        for (e in level.entitiesForRendering()) {
+            if (e !is AbstractArrow || e.distanceToSqr(p) > ARROW_RANGE * ARROW_RANGE) continue
+            sb.append(if (n++ == 0) ",\"ar\":[" else ",")
+            val v = e.deltaMovement
+            val a = e as BrecArrowAccessor
+            sb.append('[').append(e.id).append(',').append(RecorderFiles.q(BuiltInRegistries.ENTITY_TYPE.getKey(e.type).path))
+                .append(',').append(e.x).append(',').append(e.y).append(',').append(e.z)
+                .append(',').append(v.x).append(',').append(v.y).append(',').append(v.z)
+                .append(',').append(e.yRot).append(',').append(e.xRot).append(',').append(e.tickCount)
+                .append(',').append(if (a.`brec$inGround`()) 1 else 0).append(',').append(a.`brec$inGroundTime`())
+                .append(',').append(e.owner?.id ?: -1).append(']')
+        }
+        if (n > 0) sb.append(']')
+    }
+
+    private fun startManual(note: String?) {
+        if (!enabled) { DevgineerClient.msg("§7Better Recorder is off: turn it on first."); return }
+        session?.let { s ->
+            DevgineerClient.msg(if (s.run == null) "§7Better Recorder: already recording (${s.name}). /brec stop first." else "§7Better Recorder: recording this run already (${s.run.stamp}); /brec mark to mark it.")
+            return
+        }
+        val clean = note?.replace(Regex("[^A-Za-z0-9_-]+"), "-")?.trim('-')?.take(40)?.takeIf { it.isNotEmpty() }
+        val name = "manual-" + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + (clean?.let { "-$it" } ?: "")
+        start(null, name, note)
+        val single = DevgineerClient.mc.hasSingleplayerServer()
+        DevgineerClient.msg("§aBetter Recorder§7: recording $name.br${if (single) " (singleplayer: no packets go over a wire here, so ticks, inputs, arrows and the bow only)" else ""}. /brec stop to save.")
+    }
+
+    private fun stopManual() {
+        val s = session?.takeIf { it.run == null } ?: run { DevgineerClient.msg("§7Better Recorder: no /brec start recording running."); return }
+        val ticks = s.ticks
+        stop(wait = false)
+        DevgineerClient.msg("§aBetter Recorder§7: saved ${s.name}.br ($ticks ticks).")
+    }
+
+    private fun start(run: RunRecorder?, manualName: String?, note: String? = null) {
         Files.createDirectories(dir)
         val mc = DevgineerClient.mc
         val p = mc.player
         val v = SharedConstants.getCurrentVersion()
+        val single = mc.hasSingleplayerServer()
         val meta = buildString {
             append("\"brec\":").append(FORMAT_VERSION)
             append(",\"brecFormat\":").append(RecorderFiles.q(FORMAT_NOTE))
-            append(",\"adr\":").append(RecorderFiles.q(run.stamp))
+            append(",\"adr\":").append(RecorderFiles.q(run?.stamp))
+            append(",\"manual\":").append(run == null)
+            if (run == null) append(",\"note\":").append(RecorderFiles.q(note))
+            append(",\"singleplayer\":").append(single)
+            if (single) append(",\"world\":").append(RecorderFiles.q(mc.singleplayerServer?.worldData?.levelName))
             append(",\"mc\":").append(RecorderFiles.q(v.name()))
             append(",\"protocol\":").append(v.protocolVersion())
             append(",\"uuid\":").append(RecorderFiles.q(p?.uuid?.toString()))
@@ -213,7 +290,7 @@ object BetterRecorder : Module(
             if (!msg.contains("Dungeon Recorder saved")) DevgineerClient.msg(msg.replace("Dungeon Recorder", "Better Recorder"))
         }
         rec.confirm("brec")
-        val s = Session(run, rec)
+        val s = Session(run, rec, manualName ?: run!!.stamp)
         s.lastTickNs = System.nanoTime()
         session = s
         val (frames, dropped) = BrecWire.goLive(rec)
@@ -281,11 +358,10 @@ object BetterRecorder : Module(
         session = null
         BrecWire.stopLive(s.rec)
         line(s, "end", StringBuilder(",\"ticks\":").append(s.ticks))
-        val adr = s.run.stamp
         val finish = Runnable {
             if (!s.rec.closeAndWait(if (wait) 3000 else 120_000)) return@Runnable
-            // Named after the ADR run (the session names itself by its own start), unless that name is taken.
-            val target = dir.resolve("$adr.br")
+            // Named after the ADR run, or manual-<stamp>[-note] (the session names itself by its own start), unless that name is taken.
+            val target = dir.resolve("${s.name}.br")
             runCatching { if (!Files.exists(target)) Files.move(s.rec.dir, target) }
         }
         if (wait) finish.run() else Thread(finish, "better-recorder-close").apply { isDaemon = false; start() }
@@ -294,7 +370,8 @@ object BetterRecorder : Module(
     private fun line(s: Session, kind: String, body: CharSequence) {
         val seq = Rec.nextSeq()
         val ms = System.currentTimeMillis()
-        val t = s.run.currentTick
+        // A manual recording has no ADR tick: its own ticks since /brec start instead.
+        val t = s.run?.currentTick ?: s.ticks.toInt()
         val text = StringBuilder(body.length + 96).append(RecorderFiles.envelope(kind, seq, t, clientTick, ms, System.nanoTime() - s.rec.startNs))
             .append(body).append('}').toString()
         s.rec.line(seq, kind, ms, text, t = t, n = clientTick)
@@ -304,18 +381,21 @@ object BetterRecorder : Module(
         val s = session ?: run { DevgineerClient.msg("§7Better Recorder: not recording."); return }
         line(s, "mark", StringBuilder(",\"note\":").append(RecorderFiles.q(note)))
         s.rec.addMark(Rec.nextSeq(), System.currentTimeMillis(), note)
-        DevgineerClient.msg("§aMarked§7 at tick ${s.run.currentTick}${if (note != null) ": $note" else ""}")
+        DevgineerClient.msg("§aMarked§7 at tick ${s.run?.currentTick ?: s.ticks}${if (note != null) ": $note" else ""}")
     }
 
     private fun status(): String {
-        val s = session ?: return "§7Better Recorder: not recording${if (!enabled) " (off)" else " (it records while ADR records a Hypixel dungeon run)"}."
-        return "§aBetter Recorder§7: ${s.run.stamp}.br, tick ${s.run.currentTick}, ${s.ticks} client ticks."
+        val s = session ?: return "§7Better Recorder: not recording${if (!enabled) " (off)" else " (it records while ADR records a Hypixel dungeon run, or /brec start [note] for one anywhere)"}."
+        return "§aBetter Recorder§7: ${s.name}.br, ${if (s.run != null) "tick ${s.run.currentTick}, " else ""}${s.ticks} client ticks."
     }
 
-    private const val FORMAT_VERSION = 3
-    private const val FORMAT_NOTE = "Better Recorder v3 (src/dev/betterrecorder/FORMAT.md): Dungeon Recorder layout (manifest.json, partNNNN.jsonl.gz + .raw.gz sidecar + .idx.jsonl). " +
-        "Lines: envelope {k,seq,t=ADR tick,n=client tick,ms,ns}. pre {fr:[seq,us,clientTick]...} frames buffered before the run; " +
-        "tk {dt us, fr:[seq,us]... live frames this tick, in:{changed: k key bits fwd,back,left,right,jump,sneak,sprint,use,attack,drop,ctrl; c [use,attack,drop] presses; sl; r [yaw,pitch]; p; v; g; st sprint|sneak<<1|using<<2; ping; scr; fps}}; " +
+    private const val FORMAT_VERSION = 4
+    private const val ARROW_RANGE = 32.0
+    private const val FORMAT_NOTE = "Better Recorder v4 (src/dev/betterrecorder/FORMAT.md): Dungeon Recorder layout (manifest.json, partNNNN.jsonl.gz + .raw.gz sidecar + .idx.jsonl). " +
+        "An ADR run's (better/<ADR stamp>.br) or a /brec start one's (better/manual-<stamp>[-note].br; meta manual, note, server, singleplayer, world). " +
+        "Lines: envelope {k,seq,t=ADR tick (manual: ticks since start),n=client tick,ms,ns}. pre {fr:[seq,us,clientTick]...} frames buffered before the recording; " +
+        "tk {dt us, fr:[seq,us]... live frames this tick, in:{changed: k key bits fwd,back,left,right,jump,sneak,sprint,use,attack,drop,ctrl; c [use,attack,drop] presses; sl; h held [mc id, sb id]; r [yaw,pitch]; p; v; g; st sprint|sneak<<1|using<<2; ping; scr; fps}, " +
+        "use [[mc id, sb id], ticks using, ticks left, hand] while using an item, ar [[id,type,x,y,z,vx,vy,vz,yaw,pitch,age,inGround,inGroundTicks,owner|-1]...] every arrow within 32 blocks every tick}; " +
         "prof (profile at start); mark; end. Raw sidecar: [u32 len][varlong seq][dir 0 in/1 out][phase 3 config/4 play][withheld][packet id + payload, uncompressed]."
 
     /** Small enough to always leave on: stops (with a line) under 5 GB free; no folder cap. */
