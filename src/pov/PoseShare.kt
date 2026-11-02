@@ -48,6 +48,8 @@ object PoseShare {
      *  and how evenly its poses come, within these. */
     private const val BUFFER_MIN_NS = 6_000_000L
     private const val BUFFER_MAX_NS = 90_000_000L
+    /** The most a shared position is drawn behind its due time (see [Track.posBuffer]). */
+    private const val POS_BUFFER_MAX_NS = 120_000_000L
     /** Look frames over TURN: one a frame at most, as often as this (the "Sharing FPS" setting; 60 a second), each with the frame's look rather than the tick's. */
     @Volatile var frameNs = 16_666_666L
     private const val EXTRAPOLATE_NS = 100_000_000L
@@ -180,6 +182,9 @@ object PoseShare {
         var jitter = 3_000_000.0
         var gap = TICK_NS.toDouble()
          var buffer = 70_000_000L
+        /** How far past its due time (their clock, at the best latency so far) a tick arrives: the worst lately, easing down (ns). */
+        var tickLate = 30_000_000.0
+        fun posBuffer() = maxOf(buffer, (tickLate + 3_000_000).toLong()).coerceAtMost(POS_BUFFER_MAX_NS)
         var source = 0
         var via: String? = null
         var swingAt = 0L
@@ -246,21 +251,25 @@ object PoseShare {
             var itemId = b.item; var sneaking = b.flags and 2 != 0
             if (t.timed) {
                 // Where they are: between the two ticks either side (as their game drew them), or past the newest by its move.
+                // Drawn [posBuffer] behind rather than the looks' [Track.buffer]: a tick comes up to a frame after it was due, and drawn
+                // sooner the next one often wasn't there yet, so the move was run on and pulled back when it came (jitter whenever
+                // they changed direction). The looks stay as close as they come.
+                val atPos = now - t.posBuffer()
                 val p1 = t.ticks.lastOrNull() ?: return null
                 val p0 = t.ticks.lastOrNull { it.first < p1.first }
                 val t1 = p1.first + t.offset
                 var lo: Pair<Long, Vec3>? = null; var hi = p1
-                for (p in t.ticks) { if (p.first + t.offset <= at) lo = p else { hi = p; break } }
+                for (p in t.ticks) { if (p.first + t.offset <= atPos) lo = p else { hi = p; break } }
                 pos = when {
                     lo == null -> t.ticks.first().second
-                    at < t1 && hi !== lo -> lo.second.lerp(hi.second, ((at - lo.first - t.offset).toDouble() / (hi.first - lo.first)).coerceIn(0.0, 1.0))
+                    atPos < t1 && hi !== lo -> lo.second.lerp(hi.second, ((atPos - lo.first - t.offset).toDouble() / (hi.first - lo.first)).coerceIn(0.0, 1.0))
                     p0 == null -> p1.second
-                    else -> p0.second.lerp(p1.second, 1.0 + (minOf(at - t1, CARRY_NS)).coerceAtLeast(0L).toDouble() / (p1.first - p0.first))
+                    else -> p0.second.lerp(p1.second, 1.0 + (minOf(atPos - t1, CARRY_NS)).coerceAtLeast(0L).toDouble() / (p1.first - p0.first))
                 }
                 itemId = t.item; sneaking = t.sneaking
             }
             val item = BuiltInRegistries.ITEM.byId(itemId).takeIf { itemId != 0 && it !== Items.AIR }?.let { ItemStack(it) } ?: ItemStack.EMPTY
-            val delay = (t.buffer / 1_000_000).toInt() + b.delayMs + (if (!b.direct && rttMs > 0) (rttMs / 2).toInt() else 0)
+            val delay = ((if (t.timed) t.posBuffer() else t.buffer) / 1_000_000).toInt() + b.delayMs + (if (!b.direct && rttMs > 0) (rttMs / 2).toInt() else 0)
             return Pose(pos, yaw, pitch, item, t.swingAt, sneaking, t.via, b.direct, delay, t.buffer, t.timed)
         }
     }
@@ -824,7 +833,11 @@ object PoseShare {
                 // Their game draws them between their last two ticks by how far it is into the next, so a tick's position is
                 // where they're drawn a tick after it was due; and it's timed by when it was due, not when it ran (the first
                 // frame after, up to a frame late, which made their speed surge and drop).
-                val key = (t.due(s) + 50) * 1_000_000L
+                val due = t.due(s)
+                val key = (due + 50) * 1_000_000L
+                // How late this one came after it was due: held at the worst, easing down over about five seconds.
+                val tickLate = (now - t.offset - due * 1_000_000L).toDouble().coerceAtLeast(0.0)
+                t.tickLate = if (tickLate > t.tickLate) tickLate else t.tickLate * 0.99 + tickLate * 0.01
                 var j = t.ticks.size
                 while (j > 0 && t.ticks[j - 1].first > key) j--
                 if (j > 0 && t.ticks[j - 1].first == key && t.ticks[j - 1].second != pos && (j < 2 || t.ticks[j - 2].first < key - TICK_NS)) {
@@ -990,8 +1003,8 @@ object PoseShare {
                 val last = t.samples.lastOrNull()
                 if (last != null) {
                     t.via?.let { sb.append(" · relayed by ").append(it) }
-                    sb.append(" · %.0f poses/s · buffer %.0f ms · jitter %.1f ms · %s · heard %d ms ago".format(
-                        dbgPoseRate[name] ?: 0.0, t.buffer / 1e6, t.jitter / 1e6, if (t.timed) "timed" else "ticks", (now - last.arrived) / 1_000_000))
+                    sb.append(" · %.0f poses/s · buffer %.0f ms (positions %.0f) · jitter %.1f ms · %s · heard %d ms ago".format(
+                        dbgPoseRate[name] ?: 0.0, t.buffer / 1e6, t.posBuffer() / 1e6, t.jitter / 1e6, if (t.timed) "timed" else "ticks", (now - last.arrived) / 1_000_000))
                     if (now - last.arrived > STALE_NS) color = red
                 }
                 if (t.gui != null) sb.append(" · terminal open")
