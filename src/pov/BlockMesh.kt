@@ -75,7 +75,8 @@ object BlockMesh {
     // The last [pump]'s near list, finished: the same again (and nothing dirty) has nothing to look at.
     private var nearDone: List<Long>? = null
 
-    private const val DIRTY_DELAY_MS = 100L
+    /** From a block change's packet to its rebuild: a tick, for the game to have applied it (counted from the first of a run of changes). */
+    private const val DIRTY_DELAY_MS = 50L
     private const val LOAD_BUDGET_NS = 3_000_000L
 
     private val SHADE = floatArrayOf(0.5f, 1f, 0.8f, 0.8f, 0.6f, 0.6f) // the game's side shades: down, up, north, south, west, east
@@ -113,7 +114,7 @@ object BlockMesh {
     fun dirty(x: Int, y: Int, z: Int) {
         val now = System.currentTimeMillis()
         val sx = x shr 4; val sy = y shr 4; val sz = z shr 4
-        for (dx in edge(x)) for (dy in edge(y)) for (dz in edge(z)) SectionPos.asLong(sx + dx, sy + dy, sz + dz).let { dirtyAt[it] = now; chunkOnly.remove(it) }
+        for (dx in edge(x)) for (dy in edge(y)) for (dz in edge(z)) SectionPos.asLong(sx + dx, sy + dy, sz + dz).let { dirtyAt.putIfAbsent(it, now); chunkOnly.remove(it) }
     }
 
     private val MID = intArrayOf(0); private val LOW = intArrayOf(0, -1); private val HIGH = intArrayOf(0, 1)
@@ -129,7 +130,7 @@ object BlockMesh {
         for (sy in minSy..maxSy) {
             val k = SectionPos.asLong(cx, sy, cz)
             if (check) { if (!dirtyAt.containsKey(k)) chunkOnly += k } else chunkOnly.remove(k)
-            dirtyAt[k] = now
+            dirtyAt.putIfAbsent(k, now)
         }
     }
 
@@ -177,7 +178,9 @@ object BlockMesh {
         val (cx, cz) = r.p.toCanonical(x, z) ?: return
         for (dx in edge(cx)) for (dy in edge(y)) for (dz in edge(cz)) {
             val key = r.pieceKey((cx shr 4) + dx, (y shr 4) + dy, (cz shr 4) + dz)
-            touchedRoom += key; dirtyRoom[key] = now
+            // The first change's time is kept: a run of changes (a wall mined block by block, a change every tick or two)
+            // mustn't put the rebuild off until it stops, or an eye in the new tunnel sees out through the old solid wall.
+            touchedRoom += key; dirtyRoom.putIfAbsent(key, now)
         }
         touchedRooms += r.key
     }
