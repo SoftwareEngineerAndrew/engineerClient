@@ -133,7 +133,13 @@ object PosePov : Module(
     private val shareFps by NumberSetting("Sharing FPS", 60, ShareFps.NONE..240, 5, desc = "How many times a second your look goes to teammates (whether or not this module is on). Higher is smoother for them. At the lowest, none: nothing of yours is shared.")
     private val skipTiny by BooleanSetting("Skip tiny look changes", true, desc = "Doesn't send a look change under 0.05° (too small to see in a view; mostly hand jitter at high FPS). The exact look still goes with every tick. Cuts what you send when your mouse barely moves.")
     private val debugInfo by BooleanSetting("Debug info", false, desc = "Over the views: the relay and TURN connections, each teammate's route and one-way delays both ways, frames a second, losses and buffering. Also written to the log every 10 seconds.")
-    private val showHuds by BooleanSetting("Show HUDs", false, desc = "Vanilla's HUD and every mod's (Odin's map too) drawn over the views. Off: the views cover them; the leap menu's own boxes and names stay on top either way.")
+    private enum class HudsOver { NONE, MOD_HUDS, ALL }
+    private val hudsOver by com.odtheking.odin.clickgui.settings.impl.SelectorSetting("HUDs Over Views", HudsOver.MOD_HUDS, desc = "What's drawn over the views. None: just the views. Mod HUDs: every HUD you've placed in the HUD editor (Odin's, Engineer Client's, Coffee Client's: timers, Terminals Status...) but not Odin's Dungeon Map or vanilla's HUD (hotbar, health, chat...). All: everything, maps and vanilla's HUD too. The leap menu's own boxes and names stay on top either way.")
+    /** All: the views go under the whole GUI (PosePovUnderGuiMixin). */
+    private val showHuds get() = hudsOver == HudsOver.ALL
+    /** Mod HUDs: the views cover the HUD, then the HUD editor's HUDs are drawn again on top, less the map. */
+    private val modHuds get() = hudsOver == HudsOver.MOD_HUDS
+    private val NOT_OVER_VIEWS = setOf("Dungeon Map")
     private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
     private val viewDistance by NumberSetting("View distance", 96, 32..160, 8, unit = " blocks", desc = "How far the views draw, fading into the sky over the last stretch. Lower is faster; past half of it only the bigger faces are drawn.")
 
@@ -166,7 +172,12 @@ object PosePov : Module(
     init {
         // Only when the under-GUI hook didn't draw this frame (it can't have matched): on top of the HUD then, but still there.
         on<ScreenEvent.Render>(EventPriority.HIGHEST + 100) {
-            EngineerClient.safely("pose pov") { if (!drewUnderGui && wants()) timed(true) { draw(guiGraphics) } }
+            EngineerClient.safely("pose pov") {
+                if (!drewUnderGui && wants()) {
+                    timed(true) { draw(guiGraphics) }
+                    if (modHuds) redrawModHuds(guiGraphics)
+                }
+            }
             drewUnderGui = false
         }
         ClientTickEvents.END_CLIENT_TICK.register {
@@ -264,6 +275,14 @@ object PosePov : Module(
         EngineerClient.safely("pose pov") { if (wants()) { timed(true) { draw(gfx) }; drewUnderGui = true } }
     }
     private var drewUnderGui = false
+
+    /** Mod HUDs: every HUD on in the HUD editor, again over the views where Odin puts it (not the map). */
+    private fun redrawModHuds(gfx: GuiGraphicsExtractor) {
+        for (hud in com.odtheking.odin.features.ModuleManager.hudSettingsCache) {
+            if (!hud.isEnabled || hud.name in NOT_OVER_VIEWS) continue
+            EngineerClient.safely("pose pov hud ${hud.name}") { com.engineerclient.OdinHuds.redraw(gfx, hud) }
+        }
+    }
 
     /** The views fill the screen (the leap menu is open and they've been drawn): the world under them isn't drawn (PosePovRenderMixin). */
     fun coversWorld(): Boolean = allViews != null && wants()
