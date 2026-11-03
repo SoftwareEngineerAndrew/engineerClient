@@ -7,8 +7,8 @@ import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 
 /**
- * Odin API that differs between the Odin versions this mod runs on. This build compiles against 0.3.7, but ADM players
- * also run Odin 0.4.0, where a call compiled for 0.3.7 throws NoSuchMethodError.
+ * Odin API that differed between 0.3.7 (the 26.3 port build) and 0.4.0. The mod now compiles against and requires 0.4.0,
+ * so these work either way; kept as the one place such version differences go.
  */
 object OdinCompat {
 
