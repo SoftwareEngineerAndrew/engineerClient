@@ -22,6 +22,8 @@
     "LcmStyleMixin",
     "LcmMapInfoMixin",
     "MapPathHintsMixin",
+    "MapIconsMixin",
+    "MapSizeMixin",
     "TpMazeRenderMixin",
     "TerminalClickLimitMixin",
     "NumberSettingNoneMixin"

@@ -61,11 +61,12 @@ import kotlin.math.roundToInt
  */
 object OdinMapPrediction {
 
-    private enum class Mode { ADM, ODIN }
+    private enum class Mode { ADM, ODIN, OFF }
 
     private val mode = SelectorSetting("Room Prediction", Mode.ADM,
-        desc = "ADM: unknown rooms coloured by their chances, from the rules every recorded map of the floor follows, updated as rooms open. Odin: Odin's own guess. Added by engineerClient.")
+        desc = "ADM: unknown rooms coloured by their chances, from the rules every recorded map of the floor follows, updated as rooms open. Odin: Odin's own guess. Off: no guesses, every unknown tile in the unknown room colour (the blood room behind a blood door still shows). Added by engineerClient.")
     private val on: Boolean get() = mode.value == Mode.ADM
+    private val off: Boolean get() = mode.value == Mode.OFF
     private val threadsSetting = NumberSetting("Prediction Threads", 0, 0..4, 1,
         desc = "Threads the guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on }
     private val aheadSetting = BooleanSetting("Predict Ahead", true,
@@ -149,7 +150,8 @@ object OdinMapPrediction {
 
     private const val W = 6
     private const val TILE = 20
-    private const val ROOM = 16
+    /** A room on the map: Room Size in Odin's look (MapSizes), dtMap's 16 in LCM Style. */
+    private val ROOM: Int get() = if (lcm) 16 else com.engineerclient.mapicons.MapSizes.room()
     /** From this sure (percent) a dead end always gets Odin's guess tile, whatever Dead End Chance is. */
     private const val ALWAYS_DEAD_END = 95
     /**
@@ -328,6 +330,19 @@ object OdinMapPrediction {
         return true
     }
 
+    /**
+     * Room Prediction Off: Odin's "?" tiles all in the unknown room colour (LCM Style's unopened colour), no guess
+     * colours, on any floor; the blood room behind a blood door is known, not guessed, so it still shows.
+     */
+    private fun drawPlain(g: GuiGraphicsExtractor): Boolean {
+        if (!DungeonMap.enabled) return false
+        val known = knownTiles()
+        val blood = bloodTiles(known)
+        for (t in hintTiles(known)) if (t !in blood) plainTile(g, t)
+        for (t in blood) bloodRoom(g, t)
+        return true
+    }
+
     /** Unknown tiles behind a door the map shows (Odin's "?" tiles), the instant the door is on the map. */
     private fun hintTiles(known: BooleanArray): Set<Int> {
         val out = HashSet<Int>()
@@ -383,6 +398,7 @@ object OdinMapPrediction {
     }
 
     private fun draw(g: GuiGraphicsExtractor): Boolean {
+        if (off) return drawPlain(g)
         if (!replacesOdin()) return drawWithoutPrediction(g)
         val p = shown ?: return drawWithoutPrediction(g)
         val v = shownView ?: return drawWithoutPrediction(g)
@@ -509,9 +525,10 @@ object OdinMapPrediction {
             else -> DungeonMap.normalDoorColor
         }
         val x = (d.a % W) * TILE; val y = (d.a / W) * TILE
-        val half = (ROOM - 8) / 2
-        if (d.b == d.a + 1) g.fill(x + ROOM, y + half, x + TILE, y + half + 8, color.rgba)
-        else g.fill(x + half, y + ROOM, x + half + 8, y + TILE, color.rgba)
+        val width = com.engineerclient.mapicons.MapSizes.door()
+        val half = (ROOM - width) / 2
+        if (d.b == d.a + 1) g.fill(x + ROOM, y + half, x + TILE, y + half + width, color.rgba)
+        else g.fill(x + half, y + ROOM, x + half + width, y + TILE, color.rgba)
     }
 
     /**
@@ -650,6 +667,7 @@ object OdinMapPrediction {
     }
 
     private fun icon(g: GuiGraphicsExtractor, x: Int, y: Int) {
+        if (!com.engineerclient.mapicons.MapIcons.showQuestionMarks) return
         val size = ROOM - 4
         g.blit(RenderPipelines.GUI_TEXTURED, question, x + 2, y + 2, size.toFloat(), size.toFloat(), size, size, size, size)
     }

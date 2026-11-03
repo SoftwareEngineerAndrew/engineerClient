@@ -80,7 +80,8 @@ object LcmStyle {
 
     private const val ROOM = 16
     private const val TILE = 20
-    private const val PAD = 5
+    /** The background around the rooms: Map Padding when Custom Map Padding is on (MapSizes), else dtMap's 5. */
+    private val PAD: Int get() = com.engineerclient.mapicons.MapSizes.padding() ?: 5
     private const val DOOR = 9
     private const val DARKEN = 0.4f
 
@@ -161,7 +162,7 @@ object LcmStyle {
         return width to height
     }
 
-    private fun disableInBoss(): Boolean = (DungeonMap.settings["Disable in Boss"] as? BooleanSetting)?.value ?: true
+    internal fun disableInBoss(): Boolean = (DungeonMap.settings["Disable in Boss"] as? BooleanSetting)?.value ?: true
 
     /** The floor's rooms across and down, as dtMap sizes its map. */
     internal fun mapSize(example: Boolean): Pair<Int, Int> {
@@ -373,6 +374,7 @@ object LcmStyle {
         // as dtMap: the name once the room is open (and Odin has scanned it), its check mark before that
         val name = knownName(room)
         if (name == null) {
+            if (!com.engineerclient.mapicons.MapIcons.showCheckmarks) return
             val icon = when (room.checkmark) {
                 MapCheckmark.GREEN -> greenCheck
                 MapCheckmark.WHITE -> whiteCheck
