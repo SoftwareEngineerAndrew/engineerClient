@@ -55,6 +55,7 @@ object RandomStuff : Module(
      * render type still shows on the slots Odin hands back to vanilla.
      */
     private val hideTermNumbers by BooleanSetting("Hide Numbers' Numbers", false, desc = "In the numbers terminal (\"Click in order!\"), hides the numbers 1-10 so only the solver's order colours are left to go on. Odin's old Show Numbers, inverted. Applies to /termsim as well.")
+    private val termNumbersShown by NumberSetting("Show Next Numbers", 0, 0..14, 1, desc = "With Hide Numbers' Numbers: the numbers still show on this many of the next panes to click (0 hides them all). Applies to /termsim as well.").withDependency { hideTermNumbers }
     private val termCursorReset by BooleanSetting("Force Cursor Reset", false, desc = "Opening a terminal always puts the cursor in the middle of the screen. On Linux (Xwayland) the game sometimes leaves it where it was; this moves it again. Terminals (and /termsim) only, no other menu.")
     private val partyFinderStats by BooleanSetting("Party Finder Classes", true, desc = "In the Party Finder, which classes each party is missing (yours in bold).")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
@@ -252,7 +253,19 @@ object RandomStuff : Module(
     fun hidesTerminalNumber(slot: Slot): Boolean {
         if (!hidesTerminalNumbers()) return false
         val term = TerminalUtils.currentTerm ?: return false
-        return term.type == TerminalTypes.NUMBERS && slot.index < term.type.windowSize
+        return term.type == TerminalTypes.NUMBERS && slot.index < term.type.windowSize && !showsTerminalNumber(slot.index, term.solution)
+    }
+
+    /**
+     * Whether Show Next Numbers keeps [slotIndex]'s number despite Hide Numbers' Numbers: it is one of the next
+     * (setting) slots in [solution], the clicks left in order.
+     */
+    @JvmStatic
+    fun showsTerminalNumber(slotIndex: Int, solution: List<Int>): Boolean {
+        val n = termNumbersShown
+        if (n <= 0) return false
+        val at = solution.indexOf(slotIndex)
+        return at in 0 until n
     }
 
     /** Whether the glint should be dropped for a piece of worn equipment. */

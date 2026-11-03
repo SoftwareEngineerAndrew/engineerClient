@@ -4,6 +4,7 @@ import com.engineerclient.misc.RandomStuff;
 import com.engineerclient.practice.InfNumbersSim;
 import com.odtheking.odin.utils.Color;
 import com.odtheking.odin.utils.skyblock.dungeon.terminals.terminalhandler.NumbersHandler;
+import com.odtheking.odin.utils.skyblock.dungeon.terminals.terminalhandler.TerminalHandler;
 import kotlin.Pair;
 import net.minecraft.world.inventory.Slot;
 import org.spongepowered.asm.mixin.Mixin;
@@ -32,7 +33,8 @@ public class NumbersHandlerMixin {
     @Inject(method = "renderSlot", at = @At("RETURN"), cancellable = true)
     private void ec$noNumbers(int slotIndex, CallbackInfoReturnable<Pair<Color, String>> cir) {
         if (cir.getReturnValue() == null) return;
-        if (InfNumbersSim.active() || RandomStuff.hidesTerminalNumbers()) {
+        if (InfNumbersSim.active() || (RandomStuff.hidesTerminalNumbers()
+                && !RandomStuff.showsTerminalNumber(slotIndex, ((TerminalHandler) (Object) this).getSolution()))) {
             cir.setReturnValue(new Pair<>(cir.getReturnValue().getFirst(), null));
         }
     }
