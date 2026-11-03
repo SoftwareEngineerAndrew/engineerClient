@@ -307,8 +307,7 @@ class TurnLink(
         if (slot != p.slot) return
         // The whole counter: the low 24 bits sent, the rest from the last one heard (the nearest that fits).
         val low = ((d[off + 1].toLong() and 255) shl 16) or ((d[off + 2].toLong() and 255) shl 8) or (d[off + 3].toLong() and 255)
-        var ctr = (p.heard and 0xFFFFFFL.inv()) or low
-        if (ctr < p.heard - 0x800000) ctr += 0x1000000 else if (ctr > p.heard + 0x800000 && ctr >= 0x1000000) ctr -= 0x1000000
+        val ctr = counter(p.heard, low)
         if (ctr <= p.heard) return
         val body = runCatching {
             val c = ciphers.get()
@@ -486,6 +485,13 @@ class TurnLink(
         const val PING = 0
         const val PONG = 1
         private const val HEAD = 4
+
+        /** A frame's whole counter from its low 24 bits and the last one heard (the nearest that fits). */
+        fun counter(heard: Long, low: Long): Long {
+            var ctr = (heard and 0xFFFFFFL.inv()) or low
+            if (ctr < heard - 0x800000) ctr += 0x1000000 else if (ctr > heard + 0x800000 && ctr >= 0x1000000) ctr -= 0x1000000
+            return ctr
+        }
         private const val TAG = 12
         private const val MAX_PACKET = 300
         private const val PUNCH_MS = 200L

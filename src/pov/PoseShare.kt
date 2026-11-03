@@ -48,32 +48,19 @@ import java.util.concurrent.ConcurrentHashMap
 object PoseShare {
     private const val SITE = "undonecoffee.com"
     private const val TICK_NS = 50_000_000L
-    /** How far behind the newest pose a shared player is drawn (to ride out uneven arrival): each track's own, from how often
-     *  and how evenly its poses come, within these. */
-    private const val BUFFER_MIN_NS = 6_000_000L
-    private const val BUFFER_MAX_NS = 90_000_000L
-    /** The most a shared position is drawn behind its due time (see [Track.posBuffer]). */
-    private const val POS_BUFFER_MAX_NS = 120_000_000L
     /** Look frames over TURN: one a frame at most, as often as this (the "Sharing FPS" setting; 60 a second), each with the frame's look rather than the tick's. */
     @Volatile var frameNs = 16_666_666L
-    private const val EXTRAPOLATE_NS = 100_000_000L
-    /** How far past a peer's newest tick its position is carried on by that tick's move. */
-    private const val CARRY_NS = 60_000_000L
     /**
      * TURN kinds ([TurnLink]'s header): the relay's own numbers for the frames both carry (3 terminal, 4 closed, 7 and 8
-     * PartyProgress), and two of its own. [D_TICK]: [time u16, ms][x y z: 24-bit][yaw u16][pitch i16][flags]([item u16] when
-     * flag 0x80), a tick at a time (where you are only changes then). [D_LOOK]: [time u16][yaw u16][pitch i16], every frame the
-     * look changes in.
+     * PartyProgress), and two of its own, [PoseWire.D_TICK] and [PoseWire.D_LOOK] (see [PoseWire]).
      */
-    private const val D_TICK = 9
-    private const val D_LOOK = 10
+    private const val D_TICK = PoseWire.D_TICK
+    private const val D_LOOK = PoseWire.D_LOOK
     /** A shared view older than this isn't shown: an old frame would pass for where they are now. */
-    private const val STALE_NS = 300_000_000L
+    private const val STALE_NS = PoseTrack.STALE_NS
     private const val GUI_STALE_NS = 3_000_000_000L
     /** The most a terminal frame may be, its kind included: the relay's MAX_GUI (adr src/pose.js), past which it closes the socket. */
     private const val MAX_GUI_FRAME = 40
-    /** While still, your pose is sent this often rather than every tick (well inside [STALE_NS]). */
-    private const val STILL_NS = 100_000_000L
     private val LOBBY = Regex("[A-Za-z0-9]{1,24}")
     private val STARTS_WITH = Regex("^What starts with: '([A-Za-z])'\\?$")
     private val SELECT = Regex("^Select all the ([\\w ]+) items!$")
@@ -100,21 +87,8 @@ object PoseShare {
     private var guiAt = 0L
     private var sentWatch = false
     private var watchAt = 0L
-    private var lastSig: ByteArray? = null
-    private var prevFrame: ByteArray? = null
-    private var prevSent = false
-    private var selfAt = 0L
-    // TURN: the last tick's body and whether it was a change (a change is followed by one more, the settled pose, so
-    // nobody carries on a move that has stopped), when it last went, and the item last sent with one.
-    private var lastTick: ByteArray? = null
-    private var tickChanged = false
-    private var tickSentAt = 0L
-    private var tickItem = -1
-    private var tickItemAt = 0L
-    // [frame]'s own: when it last ran, its last look and whether that was a change.
-    private var frameAt = 0L
-    private var lastLook = -1L
-    private var lookChanged = false
+    /** When what of yours goes: [PoseWire.Sender]. */
+    private val own = PoseWire.Sender()
     private var wasWanted = false
 
 
@@ -126,9 +100,6 @@ object PoseShare {
     @Volatile var optimize = true
     /** "Skip tiny look changes": looks under 0.05° from the last sent aren't sent; set by [PosePov]. */
     @Volatile var skipTiny = true
-    /** Look frames sent and skipped as tiny (for the debug info). */
-    @Volatile private var looksSent = 0L
-    @Volatile private var looksSkipped = 0L
     /** "Debug info": the numbers behind [debugLines] are kept up; set by [PosePov]. */
     @Volatile var debug = false
     @Volatile private var mySlot = 0
@@ -164,52 +135,6 @@ object PoseShare {
 
     // ------------------------------------------------------------------ what's been heard
 
-    class Sample(val seq: Long, val time: Long, val arrived: Long, val pos: Vec3, val yaw: Float, val pitch: Float, val flags: Int, val item: Int, val delayMs: Int, val direct: Boolean)
-
-    class Track {
-        val samples = ArrayDeque<Sample>()
-        /** The smallest (arrival - send tick time) seen: arrival at the best latency so far; a sample's time is its tick plus this. */
-        var offset = Long.MAX_VALUE
-        var lastSeq = -1L
-        /**
-         * Its poses come over TURN, timed in ms: [samples] are then looks only (from every frame and tick), and [ticks] the
-         * positions (time, where), with the held item and sneaking from the newest tick.
-         */
-        var timed = false
-        /** Positions keyed by when their game drew them there: a tick after the tick was due (see [heard]). */
-        val ticks = ArrayDeque<Pair<Long, Vec3>>()
-        /** The newest ticks' ms past each 50: a tick runs at the first frame after it's due, so the earliest of these is when they're due. */
-        val phases = IntArray(16)
-        var phaseN = 0
-        var item = 0
-        var sneaking = false
-        var lastArrived = 0L
-        /** Smoothed: how late a pose comes past the best so far, and the gap between poses while they flow (ns). */
-        var jitter = 3_000_000.0
-        var gap = TICK_NS.toDouble()
-         var buffer = 70_000_000L
-        /** How far past its due time (their clock, at the best latency so far) a tick arrives: the worst lately, easing down (ns). */
-        var tickLate = 30_000_000.0
-        fun posBuffer() = maxOf(buffer, (tickLate + 3_000_000).toLong()).coerceAtMost(POS_BUFFER_MAX_NS)
-        var source = 0
-        var via: String? = null
-        var swingAt = 0L
-        /** Poses heard (for the debug info's rate). */
-        var arrivals = 0L
-        @Volatile var gui: Gui? = null
-        fun at(s: Sample) = s.time + offset
-
-        /** When the tick their game ran at [ms] was due: on the 50 ms grid where the newest ticks' lateness starts (the end of the widest gap). */
-        fun due(ms: Long): Long {
-            phases[phaseN++ % phases.size] = Math.floorMod(ms, 50L).toInt()
-            val n = minOf(phaseN, phases.size)
-            val r = phases.copyOf(n).also { it.sort() }
-            var start = r[0]; var widest = -1
-            for (i in 0 until n) { val gap = if (i == 0) r[0] + 50 - r[n - 1] else r[i] - r[i - 1]; if (gap > widest) { widest = gap; start = r[i] } }
-            return ms - Math.floorMod(ms - start, 50L)
-        }
-    }
-
     /**
      * An open terminal as its holder sees it: Odin's type, the letter (Starts With) or colour (Select), and Odin's solution
      * (slot numbers, in order; Rubix repeats a slot once per click), and where their mouse is on the window ([mouseU] across
@@ -232,53 +157,16 @@ object PoseShare {
         TerminalTypes.MELODY to Grid(5, 9, 0, 0, 3),
     )
 
-    private val tracks = ConcurrentHashMap<String, Track>()
+    private val tracks = ConcurrentHashMap<String, PoseTrack>()
 
     /** A shared teammate's pose for drawing now: [via] is who relayed it (null when they share it themselves). */
     class Pose(val pos: Vec3, val yaw: Float, val pitch: Float, val item: ItemStack, val swingAt: Long, val sneaking: Boolean, val via: String?, val direct: Boolean, val delayMs: Int, val bufferNs: Long, val timed: Boolean)
 
     fun pose(name: String, now: Long): Pose? {
-        val t = tracks[name.lowercase()] ?: return null
-        synchronized(t) {
-            val last = t.samples.lastOrNull() ?: return null
-            if (now - last.arrived > STALE_NS) return null
-            val at = now - t.buffer
-            // The two poses either side of the drawing time, or the newest two to run on from (for a little while).
-            var a = t.samples.first(); var b = last
-            for (s in t.samples) { if (t.at(s) <= at) a = s else { b = s; break } }
-            var pos: Vec3; val yaw: Float; val pitch: Float
-            if (a === b || t.at(b) == t.at(a)) { pos = b.pos; yaw = b.yaw; pitch = b.pitch }
-            else {
-                // A look is never run on past the newest (a turn that stopped would swing on); a tick-at-a-time pose is.
-                val k = ((minOf(at, t.at(b) + EXTRAPOLATE_NS) - t.at(a)).toDouble() / (t.at(b) - t.at(a))).coerceIn(0.0, if (t.timed) 1.0 else Double.MAX_VALUE)
-                pos = a.pos.lerp(b.pos, k)
-                yaw = a.yaw + Mth.wrapDegrees(b.yaw - a.yaw) * k.toFloat()
-                pitch = Mth.lerp(k.toFloat().coerceAtMost(1f), a.pitch, b.pitch)
-            }
-            var itemId = b.item; var sneaking = b.flags and 2 != 0
-            if (t.timed) {
-                // Where they are: between the two ticks either side (as their game drew them), or past the newest by its move.
-                // Drawn [posBuffer] behind rather than the looks' [Track.buffer]: a tick comes up to a frame after it was due, and drawn
-                // sooner the next one often wasn't there yet, so the move was run on and pulled back when it came (jitter whenever
-                // they changed direction). The looks stay as close as they come.
-                val atPos = now - t.posBuffer()
-                val p1 = t.ticks.lastOrNull() ?: return null
-                val p0 = t.ticks.lastOrNull { it.first < p1.first }
-                val t1 = p1.first + t.offset
-                var lo: Pair<Long, Vec3>? = null; var hi = p1
-                for (p in t.ticks) { if (p.first + t.offset <= atPos) lo = p else { hi = p; break } }
-                pos = when {
-                    lo == null -> t.ticks.first().second
-                    atPos < t1 && hi !== lo -> lo.second.lerp(hi.second, ((atPos - lo.first - t.offset).toDouble() / (hi.first - lo.first)).coerceIn(0.0, 1.0))
-                    p0 == null -> p1.second
-                    else -> p0.second.lerp(p1.second, 1.0 + (minOf(atPos - t1, CARRY_NS)).coerceAtLeast(0L).toDouble() / (p1.first - p0.first))
-                }
-                itemId = t.item; sneaking = t.sneaking
-            }
-            val item = BuiltInRegistries.ITEM.byId(itemId).takeIf { itemId != 0 && it !== Items.AIR }?.let { ItemStack(it) } ?: ItemStack.EMPTY
-            val delay = ((if (t.timed) t.posBuffer() else t.buffer) / 1_000_000).toInt() + b.delayMs + (if (!b.direct && rttMs > 0) (rttMs / 2).toInt() else 0)
-            return Pose(pos, yaw, pitch, item, t.swingAt, sneaking, t.via, b.direct, delay, t.buffer, t.timed)
-        }
+        val d = tracks[name.lowercase()]?.drawn(now) ?: return null
+        val item = BuiltInRegistries.ITEM.byId(d.item).takeIf { d.item != 0 && it !== Items.AIR }?.let { ItemStack(it) } ?: ItemStack.EMPTY
+        val delay = d.delayMs + (if (!d.direct && rttMs > 0) (rttMs / 2).toInt() else 0)
+        return Pose(d.pos, d.yaw, d.pitch, item, d.swingAt, d.sneaking, d.via, d.direct, delay, d.bufferNs, d.timed)
     }
 
     fun gui(name: String, now: Long): Gui? = tracks[name.lowercase()]?.gui?.takeIf { now - it.at < GUI_STALE_NS }
@@ -358,23 +246,18 @@ object PoseShare {
         } else if (guiFrame != null) { guiFrame = null; share(byteArrayOf(4)) }
 
         if (!wanted || !sharing) { wasWanted = false; return }
-        if (!wasWanted) { wasWanted = true; selfAt = 0L; guiAt = 0L }
+        if (!wasWanted) { wasWanted = true; own.selfAt = 0L; guiAt = 0L }
 
-        // Yourself: every tick while moving, every [STILL_NS] while still, and the still pose again just before moving off
+        // Yourself: every tick while moving, every [PoseWire.STILL_NS] while still, and the still pose again just before moving off
         // (so the move starts from where it did, not drawn out across the gap).
         var flags = if (swung) 1 else 0
         if (me.isShiftKeyDown) flags = flags or 2
         val frame = pose(1, -1, 0, me.x, me.y, me.z, me.yRot, me.xRot, flags, me.mainHandItem)
-        val sig = frame.copyOfRange(3, 16) + frame.copyOfRange(17, 20)
-        val changed = !sig.contentEquals(lastSig)
         // TURN has its own (below); the relay is for whoever that doesn't go to.
         val fast = turnSlots()
         val direct = if (fast.isNotEmpty()) tickDirect(me, flags, now, fast) else emptySet()
         val relay = !direct.containsAll(roster.keys)
-        if (changed && !prevSent && relay) prevFrame?.let { sendBinary(it) }
-        prevSent = changed || now - selfAt > STILL_NS
-        if (prevSent) { if (relay) sendBinary(frame); selfAt = now }
-        prevFrame = frame; lastSig = sig
+        for (f in own.relayFrames(frame, now, relay)) sendBinary(f)
 
         // Teammates you can see who don't share for themselves (each tagged by where they are in the party you sent).
         val sharers = roster.values.toSet()
@@ -402,64 +285,25 @@ object PoseShare {
         if (fast.isEmpty()) return
         val me = mc.player ?: return
         val now = System.nanoTime()
-        if (now - frameAt < frameNs - 1_000_000L) return
-        frameAt = now
-        val yaw = (Mth.wrapDegrees(me.yRot) / 360f * 65536f).toInt() and 0xFFFF
-        val pitch = (me.xRot.coerceIn(-90f, 90f) / 90f * 32767f).toInt() and 0xFFFF
-        val look = (yaw.toLong() shl 16) or pitch.toLong()
-        // "Skip tiny look changes": one under 0.05° either way from the last sent isn't sent (the next tick's exact look follows).
-        val changed = look != lastLook && !(skipTiny && lastLook >= 0 && tiny(look, lastLook))
-        if (changed) looksSent++ else if (look != lastLook) looksSkipped++
-        // The look before a turn, again, with its own time: otherwise the turn is drawn spread across the still stretch before it.
-        if (changed && !lookChanged && lastLook >= 0) turn.broadcast(D_LOOK, lookBody(lastLookMs, lastLook), fast)
-        if (changed) turn.broadcast(D_LOOK, lookBody(msNow(), look), fast)
-        lookChanged = changed
-        if (changed) lastLook = look
-        lastLookMs = msNow()
+        val bodies = own.look(now, msNow(), me.yRot, me.xRot, frameNs, skipTiny) ?: return
+        for (b in bodies) turn.broadcast(D_LOOK, b, fast)
     }
 
-    /** Within 0.05° of [b] in yaw and pitch (yaw 65536 to the turn, pitch 32767 to 90°). */
-    private fun tiny(a: Long, b: Long): Boolean {
-        val dy = (((a shr 16) - (b shr 16) + 32768) and 0xFFFF) - 32768
-        val dp = (a and 0xFFFF).toInt().toShort() - (b and 0xFFFF).toInt().toShort()
-        return kotlin.math.abs(dy) < 0.05 / 360 * 65536 && kotlin.math.abs(dp) < 0.05 / 90 * 32767
-    }
-
-    private var lastLookMs = 0
     private fun msNow() = (System.nanoTime() / 1_000_000).toInt() and 0xFFFF
-    private fun lookBody(ms: Int, look: Long) =
-        byteArrayOf((ms shr 8).toByte(), ms.toByte(), (look shr 24).toByte(), (look shr 16).toByte(), (look shr 8).toByte(), look.toByte())
 
     /**
      * This tick's [D_TICK] to each teammate in [to]: when it changed, once more when it stops changing (the settled pose), every
-     * [STILL_NS] otherwise, and the pose before a change, again, first. The held item rides along when it changes, and once a
+     * [PoseWire.STILL_NS] otherwise, and the pose before a change, again, first. The held item rides along when it changes, and once a
      * second. The peers it reached.
      */
     private fun tickDirect(me: net.minecraft.client.player.LocalPlayer, flags: Int, now: Long, to: Set<Int>): Set<Int> {
         if (!turn.ready) return emptySet()
         val item = if (me.mainHandItem.isEmpty) 0 else BuiltInRegistries.ITEM.getId(me.mainHandItem.item)
-        val withItem = item != tickItem || now - tickItemAt > 1_000_000_000L
-        val b = ByteBuffer.allocate(if (withItem) 18 else 16)
-        b.putShort(msNow().toShort())
-        put24(b, me.x); put24(b, me.y); put24(b, me.z)
-        b.putShort((Mth.wrapDegrees(me.yRot) / 360f * 65536f).toInt().toShort())
-        b.putShort((me.xRot.coerceIn(-90f, 90f) / 90f * 32767f).toInt().toShort())
-        b.put((flags or (if (withItem) 0x80 else 0)).toByte())
-        if (withItem) b.putShort(item.toShort())
-        val body = b.array()
-        // Changed: where, which way, sneaking or swinging (not the time, not the item).
-        val changed = lastTick?.let { !body.copyOfRange(2, 15).contentEquals(it.copyOfRange(2, 15)) || (flags and 3) != 0 } ?: true
-        val prev = lastTick
-        lastTick = body
-        val send = changed || tickChanged || now - tickSentAt > STILL_NS
-        val wasChanged = tickChanged
-        tickChanged = changed
         // Not due: it still counts as reaching them (they have it; the relay isn't needed for it).
-        if (!send) return to
-        if (changed && !wasChanged && prev != null && now - tickSentAt > TICK_NS + 5_000_000L) turn.broadcast(D_TICK, prev, to)
-        tickSentAt = now
-        if (withItem) { tickItem = item; tickItemAt = now }
-        return turn.broadcast(D_TICK, body, to)
+        val bodies = own.tick(now, msNow(), me.x, me.y, me.z, me.yRot, me.xRot, flags, item) ?: return to
+        var out = emptySet<Int>()
+        for (b in bodies) out = turn.broadcast(D_TICK, b, to)
+        return out
     }
 
     /** Your own frame: over TURN to each teammate it goes to that way, and through the relay unless that was all of them. */
@@ -518,13 +362,7 @@ object PoseShare {
         val now = System.currentTimeMillis()
         for (slot in roster.keys) {
             val p = turn.peer(slot)
-            var fast = p != null && p.bound && p.live(now)
-            if (fast && optimize) {
-                val turnMs = p!!.rttMs / 2
-                val relayMs = relayPathMs(p)
-                if (turnMs > 0 && relayMs > 0) fast = if (viaTurn[slot] != false) turnMs <= relayMs + 5 else turnMs + 5 < relayMs
-            }
-            viaTurn[slot] = fast
+            viaTurn[slot] = PoseWire.viaTurn(viaTurn[slot], p != null && p.bound && p.live(now), optimize, p?.let { it.rttMs / 2 } ?: -1.0, p?.let { relayPathMs(it) } ?: -1.0)
         }
         viaTurn.keys.retainAll(roster.keys)
     }
@@ -567,29 +405,8 @@ object PoseShare {
     }
 
     /** A pose frame: [kind]([party index][age])[seq u16][x y z: 24-bit, 1/256 block][yaw u16][pitch i16][flags][half rtt /2 ms][item u16]. */
-    private fun pose(kind: Int, index: Int, age: Int, x: Double, y: Double, z: Double, yaw: Float, pitch: Float, flags: Int, held: ItemStack): ByteArray {
-        val b = ByteBuffer.allocate(if (kind == 2) 22 else 20)
-        b.put(kind.toByte())
-        if (kind == 2) b.put(index.toByte()).put(age.toByte())
-        b.putShort(seq.toShort())
-        put24(b, x); put24(b, y); put24(b, z)
-        b.putShort((Mth.wrapDegrees(yaw) / 360f * 65536f).toInt().toShort())
-        b.putShort((pitch.coerceIn(-90f, 90f) / 90f * 32767f).toInt().toShort())
-        b.put(flags.toByte())
-        b.put((if (rttMs > 0) (rttMs / 4).toInt().coerceIn(0, 255) else 0).toByte())
-        b.putShort(if (held.isEmpty) 0 else BuiltInRegistries.ITEM.getId(held.item).toShort())
-        return b.array()
-    }
-
-    private fun put24(b: ByteBuffer, v: Double) {
-        val i = (v * 256).toInt().coerceIn(-0x800000, 0x7FFFFF)
-        b.put((i shr 16).toByte()).put((i shr 8).toByte()).put(i.toByte())
-    }
-
-    private fun get24(b: ByteBuffer): Double {
-        val i = ((b.get().toInt() shl 16) or ((b.get().toInt() and 255) shl 8) or (b.get().toInt() and 255))
-        return i / 256.0
-    }
+    private fun pose(kind: Int, index: Int, age: Int, x: Double, y: Double, z: Double, yaw: Float, pitch: Float, flags: Int, held: ItemStack): ByteArray =
+        PoseWire.relay(kind, index, age, seq, x, y, z, yaw, pitch, flags, rttMs, if (held.isEmpty) 0 else BuiltInRegistries.ITEM.getId(held.item))
 
     // ------------------------------------------------------------------ the socket
 
@@ -617,7 +434,7 @@ object PoseShare {
     private fun opened(ws: WebSocket, lobby: String) {
         if (room != lobby) { runCatching { ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }; return }
         sending = CompletableFuture.completedFuture(null)
-        ready = false; wanted = false; sentWatch = false; guiFrame = null; lastSig = null; prevFrame = null
+        ready = false; wanted = false; sentWatch = false; guiFrame = null; own.forgetRelay()
         stopTurn()
         roster.clear(); subjects.clear(); sentParty = emptyList(); sentEntries = emptyList(); partyAt = 0L
         socket = ws
@@ -775,21 +592,8 @@ object PoseShare {
         val now = System.nanoTime()
         val b = ByteBuffer.wrap(body)
         when (kind) {
-            D_TICK -> if (body.size == 16 || (body.size == 18 && body[15].toInt() and 0x80 != 0)) {
-                val ms = b.short.toLong() and 0xFFFF
-                val pos = Vec3(get24(b), get24(b), get24(b))
-                val yaw = (b.short.toInt() and 0xFFFF) / 65536f * 360f
-                val pitch = b.short / 32767f * 90f
-                val flags = b.get().toInt() and 255
-                val item = if (flags and 0x80 != 0) b.short.toInt() and 0xFFFF else -1
-                heard(sender, null, slot, now, true, true, ms, pos, yaw, pitch, flags and 0x7F, item, 0)
-            }
-            D_LOOK -> if (body.size == 6) {
-                val ms = b.short.toLong() and 0xFFFF
-                val yaw = (b.short.toInt() and 0xFFFF) / 65536f * 360f
-                val pitch = b.short / 32767f * 90f
-                heard(sender, null, slot, now, true, true, ms, null, yaw, pitch, 0, -1, 0)
-            }
+            D_TICK -> PoseWire.readTick(body)?.let { h -> heard(sender, null, slot, now, true, true, h) }
+            D_LOOK -> PoseWire.readLook(body)?.let { h -> heard(sender, null, slot, now, true, true, h) }
             3 -> gui(sender, b, now)
             9 -> rooms(sender, b)
             4 -> if (body.isEmpty()) tracks[sender]?.gui = null
@@ -799,93 +603,17 @@ object PoseShare {
 
     /** A relay pose frame's body (after its kind, and a seen one's index and age). */
     private fun heardRelayed(name: String, via: String?, source: Int, b: ByteBuffer, ageMs: Int, now: Long) {
-        val seq = b.short.toLong() and 0xFFFF
-        val pos = Vec3(get24(b), get24(b), get24(b))
-        val yaw = (b.short.toInt() and 0xFFFF) / 65536f * 360f
-        val pitch = b.short / 32767f * 90f
-        val flags = b.get().toInt() and 255
-        val half = (b.get().toInt() and 255) * 2
-        val item = b.short.toInt() and 0xFFFF
-        heard(name, via, source, now, false, false, seq, pos, yaw, pitch, flags, item, half + ageMs)
+        val h = PoseWire.readRelay(b)
+        heard(name, via, source, now, false, false, h, h.halfMs + ageMs)
     }
 
-    /**
-     * A pose heard: [raw] the sender's tick (relayed) or its ms (over TURN, [timed]), both 16 bits; [pos] null for a look
-     * alone; [item] -1 when it didn't come.
-     */
-    private fun heard(name: String, via: String?, source: Int, now: Long, direct: Boolean, timed: Boolean, raw: Long, pos: Vec3?, yaw: Float, pitch: Float, flags: Int, item: Int, delayMs: Int) {
+    /** A pose heard ([PoseTrack.heard]): over TURN its delay is half TURN's round trip to them, else [delayMs]. */
+    private fun heard(name: String, via: String?, source: Int, now: Long, direct: Boolean, timed: Boolean, h: PoseWire.Heard, delayMs: Int = 0) {
         if (name !in teammates) return
-        if (pos != null && (pos.y < -64 || pos.y > 400)) return
-        val t = tracks.getOrPut(name) { Track() }
-        synchronized(t) {
-            val fresh = t.samples.lastOrNull()?.let { now - it.arrived <= STALE_NS } == true
-            // One source at a time: another (someone else seeing them) takes over only once this one has gone quiet.
-            if (t.source != source) {
-                if (fresh) return
-                t.source = source; reset(t)
-            }
-            // TURN over the relay's ticks: while it comes, the same pose a tick at a time (relayed for others) is
-            // skipped; it starting (or ticks after it stopped) starts the timing over.
-            if (t.timed != timed) {
-                if (!timed && fresh) return
-                t.timed = timed; reset(t)
-                t.gap = if (timed) 16_000_000.0 else TICK_NS.toDouble()
-            }
-            t.via = via
-            // 16 bits unwrapped against the newest (ticks wrap after 55 minutes, ms after 65 s).
-            val s = if (t.lastSeq < 0) raw else t.lastSeq + ((raw - (t.lastSeq and 0xFFFF) + 0x8000) and 0xFFFF) - 0x8000
-            // Relayed ticks only ever move on; over TURN, a pose sent again from before a move comes after later looks.
-            if (!timed && t.lastSeq >= 0 && s <= t.lastSeq) return
-            if (timed && t.lastSeq >= 0 && s < t.lastSeq - 1000) return
-            val time = if (timed) s * 1_000_000L else s * TICK_NS
-            val off = now - time
-            // A gap (they were still, or nobody was watching), or a clock that jumped: timing starts over from here.
-            if (!fresh || (t.offset != Long.MAX_VALUE && kotlin.math.abs(off - t.offset) > 1_000_000_000L)) reset(t)
-            if (s > t.lastSeq) t.lastSeq = s
-            // Best latency so far, let drift upward slowly (4 ms a second) so a clock that runs a little apart doesn't strand it.
-            val since = if (t.lastArrived == 0L) 0L else (now - t.lastArrived).coerceIn(0L, 1_000_000_000L)
-            t.offset = if (t.offset == Long.MAX_VALUE) off else minOf(off, t.offset + since / 250)
-            // How far behind to draw: the usual gap between poses (while they flow; a still pose's 100 ms isn't one) plus
-            // twice the usual lateness, eased towards so the drawing time never jumps.
-            val late = (off - t.offset).toDouble().coerceAtLeast(0.0)
-            t.jitter = t.jitter * 0.9 + late * 0.1
-            val gap = now - t.lastArrived
-            if (t.lastArrived != 0L && gap < 80_000_000L) t.gap = t.gap * 0.9 + gap * 0.1
-            t.lastArrived = now
-            val target = (t.gap + 2 * t.jitter + 2_000_000).toLong().coerceIn(BUFFER_MIN_NS, BUFFER_MAX_NS)
-            t.buffer = (t.buffer * 0.95 + target * 0.05).toLong()
-            val delay = if (direct) turn.rttMs(source).let { if (it > 0) (it / 2).toInt() else 0 } else delayMs
-            // Kept in time order (a pose from before a move can come after it).
-            val sample = Sample(s, time, now, pos ?: Vec3.ZERO, yaw, pitch.coerceIn(-90f, 90f), flags, maxOf(item, 0), delay, direct)
-            var i = t.samples.size
-            while (i > 0 && t.samples[i - 1].time > time) i--
-            t.samples.add(i, sample)
-            while (t.samples.size > 32) t.samples.removeFirst()
-            if (timed && pos != null) {
-                // Their game draws them between their last two ticks by how far it is into the next, so a tick's position is
-                // where they're drawn a tick after it was due; and it's timed by when it was due, not when it ran (the first
-                // frame after, up to a frame late, which made their speed surge and drop).
-                val due = t.due(s)
-                val key = (due + 50) * 1_000_000L
-                // How late this one came after it was due: held at the worst, easing down over about five seconds.
-                val tickLate = (now - t.offset - due * 1_000_000L).toDouble().coerceAtLeast(0.0)
-                t.tickLate = if (tickLate > t.tickLate) tickLate else t.tickLate * 0.99 + tickLate * 0.01
-                var j = t.ticks.size
-                while (j > 0 && t.ticks[j - 1].first > key) j--
-                if (j > 0 && t.ticks[j - 1].first == key && t.ticks[j - 1].second != pos && (j < 2 || t.ticks[j - 2].first < key - TICK_NS)) {
-                    // Two ticks in one frame (theirs caught up after a slow one): the first was due a tick earlier.
-                    t.ticks[j - 1] = (key - TICK_NS) to t.ticks[j - 1].second
-                }
-                if (j == 0 || t.ticks[j - 1].first != key) t.ticks.add(j, key to pos)
-                while (t.ticks.size > 8) t.ticks.removeFirst()
-                if (j >= t.ticks.size - 1) { if (item >= 0) t.item = item; t.sneaking = flags and 2 != 0 }
-            }
-            if (flags and 1 != 0) t.swingAt = now
-            t.arrivals++
-        }
+        if (h.pos != null && (h.pos.y < -64 || h.pos.y > 400)) return
+        val delay = if (direct) turn.rttMs(source).let { if (it > 0) (it / 2).toInt() else 0 } else delayMs
+        tracks.getOrPut(name) { PoseTrack() }.heard(via, source, now, direct, timed, h.raw, h.pos, h.yaw, h.pitch, h.flags, h.item, delay)
     }
-
-    private fun reset(t: Track) { t.samples.clear(); t.ticks.clear(); t.offset = Long.MAX_VALUE; t.lastSeq = -1; t.phaseN = 0 }
 
     /** A terminal frame, kept only if it is one a real terminal could be: its grid's cells, no more than it has. */
     private fun gui(sender: String, b: ByteBuffer, now: Long) {
@@ -905,7 +633,7 @@ object PoseShare {
         if (solutionFor(type, grid, sol.asList()).size != n) return
         val u = if (b.hasRemaining()) TerminalsLayout.decodeMouse(b.get().toInt() and 255) else null
         val v = if (b.hasRemaining()) TerminalsLayout.decodeMouse(b.get().toInt() and 255) else null
-        tracks.getOrPut(sender) { Track() }.gui = Gui(type, extra, sol, now, u ?: Double.NaN, v ?: Double.NaN)
+        tracks.getOrPut(sender) { PoseTrack() }.gui = Gui(type, extra, sol, now, u ?: Double.NaN, v ?: Double.NaN)
     }
 
     private class Listener(private val lobby: String) : WebSocket.Listener {
@@ -972,7 +700,7 @@ object PoseShare {
         if (nowMs - dbgAt < 1000) return
         val dt = if (dbgAt == 0L) 1.0 else (nowMs - dbgAt) / 1000.0
         dbgAt = nowMs
-        val counts = longArrayOf(turn.framesOut.get(), turn.bytesOut.get(), turn.bytesIn.get(), looksSent, looksSkipped)
+        val counts = longArrayOf(turn.framesOut.get(), turn.bytesOut.get(), turn.bytesIn.get(), own.looksSent, own.looksSkipped)
         for (i in 0 until 5) { dbgRates[i] = (counts[i] - dbgCounts[i]) / dt; dbgCounts[i] = counts[i] }
         for ((name, t) in tracks) {
             val n = synchronized(t) { t.arrivals }
@@ -1055,14 +783,19 @@ object PoseShare {
     private var roomsSig = ""
     private var roomsRoster: Set<Int> = emptySet()
     private var roomsAt = 0L
+    private const val ROOMS_AGAIN_MS = 5_000L
 
-    /** [9][count]([core i32][turn][tile count][tiles: z * 6 + x])*: this game's named rooms, to every linked teammate. */
+    /**
+     * [9][count]([core i32][turn][tile count][tiles: z * 6 + x])*: this game's named rooms, to every linked teammate: when
+     * they change or someone links, and again every [ROOMS_AGAIN_MS] (over TURN a lost or late frame is gone, and once the
+     * rooms stop changing, in boss, nothing would bring them back).
+     */
     private fun shareRooms(nowMs: Long) {
         if (!ready || roster.isEmpty() || nowMs - roomsAt < 1100) return
         val mine = KnownWorld.mine().filter { it.tiles.size in 1..4 }
         val sig = mine.joinToString(";") { "${it.core},${it.rot.ordinal},${it.tiles}" }
         val linked = roster.keys.toSet()
-        if (mine.isEmpty() || (sig == roomsSig && linked == roomsRoster)) return
+        if (mine.isEmpty() || (sig == roomsSig && linked == roomsRoster && nowMs - roomsAt < ROOMS_AGAIN_MS)) return
         roomsSig = sig; roomsRoster = linked; roomsAt = nowMs
         val b = ByteBuffer.allocate(256)
         b.put(9).put(0)
