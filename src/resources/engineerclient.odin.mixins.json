@@ -19,7 +19,6 @@
     "SimonSaysTicksMixin",
     "TickTimersGoldorMixin",
     "HighlightRenderMixin",
-    "TermGuiButtonMixin",
     "LcmStyleMixin",
     "LcmMapInfoMixin",
     "MapPathHintsMixin",

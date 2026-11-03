@@ -52,9 +52,8 @@ dependencies {
     implementation("org.tukaani:xz:1.10")
     "include"("org.tukaani:xz:1.10")
 
-    // Odin is a required runtime mod (declared in fabric.mod.json). 0.3.7 for 26.3 is not released
-    // yet: compiled against the 26.3 port build (OdinFabric PR #164, CI run 37808382947), which the
-    // release workflow downloads into libs/odin; kept out of git.
+    // Odin is a required runtime mod (declared in fabric.mod.json, >=0.4.0). Compiled against the
+    // Odin 0.4.0 release jar unpacked into libs/odin, which the release workflow downloads; kept out of git.
     compileOnly(files("libs/odin"))
 
     testImplementation(kotlin("test"))
