@@ -11,14 +11,22 @@ import kotlin.test.assertTrue
  * network going wrong in real time: delay, loss, reordering, an outage. Each check takes a few seconds.
  */
 class TurnLinkLoopbackTest {
-    private class Pair2(val server: FakeTurnServer) : AutoCloseable {
+    private class Pair2(val server: FakeTurnServer, anyOrder: Set<Int> = emptySet()) : AutoCloseable {
         val gotA = ConcurrentLinkedQueue<ByteArray>(); val gotB = ConcurrentLinkedQueue<ByteArray>()
-        val a = TurnLink({ _, k, b -> if (k == 9) gotA.add(b) }, {}, "127.0.0.1", server.port)
-        val b = TurnLink({ _, k, b -> if (k == 9) gotB.add(b) }, {}, "127.0.0.1", server.port)
-        var addrA = ""; var addrB = ""
+        val a = TurnLink({ _, k, b -> if (k == 9) gotA.add(b) }, {}, "127.0.0.1", server.port, anyOrder)
+        val b = TurnLink({ _, k, b -> if (k == 9) gotB.add(b) }, {}, "127.0.0.1", server.port, anyOrder)
+        @Volatile var addrA = ""; @Volatile var addrB = ""
         @Volatile var ticking = true
+        // Once linked, a new relayed address is told to both again, as the relay does ("pe" when a pair's addresses change).
+        @Volatile private var linked = false
+        private var toldA = ""; private var toldB = ""
+        val key = "5a".repeat(32)
         private val ticker = Thread {
-            while (ticking) { a.tick { addrA = it }; b.tick { addrB = it }; Thread.sleep(20) }
+            while (ticking) {
+                a.tick { addrA = it }; b.tick { addrB = it }
+                if (linked && addrA.isNotEmpty() && addrB.isNotEmpty() && (addrA != toldA || addrB != toldB)) { toldA = addrA; toldB = addrB; a.add(2, addrB, key); b.add(1, addrA, key) }
+                Thread.sleep(20)
+            }
         }.apply { isDaemon = true }
 
         init {
@@ -26,8 +34,9 @@ class TurnLinkLoopbackTest {
             ticker.start()
             until(5000) { addrA.isNotEmpty() && addrB.isNotEmpty() }
             assertTrue(addrA.isNotEmpty() && addrB.isNotEmpty(), "allocated (${a.problem}, ${b.problem})")
-            val key = "5a".repeat(32)
+            toldA = addrA; toldB = addrB
             a.add(2, addrB, key); b.add(1, addrA, key)
+            linked = true
             until(5000) { a.live(2) && b.live(1) }
             assertTrue(a.live(2) && b.live(1), "linked")
         }
@@ -83,6 +92,50 @@ class TurnLinkLoopbackTest {
             val got = p.stream(300, 3)
             assertEquals(got.sorted(), got, "never out of order")
             assertTrue(got.size in 230..299, "the late ones are dropped: ${got.size} of 300")
+        }
+    }
+
+    @Test fun latePosesAreTakenOnceWhereOrderDoesNotMatter() {
+        val server = FakeTurnServer(seed = 3)
+        Pair2(server, anyOrder = setOf(9)).use { p ->
+            server.fifo = false
+            server.impair = { r -> if (r.nextDouble() < 0.1) 15.0 else 1.0 }
+            val got = p.stream(300, 3)
+            assertEquals(got.size, got.toSet().size, "each once")
+            assertTrue(got.size >= 297, "the late ones are taken: ${got.size} of 300")
+            assertTrue(got.sorted() != got, "and some did come late")
+            assertTrue(p.b.peer(1)!!.lost <= 3, "late isn't lost: ${p.b.peer(1)!!.lost}")
+        }
+    }
+
+    @Test fun aOneWayOutageBringsTheRelayInWithinASecond() {
+        Pair2(FakeTurnServer(seed = 11)).use { p ->
+            p.until(2000) { p.a.broadcast(9, byteArrayOf(0)) == setOf(2) }
+            assertEquals(setOf(2), p.a.broadcast(9, byteArrayOf(0)), "sure to begin with")
+            // a's frames stop reaching b, though a still hears b: only b knows, and says so.
+            p.server.cutFrom = p.addrA
+            val t0 = System.currentTimeMillis()
+            p.until(3000) { p.a.broadcast(9, byteArrayOf(0)).isEmpty() }
+            val doubt = System.currentTimeMillis() - t0
+            assertTrue(p.a.broadcast(9, byteArrayOf(0)).isEmpty() && p.a.live(2), "not sure (the relay goes too), still live")
+            assertTrue(doubt < 1200, "within a second: $doubt ms")
+            p.server.cutFrom = null
+            val t1 = System.currentTimeMillis()
+            p.until(3000) { p.a.broadcast(9, byteArrayOf(0)) == setOf(2) }
+            assertTrue(System.currentTimeMillis() - t1 < 2000, "sure again once it heals")
+        }
+    }
+
+    @Test fun aNatThatMovesUsIsNoticedAndTurnComesBack() {
+        Pair2(FakeTurnServer(seed = 13)).use { p ->
+            val before = p.addrA
+            p.server.rebound = true
+            val t0 = System.currentTimeMillis()
+            p.until(12_000) { p.addrA.isNotEmpty() && p.addrA != before && p.a.live(2) && p.b.live(1) && p.a.peer(2)?.heardAt?.let { it > t0 } == true }
+            val back = System.currentTimeMillis() - t0
+            assertTrue(p.addrA != before && p.a.live(2) && p.b.live(1), "reallocated and live again (${p.a.problem})")
+            assertTrue(back < 8000, "within a few seconds of going quiet: $back ms")
+            assertEquals((0 until 50).toList(), p.stream(50, 5))
         }
     }
 

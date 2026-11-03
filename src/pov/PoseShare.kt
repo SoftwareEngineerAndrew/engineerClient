@@ -52,7 +52,8 @@ object PoseShare {
     @Volatile var frameNs = 16_666_666L
     /**
      * TURN kinds ([TurnLink]'s header): the relay's own numbers for the frames both carry (3 terminal, 4 closed, 7 and 8
-     * PartyProgress), and two of its own, [PoseWire.D_TICK] and [PoseWire.D_LOOK] (see [PoseWire]).
+     * PartyProgress), but rooms (the relay's 9) as [PoseWire.D_ROOMS], and its own: [PoseWire.D_TICK], [PoseWire.D_LOOK] and
+     * [PoseWire.D_ROUTE] (see [PoseWire]).
      */
     private const val D_TICK = PoseWire.D_TICK
     private const val D_LOOK = PoseWire.D_LOOK
@@ -106,7 +107,8 @@ object PoseShare {
     /** Frame kinds past the pose relay's own that it says it passes on (its sign-in's "x"); [shareExtra]'s go over TURN only otherwise. */
     @Volatile private var relayExtras: Set<Int> = emptySet()
 
-    private val turn = TurnLink({ slot, kind, body -> EngineerClient.safely("pose turn") { direct(slot, kind, body) } }, { EngineerClient.logger.info("[pose share] $it") })
+    private val turn = TurnLink({ slot, kind, body -> EngineerClient.safely("pose turn") { direct(slot, kind, body) } }, { EngineerClient.logger.info("[pose share] $it") },
+        anyOrder = setOf(D_TICK, D_LOOK))
     /** Whether the relay hands out TURN credentials (it has a key), and the ones it gave. */
     @Volatile private var turnOffered = false
     @Volatile private var creds: Pair<String, String>? = null
@@ -299,8 +301,8 @@ object PoseShare {
     private fun tickDirect(me: net.minecraft.client.player.LocalPlayer, flags: Int, now: Long, to: Set<Int>): Set<Int> {
         if (!turn.ready) return emptySet()
         val item = if (me.mainHandItem.isEmpty) 0 else BuiltInRegistries.ITEM.getId(me.mainHandItem.item)
-        // Not due: it still counts as reaching them (they have it; the relay isn't needed for it).
-        val bodies = own.tick(now, msNow(), me.x, me.y, me.z, me.yRot, me.xRot, flags, item) ?: return to
+        // Not due: it still counts as reaching them where TURN is sure (they have it; the relay isn't needed for it).
+        val bodies = own.tick(now, msNow(), me.x, me.y, me.z, me.yRot, me.xRot, flags, item) ?: return to.filterTo(HashSet()) { turn.sure(it) }
         var out = emptySet<Int>()
         for (b in bodies) out = turn.broadcast(D_TICK, b, to)
         return out
@@ -308,7 +310,7 @@ object PoseShare {
 
     /** Your own frame: over TURN to each teammate it goes to that way, and through the relay unless that was all of them. */
     private fun share(frame: ByteArray) {
-        val direct = turn.broadcast(frame[0].toInt(), frame.copyOfRange(1, frame.size), turnSlots())
+        val direct = turn.broadcast(PoseWire.turnKind(frame[0].toInt()), frame.copyOfRange(1, frame.size), turnSlots())
         if (!direct.containsAll(roster.keys)) sendBinary(frame)
     }
 
@@ -321,7 +323,7 @@ object PoseShare {
      */
     fun shareExtra(frame: ByteArray): Int {
         if (!ready || roster.isEmpty()) return 0
-        val direct = turn.broadcast(frame[0].toInt(), frame.copyOfRange(1, frame.size), turnSlots())
+        val direct = turn.broadcast(PoseWire.turnKind(frame[0].toInt()), frame.copyOfRange(1, frame.size), turnSlots())
         if (relayTakes(frame[0].toInt() and 255) && !direct.containsAll(roster.keys)) sendBinary(frame)
         return direct.size
     }
@@ -362,10 +364,19 @@ object PoseShare {
         val now = System.currentTimeMillis()
         for (slot in roster.keys) {
             val p = turn.peer(slot)
-            viaTurn[slot] = PoseWire.viaTurn(viaTurn[slot], p != null && p.bound && p.live(now), optimize, p?.let { it.rttMs / 2 } ?: -1.0, p?.let { relayPathMs(it) } ?: -1.0)
+            val q = quick.getOrPut(slot) { PoseWire.Route() }.update(now, p?.let { it.rttMs / 2 } ?: -1.0, p?.let { relayPathMs(it) } ?: -1.0)
+            val live = p != null && p.bound && p.live(now)
+            val via = PoseWire.viaTurn(q, live, optimize)
+            // Off TURN while it still works (the relay is quicker now): told, so their view takes the relay's at once
+            // rather than holding still until TURN has gone stale.
+            if (viaTurn[slot] == true && !via && live) turn.broadcast(PoseWire.D_ROUTE, byteArrayOf(0), setOf(slot))
+            viaTurn[slot] = via
         }
-        viaTurn.keys.retainAll(roster.keys)
+        viaTurn.keys.retainAll(roster.keys); quick.keys.retainAll(roster.keys)
     }
+
+    /** Linked slot -> "Optimize server location"'s choice for it ([PoseWire.Route]). */
+    private val quick = ConcurrentHashMap<Int, PoseWire.Route>()
 
     private fun relayPathMs(p: TurnLink.Peer) = if (rttMs > 0 && p.theirRelayMs >= 0) rttMs / 2 + p.theirRelayMs else -1.0
 
@@ -505,7 +516,7 @@ object PoseShare {
     }
 
     private fun stopTurn() {
-        turn.stop(); creds = null; credsAskedAt = 0L; turnAddr = ""; sentAddr = ""; viaTurn.clear()
+        turn.stop(); creds = null; credsAskedAt = 0L; turnAddr = ""; sentAddr = ""; viaTurn.clear(); quick.clear()
     }
 
     // The JDK socket takes one frame at a time; each waits for the one before it.
@@ -594,8 +605,9 @@ object PoseShare {
         when (kind) {
             D_TICK -> PoseWire.readTick(body)?.let { h -> heard(sender, null, slot, now, true, true, h) }
             D_LOOK -> PoseWire.readLook(body)?.let { h -> heard(sender, null, slot, now, true, true, h) }
+            PoseWire.D_ROUTE -> if (body.size == 1) tracks[sender]?.turnLeft(now)
             3 -> gui(sender, b, now)
-            9 -> rooms(sender, b)
+            PoseWire.D_ROOMS -> rooms(sender, b)
             4 -> if (body.isEmpty()) tracks[sender]?.gui = null
             7, 8 -> extras?.invoke(sender, kind, b)
         }
@@ -755,7 +767,7 @@ object PoseShare {
                 val p = turn.peer(slot)
                 val fast = viaTurn[slot] == true
                 color = if (fast) green else yellow
-                sb.append(if (fast) "TURN" else "relay")
+                sb.append(if (!fast) "relay" else if (turn.sure(slot)) "TURN" else "TURN, unsure (the relay too)")
                 if (p != null) {
                     sb.append(" · TURN ").append(if (p.bound) ms(if (p.rttMs < 0) -1.0 else p.rttMs / 2) + " one way" else "binding")
                     sb.append(" · relay ").append(ms(relayPathMs(p))).append(" one way")

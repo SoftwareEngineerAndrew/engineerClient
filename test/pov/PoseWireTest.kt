@@ -30,6 +30,11 @@ class PoseWireTest {
         assertNull(PoseWire.readTick(ByteArray(15)))
         assertNull(PoseWire.readTick(ByteArray(17)))
         assertNull(PoseWire.readTick(PoseWire.tickBody(1, 0.0, 0.0, 0.0, 0f, 0f, 0, null) + byteArrayOf(0, 0)))
+        // Flags past swung, sneaking and the item: not a tick (an older game's rooms sent as kind 9).
+        assertNull(PoseWire.readTick(PoseWire.tickBody(1, 0.0, 64.0, 0.0, 0f, 0f, 4, null)))
+        // Rooms go over TURN as their own kind, never as a tick's.
+        assertEquals(PoseWire.D_ROOMS, PoseWire.turnKind(9)); assertEquals(3, PoseWire.turnKind(3))
+        assertTrue(setOf(PoseWire.D_TICK, PoseWire.D_LOOK, PoseWire.D_ROUTE, PoseWire.D_ROOMS, TurnLink.PING, TurnLink.PONG, TurnLink.MISSING, 3, 4, 7, 8).size == 11, "every TURN kind its own number")
         // Positions past the 24-bit range are held at its ends, never wrapped to the other side of the world.
         val far = PoseWire.readTick(PoseWire.tickBody(1, 1e6, -1e6, 0.0, 0f, 0f, 0, null))!!
         assertTrue(far.pos!!.x > 32000 && far.pos.y < -32000)
@@ -112,19 +117,81 @@ class PoseWireTest {
     }
 
     @Test fun routeChoiceHasHysteresis() {
-        // Not live: the relay, whatever the times.
-        assertFalse(PoseWire.viaTurn(true, false, true, 10.0, 100.0))
-        // Live, not optimizing: TURN.
-        assertTrue(PoseWire.viaTurn(false, true, false, 200.0, 10.0))
-        // On TURN, it stays until it's 5 ms slower than the relay.
-        assertTrue(PoseWire.viaTurn(true, true, true, 44.0, 40.0))
-        assertTrue(PoseWire.viaTurn(true, true, true, 45.0, 40.0))
-        assertFalse(PoseWire.viaTurn(true, true, true, 45.5, 40.0))
-        // On the relay, it goes back only once TURN is 5 ms quicker.
-        assertFalse(PoseWire.viaTurn(false, true, true, 36.0, 40.0))
-        assertTrue(PoseWire.viaTurn(false, true, true, 34.0, 40.0))
-        // Not measured yet: TURN while live.
-        assertTrue(PoseWire.viaTurn(null, true, true, -1.0, 40.0))
+        val long = PoseWire.ROUTE_DWELL_MS
+        // Not live: the relay, whatever was chosen.
+        assertFalse(PoseWire.viaTurn(true, false, true))
+        // Live, not optimizing: TURN, whatever was chosen.
+        assertTrue(PoseWire.viaTurn(false, true, false))
+        // Live and optimizing: the choice, and TURN until there is one.
+        assertFalse(PoseWire.viaTurn(false, true, true))
+        assertTrue(PoseWire.viaTurn(null, true, true))
+        val hold = PoseWire.ROUTE_HOLD_MS
+        // Not measured: no choice. First measured: at once.
+        val r = PoseWire.Route()
+        assertNull(r.update(0, -1.0, 40.0))
+        assertEquals(true, r.update(1000, 30.0, 40.0))
+        // On TURN, it stays until it's 5 ms (or a tenth) slower than the relay, for a while, and the dwell has passed.
+        var t = 1000 + long
+        assertEquals(true, r.update(t, 45.0, 40.0))
+        assertEquals(true, r.update(t, 45.5, 40.0))              // slower, but only just now
+        assertEquals(true, r.update(t + hold - 1, 45.5, 40.0))
+        assertEquals(true, r.update(t + hold, 44.0, 40.0))       // back within the margin: starts over
+        assertEquals(true, r.update(t + hold + 10, 46.0, 40.0))
+        assertEquals(false, r.update(t + 2 * hold + 10, 46.0, 40.0))
+        // On the relay, it goes back once TURN is 5 ms quicker for a while (no dwell for that).
+        t += 2 * hold + 10
+        assertEquals(false, r.update(t + 1, 36.0, 40.0))
+        assertEquals(false, r.update(t + 2, 34.0, 40.0))
+        assertEquals(true, r.update(t + 2 + hold, 34.0, 40.0))
+        // Off TURN again: not within the dwell, however clear.
+        t += 2 + hold
+        assertEquals(true, r.update(t + 1, 200.0, 40.0))
+        assertEquals(true, r.update(t + long - 1, 200.0, 40.0))
+        assertEquals(false, r.update(t + long, 200.0, 40.0))
+        assertEquals(3, r.switches)
+        // A tenth on a slow link.
+        val s = PoseWire.Route(); s.update(0, 100.0, 100.0)
+        assertEquals(true, s.update(long, 109.0, 100.0)); assertEquals(true, s.update(long + hold, 109.0, 100.0))
+        s.update(long + hold + 1, 111.0, 100.0); assertEquals(false, s.update(long + 2 * hold + 1, 111.0, 100.0))
+    }
+
+    @Test fun turnReplayWindowTakesLatePosesOnceAndNeverReplays() {
+        val p = TurnLink.Peer(1, java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 1), javax.crypto.spec.SecretKeySpec(ByteArray(32), "AES"))
+        for (c in listOf(1L, 2L, 3L, 5L, 6L)) { assertTrue(p.fresh(c, false)); p.mark(c) }
+        assertEquals(1L, p.lost)
+        // 4 came late: only where late is fine, and only once (then it isn't lost after all).
+        assertFalse(p.fresh(4, false))
+        assertTrue(p.fresh(4, true)); p.mark(4)
+        assertEquals(0L, p.lost)
+        assertFalse(p.fresh(4, true))
+        // Anything heard already, or too far back to tell: never.
+        for (c in 1L..6L) assertFalse(p.fresh(c, true))
+        p.mark(200)
+        assertFalse(p.fresh(130, true)); assertTrue(p.fresh(140, true)); assertFalse(p.fresh(200, true)); assertTrue(p.fresh(201, false))
+    }
+
+    @Test fun trackTakesTheRelayAtOnceWhenTheyLeaveTurnAndTurnOnAPosition() {
+        val t = PoseTrack()
+        val base = 5_000_000_000L
+        for (n in 0..5) t.heard(null, 1, base + n * 50_000_000L, true, true, (n * 50L), Vec3(n.toDouble(), 64.0, 0.0), 0f, 0f, 0, 1, 15)
+        val now = base + 5 * 50_000_000L + 10_000_000L
+        // Without word, the relay waits for TURN to go stale...
+        assertFalse(t.heard(null, 1, now, false, false, 100, Vec3(5.0, 64.0, 0.0), 0f, 0f, 0, 1, 0))
+        // ...told, it's taken at once, with a tick's buffer.
+        t.turnLeft(now)
+        assertTrue(t.heard(null, 1, now + 1_000_000L, false, false, 101, Vec3(5.0, 64.0, 0.0), 0f, 0f, 0, 1, 0))
+        assertFalse(t.timed); assertTrue(t.buffer >= 60_000_000L, "a tick's buffer: ${t.buffer}")
+        assertNotNull(t.drawn(now + 2_000_000L))
+        // A late TURN frame just after: not taken back.
+        assertFalse(t.heard(null, 1, now + 20_000_000L, true, true, 300, Vec3(5.0, 64.0, 0.0), 0f, 0f, 0, 1, 15))
+        // Back to TURN later: not on a look (nothing to draw them at), on a tick.
+        val later = now + 1_000_000_000L
+        t.heard(null, 1, later - 40_000_000L, false, false, 120, Vec3(6.0, 64.0, 0.0), 0f, 0f, 0, 1, 0)
+        assertFalse(t.heard(null, 1, later, true, true, 2000, null, 10f, 0f, 0, -1, 15))
+        assertNotNull(t.drawn(later))
+        assertTrue(t.heard(null, 1, later + 5_000_000L, true, true, 2005, Vec3(6.0, 64.0, 0.0), 0f, 0f, 0, 1, 15))
+        assertTrue(t.timed)
+        assertNotNull(t.drawn(later + 6_000_000L))
     }
 
     @Test fun turnCountersUnwrapAndRefuseOldOnes() {

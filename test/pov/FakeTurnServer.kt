@@ -19,6 +19,11 @@ class FakeTurnServer(private val seed: Long = 1) : AutoCloseable {
     @Volatile var impair: (Random) -> Double? = { 0.0 }
     /** One route keeps one flow in order (a held frame holds the ones behind it); off, each frame takes its own time. */
     @Volatile var fifo = true
+    /** Frames from this allocation (its relayed "ip:port") are lost: an outage one way only. */
+    @Volatile var cutFrom: String? = null
+    /** The NAT moved every client to another port: the server sees new addresses, so their allocations are lost to them. */
+    @Volatile var rebound = false
+    private fun key(from: InetSocketAddress) = if (rebound) InetSocketAddress(from.address, from.port xor 0x2000) else from
     private val lastDue = ConcurrentHashMap<InetSocketAddress, Long>()
     private val rnd = Random(seed)
     private val socket = DatagramSocket(InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
@@ -69,7 +74,7 @@ class FakeTurnServer(private val seed: Long = 1) : AutoCloseable {
 
     private fun handle(from: InetSocketAddress, d: ByteArray) {
         val first = d[0].toInt() and 255
-        if (first in 0x40..0x7F) { channelData(from, d); return }
+        if (first in 0x40..0x7F) { channelData(key(from), d); return }
         val b = ByteBuffer.wrap(d)
         val type = b.short.toInt() and 0x3FFF
         b.short; val cookie = b.int
@@ -80,21 +85,21 @@ class FakeTurnServer(private val seed: Long = 1) : AutoCloseable {
         when (type) {
             ALLOCATE -> {
                 if (!signed) { challenged++; send(from, error(type, tx, 401) { attr(REALM, "fake".toByteArray()); attr(NONCE, "n0nce".toByteArray()) }); return }
-                val a = byClient.getOrPut(from) {
+                val a = byClient.getOrPut(key(from)) {
                     allocations++
                     Allocation(from, InetSocketAddress(InetAddress.getLoopbackAddress(), synchronized(this) { nextPort++ })).also { byRelayed[it.relayed] = it }
                 }
                 send(from, success(type, tx) { xorAddress(XOR_RELAYED_ADDRESS, a.relayed); attr(LIFETIME, ByteBuffer.allocate(4).putInt(600).array()) })
             }
-            REFRESH -> send(from, success(type, tx) { attr(LIFETIME, ByteBuffer.allocate(4).putInt(600).array()) })
+            REFRESH -> if (byClient[key(from)] == null) send(from, error(type, tx, 437) {}) else send(from, success(type, tx) { attr(LIFETIME, ByteBuffer.allocate(4).putInt(600).array()) })
             CHANNEL_BIND -> {
-                val a = byClient[from] ?: run { send(from, error(type, tx, 437) {}); return }
+                val a = byClient[key(from)] ?: run { send(from, error(type, tx, 437) {}); return }
                 val ch = attrs[CHANNEL_NUMBER]?.let { ((it[0].toInt() and 255) shl 8) or (it[1].toInt() and 255) } ?: return
                 val peer = attrs[XOR_PEER_ADDRESS]?.let { unXor(it) } ?: return
                 a.channels[ch] = peer; a.byPeer[peer] = ch
                 send(from, success(type, tx) {})
             }
-            BINDING -> send(from, success(type, tx) { xorAddress(XOR_MAPPED_ADDRESS, from) })
+            BINDING -> send(from, success(type, tx) { xorAddress(XOR_MAPPED_ADDRESS, key(from)) })
         }
     }
 
@@ -105,6 +110,7 @@ class FakeTurnServer(private val seed: Long = 1) : AutoCloseable {
         val n = ((d[2].toInt() and 255) shl 8) or (d[3].toInt() and 255)
         val peer = a.channels[ch] ?: return
         val to = byRelayed[peer] ?: return
+        if (cutFrom == "${a.relayed.address.hostAddress}:${a.relayed.port}") { droppedFrames++; return }
         val data = d.copyOfRange(4, 4 + n)
         val delay = synchronized(rnd) { impair(rnd) }
         if (delay == null) { droppedFrames++; return }

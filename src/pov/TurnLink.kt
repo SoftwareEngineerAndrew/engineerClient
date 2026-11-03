@@ -25,9 +25,13 @@ import javax.crypto.spec.SecretKeySpec
  *
  * Each frame, inside TURN's ChannelData (4 bytes): [sender slot << 4 | kind][counter, low 24 bits][AES-GCM of the body, tag
  * 12 bytes, the least Java's GCM takes]. The header is the associated data; the nonce is the slot plus the whole counter (worked out from its low bits
- * and the last one heard), so the two directions never share one. A counter not past the last one heard is dropped
- * (replays). Kinds: [PING], [PONG] (each with the sender's one-way time to the pose relay, for picking the faster way) and
- * PoseShare's (its D_ ones).
+ * and the last one heard), so the two directions never share one. A counter heard before is dropped (replays), and so is
+ * one behind the newest unless its kind is in [anyOrder] (then up to 64 back, once each: [Peer.fresh]). Kinds: [PING], [PONG]
+ * (each with the sender's one-way time to the pose relay, for picking the faster way), [MISSING] and PoseShare's (its D_ ones).
+ *
+ * Two ways a link in trouble is noticed quickly: a teammate not heard from for [SURE_MS], or one that says it isn't hearing
+ * us ([MISSING]), isn't [Peer.sure], and what goes to it goes by the relay too; and every teammate quiet at once, or the
+ * server seeing us at another address (a NAT that moved us), gets a new allocation rather than waiting for its renewal.
  *
  * TURN (RFC 8656), as little of it as this needs: Allocate (long-term credentials, MESSAGE-INTEGRITY), Refresh, ChannelBind
  * per teammate (which also gives the permission), Binding now and then to keep the NAT's mapping open and time the server.
@@ -39,6 +43,11 @@ class TurnLink(
     private val log: (String) -> Unit,
     private val host: String = "turn.cloudflare.com",
     private val port: Int = 3478,
+    /**
+     * Kinds that are still worth having when they come late, behind a later frame (poses: [PoseTrack] puts each in its
+     * place by its own time). Any other kind that comes late is dropped, as a replay would be, so it can never undo a newer one.
+     */
+    private val anyOrder: Set<Int> = emptySet(),
 ) {
     enum class State { OFF, ALLOCATING, READY, FAILED }
 
@@ -57,7 +66,33 @@ class TurnLink(
         /** Frames in and out, and frames that never came (gaps in the counter), for the debug info. */
         @Volatile var framesIn = 0L
         @Volatile var lost = 0L
+        /** Which of the 64 counters up to [heard] have come (bit i: heard - i), so a late one is taken once and a replay never. */
+        var seen = 0L
         fun live(now: Long) = now - heardAt < LIVE_MS
+        /** Heard from lately enough that what's sent is surely getting there: past this, the relay carries it too. */
+        fun sure(now: Long) = now - heardAt < SURE_MS && now - missedAt >= MISSED_FOR_MS
+        /** When they last said they aren't hearing us ([MISSING]). */
+        @Volatile var missedAt = Long.MIN_VALUE / 2
+
+        /** Whether counter [ctr] may be opened: past the newest, or (when [late] is fine) one of the last 64 not yet heard. */
+        fun fresh(ctr: Long, late: Boolean): Boolean {
+            if (ctr > heard) return true
+            val d = heard - ctr
+            return late && d in 1..63 && (seen ushr d.toInt()) and 1L == 0L
+        }
+
+        /** Counter [ctr] has come (opened and checked). */
+        fun mark(ctr: Long) {
+            if (ctr > heard) {
+                val shift = ctr - heard
+                if (heard > 0 && shift > 1) lost += shift - 1
+                seen = (if (shift >= 64) 0L else seen shl shift.toInt()) or 1L
+                heard = ctr
+            } else {
+                seen = seen or (1L shl (heard - ctr).toInt())
+                if (lost > 0) lost--
+            }
+        }
     }
 
     private class Tx(val method: Int, val slot: Int, val sentAt: Long, val tries: Int)
@@ -116,7 +151,7 @@ class TurnLink(
     @Synchronized
     private fun open() {
         state = State.ALLOCATING; problem = null
-        realm = null; nonce = null; authKey = null; authTried = false
+        realm = null; nonce = null; authKey = null; authTried = false; mapped = null
         relayed = null; txs.clear()
         for (p in peers.values) p.bound = false
         Thread.ofPlatform().name("engineerclient-pov-turn").daemon(true).start {
@@ -145,8 +180,9 @@ class TurnLink(
         runCatching { s?.close() }
     }
 
+    /** Down until a retry; [now]: at once (the network under it changed, which a new allocation fixes), not after the backoff. */
     @Synchronized
-    private fun fail(why: String) {
+    private fun fail(why: String, now: Boolean = false) {
         log("TURN: $why")
         problem = why
         val s = socket
@@ -154,9 +190,13 @@ class TurnLink(
         for (p in peers.values) p.bound = false
         runCatching { s?.close() }
         state = State.FAILED
-        retryAt = System.currentTimeMillis() + backoff
-        backoff = (backoff * 2).coerceAtMost(120_000L)
+        retryAt = System.currentTimeMillis() + (if (now) 0L else backoff)
+        if (!now) backoff = (backoff * 2).coerceAtMost(120_000L)
     }
+
+    /** Our address as the TURN server sees it (its Binding answers): another one means the NAT moved us, and the allocation is lost. */
+    @Volatile private var mapped: InetSocketAddress? = null
+    private var quietCheckAt = 0L
 
     fun add(slot: Int, address: String, keyHex: String) {
         if (slot == mySlot || slot !in 1..15) return
@@ -215,6 +255,13 @@ class TurnLink(
             if (now >= refreshAt) { refreshAt = now + 30_000L; request(REFRESH) }
             for (p in peers.values) if (now - p.bindAt > (if (p.bound) BIND_MS else 2_000L)) { p.bindAt = now; request(CHANNEL_BIND, p.slot) }
             if (now - bindingAt > BINDING_MS) { bindingAt = now; request(BINDING) }
+            // Every teammate that was live gone quiet at once: more likely ours than all of theirs, so the allocation is
+            // checked now (a Refresh: "allocation mismatch" when the NAT dropped us) rather than at its renewal minutes away.
+            val heardOf = peers.values.filter { it.bound && it.heardAt > 0 }
+            if (heardOf.isNotEmpty() && heardOf.all { now - it.heardAt in QUIET_MS..QUIET_MS + 5_000L } && now - quietCheckAt > 10_000L) {
+                quietCheckAt = now; bindingAt = now
+                request(BINDING); request(REFRESH)
+            }
         }
         for (p in peers.values) {
             if (!p.bound || now - p.lastOut < (if (p.live(now)) KEEP_MS else PUNCH_MS)) continue
@@ -223,20 +270,30 @@ class TurnLink(
             p.pings[n] = System.nanoTime()
             if (p.pings.size > 8) p.pings.keys.firstOrNull()?.let { p.pings.remove(it) }
             frame(s, p, PING, pingBody(n))
+            // Not hearing them (though they may hear us, and so think all is well): told, so they send by the relay too.
+            val silent = now - p.heardAt
+            if (p.heardAt > 0 && silent > MISS_MS) frame(s, p, MISSING, ByteBuffer.allocate(2).putShort(silent.coerceAtMost(65_535L).toInt().toShort()).array())
         }
     }
 
     private fun pingBody(n: Int) = ByteBuffer.allocate(6).putInt(n).putShort(myRelayMs.coerceIn(-1, 65534).toShort()).array()
 
-    /** A [kind] of frame to each live teammate in [to] (all when null); the slots it went to. */
+    /**
+     * A [kind] of frame to each live teammate in [to] (all when null); the slots it surely reached ([Peer.sure]: heard from
+     * lately). One that's live but not sure still gets it, and the caller sends it through the relay as well: TURN going
+     * quiet costs well under a second, not [LIVE_MS].
+     */
     fun broadcast(kind: Int, body: ByteArray, to: Set<Int>? = null): Set<Int> {
         val s = socket ?: return emptySet()
         if (state != State.READY) return emptySet()
         val now = System.currentTimeMillis()
         val out = HashSet<Int>()
-        for (p in peers.values) if (p.bound && p.live(now) && (to == null || p.slot in to)) { frame(s, p, kind, body); out += p.slot }
+        for (p in peers.values) if (p.bound && p.live(now) && (to == null || p.slot in to)) { frame(s, p, kind, body); if (p.sure(now)) out += p.slot }
         return out
     }
+
+    /** Whether frames to [slot] surely get there this way ([Peer.sure]). */
+    fun sure(slot: Int) = peers[slot]?.let { it.bound && it.sure(System.currentTimeMillis()) } == true
 
     /** A frame to [p]: [channel][length], then the sealed frame. */
     private fun frame(s: DatagramSocket, p: Peer, kind: Int, body: ByteArray) {
@@ -308,15 +365,14 @@ class TurnLink(
         // The whole counter: the low 24 bits sent, the rest from the last one heard (the nearest that fits).
         val low = ((d[off + 1].toLong() and 255) shl 16) or ((d[off + 2].toLong() and 255) shl 8) or (d[off + 3].toLong() and 255)
         val ctr = counter(p.heard, low)
-        if (ctr <= p.heard) return
+        if (!p.fresh(ctr, kind in anyOrder)) return
         val body = runCatching {
             val c = ciphers.get()
             c.init(Cipher.DECRYPT_MODE, p.key, GCMParameterSpec(TAG * 8, nonce(slot, ctr)))
             c.updateAAD(d, off, HEAD)
             c.doFinal(d, off + HEAD, n - HEAD)
         }.getOrNull() ?: return
-        if (p.heard > 0 && ctr > p.heard + 1) p.lost += ctr - p.heard - 1
-        p.heard = ctr; p.heardAt = now; p.framesIn++
+        p.mark(ctr); p.heardAt = now; p.framesIn++
         when (kind) {
             PING -> if (body.size == 6) {
                 p.theirRelayMs = ByteBuffer.wrap(body, 4, 2).short.toInt()
@@ -328,6 +384,7 @@ class TurnLink(
                 val ms = (System.nanoTime() - sent) / 1e6
                 p.rttMs = if (p.rttMs < 0) ms else p.rttMs * 0.7 + ms * 0.3
             }
+            MISSING -> if (body.size == 2) p.missedAt = now
             else -> sink(slot, kind, body)
         }
     }
@@ -347,7 +404,7 @@ class TurnLink(
                 // Stale nonce: the new one, and again.
                 438 -> { nonce = m.nonce ?: return; request(t.method, t.slot, t.tries + 1) }
                 // An allocation from before (a quick restart): a new socket, so a new one.
-                437 -> fail("allocation mismatch")
+                437 -> fail("allocation mismatch", now = true)
                 else -> when (t.method) {
                     ALLOCATE, REFRESH -> fail("${methodName(t.method)} refused (${m.error})")
                     CHANNEL_BIND -> { log("TURN: channel to teammate ${t.slot} refused (${m.error})"); peers[t.slot]?.bindAt = now + 30_000L }
@@ -367,7 +424,12 @@ class TurnLink(
             }
             REFRESH -> { lifetimeS = m.lifetime ?: lifetimeS; refreshAt = now + lifetimeS * 500L }
             CHANNEL_BIND -> peers[t.slot]?.let { it.bound = true; it.bindAt = now }
-            BINDING -> { val ms = (now - t.sentAt).toDouble(); serverRttMs = if (serverRttMs < 0) ms else serverRttMs * 0.7 + ms * 0.3 }
+            BINDING -> {
+                val ms = (now - t.sentAt).toDouble(); serverRttMs = if (serverRttMs < 0) ms else serverRttMs * 0.7 + ms * 0.3
+                val was = mapped
+                m.mapped?.let { mapped = it }
+                if (was != null && m.mapped != null && m.mapped != was) fail("the network changed (the server sees us at another address now)", now = true)
+            }
         }
     }
 
@@ -438,6 +500,7 @@ class TurnLink(
         var relayed: InetSocketAddress? = null
         var peer: InetSocketAddress? = null
         var lifetime: Int? = null
+        var mapped: InetSocketAddress? = null
         var data: ByteArray? = null
     }
 
@@ -461,6 +524,7 @@ class TurnLink(
                 NONCE -> m.nonce = v
                 XOR_RELAYED_ADDRESS -> m.relayed = xorAddress(v, tx)
                 XOR_PEER_ADDRESS -> m.peer = xorAddress(v, tx)
+                XOR_MAPPED_ADDRESS -> m.mapped = xorAddress(v, tx)
                 LIFETIME -> if (alen == 4) m.lifetime = ByteBuffer.wrap(v).int
                 DATA -> m.data = v
             }
@@ -484,6 +548,12 @@ class TurnLink(
     companion object {
         const val PING = 0
         const val PONG = 1
+        /** "Nothing from you for [the u16, ms]": sent with each ping while it's so, past [MISS_MS] (older games ignore the kind). */
+        const val MISSING = 2
+        /** Silent this long is worth saying: past a ping's gap and some jitter. */
+        const val MISS_MS = 450L
+        /** A teammate isn't [Peer.sure] for this long after it said it misses us (it says so every [KEEP_MS] while it does). */
+        const val MISSED_FOR_MS = 700L
         private const val HEAD = 4
 
         /** A frame's whole counter from its low 24 bits and the last one heard (the nearest that fits). */
@@ -494,10 +564,15 @@ class TurnLink(
         }
         private const val TAG = 12
         private const val MAX_PACKET = 300
-        private const val PUNCH_MS = 200L
-        private const val KEEP_MS = 1000L
+        /** Pings to a teammate: this often until it's live, and this often once it is (each side's keep the other's [SURE_MS]). */
+        const val PUNCH_MS = 200L
+        const val KEEP_MS = 250L
         /** A teammate heard from within this is live: frames go to it this way. */
-        private const val LIVE_MS = 2500L
+        const val LIVE_MS = 2500L
+        /** ... and heard from within this, surely getting them (a few pings lost in a row is a link in trouble). */
+        const val SURE_MS = 700L
+        /** Every live teammate silent this long: the allocation is checked at once (a NAT that dropped its mapping loses it). */
+        private const val QUIET_MS = 3000L
         private const val RETRY_MS = 250L
         /** Channels last 10 minutes and the permission they bring 5: renewed well inside. */
         private const val BIND_MS = 120_000L
@@ -522,6 +597,7 @@ class TurnLink(
         private const val REALM = 0x0014
         private const val NONCE = 0x0015
         private const val XOR_RELAYED_ADDRESS = 0x0016
+        private const val XOR_MAPPED_ADDRESS = 0x0020
         private const val REQUESTED_TRANSPORT = 0x0019
         private const val FINGERPRINT = 0x8028
     }
