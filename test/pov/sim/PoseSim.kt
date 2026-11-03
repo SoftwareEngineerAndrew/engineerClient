@@ -61,6 +61,10 @@ class Result(
     val seconds: List<Second>,
     /** After each outage ([NetProfile.outages]) ends, how long until they're drawn again (ms; NaN: never). */
     val recoveryMs: List<Double> = emptyList(),
+    /** The longest the view stood still (drawn, not moving or turning) while they moved or turned (ms), and all of it (ms a minute). */
+    val longestFreezeMs: Double = 0.0, val freezeMsPerMin: Double = 0.0,
+    /** Each outage: how long the view was blank or frozen from its start (ms). */
+    val outageCostMs: List<Double> = emptyList(),
 )
 
 class Stats(xs: DoubleArray) {
@@ -78,8 +82,9 @@ class Stats(xs: DoubleArray) {
  * One teammate (the sender) sharing with you (the receiver) over [Scenario.net], simulated in virtual time: the sender's
  * game ticks and frames as a game does (20 ticks a second, run at the first frame after they're due, at most 10 a frame),
  * its [PoseWire.Sender] decides what goes when, exactly as in the game; TURN's frames cross [Link]s with TurnLink's own rules
- * (a counter not past the last heard is dropped; pings and pongs each way, 1 s apart while live and 200 ms until; live for
- * 2.5 s after the last heard), the relay's cross a TCP-like link; the route is [PoseWire.viaTurn] on the round trips as
+ * (its replay window, [TurnLink.Peer.fresh], late poses taken; pings and pongs each way, [TurnLink.KEEP_MS] apart while live and
+ * [TurnLink.PUNCH_MS] until; live for [TurnLink.LIVE_MS], the relay too while not [TurnLink.SURE_MS]), the relay's cross a
+ * TCP-like link; the route is [PoseWire.Route] and [PoseWire.viaTurn] on the round trips as
  * measured; and your game draws them from a [PoseTrack] every frame. Each drawn pose is then matched against what the
  * sender's own screen showed, to find how far behind it is.
  */
@@ -113,8 +118,11 @@ class PoseSim(private val sc: Scenario) {
 
     // The sender's side of TURN.
     private var sCtr = 0L
-    private var sHeard = 0L
+    private val sPeer = peer()
     private var sHeardAt = -1e9
+    // When the receiver last said it misses the sender's frames (TurnLink.MISSING).
+    private var sMissedAt = -1e9
+    private val route = PoseWire.Route()
     private var sRtt = -1.0
     private val sPings = HashMap<Int, Double>()
     private var sLastPing = -1e9
@@ -124,7 +132,7 @@ class PoseSim(private val sc: Scenario) {
     private var turnTicks = 0; private var ticks = 0
     // The receiver's side.
     private var rCtr = 0L
-    private var rHeard = 0L
+    private val rPeer = peer()
     private var rHeardAt = -1e9
     private var rRtt = -1.0
     private val rPings = HashMap<Int, Double>()
@@ -133,7 +141,7 @@ class PoseSim(private val sc: Scenario) {
     private var sRelayRtt = -1.0; private var rRelayRtt = -1.0; private var relayPingAt = -1e9
     private var nextPing = 1
 
-    private var turnFramesSent = 0L; private var turnFramesLostOrDropped = 0L; private var reordered = 0L
+    private var turnFramesSent = 0L; private var turnFramesLostOrDropped = 0L; private var reordered = 0L; private var lateTaken = 0L
     private var turnUpBytes = 0L; private var turnDownBytes = 0L
     private var relayFrames = 0L; private var relayBytes = 0L
     private val relayPerSecond = IntArray(sc.seconds + 2)
@@ -147,10 +155,11 @@ class PoseSim(private val sc: Scenario) {
     private class Rec(val t: Double, val pos: Vec3?, val yaw: Float, val pitch: Float, val buffer: Long, val posBuffer: Long)
     private val recs = ArrayList<Rec>()
 
-    private val LIVE_MS = 2500.0
+    private fun peer() = TurnLink.Peer(1, java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 1), javax.crypto.spec.SecretKeySpec(ByteArray(32), "AES"))
     private val frameNs = 1_000_000_000L / env.shareFps.toLong().coerceIn(20L, 240L)
 
-    private fun live(heardAt: Double, now: Double) = now - heardAt < LIVE_MS
+    private fun live(heardAt: Double, now: Double) = now - heardAt < TurnLink.LIVE_MS
+    private fun sure(heardAt: Double, now: Double) = now - heardAt < TurnLink.SURE_MS && now - sMissedAt >= TurnLink.MISSED_FOR_MS
 
     // ------------------------------------------------------------------ TURN frames each way
 
@@ -167,14 +176,16 @@ class PoseSim(private val sc: Scenario) {
 
     /** At the receiver's TurnLink: the counter check, then PoseShare.direct. */
     private fun receiverGot(ctr: Long, kind: Int, body: ByteArray, now: Double) {
-        val c = TurnLink.counter(rHeard, ctr and 0xFFFFFF)
-        if (c <= rHeard) { reordered++; return }
-        rHeard = c; rHeardAt = now
+        val c = TurnLink.counter(rPeer.heard, ctr and 0xFFFFFF)
+        if (!rPeer.fresh(c, kind == PoseWire.D_TICK || kind == PoseWire.D_LOOK)) { reordered++; return }
+        if (c < rPeer.heard) lateTaken++
+        rPeer.mark(c); rHeardAt = now
         when (kind) {
             TurnLink.PING -> { val n = ByteBuffer.wrap(body).int; receiverSend(TurnLink.PONG, n, now) }
             TurnLink.PONG -> { val n = ByteBuffer.wrap(body).int; rPings.remove(n)?.let { sent -> val ms = now - sent; rRtt = if (rRtt < 0) ms else rRtt * 0.7 + ms * 0.3 } }
             PoseWire.D_TICK -> PoseWire.readTick(body)?.let { heard(true, it, now, if (rRtt > 0) (rRtt / 2).toInt() else 0) }
             PoseWire.D_LOOK -> PoseWire.readLook(body)?.let { heard(true, it, now, if (rRtt > 0) (rRtt / 2).toInt() else 0) }
+            PoseWire.D_ROUTE -> track.turnLeft(recvNs(now))
         }
     }
 
@@ -186,30 +197,32 @@ class PoseSim(private val sc: Scenario) {
     }
 
     private fun senderGot(ctr: Long, kind: Int, n: Int, theirRelay: Int, now: Double) {
-        val c = TurnLink.counter(sHeard, ctr and 0xFFFFFF)
-        if (c <= sHeard) return
-        sHeard = c; sHeardAt = now
+        val c = TurnLink.counter(sPeer.heard, ctr and 0xFFFFFF)
+        if (!sPeer.fresh(c, false)) return
+        sPeer.mark(c); sHeardAt = now
         theirRelayMs = theirRelay
         when (kind) {
             TurnLink.PING -> turnSend(TurnLink.PONG, ByteBuffer.allocate(6).putInt(n).putShort(0).array(), now)
             TurnLink.PONG -> sPings.remove(n)?.let { sent -> val ms = now - sent; sRtt = if (sRtt < 0) ms else sRtt * 0.7 + ms * 0.3 }
+            TurnLink.MISSING -> sMissedAt = now
         }
     }
 
     /** TurnLink.tick's pings, each way: a second apart while live, 200 ms until. */
     private fun pings(now: Double) {
         if (!env.turn) return
-        if (now - sLastPing >= (if (live(sHeardAt, now)) 1000.0 else 200.0)) {
+        if (now - sLastPing >= (if (live(sHeardAt, now)) TurnLink.KEEP_MS else TurnLink.PUNCH_MS)) {
             sLastPing = now
             val n = nextPing++
             sPings[n] = now
             turnSend(TurnLink.PING, ByteBuffer.allocate(6).putInt(n).putShort(0).array(), now)
         }
-        if (now - rLastPing >= (if (live(rHeardAt, now)) 1000.0 else 200.0)) {
+        if (now - rLastPing >= (if (live(rHeardAt, now)) TurnLink.KEEP_MS else TurnLink.PUNCH_MS)) {
             rLastPing = now
             val n = nextPing++
             rPings[n] = now
             receiverSend(TurnLink.PING, n, now)
+            if (rHeardAt > 0 && now - rHeardAt > TurnLink.MISS_MS) receiverSend(TurnLink.MISSING, 0, now)
         }
         // Each game's ping to the relay, every 2 s (PoseShare's, smoothed 0.7/0.3).
         if (now - relayPingAt >= 2000) {
@@ -280,16 +293,20 @@ class PoseSim(private val sc: Scenario) {
         val item = m.item(due)
         // PoseShare.routes, every tick.
         val was = viaTurn
-        viaTurn = env.turn && PoseWire.viaTurn(viaTurn, live(sHeardAt, t), env.optimize, if (sRtt > 0) sRtt / 2 else -1.0,
-            if (sRelayRtt > 0 && theirRelayMs >= 0) sRelayRtt / 2 + theirRelayMs else -1.0)
+        val q = route.update(t.toLong(), if (sRtt > 0) sRtt / 2 else -1.0, if (sRelayRtt > 0 && theirRelayMs >= 0) sRelayRtt / 2 + theirRelayMs else -1.0)
+        val live = live(sHeardAt, t)
+        viaTurn = env.turn && PoseWire.viaTurn(q, live, env.optimize)
         if (was != null && was != viaTurn) routeSwitches++
+        // Off TURN while it works: the last frame that way says so (PoseWire.D_ROUTE).
+        if (was == true && viaTurn == false && live) turnSend(PoseWire.D_ROUTE, byteArrayOf(0), t)
         ticks++; if (viaTurn == true) { turnTicks++; val sec = (t / 1000).toInt(); if (sec in turnPerSecond.indices) turnPerSecond[sec] = true }
         val nano = senderNs(t)
         var relay = true
         if (viaTurn == true) {
             val bodies = sender.tick(nano, senderMs(t), pos.x, pos.y, pos.z, yaw, pitch, flags, item)
             bodies?.forEach { turnSend(PoseWire.D_TICK, it, t) }
-            relay = false
+            // Still sure of TURN: the relay isn't needed (TurnLink.broadcast's answer).
+            relay = !sure(sHeardAt, t)
         }
         val frame = PoseWire.relay(1, -1, 0, n.toInt(), pos.x, pos.y, pos.z, yaw, pitch, flags, sRelayRtt, item)
         for (f in sender.relayFrames(frame, nano, relay)) relaySend(f, t)
@@ -345,6 +362,24 @@ class PoseSim(private val sc: Scenario) {
         var lastPosAt = Double.NaN; var lastLookAt = Double.NaN
         var prevPosTau = 100.0; var prevLookTau = 100.0
         var prev: Rec? = null
+        // A freeze: frames drawn just as the one before while they moved or turned.
+        var freezeStart = -1.0; var longestFreeze = 0.0; var freezeTotal = 0.0
+        // Moving or turning all through [a, b] of their own screen (every 25 ms of it).
+        fun busy(a: Double, b: Double): Boolean {
+            var t = a
+            while (t < b) {
+                if (truthPos(t + 25).distanceTo(truthPos(t)) < 0.01 && Motions.angle(m.yaw((t + 25) / 1000), m.yaw(t / 1000)) < 0.2f) return false
+                t += 25
+            }
+            return true
+        }
+        fun endFreeze(t: Double) {
+            if (freezeStart < 0) return
+            val a = freezeStart; freezeStart = -1.0
+            // Against their screen as far behind as it's been drawn lately: they were busy all that time, and it stood still.
+            val lag = if (prevPosTau.isFinite()) prevPosTau else 100.0
+            if (t - a > 40 && busy(a - lag, t - lag)) { longestFreeze = max(longestFreeze, t - a); freezeTotal += t - a }
+        }
         val perSec = Array(sc.seconds + 1) { ArrayList<DoubleArray>() }
         val blankPerSec = IntArray(sc.seconds + 1); val framesPerSec = IntArray(sc.seconds + 1)
         for (r in recs) {
@@ -353,9 +388,13 @@ class PoseSim(private val sc: Scenario) {
             val sec = (r.t / 1000).toInt().coerceAtMost(sc.seconds)
             framesPerSec[sec]++
             if (r.pos == null) {
+                endFreeze(r.t)
                 if (first >= 0) { blank++; blankPerSec[sec]++; if (blankStart < 0) blankStart = r.t }
                 prev = r; continue
             }
+            val pr = prev
+            if (pr?.pos != null && pr.pos.distanceTo(r.pos) < 1e-6 && pr.yaw == r.yaw && pr.pitch == r.pitch) { if (freezeStart < 0) freezeStart = pr.t }
+            else endFreeze(r.t)
             if (blankStart >= 0) { longest = max(longest, r.t - blankStart); blankStart = -1.0; lastPosAt = Double.NaN; lastLookAt = Double.NaN }
             if (first < 0) first = r.t
             val now = truthPos(r.t)
@@ -404,6 +443,17 @@ class PoseSim(private val sc: Scenario) {
             prev = r
         }
         if (blankStart >= 0) longest = max(longest, recs.last().t - blankStart)
+        endFreeze(recs.last().t)
+        // An outage's cost: the time from its start to 3 s past its end that the view was blank or stood still (ms).
+        val outageCost = sc.net.outages.filter { it.first + it.second < durMs - 1000 }.map { (s, len) ->
+            var cost = 0.0
+            for (i in 1 until recs.size) {
+                val a = recs[i - 1]; val b = recs[i]
+                if (b.t < s || b.t > s + len + 3000) continue
+                if (b.pos == null || (a.pos != null && a.pos.distanceTo(b.pos) < 1e-6 && a.yaw == b.yaw)) cost += b.t - a.t
+            }
+            cost
+        }
         val seconds = (1..sc.seconds).map { s ->
             val rows = perSec.getOrNull(s) ?: arrayListOf()
             fun med(i: Int) = rows.map { it[i] }.filter { !it.isNaN() }.sorted().let { if (it.isEmpty()) Double.NaN else it[it.size / 2] }
@@ -419,7 +469,8 @@ class PoseSim(private val sc: Scenario) {
             turnFramesSent, turnFramesLostOrDropped, reordered,
             if (heardCalls == 0L) 0.0 else heardNs.toDouble() / heardCalls, if (drawnCalls == 0L) 0.0 else drawnNs.toDouble() / drawnCalls,
             if (sendCalls == 0L) 0.0 else sendNs.toDouble() / sendCalls, seconds,
-            sc.net.outages.filter { it.first + it.second < durMs - 1000 }.map { (s, len) -> val end = (s + len).toDouble(); recs.firstOrNull { it.t >= end && it.pos != null }?.let { it.t - end } ?: Double.NaN })
+            sc.net.outages.filter { it.first + it.second < durMs - 1000 }.map { (s, len) -> val end = (s + len).toDouble(); recs.firstOrNull { it.t >= end && it.pos != null }?.let { it.t - end } ?: Double.NaN },
+            longestFreeze, freezeTotal / (sc.seconds / 60.0), outageCost)
     }
 
     /**

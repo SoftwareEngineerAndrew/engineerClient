@@ -44,6 +44,7 @@ class PoseSimTest {
                     check(!(r.posDelay.p50 > worstBase(n) + jitter + 70), r) { "position ${r.posDelay.p50} ms behind" }
                     check(!(r.lookDelay.p50 > worstBase(n) + jitter + 60), r) { "look ${r.lookDelay.p50} ms behind" }
                     check(r.jumps <= 3 && r.backsteps <= 15, r) { "jumps ${r.jumps}, backsteps ${r.backsteps}" }
+                    check(r.longestFreezeMs <= 150, r) { "stood still ${r.longestFreezeMs} ms while they moved" }
                 } else if (n in rough) {
                     check(100.0 * r.blankFrames / r.frames <= 10 && r.longestBlankMs <= 1500, r) { "blank ${100.0 * r.blankFrames / r.frames}%, longest ${r.longestBlankMs} ms" }
                     check(!(r.posDelay.p50 > n.baseMs + 3 * jitter + 120), r) { "position ${r.posDelay.p50} ms behind" }
@@ -73,11 +74,21 @@ class PoseSimTest {
                     }
                 }
                 "route flap" -> check(r.routeSwitches <= 3, r) { "${r.routeSwitches} route switches" }
+                "relay quicker" -> check(r.turnShare < 0.25 && r.routeSwitches <= 2, r) { "on TURN ${100 * r.turnShare}% of ticks, ${r.routeSwitches} switches" }
                 "long" -> {
                     // Ten minutes in, no worse than one minute in.
                     fun med(from: Int, to: Int) = r.seconds.filter { it.s in from until to }.map { it.posDelayMs }.filter { !it.isNaN() }.sorted().let { it[it.size / 2] }
                     check(abs(med(540, 600) - med(60, 120)) <= 20, r) { "minute 10: ${med(540, 600)} ms, minute 1: ${med(60, 120)} ms" }
                     if (n === Nets.TYPICAL) check(100.0 * r.blankFrames / r.frames <= 0.1, r) { "blank ${r.blankFrames} frames" }
+                    // The route on a jittery 4G doesn't flap (it once switched 49 times in ten minutes, each a hitch).
+                    check(r.routeSwitches <= 6, r) { "${r.routeSwitches} route switches" }
+                    check(r.longestBlankMs <= 1000, r) { "longest blank ${r.longestBlankMs} ms" }
+                }
+                // TURN alone out, the relay fine: the view goes over to the relay within a moment, whatever the outage's
+                // length (it once waited out TURN's 2.5 s: 1.6 s blank, 1-2 s lost per outage).
+                "TURN drops" -> {
+                    check(r.longestBlankMs <= 600, r) { "longest blank ${r.longestBlankMs} ms" }
+                    if (sc.motion === Motions.STRAFE) check(r.outageCostMs.all { it <= 900 }, r) { "outages cost ${r.outageCostMs} ms" }
                 }
                 "idle" -> check(r.jumps == 0 && (n !== Nets.TYPICAL || r.blankFrames == 0), r) { "idle: jumps ${r.jumps}, blank ${r.blankFrames}" }
             }

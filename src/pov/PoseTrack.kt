@@ -66,6 +66,11 @@ class PoseTrack(private val tuning: Tuning = Tuning()) {
 
     fun reset() { samples.clear(); ticks.clear(); offset = Long.MAX_VALUE; lastSeq = -1; phaseN = 0 }
 
+    /** When they said (over TURN, [PoseWire.D_ROUTE]) that their frames go by the relay from now. */
+    var turnLeftAt = 0L
+    var leftTurn = false
+    fun turnLeft(now: Long) = synchronized(this) { turnLeftAt = now; leftTurn = true }
+
     /** Where to draw them at [now] (System.nanoTime's clock), or null when nothing recent enough has come. */
     fun drawn(now: Long): Drawn? = synchronized(this) {
         val t = this
@@ -122,11 +127,18 @@ class PoseTrack(private val tuning: Tuning = Tuning()) {
             t.source = source; reset()
         }
         // TURN over the relay's ticks: while it comes, the same pose a tick at a time (relayed for others) is
-        // skipped; it starting (or ticks after it stopped) starts the timing over.
+        // skipped, unless they said their frames go by the relay from now ([turnLeft]: no waiting for TURN to go stale,
+        // the view held still meanwhile); it starting (or ticks after it stopped) starts the timing over.
         if (t.timed != timed) {
-            if (!timed && fresh) return false
+            val left = t.leftTurn && now - t.turnLeftAt < SWITCH_NS
+            if (!timed && fresh && !left) return false
+            // To TURN on a position (a look alone would leave nothing to draw them at until the next tick), and not from a
+            // late TURN frame just after they left it.
+            if (timed && ((pos == null && fresh) || (t.leftTurn && now - t.turnLeftAt < LATE_NS))) return false
             t.timed = timed; reset()
             t.gap = if (timed) 16_000_000.0 else TICK_NS.toDouble()
+            // Ticks need a tick's buffer at least from the first: TURN's few ms would run each on and pull it back.
+            if (!timed) t.buffer = maxOf(t.buffer, 70_000_000L)
         }
         t.via = via
         // 16 bits unwrapped against the newest (ticks wrap after 55 minutes, ms after 65 s).
@@ -194,5 +206,8 @@ class PoseTrack(private val tuning: Tuning = Tuning()) {
         const val CARRY_NS = 60_000_000L
         /** A shared view older than this isn't shown: an old frame would pass for where they are now. */
         const val STALE_NS = 300_000_000L
+        /** After [turnLeft]: the relay's ticks are taken at once for this long, and TURN's (late ones) not for [LATE_NS]. */
+        const val SWITCH_NS = 2_000_000_000L
+        const val LATE_NS = 300_000_000L
     }
 }

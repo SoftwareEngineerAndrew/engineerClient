@@ -13,6 +13,16 @@ import java.nio.ByteBuffer
 object PoseWire {
     const val D_TICK = 9
     const val D_LOOK = 10
+    /** Over TURN, the last thing sent that way: your frames go to them through the relay from now (Optimize server location chose it). */
+    const val D_ROUTE = 11
+    /**
+     * Your rooms over TURN: the relay's kind 9 ([PoseShare]'s rooms frame), which over TURN is [D_TICK]'s number (each read
+     * as the other: rooms never came that way, and one 16 or 18 bytes long was drawn as a pose somewhere made up).
+     */
+    const val D_ROOMS = 12
+
+    /** A relay frame kind as sent over TURN (where 9 is [D_TICK]). */
+    fun turnKind(relayKind: Int) = if (relayKind == 9) D_ROOMS else relayKind
     const val TICK_NS = 50_000_000L
     /** While still, your pose is sent this often rather than every tick (well inside [PoseTrack.STALE_NS]). */
     const val STILL_NS = 100_000_000L
@@ -68,6 +78,8 @@ object PoseWire {
     /** A [D_TICK] body, or null when it isn't one. */
     fun readTick(body: ByteArray): Heard? {
         if (!(body.size == 16 || (body.size == 18 && body[15].toInt() and 0x80 != 0))) return null
+        // Flags are swung (1), sneaking (2) and the item (0x80): anything else isn't a tick (an older game's rooms, see [D_ROOMS]).
+        if (body[15].toInt() and 0x7C != 0) return null
         val b = ByteBuffer.wrap(body)
         val ms = b.short.toLong() and 0xFFFF
         val pos = Vec3(get24(b), get24(b), get24(b))
@@ -102,13 +114,43 @@ object PoseWire {
 
     /**
      * Whether a teammate's frames go over TURN (else the relay): only while TURN is live to them, and with "Optimize server
-     * location" whichever is quicker (half TURN's round trip against your way to the relay plus theirs from it), switching only
-     * for a clear 5 ms so it doesn't flap. [was] the last choice (null at first).
+     * location" as [quicker] last chose.
      */
-    fun viaTurn(was: Boolean?, live: Boolean, optimize: Boolean, turnMs: Double, relayMs: Double): Boolean {
-        var fast = live
-        if (fast && optimize && turnMs > 0 && relayMs > 0) fast = if (was != false) turnMs <= relayMs + 5 else turnMs + 5 < relayMs
-        return fast
+    fun viaTurn(quick: Boolean?, live: Boolean, optimize: Boolean) = live && (!optimize || quick != false)
+
+    /** How long the other way must stay the quicker before [Route] takes it (one measurement can be stale or a spike). */
+    const val ROUTE_HOLD_MS = 3_000L
+    /** The least time on TURN before [Route] leaves it again: each switch is a hitch in their view (the track starts over). */
+    const val ROUTE_DWELL_MS = 15_000L
+
+    /**
+     * "Optimize server location" for one teammate: whether TURN is the quicker way to them (half its round trip against your
+     * way to the relay plus theirs from it), [quick] null until both are measured. It changes only for a clear margin (5 ms,
+     * or a tenth of the way: jitter on a slow link is bigger) that holds [ROUTE_HOLD_MS] (the relay is timed every 2 s, TURN
+     * four times a second, so a new route shows on TURN first), and leaves TURN at most once in [ROUTE_DWELL_MS], so it
+     * doesn't flap: a few ms more for a while costs nothing seen, a switch does. Whether TURN is up at all is apart from it
+     * ([viaTurn]): an outage doesn't undo the choice.
+     */
+    class Route {
+        var quick: Boolean? = null; private set
+        private var changedAt = Long.MIN_VALUE / 2
+        private var otherSince = -1L
+        var switches = 0; private set
+
+        /** At [nowMs] (ms), with the one-way times as measured (<= 0: not yet): the choice. */
+        fun update(nowMs: Long, turnMs: Double, relayMs: Double): Boolean? {
+            val was = quick
+            if (turnMs <= 0 || relayMs <= 0) return was
+            val margin = maxOf(5.0, 0.1 * minOf(turnMs, relayMs))
+            val better = if (was != false) turnMs <= relayMs + margin else turnMs + margin < relayMs
+            // The first choice isn't a switch: no dwell after it.
+            if (was == null) { quick = better; return better }
+            if (better == was) { otherSince = -1L; return was }
+            if (otherSince < 0) otherSince = nowMs
+            if (nowMs - otherSince < ROUTE_HOLD_MS || (was && nowMs - changedAt < ROUTE_DWELL_MS)) return was
+            quick = better; changedAt = nowMs; otherSince = -1L; switches++
+            return better
+        }
     }
 
     /** Within 0.05° of [b] in yaw and pitch (yaw 65536 to the turn, pitch 32767 to 90°). */

@@ -49,6 +49,12 @@ object Scenarios {
         }
     }
 
+    /** The relay clearly quicker (TURN's way round is long): Optimize server location must still take it, and stay. */
+    val relayQuicker = listOf(Motions.P3, Motions.STRAFE).map { m ->
+        Scenario("relay quicker", NetProfile("TURN 70 ms", 70.0, jitterMs = 10.0, noiseMs = 3.0), m, Env(label = "relay 40 ms"), seconds = 60,
+            relay = NetProfile("relay", 40.0, jitterMs = 10.0, noiseMs = 3.0, tcp = true))
+    }
+
     /** Ten minutes, for drift and wrap-arounds (the 16-bit ms wraps every 65 s). */
     val long = listOf(
         Scenario("long", Nets.TYPICAL, Motions.P3, Env(driftPpm = 300.0, label = "10 min, clock +300 ppm"), seconds = 600),
@@ -59,7 +65,15 @@ object Scenarios {
     /** Stand still for 20 s: nothing should be drawn moving, and the sending slows to the still rate. */
     val idle = listOf(Nets.TYPICAL, Nets.HORRIBLE).map { Scenario("idle", it, Motions.STILL, seconds = 30) }
 
-    val all get() = network + relayOnly + games + flap + long + idle
+    /**
+     * TURN alone drops out (a NAT that lost its mapping, Cloudflare's TURN having trouble) while the relay is fine: the view
+     * should go over to the relay rather than wait TURN out.
+     */
+    val turnDrops = listOf(Motions.P3, Motions.STRAFE).map { m ->
+        Scenario("TURN drops", Nets.OUTAGES.copy(name = "TURN outages"), m, seconds = 50, relay = Nets.TYPICAL.asRelay())
+    }
+
+    val all get() = network + relayOnly + games + flap + relayQuicker + long + idle + turnDrops
 
     /** Runs [list] on a few threads (each run is its own, nothing shared). */
     fun run(list: List<Scenario>, threads: Int = 6): List<Pair<Result, Long>> {
@@ -73,13 +87,13 @@ object Scenarios {
     private fun f(v: Double, d: Int = 0) = if (v.isNaN()) "-" else String.format(Locale.ROOT, "%.${d}f", v)
 
     val HEAD = listOf("group", "network", "movement", "setting", "pos delay p50", "p95", "max", "look delay p50", "p95", "behind p95 (blocks)",
-        "shape err p95", "blank %", "longest blank ms", "first shown ms", "jumps", "backsteps", "pos rewinds", "look rewinds", "route switches", "on TURN %",
+        "shape err p95", "blank %", "longest blank ms", "longest freeze ms", "freeze ms/min", "outage cost ms", "first shown ms", "jumps", "backsteps", "pos rewinds", "look rewinds", "route switches", "on TURN %",
         "TURN up kB/s", "relay frames/s", "relay max/s", "relay dropped", "TURN lost %", "reordered dropped", "heard ns", "drawn ns", "sender ns/frame")
 
     fun row(r: Result, dropped: Long): List<String> {
         val s = r.scenario
         return listOf(s.group, s.net.name, s.motion.name, s.env.label, f(r.posDelay.p50), f(r.posDelay.p95), f(r.posDelay.max), f(r.lookDelay.p50), f(r.lookDelay.p95),
-            f(r.behind.p95, 2), f(r.shapeErr.p95, 3), f(100.0 * r.blankFrames / maxOf(1, r.frames), 2), f(r.longestBlankMs), f(r.firstShownMs), "${r.jumps}", "${r.backsteps}", "${r.posRewinds}", "${r.lookRewinds}",
+            f(r.behind.p95, 2), f(r.shapeErr.p95, 3), f(100.0 * r.blankFrames / maxOf(1, r.frames), 2), f(r.longestBlankMs), f(r.longestFreezeMs), f(r.freezeMsPerMin), r.outageCostMs.joinToString(" ") { f(it) }, f(r.firstShownMs), "${r.jumps}", "${r.backsteps}", "${r.posRewinds}", "${r.lookRewinds}",
             "${r.routeSwitches}", f(100 * r.turnShare), f(r.turnUpBytesPerS / 1000, 2), f(r.relayFramesPerS, 1), "${r.relayFramesMaxPerS}", "$dropped",
             f(if (r.turnFramesSent == 0L) 0.0 else 100.0 * r.turnFramesLost / r.turnFramesSent, 1), "${r.turnFramesReordered}",
             f(r.heardNs), f(r.drawnNs), f(r.sendNs))
