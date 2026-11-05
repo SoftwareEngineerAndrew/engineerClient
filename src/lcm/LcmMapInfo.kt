@@ -49,7 +49,8 @@ import kotlin.math.floor
  * worked out by dtMap's score calculator in its Legit Mode with its default score settings, from the tab list
  * stats Odin reads:
  *
- * - secrets found (aqua), the secrets still missing for 300 (yellow; the bonus score counts, Paul's doesn't) and
+ * - secrets found (aqua), the secrets still missing for 300 (yellow; the bonus score so far and Paul's +10 count,
+ *   as in Odin's own Full Hud and dtMap's "Missing secrets calculate paul") and
  *   the total (red), then the unknown secrets (the total less the rooms someone has walked into: yours, and your
  *   teammates' from Odin's map websocket; green while at least the 300 needs, else gold - dtMap shows it only when
  *   solo clearing) and the score: red under 270, yellow under 300, green from 300
@@ -180,9 +181,13 @@ object LcmMapInfo {
     /** dtMap's Paul on Auto: Paul's +10 when he's mayor with his perk. */
     private fun calculatePaulScore(): Int = if (DungeonUtils.isPaul) 10 else 0
 
-    /** The secrets 300 needs in all (dtMap's default: the bonus score so far counts, Paul's doesn't). */
+    /**
+     * The secrets 300 needs in all: the bonus score so far and Paul's +10 both count (Odin's needed secrets, and
+     * dtMap with "Missing secrets calculate paul" on; dtMap's default leaves Paul out, which asked for 10 bonus
+     * points' worth of secrets too many whenever Paul is mayor).
+     */
     private fun calculateNeededSecrets(): Int =
-        ceil(calculateTotalSecrets() * secretFactor() * (40 - calculateBonusScoreNoPaul() + deathPenalty()) / 40f).toInt().coerceAtLeast(0)
+        ceil(calculateTotalSecrets() * secretFactor() * (40 - calculateBonusScoreNoPaul() - calculatePaulScore() + deathPenalty()) / 40f).toInt().coerceAtLeast(0)
 
     /** The secrets still missing for 300. */
     private fun calculateMinimumSecrets(): Int = (calculateNeededSecrets() - DungeonUtils.secretCount).coerceAtLeast(0)
