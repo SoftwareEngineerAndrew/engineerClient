@@ -22,6 +22,20 @@ object PaulScore {
         MapInfo.registerSetting(mode)
     }
 
+    /** The setting's label (Auto / On / Off), for the recorder. */
+    @JvmStatic
+    fun label(): String = mode.value.toString()
+
+    private val paulField by lazy {
+        runCatching {
+            Class.forName("com.odtheking.odin.utils.skyblock.dungeon.DungeonListener").getDeclaredField("paul").apply { isAccessible = true }
+        }.getOrNull()
+    }
+
+    /** Odin's own Paul (the mayor check), read from its field so the override is left out; null if it can't be read. */
+    @JvmStatic
+    fun real(): Boolean? = runCatching { paulField?.getBoolean(null) }.getOrNull()
+
     /** The forced Paul value, or null to leave Odin's mayor check. */
     @JvmStatic
     fun forced(): Boolean? = when (mode.value) {
