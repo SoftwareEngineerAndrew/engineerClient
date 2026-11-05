@@ -61,7 +61,9 @@ import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSwingAnimationPacket
 import net.minecraft.network.protocol.game.ClientboundSetTimePacket
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.resources.Identifier
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.minecraft.world.InteractionHand
@@ -133,11 +135,14 @@ object PosePov : Module(
     private val shareFps by NumberSetting("Sharing FPS", 60, ShareFps.NONE..240, 5, desc = "How many times a second your look goes to teammates (whether or not this module is on). Higher is smoother for them. At the lowest, none: nothing of yours is shared.")
     private val skipTiny by BooleanSetting("Skip tiny look changes", true, desc = "Doesn't send a look change under 0.05° (too small to see in a view; mostly hand jitter at high FPS). The exact look still goes with every tick. Cuts what you send when your mouse barely moves.")
     private val debugInfo by BooleanSetting("Debug info", false, desc = "Over the views: the relay and TURN connections, each teammate's route and one-way delays both ways, frames a second, losses and buffering. Also written to the log every 10 seconds.")
+    private val onlyBloodRush by BooleanSetting("Only In Blood Rush", false, desc = "Shows the views on blood rush: from the dungeon starting until the blood door opens. Adds to the other Only In place; neither ticked is everywhere.")
+    private val onlyGoldor by BooleanSetting("Only In Goldor", false, desc = "Shows the views in Goldor (F7/M7 phase 3: terminals, devices, levers and the Goldor fight). Adds to the other Only In place; neither ticked is everywhere.")
+    private val places get() = buildList { if (onlyBloodRush) add(ShowIn.Place.BLOOD_RUSH); if (onlyGoldor) add(ShowIn.Place.GOLDOR) }
     private enum class HudsOver { NONE, MOD_HUDS, ALL }
-    private val hudsOver by com.odtheking.odin.clickgui.settings.impl.SelectorSetting("HUDs Over Views", HudsOver.MOD_HUDS, desc = "What's drawn over the views. None: just the views. Mod HUDs: every HUD you've placed in the HUD editor (Odin's, Engineer Client's, Coffee Client's: timers, Terminals Status...) but not Odin's Dungeon Map or vanilla's HUD (hotbar, health, chat...). All: everything, maps and vanilla's HUD too. The leap menu's own boxes and names stay on top either way.")
-    /** All: the views go under the whole GUI (PosePovUnderGuiMixin). */
-    private val showHuds get() = hudsOver == HudsOver.ALL
-    /** Mod HUDs: the views cover the HUD, then the HUD editor's HUDs are drawn again on top, less the map. */
+    private val hudsOver by com.odtheking.odin.clickgui.settings.impl.SelectorSetting("HUDs Over Views", HudsOver.MOD_HUDS, desc = "What's drawn over the views. None: just the views. Mod HUDs: every mod's HUD (the HUD editor's timers, Terminals Status..., other mods' HUDs, and titles such as alerts), one that turns up while the menu is open too, but not Odin's Dungeon Map or the rest of vanilla's HUD (hotbar, health, chat, scoreboard...). All: everything, maps and vanilla's HUD too. The leap menu's own boxes and names stay on top either way.")
+    /** All and Mod HUDs: the views go under the whole GUI (PosePovUnderGuiMixin), so every mod's HUD, and one that turns up while the menu is open, is drawn over them. */
+    private val showHuds get() = hudsOver != HudsOver.NONE
+    /** Mod HUDs: vanilla's own HUD (but titles, which mods' alerts use) and Odin's Dungeon Map are left out while the views cover the screen ([hidesVanilla], [hidesHud]). */
     private val modHuds get() = hudsOver == HudsOver.MOD_HUDS
     private val NOT_OVER_VIEWS = setOf("Dungeon Map")
     private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
@@ -170,6 +175,14 @@ object PosePov : Module(
     private val skyColor = Vector4f(((SKY shr 16) and 255) / 255f, ((SKY shr 8) and 255) / 255f, (SKY and 255) / 255f, 1f)
 
     init {
+        // Mod HUDs: vanilla's HUD (hotbar, health, chat, scoreboard...) isn't drawn over the views, everything else is.
+        for (id in listOf(VanillaHudElements.MISC_OVERLAYS, VanillaHudElements.CROSSHAIR, VanillaHudElements.SPECTATOR_MENU, VanillaHudElements.HOTBAR,
+            VanillaHudElements.ARMOR_BAR, VanillaHudElements.HEALTH_BAR, VanillaHudElements.FOOD_BAR, VanillaHudElements.AIR_BAR, VanillaHudElements.MOUNT_HEALTH,
+            VanillaHudElements.INFO_BAR, VanillaHudElements.EXPERIENCE_LEVEL, VanillaHudElements.HELD_ITEM_TOOLTIP, VanillaHudElements.SPECTATOR_TOOLTIP,
+            VanillaHudElements.MOB_EFFECTS, VanillaHudElements.BOSS_BAR, VanillaHudElements.SLEEP, VanillaHudElements.DEMO_TIMER, VanillaHudElements.SCOREBOARD,
+            VanillaHudElements.OVERLAY_MESSAGE, VanillaHudElements.CHAT, VanillaHudElements.PLAYER_LIST)) {
+            HudElementRegistry.replaceElement(id) { original -> HudElement { g, dt -> if (!hidesVanilla(id)) original.extractRenderState(g, dt) } }
+        }
         // Only when the under-GUI hook didn't draw this frame (it can't have matched): on top of the HUD then, but still there.
         on<ScreenEvent.Render>(EventPriority.HIGHEST + 100) {
             EngineerClient.safely("pose pov") {
@@ -233,7 +246,9 @@ object PosePov : Module(
         // (An unloaded chunk keeps what was built from it: the best there is until it comes back, checked then.)
         // Arm swings, timed from the packet: the game's own swing state sticks for some remote players, as their head yaw does.
         onReceive<ClientboundSwingAnimationPacket> { if (hand() == InteractionHand.MAIN_HAND) swings[entityId()] = System.nanoTime() }
-        on<LevelEvent.Load> { KnownWorld.reset(); BlockMesh.newRun(); portals = null; for (c in culls) c.reset() }
+        // Blood rush ends at the blood door, read straight off the network ([ShowIn]; Leap Extras feeds it too, only while it is on).
+        onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) { if (!overlay) ShowIn.onChat(content.string) }
+        on<LevelEvent.Load> { KnownWorld.reset(); ShowIn.reset(); BlockMesh.newRun(); portals = null; for (c in culls) c.reset() }
     }
 
     override fun onDisable() {
@@ -270,11 +285,21 @@ object PosePov : Module(
     }
 
     fun drawUnderGui(gfx: GuiGraphicsExtractor) {
+        covering = false
         // Without "Show HUDs": left to the screen's render instead (ScreenEvent.Render above), after the HUD, so it's covered.
         if (!showHuds) return
-        EngineerClient.safely("pose pov") { if (wants()) { timed(true) { draw(gfx) }; drewUnderGui = true } }
+        EngineerClient.safely("pose pov") { if (wants()) { timed(true) { draw(gfx) }; drewUnderGui = true; covering = true } }
     }
     private var drewUnderGui = false
+    /** This frame's views went under the GUI: set at the GUI's start each frame, before any HUD element is drawn. */
+    private var covering = false
+
+    /** Whether vanilla's HUD element [id] is left out this frame: Mod HUDs, with the views under it. Titles stay (mods' alerts are titles). */
+    fun hidesVanilla(id: Identifier): Boolean = covering && modHuds && id !in KEEP_VANILLA
+    private val KEEP_VANILLA = setOf(VanillaHudElements.TITLE_AND_SUBTITLE, VanillaHudElements.SUBTITLES)
+
+    /** Whether the Odin HUD [name] is left out this frame (OdinHuds): the map, under Mod HUDs. */
+    fun hidesHud(name: String): Boolean = covering && modHuds && name in NOT_OVER_VIEWS
 
     /** Mod HUDs: every HUD on in the HUD editor, again over the views where Odin puts it (not the map). */
     private fun redrawModHuds(gfx: GuiGraphicsExtractor) {
@@ -289,6 +314,7 @@ object PosePov : Module(
 
     private fun wants(): Boolean {
         if (!enabled || !LeapMenu.enabled) return false
+        if (!ShowIn.allows(places)) return false
         val screen = mc.gui.screen() as? AbstractContainerScreen<*> ?: return false
         return screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player")
     }
