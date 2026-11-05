@@ -33,7 +33,7 @@ jobs:
         if: github.ref_name == 'main'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
+        run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && mkdir -p libs && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
       - name: Version
         run: |
           echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
@@ -86,7 +86,7 @@ jobs:
         if: github.ref_name == 'main'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
+        run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && mkdir -p libs && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
       # Its own compiler state, as the release job's (above), so it doesn't compile everything cold first (a minute); the
       # first run starts from the release job's.
       - uses: actions/cache@v4

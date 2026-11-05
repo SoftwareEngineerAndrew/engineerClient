@@ -29,7 +29,7 @@ jobs:
       - name: Odin 0.4.0
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
+        run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && mkdir -p libs && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
       - name: Version
         run: |
           echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}-test" >> "$GITHUB_ENV"
@@ -62,5 +62,5 @@ jobs:
       - name: Odin 0.4.0
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
+        run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && mkdir -p libs && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
       - run: gradle test --console=plain -Dorg.gradle.jvmargs=-Xmx6G -Pkotlin.daemon.jvmargs=-Xmx6G
