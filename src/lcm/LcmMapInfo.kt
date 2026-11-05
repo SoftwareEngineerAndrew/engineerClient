@@ -178,7 +178,7 @@ object LcmMapInfo {
     private fun calculateBonusScoreNoPaul(): Int =
         (if (DungeonUtils.mimicKilled) 2 else 0) + (if (DungeonUtils.princeKilled) 1 else 0) + OdinCompat.batsKilled().coerceAtMost(5) + DungeonUtils.cryptCount.coerceAtMost(5)
 
-    /** dtMap's Paul on Auto: Paul's +10 when he's mayor with his perk. */
+    /** Paul's +10: Odin's Paul check, which Map Info's Paul Score (Auto / On / Off) overrides ([PaulScore]). */
     private fun calculatePaulScore(): Int = if (DungeonUtils.isPaul) 10 else 0
 
     /**

@@ -112,6 +112,7 @@ object EngineerClient : ClientModInitializer {
         // (reading never writes the file).
         safely("lcm style") { com.engineerclient.lcm.LcmStyle.install() }
         safely("lcm map info") { com.engineerclient.lcm.LcmMapInfo.install() }
+        safely("paul score") { com.engineerclient.lcm.PaulScore.install() }
         safely("map prediction") { com.engineerclient.mappred.OdinMapPrediction.install() }
         safely("map icons") { com.engineerclient.mapicons.MapIcons.install() }
         safely("map sizes") { com.engineerclient.mapicons.MapSizes.install() }

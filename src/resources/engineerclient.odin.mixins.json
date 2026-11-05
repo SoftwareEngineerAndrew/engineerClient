@@ -21,6 +21,7 @@
     "HighlightRenderMixin",
     "LcmStyleMixin",
     "LcmMapInfoMixin",
+    "PaulScoreMixin",
     "MapPathHintsMixin",
     "MapIconsMixin",
     "MapSizeMixin",
