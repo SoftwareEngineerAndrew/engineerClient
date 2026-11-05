@@ -159,9 +159,9 @@ object OdinState {
         j.safe("inDungeons") { it.append(DungeonUtils.inDungeons) }
         j.safe("inBoss") { it.append(DungeonListener.inBoss) }
         j.safe("inClear") { it.append(DungeonUtils.inClear) }
-        j.safe("paul") { it.append(DungeonListener.paul) }
-        // Odin 0.3.6+ has no Paul override setting (it goes by the mayor alone): written as null so the field stays.
-        j.safe("togglePaul") { it.append("null") }
+        // The real mayor Paul (Odin's field), not Map Info's Paul Score override; the override goes in togglePaul.
+        j.safe("paul") { it.append(com.engineerclient.lcm.PaulScore.real()?.toString() ?: "null") }
+        j.safe("togglePaul") { OdinJs.str(it, com.engineerclient.lcm.PaulScore.label()) }
         j.safe("f7Phase") { OdinJs.str(it, DungeonUtils.getF7Phase().name) }
         // Replaced (not mutated) by Odin on every update: read it once, fresh.
         j.safe("stats") { out ->
