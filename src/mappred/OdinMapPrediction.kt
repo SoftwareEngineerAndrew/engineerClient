@@ -139,6 +139,8 @@ object OdinMapPrediction {
     @Volatile private var shownView: MapView? = null
     /** Every unnamed room's names once the map is known for sure ([MapPredictor.certainNames]); null until then. */
     @Volatile private var shownNames: List<NamedRoom>? = null
+    /** The key of the view [shown] was made for: while it isn't the map's ([lastKey]), the prediction up is the one before. */
+    @Volatile private var shownKey = ""
     private var lastKey = ""
     private val generation = AtomicInteger()
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-map-prediction").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
@@ -173,7 +175,7 @@ object OdinMapPrediction {
         generation.incrementAndGet()
         session.cancel()
         worker.execute { session.clear() }
-        shown = null; shownView = null; shownNames = null; lastKey = ""
+        shown = null; shownView = null; shownNames = null; shownKey = ""; lastKey = ""
         pathDoors.clear()
     }
 
@@ -277,8 +279,11 @@ object OdinMapPrediction {
                 shownNames = namer?.certainNames(null)
                 do {
                     if (generation.get() != gen) return@safely
-                    session.prediction()?.let { shown = it; shownView = v; shownNames = namer?.certainNames(it) }
+                    session.prediction()?.let { shown = it; shownView = v; shownKey = key; shownNames = namer?.certainNames(it) }
                 } while (session.step())
+                // nothing fits this map: the one before's guesses aren't this map's (its blood can be where this one rules
+                // it out), so none stay up; Odin's own "?" tiles until the next map
+                if (generation.get() == gen && shownKey != key) { shown = null; shownView = null; shownNames = null }
             }
         }
     }
@@ -406,6 +411,12 @@ object OdinMapPrediction {
         // behind a blood door is the blood room: drawn as itself, never as a guess
         val blood = bloodTiles(known)
         for (t in blood) bloodRoom(g, t)
+        // blood and the fairy once the map shows where they are (or the blood door), and while the prediction up is the one
+        // for the map before (what the map shows now can rule its spots out): guessed nowhere else
+        val stale = shownKey != lastKey
+        drop.fill(false)
+        drop[Cls.BLOOD] = stale || blood.isNotEmpty() || DungeonScan.rooms.any { it.isViewable && it.type == RoomType.BLOOD }
+        drop[Cls.FAIRY] = stale || DungeonScan.rooms.any { it.isViewable && it.type == RoomType.FAIRY }
         val min = minChance.value
         val deadEndAt = minOf(deadEndChance.value, ALWAYS_DEAD_END) / 100f
         val oneAt = oneChance.value / 100f
@@ -418,7 +429,7 @@ object OdinMapPrediction {
         // the last rooms the secret total leaves only one size and place for: in full, named when only one name fits
         val exact = BooleanArray(W * W)
         // (every room, discovered ones nobody has opened too, once the map is known for sure)
-        if (exactRooms.value) for ((_, names) in (shownNames ?: p.namedRooms).groupBy { it.tiles.joinToString(",") }) {
+        if (exactRooms.value) for ((_, names) in (shownNames ?: p.namedRooms).filter { val c = typeOfPool(it.name.pool); c < 0 || !drop[c] }.groupBy { it.tiles.joinToString(",") }) {
             val tiles = names[0].tiles
             if (names.sumOf { it.chance.toDouble() } < SURE) continue
             if (tiles.all { known[it] }) { if (!namedOnMap(tiles[0])) roomText(g, tiles, names); continue }
@@ -431,7 +442,7 @@ object OdinMapPrediction {
         if (exactRooms.value) for (tiles in MapPredictor.certainShapes(p, SURE)) {
             if (tiles.any { known[it] || exact[it] || it in blood }) continue
             for (t in tiles) exact[t] = true
-            val q = p.probs[tiles[0]] ?: p.raw[tiles[0]]
+            val q = (p.probs[tiles[0]] ?: p.raw[tiles[0]])?.let(::kept)
             val types = if (tiles.size > 1 || q == null) listOf(-1) else {
                 val room = q.sum()
                 (0 until Cls.COUNT).filter { q[it] >= 0.05f * room }.sortedByDescending { q[it] }.take(3).map { if (it == Cls.NORMAL || it == Cls.BIG) -1 else it }.distinct()
@@ -449,7 +460,7 @@ object OdinMapPrediction {
         }
         for (t in 0 until W * W) {
             if (known[t] || exact[t] || t in blood) continue
-            val probs = p.probs[t]
+            val probs = p.probs[t]?.let(::kept)
             if (probs == null || v.roomAt[t] >= 0) {
                 if (t in hints) plainTile(g, t)
                 continue
@@ -510,8 +521,8 @@ object OdinMapPrediction {
         if (lcm) {
             // as LCM Style draws a door to rooms nobody has opened: blood and fairy darkened, wither black, else dark grey
             val color = when {
-                d.blood >= 0.5f * d.chance -> LcmStyle.darker(LcmStyle.BLOOD)
-                d.fairy >= 0.5f * d.chance -> LcmStyle.darker(LcmStyle.FAIRY)
+                !drop[Cls.BLOOD] && d.blood >= 0.5f * d.chance -> LcmStyle.darker(LcmStyle.BLOOD)
+                !drop[Cls.FAIRY] && d.fairy >= 0.5f * d.chance -> LcmStyle.darker(LcmStyle.FAIRY)
                 d.wither >= 0.5f * d.chance -> LcmStyle.WITHER
                 else -> LcmStyle.UNOPENED
             }
@@ -519,8 +530,8 @@ object OdinMapPrediction {
             return
         }
         val color = when {
-            d.blood >= 0.5f * d.chance -> DungeonMap.bloodDoorColor
-            d.fairy >= 0.5f * d.chance -> DungeonMap.fairyDoorColor
+            !drop[Cls.BLOOD] && d.blood >= 0.5f * d.chance -> DungeonMap.bloodDoorColor
+            !drop[Cls.FAIRY] && d.fairy >= 0.5f * d.chance -> DungeonMap.fairyDoorColor
             d.wither >= 0.5f * d.chance -> DungeonMap.witherDoorColor
             else -> DungeonMap.normalDoorColor
         }
@@ -543,6 +554,12 @@ object OdinMapPrediction {
         exactFill(g, tiles, types.ifEmpty { listOf(typeOfPool(names.maxBy { it.chance }.name.pool)) })
         roomText(g, tiles, names)
     }
+
+    /** The classes not to guess anywhere while this frame is drawn ([draw]: blood and the fairy once the map shows them, or the prediction is the map before's). */
+    private val drop = BooleanArray(Cls.COUNT)
+
+    /** A tile's chances without the [drop]ped classes (the rest as they are: a tile that was mostly blood shows as little). */
+    private fun kept(q: FloatArray): FloatArray = if (drop.none { it }) q else FloatArray(q.size) { if (drop[it]) 0f else q[it] }
 
     private fun typeOfPool(pool: Int): Int = when (pool) {
         MapStats.POOL_PUZZLE -> Cls.PUZZLE
@@ -682,7 +699,7 @@ object OdinMapPrediction {
         if (pz > 0) parts += "§d${if (pz > 1) pz else ""}P"
         if (s.expect[Cls.TRAP] >= 0.5f) parts += "§6T"
         if (s.expect[Cls.YELLOW] >= 0.5f) parts += "§eY"
-        if (s.expect[Cls.BLOOD] >= 0.5f) parts += "§cB"
+        if (!drop[Cls.BLOOD] && s.expect[Cls.BLOOD] >= 0.5f) parts += "§cB"
         val top = parts.joinToString(" ").ifEmpty { "§7-" }
         small(g, top, x + ROOM / 2, y + 3, -1)
         val sec = secretsAt[s.tile]?.let { " §b${it.roundToInt()}s" } ?: ""
