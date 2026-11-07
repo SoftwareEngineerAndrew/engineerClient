@@ -74,6 +74,10 @@ class RunRecorder(
     private var linesWritten = 0L
 
     private val startedAt = LocalDateTime.now()
+    // Whether the dungeon ever began: Mort's map line, a boss line, or a second room. A party that leaves or
+    // warps on from the start room (someone unready, a requeue) gives none, and that isn't a run (see finish).
+    private var began = false
+    private val roomsSeen = HashSet<String>()
     private var floorName: String? = null
     private var partyKey = ""
 
@@ -262,6 +266,7 @@ class RunRecorder(
     fun onChat(message: String, colored: String? = null, n: Int? = null) {
         val c = if (colored != null && colored != message) ",\"c\":${str(colored)}" else ""
         val st = if (n != null) ",\"n\":$n" else ""
+        if (!began && (message.startsWith(MORT) || message.startsWith("[BOSS] "))) began = true
         emit("""{"k":"chat","t":$tick$st,"m":${str(message)}$c}""")
     }
 
@@ -269,7 +274,12 @@ class RunRecorder(
     fun onChestEvent(pos: BlockPos, openCount: Int) =
         emit("""{"k":"bev","t":$tick,"x":${pos.x},"y":${pos.y},"z":${pos.z},"b":$openCount}""")
 
-    fun onRoomEnter(name: String?) = emit("""{"k":"room","t":$tick,"name":${str(name ?: "Unknown")}}""")
+    fun onRoomEnter(name: String?) {
+        if (name != null && roomsSeen.add(name) && roomsSeen.size > 1) began = true
+        emitRoom(name)
+    }
+
+    private fun emitRoom(name: String?) = emit("""{"k":"room","t":$tick,"name":${str(name ?: "Unknown")}}""")
 
     /** Your own container screens (terminals are GUIs with fixed titles): exact open/close times. */
     fun onGuiClose() {
@@ -349,6 +359,7 @@ class RunRecorder(
     /** Ends the session: closes the file (on the writer thread) and gives it its final name. */
     fun finish() {
         if (!confirmed) { abandon(); return }
+        if (!began) { discard(); return }
         emit("""{"k":"end","t":$tick,"ms":${System.currentTimeMillis()}}""")
         flushPending()
         val temp = tempFile ?: return
@@ -389,6 +400,22 @@ class RunRecorder(
         flushPending()
     }
 
+
+    /** A dungeon that never began (left from the start room): its file goes, so it is neither kept as a run nor uploaded. */
+    private fun discard() {
+        val temp = tempFile
+        abandon()
+        Thread.ofVirtual().start {
+            try {
+                io.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS)
+                writer?.close()
+                temp?.let(Files::deleteIfExists)
+                EngineerClient.logger.info("[ec] adr: the dungeon never started (left from the start room), not saved: ${temp?.fileName}")
+            } catch (t: Throwable) {
+                EngineerClient.logger.warn("[ec] adr: couldn't remove an unstarted run's file", t)
+            }
+        }
+    }
 
     private fun abandon() {
         abandoned = true
@@ -939,6 +966,7 @@ class RunRecorder(
 
     private companion object {
         const val ABANDON_AFTER_TICKS = 20 * 60
+        const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
         private val POW10 = longArrayOf(1, 10, 100, 1000, 10000)
         /** How far (blocks) a flying arrow may be from the flight last written before a new one is. */
         private const val ARC_SLACK = 0.1
