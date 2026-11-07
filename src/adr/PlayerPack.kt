@@ -16,7 +16,7 @@ import java.util.TreeMap
  * slides on: about a third of stops did, up to 0.35 blocks); NPCs (Hypixel's are players too: version 2 ids) coarser still,
  * and facing the way they walk between rows, as mobs do ([MobPlan.walkYaw]). A row where what they
  * hold or crouching changes always stays. The recording player's own rows the same, but far finer
- * ([SELF]: "sthin" in the meta), and where the camera frames have where they looked (a frame from
+ * ([SELF]: "sthin" in the meta; 0.02 of a block while they stand still, or their view drifted on after a stop), and where the camera frames have where they looked (a frame from
  * [CAM_BEFORE] ticks before to [CAM_AFTER] after) their yaw and pitch are the row before's: the
  * viewer takes them from the frames ("selfcam").
  */
@@ -51,7 +51,7 @@ internal class PlayerPlan private constructor(private val rows: TreeMap<Int, Jso
         private val PLAYER = Kind(PLAYER_STEP, PLAYER_TOL, PLAYER_ANG, 5.0, PLAYER_STEP)
         private val NPC = Kind(0.2, 1.5, MobPlan.WALK_ANG_TOL, 20.0)
         /** The recording player (their camera follows these: near exact). */
-        private val SELF = Kind(0.05, 0.1, 2.0, 0.1)
+        private val SELF = Kind(0.05, 0.1, 2.0, 0.1, 0.02)
         /** A camera frame from this many ticks before a row of the recording player's to one after has their look (the viewer's unfoldPlayers). */
         const val CAM_BEFORE = 2.0
         const val CAM_AFTER = 1.0
