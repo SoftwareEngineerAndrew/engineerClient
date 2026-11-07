@@ -12,7 +12,8 @@ import java.util.TreeMap
  * next, up to [MobPlan.LERP_GAP] ticks apart (further, they hold still), so a row goes where that
  * slide is near where they really were every tick between - standing still too (a row is put in
  * where they stood until). Players at [PLAYER_STEP] of a block and 5 degrees, within [PLAYER_TOL]
- * blocks and [PLAYER_ANG] degrees; NPCs (Hypixel's are players too: version 2 ids) coarser still,
+ * blocks and [PLAYER_ANG] degrees, and within [PLAYER_STEP] while they stand still (else one who stops
+ * slides on: about a third of stops did, up to 0.35 blocks); NPCs (Hypixel's are players too: version 2 ids) coarser still,
  * and facing the way they walk between rows, as mobs do ([MobPlan.walkYaw]). A row where what they
  * hold or crouching changes always stays. The recording player's own rows the same, but far finer
  * ([SELF]: "sthin" in the meta), and where the camera frames have where they looked (a frame from
@@ -40,13 +41,14 @@ internal class PlayerPlan private constructor(private val rows: TreeMap<Int, Jso
         }
     }
 
-    private class Kind(val step: Double, val tol: Double, val ang: Double, val angStep: Double)
+    /** [restTol]: how far the slide may be from where they stand while they stand still (see thin). */
+    private class Kind(val step: Double, val tol: Double, val ang: Double, val angStep: Double, val restTol: Double = tol)
 
     companion object {
         const val PLAYER_STEP = 0.1
         const val PLAYER_TOL = 0.35
         const val PLAYER_ANG = 15.0
-        private val PLAYER = Kind(PLAYER_STEP, PLAYER_TOL, PLAYER_ANG, 5.0)
+        private val PLAYER = Kind(PLAYER_STEP, PLAYER_TOL, PLAYER_ANG, 5.0, PLAYER_STEP)
         private val NPC = Kind(0.2, 1.5, MobPlan.WALK_ANG_TOL, 20.0)
         /** The recording player (their camera follows these: near exact). */
         private val SELF = Kind(0.05, 0.1, 2.0, 0.1)
@@ -101,7 +103,7 @@ internal class PlayerPlan private constructor(private val rows: TreeMap<Int, Jso
             val first = list.first().second
             val k = kind ?: if (first.size() > 7 && runCatching { first[7].asInt }.getOrNull() == NPC_VERSION) NPC else PLAYER
             // Points: each row, and where they stood until the next (it holds still till then).
-            class Pt(val t: Int, val v: DoubleArray, val row: JsonArray, val must: Boolean)
+            class Pt(val t: Int, val v: DoubleArray, val row: JsonArray, val must: Boolean) { var rest = false }
             val pts = ArrayList<Pt>(list.size * 2)
             var extra: String? = null
             for ((i, tr) in list.withIndex()) {
@@ -116,6 +118,10 @@ internal class PlayerPlan private constructor(private val rows: TreeMap<Int, Jso
                 pts += Pt(t, v, r, i == 0 || e != extra)
                 extra = e
             }
+            // Standing still (the same place as the point before or after): a slide from where they last moved to
+            // where they next do would carry them through it, up to [Kind.tol] - a player who stopped kept sliding.
+            fun same(p: Pt, q: Pt) = p.v[0] == q.v[0] && p.v[1] == q.v[1] && p.v[2] == q.v[2]
+            for ((i, p) in pts.withIndex()) p.rest = (i > 0 && same(p, pts[i - 1])) || (i + 1 < pts.size && same(p, pts[i + 1]))
             fun fits(a: Int, c: Int): Boolean {
                 val pa = pts[a]; val pc = pts[c]
                 val span = (pc.t - pa.t).toDouble()
@@ -123,7 +129,8 @@ internal class PlayerPlan private constructor(private val rows: TreeMap<Int, Jso
                     val pj = pts[j]
                     if (pj.must) return false
                     val f = if (span > MobPlan.LERP_GAP) 0.0 else (pj.t - pa.t) / span
-                    for (i in 0..2) if (Math.abs(pa.v[i] + (pc.v[i] - pa.v[i]) * f - pj.v[i]) > k.tol) return false
+                    val tol = if (pj.rest) k.restTol else k.tol
+                    for (i in 0..2) if (Math.abs(pa.v[i] + (pc.v[i] - pa.v[i]) * f - pj.v[i]) > tol) return false
                     // (NPCs are mobs: facing the way they go between rows, as the viewer has them - "walkyaw")
                     val walk = if (k === NPC && span <= MobPlan.LERP_GAP) walkDir(pa.v, pc.v, span) else null
                     val yaw = if (walk != null) MobPlan.walkYaw(pa.v[3], walk, pc.v[3], (pj.t - pa.t).toDouble(), span) else pa.v[3] + MobPlan.turn(pc.v[3] - pa.v[3]) * f
