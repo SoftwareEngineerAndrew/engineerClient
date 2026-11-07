@@ -53,7 +53,6 @@ object TermProgress : Module(
     private val labels by BooleanSetting("Terminal Labels", true, desc = "Over each terminal a teammate has open: who, and the countdown to when it should be done. Seen through walls.")
     private val labelSize by NumberSetting("Label Size", 1.5f, 0.5..4.0, 0.1f, desc = "How big the terminal labels are.")
     private val predictions by BooleanSetting("Countdown", true, desc = "A countdown to when each terminal and Simon Says should be done, from that player's own history in ADR runs (config/engineerclient/party-skill.json), or everyone's. It skips down when they're quicker than that and holds when they're slower.")
-    private val showSelf by BooleanSetting("Show Yourself", false, desc = "Your own terminal and Simon Says too.")
 
     private val termHud by HUD("Terminal Progress", "Each teammate on a terminal: their name, how far it has got and the countdown.", true, 10, 200, 1f) { example ->
         drawTerms(this, example)
@@ -142,7 +141,6 @@ object TermProgress : Module(
         sses.values.removeIf { now - it.at > STALE_NS }
         if (TermInfo.deviceDone(1)) sses.clear()
         countdowns.keys.removeIf { k -> if (k.startsWith("t:")) !terms.containsKey(k.substring(2)) else !sses.containsKey(k.substring(2)) }
-        val myName = me.name.string.lowercase()
 
         // Your terminal: the one you're by while Odin has one open.
         val term = TerminalUtils.currentTerm
@@ -156,11 +154,9 @@ object TermProgress : Module(
             val open = ((nowMs - term.timeOpened) / 100).coerceIn(0, 255)
             val f = byteArrayOf(7, near.toByte(), term.type.ordinal.toByte(), left.toByte(), total.toByte(), open.toByte())
             if (!f.copyOf(5).contentEquals(termFrame?.copyOf(5)) || nowMs - termAt > RESEND_MS) { termFrame = f; termAt = nowMs; share(f) }
-            if (showSelf) put(terms, myName) { was -> termOf(near, term.type, left, total, now - (nowMs - term.timeOpened) * 1_000_000L, was, now) } else terms.remove(myName)
         } else if (sentTerm != null) {
             sentTerm = null; termFrame = null
             share(byteArrayOf(7, 255.toByte(), 0, 0, 0, 0))
-            terms.remove(myName)
         }
 
         // Simon Says, while you're at it and section 1's device isn't done: rounds done and presses into the next, from
@@ -180,9 +176,8 @@ object TermProgress : Module(
                 val since = ((nowMs - ssStart) / 100).coerceIn(0, 65535)
                 val f = byteArrayOf(8, ssRounds.toByte(), into.toByte(), (since shr 8).toByte(), since.toByte())
                 if (!f.copyOf(3).contentEquals(ssFrame?.copyOf(3)) || nowMs - ssAt > RESEND_MS) { ssFrame = f; ssAt = nowMs; share(f) }
-                if (showSelf) put(sses, myName) { was -> ssOf(ssRounds, into, now - (nowMs - ssStart) * 1_000_000L, was, now) } else sses.remove(myName)
             }
-        } else sses.remove(myName)
+        }
     }
 
     // ------------------------------------------------------------------ what's heard
