@@ -28,6 +28,8 @@ object DevgineerClient : ClientModInitializer {
         safely("posmsg migration") { PosMsgSetup.migrate(mc.gameDirectory.toPath().resolve("config").resolve("odin")) }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
         ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), DungeonRecorder, com.devgineerclient.betterrecorder.BetterRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PositionalMessages, com.devgineerclient.practice.I4Aims, com.devgineerclient.rotation.P3Rotation, com.devgineerclient.misc.FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.HubCapture)
+        // Party Progress, which was here, is Engineer Client's Term Progress (2026-11-06): what was set in it, once.
+        safely("term progress settings") { adoptTermProgress() }
         // Fast Launch pieces: after registration, so they can read its (loaded) settings.
         safely("fast launch default") { com.devgineerclient.misc.FastLaunch.enableByDefault() }
         safely("early join") { com.devgineerclient.misc.EarlyJoin.install() }
@@ -45,6 +47,25 @@ object DevgineerClient : ClientModInitializer {
         safely("boss recorder default") { BossRecorder.enableByDefault() }
         safely("maxor crystals default") { MaxorCrystals.enableByDefault() }
         safely("better recorder default") { com.devgineerclient.betterrecorder.BetterRecorder.enableByDefault() }
+    }
+
+    /**
+     * Party Progress's saved state (devgineerclient.json) put into Term Progress, while engineerclient.json has no Term
+     * Progress yet: written into engineerclient.json under the new name, then Odin's configs read again (both files are loaded by now).
+     */
+    private fun adoptTermProgress() {
+        val dir = mc.gameDirectory.toPath().resolve("config/odin/addons")
+        val theirs = dir.resolve("engineerclient.json"); val ours = dir.resolve("devgineerclient.json")
+        if (!java.nio.file.Files.exists(ours)) return
+        fun entry(file: java.nio.file.Path, name: String) = if (!java.nio.file.Files.exists(file)) null else com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(file)).asJsonArray
+            .firstOrNull { it.isJsonObject && it.asJsonObject.get("name")?.asString == name }?.asJsonObject
+        if (entry(theirs, "Term Progress") != null) return
+        val old = entry(ours, "Party Progress") ?: return
+        val list = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray
+        list.add(old.deepCopy().apply { addProperty("name", "Term Progress") })
+        java.nio.file.Files.writeString(theirs, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(list))
+        ModuleManager.loadConfigurations()
+        logger.info("[dc] Party Progress settings moved to Term Progress")
     }
 
     /** Copies these modules' entries from engineerclient.json into devgineerclient.json where this file has none yet. */
