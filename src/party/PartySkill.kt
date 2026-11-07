@@ -16,11 +16,7 @@ import java.nio.file.Files
  */
 object PartySkill {
     private const val MIN_RUNS = 3
-    /** config/engineerclient/party-skill.json; the one from when this was Devgineer Client's Party Progress (config/devgineerclient) if that's all there is. */
-    private val file by lazy {
-        val dir = FabricLoader.getInstance().configDir
-        dir.resolve("engineerclient").resolve("party-skill.json").let { if (Files.exists(it)) it else dir.resolve("devgineerclient").resolve("party-skill.json").takeIf(Files::exists) ?: it }
-    }
+    private val file by lazy { FabricLoader.getInstance().configDir.resolve("engineerclient").resolve("party-skill.json") }
     @Volatile private var table: JsonObject? = null
     private var readAt = -1L
     /** When the file's time was last looked at: at most every [CHECK_MS]. */
