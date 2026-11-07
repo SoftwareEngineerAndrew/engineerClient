@@ -198,10 +198,11 @@ object PosePov : Module(
             // Swings are kept only as long as one lasts (the packet comes for every entity in sight).
             EngineerClient.safely("pose pov swings") { val now = System.nanoTime(); swings.values.removeIf { now - it > SWING_NS } }
             EngineerClient.safely("pose pov look") { if (enabled && DungeonUtils.inDungeons) sampleLooks() }
-            // Sharing runs for everyone in a dungeon, this on or not; it only sends while a linked teammate is watching.
+            // Sharing runs for everyone in a dungeon, this on or not; it only sends while a linked teammate is watching. With this
+            // on you watch the whole dungeon (menu open or not, Only In Blood Rush / Terms or not), so a view never starts stale.
             EngineerClient.safely("pose share") {
                 watchingSoon = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
-                PoseShare.watching = watchingSoon && useShared
+                PoseShare.watching = enabled && DungeonUtils.inDungeons && useShared
                 PoseShare.skipTiny = skipTiny
                 PoseShare.debug = enabled && debugInfo
                 PoseShare.sharing = shareFps.toInt() > ShareFps.NONE
