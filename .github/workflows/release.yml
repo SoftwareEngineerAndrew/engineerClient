@@ -65,7 +65,9 @@ jobs:
           cp build/libs/*.jar "$jar"
           url="https://github.com/$GITHUB_REPOSITORY/releases/download/release-$CHANNEL/$jar"
           notes="$(printf '**[Download EngineerClient for Minecraft %s](%s)** · %s\n\nPut the jar in your `mods` folder. Needs Fabric, Fabric API, Fabric Language Kotlin and Odin.' "$MC" "$url" "$EC_VERSION")"
-          gh release create "release-$CHANNEL" "$jar" --target "$GITHUB_SHA" \
+          # ADM's update.json (promote.sh) goes beside the jar, for UpdateCheck.
+          extra=; [ -f update.json ] && extra=update.json
+          gh release create "release-$CHANNEL" "$jar" $extra --target "$GITHUB_SHA" \
             --title "EngineerClient for Minecraft $MC" \
             --notes "$notes" $latest
 
