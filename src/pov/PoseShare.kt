@@ -89,7 +89,7 @@ object PoseShare {
 
     /** Whether you're looking at your teammates' views, or about to (set by [PosePov] each tick). */
     @Volatile var watching = false
-    /** "Sharing FPS" isn't at none: your pose, look, terminal and rooms go to teammates (set by [PosePov] each tick, on or off). Off, nothing of yours is sent; theirs still come. */
+    /** "Sharing FPS" isn't off: your pose, look, terminal and rooms go to teammates (set by [PosePov] each tick, on or off). Off, nothing of yours is sent; theirs still come. */
     @Volatile var sharing = true
     /** Each teammate's frames go whichever way is quicker to them right now, TURN or the relay, measured for each one. */
     @Volatile var optimize = true

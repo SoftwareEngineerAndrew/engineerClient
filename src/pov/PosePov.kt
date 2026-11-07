@@ -132,9 +132,7 @@ object PosePov : Module(
 
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
     private val useShared by BooleanSetting("Use shared POVs", true, desc = "Draws teammates who share from their own view (exact and smooth). Off: only from what your game sees of them, and the map's guess out of range.")
-    private val shareFps by NumberSetting("Sharing FPS", 60, ShareFps.NONE..240, 5, desc = "How many times a second your look goes to teammates (whether or not this module is on). Higher is smoother for them. At the lowest, none: nothing of yours is shared.")
-    private val skipTiny by BooleanSetting("Skip tiny look changes", true, desc = "Doesn't send a look change under 0.05° (too small to see in a view; mostly hand jitter at high FPS). The exact look still goes with every tick. Cuts what you send when your mouse barely moves.")
-    private val debugInfo by BooleanSetting("Debug info", false, desc = "Over the views: the relay and TURN connections, each teammate's route and one-way delays both ways, frames a second, losses and buffering. Also written to the log every 10 seconds.")
+    private val shareFps by NumberSetting("Sharing FPS", 60, ShareFps.NONE..240, 5, desc = "How many times a second your look goes to teammates (whether or not this module is on). Higher is smoother for them. At the lowest, off: nothing of yours is shared.")
     private val onlyBloodRush by BooleanSetting("Only In Blood Rush", false, desc = "Shows the views on blood rush: from the dungeon starting until the blood door opens. Adds to the other Only In place; neither ticked is everywhere.")
     private val onlyTerms by BooleanSetting("Only In Terms", false, desc = "Shows the views in terms: F7/M7 phase 3, the terminals, devices and levers, and the Goldor split after them until you drop to Necron. Adds to the other Only In place; neither ticked is everywhere.")
     private val places get() = buildList { if (onlyBloodRush) add(ShowIn.Place.BLOOD_RUSH); if (onlyTerms) add(ShowIn.Place.GOLDOR) }
@@ -147,6 +145,7 @@ object PosePov : Module(
     private val NOT_OVER_VIEWS = setOf("Dungeon Map")
     private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
     private val viewDistance by NumberSetting("View distance", 96, 32..160, 8, unit = " blocks", desc = "How far the views draw, fading into the sky over the last stretch. Lower is faster; past half of it only the bigger faces are drawn.")
+    private val debugInfo by BooleanSetting("Debug info", false, desc = "Over the views: the relay and TURN connections, each teammate's route and one-way delays both ways, frames a second, losses and buffering. Also written to the log every 10 seconds.")
 
     /** Whether the device draws many ranges in one call (glMultiDrawElementsBaseVertex and the like). */
     private var multiFailed = false
@@ -203,7 +202,6 @@ object PosePov : Module(
             EngineerClient.safely("pose share") {
                 watchingSoon = enabled && DungeonUtils.inDungeons && (wants() || mc.player?.mainHandItem?.itemId.equalsOneOf("SPIRIT_LEAP", "INFINITE_SPIRIT_LEAP"))
                 PoseShare.watching = enabled && DungeonUtils.inDungeons && useShared
-                PoseShare.skipTiny = skipTiny
                 PoseShare.debug = enabled && debugInfo
                 PoseShare.sharing = shareFps.toInt() > ShareFps.NONE
                 PoseShare.frameNs = 1_000_000_000L / shareFps.toLong().coerceIn(20L, 240L)
@@ -249,7 +247,7 @@ object PosePov : Module(
         onReceive<ClientboundSwingAnimationPacket> { if (hand() == InteractionHand.MAIN_HAND) swings[entityId()] = System.nanoTime() }
         // Blood rush ends at the blood door, read straight off the network ([ShowIn]; Leap Extras feeds it too, only while it is on).
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) { if (!overlay) ShowIn.onChat(content.string) }
-        on<LevelEvent.Load> { KnownWorld.reset(); ShowIn.reset(); BlockMesh.newRun(); portals = null; for (c in culls) c.reset() }
+        on<LevelEvent.Load> { for (g in ghosts.values) g.real = null; KnownWorld.reset(); ShowIn.reset(); BlockMesh.newRun(); portals = null; for (c in culls) c.reset() }
     }
 
     override fun onDisable() {
@@ -362,6 +360,7 @@ object PosePov : Module(
         val players = arrayOfNulls<Player>(FEEDS)
         val bodies = ArrayList<Body>()
         val shared = arrayOfNulls<PoseShare.Pose>(FEEDS)
+        heldFor.fill(-1L)
         for (i in 0 until FEEDS) {
             val slot = DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" } ?: continue
             val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == slot.name }
@@ -386,7 +385,9 @@ object PosePov : Module(
                 ghosts.getOrPut(slot.name) { Ghost() }.seen(real, now)
                 real
             // (In boss the map stops: its icon would put them back where they were in clear.)
-            } else if (!slot.isDead && slot.mapPos.data != 0L && !DungeonUtils.inBoss) ghostEye(level, slot, now) else null
+            } else if (!slot.isDead && slot.mapPos.data != 0L && !DungeonUtils.inBoss) ghostEye(level, slot, now)
+            // Nothing newer and no map (boss, or not on it yet): their last real view, dimmed, for up to HOLD_NS.
+            else ghosts[slot.name]?.takeIf { !slot.isDead && it.real != null && now - it.realAt < HOLD_NS }?.let { heldFor[i] = now - it.realAt; it.real }
             if (e != null) eyes[i] = ghosts.getOrPut(slot.name) { Ghost() }.blended(e, now)
             // A camera that isn't a number can draw a view smeared into streaks: not drawn (logged once a few seconds).
             eyes[i]?.let { c ->
@@ -560,7 +561,10 @@ object PosePov : Module(
                 }
                 distanceLabel(gfx, subject, x0, y0, x1, y1)
             }
-            if (sh != null) footLabel(gfx, delayLabel(i, sh.via, sh.direct, sh.delayMs), Color(200, 200, 210), x0, x1, y1)
+            if (heldFor[i] >= 0) {
+                gfx.fill(x0, y0, x1, y1, 0x70000000)
+                footLabel(gfx, "last seen ${heldFor[i] / 1_000_000_000L}s ago", Color(170, 170, 170), x0, x1, y1)
+            } else if (sh != null) footLabel(gfx, delayLabel(i, sh.delayMs), Color(200, 200, 210), x0, x1, y1)
             slot?.let { PoseShare.gui(it.name, now) }?.let { terminal(gfx, it, x0, y0, x1, y1) }
         }
         // Whether sharing is up, and how many teammates are sharing with you.
@@ -584,12 +588,14 @@ object PosePov : Module(
 
     /** A view's delay label, made again only when what it says changes. */
     private val delayLabels = arrayOfNulls<String>(FEEDS)
-    private val delayKeys = LongArray(FEEDS) { -1 }
-    private fun delayLabel(i: Int, via: String?, direct: Boolean, ms: Int): String {
-        val key = (via?.hashCode()?.toLong() ?: 0L) * 31 + (if (direct) 1 else 0) * 1_000_003L + ms
-        if (key != delayKeys[i] || delayLabels[i] == null) { delayKeys[i] = key; delayLabels[i] = (via?.let { "via $it · " } ?: if (direct) "fast · " else "relay · ") + "~${ms}ms" }
+    private val delayKeys = IntArray(FEEDS) { -1 }
+    private fun delayLabel(i: Int, ms: Int): String {
+        if (ms != delayKeys[i] || delayLabels[i] == null) { delayKeys[i] = ms; delayLabels[i] = "${ms}ms" }
         return delayLabels[i]!!
     }
+    /** Each feed this frame: how long ago its held last view was real (ns), or -1 when it isn't held. */
+    private val heldFor = LongArray(FEEDS) { -1L }
+    private const val HOLD_NS = 10_000_000_000L
 
     /** Lines in a dark box, top left under the sharing status; scaled down to fit the screen's width. */
     private fun panel(gfx: GuiGraphicsExtractor, lines: List<Pair<String, Int>>) {
@@ -823,6 +829,8 @@ object PosePov : Module(
         var camOff = 0f; var camAim = 0f; var camUp = BACK_UP; var camChecked = 0L
         val trail = ArrayDeque<DoubleArray>(); var walkPos = 0f; var walkSpeed = 0f; var faceAlpha = 1f; var faceAt = 0L
         var last: Eye? = null; var lastAt = 0L; var from: Eye? = null; var fromAt = 0L
+        /** Their last real view (their own, or shared), held for [HOLD_NS] when nothing newer comes and the map has no guess. */
+        var real: Eye? = null; var realAt = 0L
 
         /** Their own view this frame: the estimate picks up from here when they go out of range. */
         fun seen(e: Eye, now: Long) {
@@ -831,7 +839,7 @@ object PosePov : Module(
                 val moved = Math.hypot(e.pos.x - x, e.pos.z - z); val dt = ((now - at) / 1e9).coerceIn(0.0, 0.25)
                 if (moved < 2.0) { walkPos += (moved * 4).toFloat(); if (dt > 0) walkSpeed += (((moved / dt) / 5).coerceAtMost(1.0).toFloat() - walkSpeed) * (1 - Math.exp(-dt * 6)).toFloat() }
             }
-            x = e.pos.x; z = e.pos.z; eyeY = e.pos.y; yaw = e.yaw; pitch = e.pitch; at = now
+            x = e.pos.x; z = e.pos.z; eyeY = e.pos.y; yaw = e.yaw; pitch = e.pitch; at = now; real = e; realAt = now
             trail.clear(); camDist = 0.0; camOff = 0f; camAim = 0f; camUp = BACK_UP
         }
 
