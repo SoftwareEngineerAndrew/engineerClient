@@ -1,6 +1,6 @@
-package com.devgineerclient.party
+package com.engineerclient.party
 
-import com.devgineerclient.DevgineerClient
+import com.engineerclient.EngineerClient
 import com.engineerclient.pov.PoseShare
 import com.engineerclient.p3sim.Station
 import com.engineerclient.practice.OdinSimonSays
@@ -43,16 +43,16 @@ import java.util.concurrent.ConcurrentHashMap
  * What arrives is kept only as far as it could be real: a terminal of the 17, a type Odin has, no more clicks than a
  * terminal takes, a round and press count Simon Says can have; it is never shown as text a sender wrote.
  */
-object PartyProgress : Module(
-    name = "Party Progress",
-    category = Category.custom("Devgineer Client", 860, 10),
+object TermProgress : Module(
+    name = "Term Progress",
+    category = Category.custom("Engineer Client", 860, 10),
     description = "Teammates' terminals and Simon Says as they do them (shared over Pose POV's party link), with a countdown to when each should be done.",
     key = null,
     toggled = true,
 ) {
     private val labels by BooleanSetting("Terminal Labels", true, desc = "Over each terminal a teammate has open: who, and the countdown to when it should be done. Seen through walls.")
     private val labelSize by NumberSetting("Label Size", 1.5f, 0.5..4.0, 0.1f, desc = "How big the terminal labels are.")
-    private val predictions by BooleanSetting("Countdown", true, desc = "A countdown to when each terminal and Simon Says should be done, from that player's own history in ADR runs (config/devgineerclient/party-skill.json), or everyone's. It skips down when they're quicker than that and holds when they're slower.")
+    private val predictions by BooleanSetting("Countdown", true, desc = "A countdown to when each terminal and Simon Says should be done, from that player's own history in ADR runs (config/engineerclient/party-skill.json), or everyone's. It skips down when they're quicker than that and holds when they're slower.")
     private val showSelf by BooleanSetting("Show Yourself", false, desc = "Your own terminal and Simon Says too.")
 
     private val termHud by HUD("Terminal Progress", "Each teammate on a terminal: their name, how far it has got and the countdown.", true, 10, 200, 1f) { example ->
@@ -90,8 +90,8 @@ object PartyProgress : Module(
 
     init {
         PoseShare.extras = { sender, kind, b -> heard(sender, kind, b) }
-        ClientTickEvents.END_CLIENT_TICK.register { DevgineerClient.safely("party progress") { tick() } }
-        on<RenderExtractEvent> { DevgineerClient.safely("party progress labels") { if (labels) drawLabels(this) } }
+        ClientTickEvents.END_CLIENT_TICK.register { EngineerClient.safely("term progress") { tick() } }
+        on<RenderExtractEvent> { EngineerClient.safely("term progress labels") { if (labels) drawLabels(this) } }
     }
 
     // ------------------------------------------------------------------ what's sent
@@ -124,13 +124,13 @@ object PartyProgress : Module(
     private fun report() {
         val heard = heardFrom.entries.sortedByDescending { it.value }.joinToString(", ") { "${it.value} from ${it.key}" }.ifEmpty { "nothing" }
         val relay = if (PoseShare.relayTakes(7)) "the relay takes them too" else "the relay doesn't take them yet, TURN only"
-        DevgineerClient.logger.info("[party progress] P3: $framesOut frames out, TURN reached up to $mostDirect of up to $mostLinked linked teammates ($relay); heard $heard")
+        EngineerClient.logger.info("[term progress] P3: $framesOut frames out, TURN reached up to $mostDirect of up to $mostLinked linked teammates ($relay); heard $heard")
     }
 
     private fun tick() {
         val me = mc.player
         if (me == null || !DungeonUtils.inBoss || DungeonUtils.getF7Phase() != M7Phases.P3) {
-            if (inP3) { inP3 = false; DevgineerClient.safely("party progress report") { report() } }
+            if (inP3) { inP3 = false; EngineerClient.safely("term progress report") { report() } }
             terms.clear(); sses.clear(); countdowns.clear()
             sentTerm = null; termFrame = null; ssStart = 0L; ssRounds = 0; ssShown = 0; ssFrame = null
             return
