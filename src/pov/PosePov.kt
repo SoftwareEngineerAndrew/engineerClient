@@ -139,7 +139,7 @@ object PosePov : Module(
     private val onlyTerms by BooleanSetting("Only In Terms", false, desc = "Shows the views in terms: F7/M7 phase 3, the terminals, devices and levers, and the Goldor split after them until you drop to Necron. Adds to the other Only In place; neither ticked is everywhere.")
     private val places get() = buildList { if (onlyBloodRush) add(ShowIn.Place.BLOOD_RUSH); if (onlyTerms) add(ShowIn.Place.GOLDOR) }
     private enum class HudsOver { NONE, MOD_HUDS, ALL }
-    private val hudsOver by com.odtheking.odin.clickgui.settings.impl.SelectorSetting("HUDs Over Views", HudsOver.MOD_HUDS, desc = "What's drawn over the views. None: just the views. Mod HUDs: every mod's HUD (the HUD editor's timers, Terminals Status..., other mods' HUDs, and titles such as alerts), one that turns up while the menu is open too, but not Odin's Dungeon Map or the rest of vanilla's HUD (hotbar, health, chat, scoreboard...). All: everything, maps and vanilla's HUD too. The leap menu's own boxes and names stay on top either way.")
+    private val hudsOver by com.odtheking.odin.clickgui.settings.impl.SelectorSetting("HUDs Over Views", HudsOver.MOD_HUDS, desc = "What's drawn over the views. None: just the views. Mod HUDs: every mod's HUD (the HUD editor's timers, Term Progress..., other mods' HUDs, and titles such as alerts), one that turns up while the menu is open too, but not Odin's Dungeon Map or the rest of vanilla's HUD (hotbar, health, chat, scoreboard...). All: everything, maps and vanilla's HUD too. The leap menu's own boxes and names stay on top either way.")
     /** All and Mod HUDs: the views go under the whole GUI (PosePovUnderGuiMixin), so every mod's HUD, and one that turns up while the menu is open, is drawn over them. */
     private val showHuds get() = hudsOver != HudsOver.NONE
     /** Mod HUDs: vanilla's own HUD (but titles, which mods' alerts use) and Odin's Dungeon Map are left out while the views cover the screen ([hidesVanilla], [hidesHud]). */
@@ -603,6 +603,26 @@ object PosePov : Module(
         pose.popMatrix()
     }
 
+    /** The terminal's name, with the letter or colour (Starts With, Select). */
+    private fun termTitle(t: PoseShare.Gui): String = when (t.type) {
+        TerminalTypes.PANES -> "Panes"
+        TerminalTypes.RUBIX -> "Rubix"
+        TerminalTypes.NUMBERS -> "Numbers"
+        TerminalTypes.STARTS_WITH -> "Starts With '${'A' + t.extra}'"
+        TerminalTypes.SELECT -> "Select " + net.minecraft.world.item.DyeColor.entries[t.extra].name.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+        TerminalTypes.MELODY -> "Melody"
+    }
+
+    /** A cell's colour: [n] is where it comes in the solution (null: not in it). */
+    private fun termCellColor(type: TerminalTypes, n: Int?): Int = when (type) {
+        // Red: still to click; green: done.
+        TerminalTypes.PANES -> if (n != null) 0xE0D04040.toInt() else 0xE040B040.toInt()
+        TerminalTypes.NUMBERS -> when (n) { null -> 0x60303030; 0 -> 0xF040D040.toInt(); 1 -> 0xE0D0C030.toInt(); 2 -> 0xD0D07020.toInt(); else -> 0xC0A04040.toInt() }
+        // Melody's solution: the lane's green pane, the pointer, and the button when they line up.
+        TerminalTypes.MELODY -> when (n) { 0 -> 0xF040D040.toInt(); 1 -> 0xF0D040D0.toInt(); 2 -> 0xF080FF80.toInt(); else -> 0x40303030 }
+        else -> if (n != null) 0xE040D040.toInt() else 0x60303030
+    }
+
     private fun footLabel(gfx: GuiGraphicsExtractor, label: String, color: Color, x0: Int, x1: Int, y1: Int) {
         val cx = (x0 + x1) / 2; val half = mc.font.width(label) / 2
         gfx.fill(cx - half - 3, y1 - 14, cx + half + 3, y1 - 2, 0x90000000.toInt())
@@ -627,7 +647,7 @@ object PosePov : Module(
         pose.translate((x0 + x1) / 2f - boxW * scale / 2, (y0 + y1) / 2f - gridH * scale / 2)
         pose.scale(scale, scale)
         val left = t.solution.distinct().size
-        val title = TerminalsStatus.title(t) + if (t.type == TerminalTypes.MELODY) "" else " · $left left"
+        val title = termTitle(t) + if (t.type == TerminalTypes.MELODY) "" else " · $left left"
         gfx.text(title, (boxW - mc.font.width(title)) / 2, 0, Color(255, 255, 255), shadow = true)
         val clicks = HashMap<Int, Int>(); val order = HashMap<Int, Int>()
         t.solution.forEachIndexed { n, s -> clicks.merge(s, 1, Int::plus); order.putIfAbsent(s, n) }
@@ -636,7 +656,7 @@ object PosePov : Module(
             val slot = (grid.startRow + r) * 9 + grid.startCol + c
             val x = gx + c * cell; val y = 12 + r * cell
             val n = order[slot]
-            val color = TerminalsStatus.cellColor(t.type, n)
+            val color = termCellColor(t.type, n)
             gfx.fill(x, y, x + cell - 1, y + cell - 1, color)
             if (t.type == TerminalTypes.RUBIX) clicks[slot]?.let { gfx.text("$it", x + (cell - mc.font.width("$it")) / 2, y + 3, Color(255, 255, 255), shadow = true) }
             if (t.type == TerminalTypes.NUMBERS && n != null && n < 3) gfx.text("${n + 1}", x + (cell - mc.font.width("${n + 1}")) / 2, y + 3, Color(255, 255, 255), shadow = true)

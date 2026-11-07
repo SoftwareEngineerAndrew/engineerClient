@@ -1,6 +1,6 @@
-package com.devgineerclient.party
+package com.engineerclient.party
 
-import com.devgineerclient.DevgineerClient
+import com.engineerclient.EngineerClient
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -9,14 +9,18 @@ import net.fabricmc.loader.api.FabricLoader
 import java.nio.file.Files
 
 /**
- * How long each player takes, from config/devgineerclient/party-skill.json (tools/partyskill/build.py over ADR runs): each
+ * How long each player takes, from config/engineerclient/party-skill.json (tools/partyskill/build.py over ADR runs): each
  * terminal type open to done, its first click and the gap between clicks after, Simon Says first start to done and the gap
  * between presses. A player's own median once they have [MIN_RUNS] of it; otherwise everyone's, scaled by how much faster or
  * slower than everyone they are on that terminal type when that much is known. Read again whenever the file changes.
  */
 object PartySkill {
     private const val MIN_RUNS = 3
-    private val file by lazy { FabricLoader.getInstance().configDir.resolve("devgineerclient").resolve("party-skill.json") }
+    /** config/engineerclient/party-skill.json; the one from when this was Devgineer Client's Party Progress (config/devgineerclient) if that's all there is. */
+    private val file by lazy {
+        val dir = FabricLoader.getInstance().configDir
+        dir.resolve("engineerclient").resolve("party-skill.json").let { if (Files.exists(it)) it else dir.resolve("devgineerclient").resolve("party-skill.json").takeIf(Files::exists) ?: it }
+    }
     @Volatile private var table: JsonObject? = null
     private var readAt = -1L
     /** When the file's time was last looked at: at most every [CHECK_MS]. */
@@ -56,12 +60,12 @@ object PartySkill {
         val now = System.currentTimeMillis()
         if (now - checkedAt < CHECK_MS) return table
         checkedAt = now
-        DevgineerClient.safely("party skill") {
+        EngineerClient.safely("party skill") {
             val at = if (Files.exists(file)) Files.getLastModifiedTime(file).toMillis() else 0L
             if (at != readAt) {
                 readAt = at
                 table = if (at == 0L) null else JsonParser.parseString(Files.readString(file)).asJsonObject.takeIf { it["format"]?.asInt == 1 }
-                if (table != null) DevgineerClient.logger.info("[dc] party skill: ${table!!.getAsJsonObject("players")?.size() ?: 0} players from ${table!!["runs"]} runs")
+                if (table != null) EngineerClient.logger.info("[ec] party skill: ${table!!.getAsJsonObject("players")?.size() ?: 0} players from ${table!!["runs"]} runs")
             }
         }
         return table
