@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# promote.sh [-n] "<commit message>": copies this repo's committed HEAD to the public
+# promote.sh [-n] [-u soft|hard|now] "<commit message>": copies this repo's committed HEAD to the public
 # undonecoffee/adm as ADM (Advanced Dungeons Mod), without the extras that only ship in this dev build:
 #   src/coffee/   Coffee Client features   (+ src/resources/coffeeclient{,.odin}.mixins.json)
 #   src/dev/      Devgineer Client features (+ src/resources/devgineerclient.mixins.json)
@@ -9,13 +9,24 @@
 # same name (main, or mc/<version> for an older Minecraft; run it from that branch's worktree) and
 # is pushed, which rebuilds that branch's release. -n: stop before the commit and leave the
 # change in the public clone to look at.
+# -u: how hard games on older versions are told to update (UpdateCheck; update.json beside each release's jar):
+# soft (the default) a line once per version, hard a red line every launch, now an alert at once, mid-game too. hard and
+# now hold for every version below this one, until a later -u hard or -u now raises them.
 set -euo pipefail
 export PATH="$HOME/.nix-profile/bin:/run/current-system/sw/bin:$PATH"
 
 DRY=0
-[ "${1:-}" = "-n" ] && { DRY=1; shift; }
+LEVEL=soft
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n) DRY=1; shift ;;
+    -u) LEVEL="${2:-}"; shift 2 ;;
+    *) break ;;
+  esac
+done
+case "$LEVEL" in soft|hard|now) ;; *) echo "promote: -u soft|hard|now" >&2; exit 1 ;; esac
 MSG="${1:-}"
-[ -n "$MSG" ] || [ "$DRY" = 1 ] || { echo "usage: promote.sh [-n] \"<commit message>\"" >&2; exit 1; }
+[ -n "$MSG" ] || [ "$DRY" = 1 ] || { echo "usage: promote.sh [-n] [-u soft|hard|now] \"<commit message>\"" >&2; exit 1; }
 
 TEAM="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 PUB="${EC_PUBLIC:-$HOME/Projects/engineerclient-public}"
@@ -33,6 +44,10 @@ if git -C "$PUB" rev-parse -q --verify "origin/$BRANCH" >/dev/null; then
 else
   git -C "$PUB" checkout -q -B "$BRANCH" origin/main
 fi
+
+# The hard and now floors so far (update.json, from the last promote).
+PREV_HARD="$(jq -r '.hard // ""' "$PUB/update.json" 2>/dev/null || true)"
+PREV_NOW="$(jq -r '.now // ""' "$PUB/update.json" 2>/dev/null || true)"
 
 # Replace the public tree with the dev HEAD, then drop the extras and what only the dev repo needs (notes, tests, tools).
 git -C "$PUB" rm -rq --ignore-unmatch .
@@ -144,6 +159,13 @@ jq -e . "$FMJ" >/dev/null || { echo "promote: fabric.mod.json is not valid JSON 
 if grep -rniE 'coffeeclient|devgineerclient' "$PUB/src" "$PUB/build.gradle.kts"; then
   echo "promote: the lines above still reference the extras" >&2; exit 1
 fi
+
+# update.json: what games on older versions are told (UpdateCheck). The note is the message's first sentence.
+HARD="$PREV_HARD"; NOW="$PREV_NOW"
+[ "$LEVEL" = hard ] && HARD="$ADM_VERSION"
+[ "$LEVEL" = now ] && { HARD="$ADM_VERSION"; NOW="$ADM_VERSION"; }
+NOTE="${MSG#ADM $ADM_VERSION: }"; NOTE="${NOTE%%. *}"; NOTE="${NOTE:0:160}"
+jq -n --arg v "$ADM_VERSION" --arg note "$NOTE" --arg hard "$HARD" --arg now "$NOW" '{version: $v, note: $note, hard: $hard, now: $now}' > "$PUB/update.json"
 
 # Must build without the extras. Untracked compile-only jars (libs/, e.g. the Odin 26.3 port, which
 # CI downloads itself) are borrowed for the check and never committed.

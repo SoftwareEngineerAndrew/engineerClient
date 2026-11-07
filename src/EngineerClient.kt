@@ -123,6 +123,7 @@ object EngineerClient : ClientModInitializer {
         safely("click limit") { com.engineerclient.misc.OdinClickLimit.install() }
         safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
         runCatching { com.engineerclient.misc.LaunchStats.install() }
+        runCatching { com.engineerclient.misc.UpdateCheck.install() }
         safely("leap order") { com.engineerclient.misc.LeapOrder.install() }
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
 
