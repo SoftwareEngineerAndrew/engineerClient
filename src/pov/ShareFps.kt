@@ -1,7 +1,7 @@
 package com.engineerclient.pov
 
 /**
- * POV Previews' "Sharing FPS" at its lowest ([NONE]): shown as none (NumberSettingNoneMixin) and nothing of yours is shared.
+ * POV Previews' "Sharing FPS" at its lowest ([NONE]): shown as off (NumberSettingNoneMixin) and nothing of yours is shared.
  * Its own object, as every slider's text asks it: loading POV Previews itself from there would start it mid-startup.
  */
 object ShareFps {
