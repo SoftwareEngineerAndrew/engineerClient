@@ -3,8 +3,10 @@ package com.engineerclient.poi
 import org.junit.jupiter.api.Test
 import java.nio.ByteBuffer
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class PointsOfInterestTest {
     private fun at(x: Double, y: Double, z: Double) = PointsOfInterest.at(x, y, z)
@@ -44,92 +46,116 @@ class PointsOfInterestTest {
         assertNull(at(1.0, 109.0, 78.0))   // S3's 4th terminal
         assertNull(at(60.0, 120.0, 126.0)) // S2's 2nd terminal
     }
-
-    @Test fun callouts() {
-        val yes = mapOf(
-            "at ee3!" to PointsOfInterest.EE3, "at hee2!" to PointsOfInterest.EE2, "at high ee2!" to PointsOfInterest.EE2,
-            "at ee2 safe spot!" to PointsOfInterest.EE2, "at split ee2!" to PointsOfInterest.EE2, "at 3 safespot!" to PointsOfInterest.EE3,
-            "at early enter 3!" to PointsOfInterest.EE3, "at low ee3!" to PointsOfInterest.EE3, "at core!" to PointsOfInterest.EE4,
-            "outside core" to PointsOfInterest.EE4, "At EE2!" to PointsOfInterest.EE2, ">>>  at ee2 ^_^!! <<<<" to PointsOfInterest.EE2,
-            "at levers dev!" to PointsOfInterest.EE2, "ee4" to PointsOfInterest.EE4,
-        )
-        for ((m, p) in yes) assertSame(p, PointsOfInterest.callout(m), m)
-        for (m in listOf("inside core", "in core", "in the core", "no ee2", "ee3?", "can't ee3", "melody 33%", "Leaped to p3wr!", "at ss!",
-            "at 3 [s4]", "bers core", "free2play", "see3"))
-            assertNull(PointsOfInterest.callout(m), m)
-    }
 }
 
 class PoiWireTest {
+    private fun body(f: ByteArray) = ByteBuffer.wrap(f, 1, f.size - 1).slice()
+
     @Test fun roundTrip() {
-        val f = PoiWire.encode(PointsOfInterest.EE3.id, 3, 4_260)
+        val f = PoiWire.encode(7, PointsOfInterest.EE3.id, 4_260)
         assertEquals(PoiWire.KIND, f[0].toInt())
-        val h = PoiWire.decode(ByteBuffer.wrap(f, 1, f.size - 1).slice())!!
-        assertEquals(PointsOfInterest.EE3.id, h.poi); assertEquals(3, h.area); assertEquals(4_200L, h.heldMs)
+        val h = PoiWire.decode(body(f))!!
+        assertEquals(7, h.seq); assertEquals(PointsOfInterest.EE3.id, h.poi); assertEquals(4_200L, h.heldMs)
     }
 
-    @Test fun heldCapsAndNone() {
-        val h = PoiWire.decode(ByteBuffer.wrap(PoiWire.encode(0, 0, 999_999), 1, 3).slice())!!
-        assertEquals(0, h.poi); assertEquals(0, h.area); assertEquals(25_500L, h.heldMs)
+    @Test fun heldCapsAndSequenceWraps() {
+        val h = PoiWire.decode(body(PoiWire.encode(256 + 3, 0, 999_999)))!!
+        assertEquals(3, h.seq); assertEquals(0, h.poi); assertEquals(PoiWire.MAX_HELD_MS, h.heldMs)
+        assertTrue(PoiWire.after(0, 255)); assertTrue(PoiWire.after(5, 4)); assertFalse(PoiWire.after(4, 5)); assertFalse(PoiWire.after(4, 4))
     }
 
     @Test fun onlyWhatAGameCouldSend() {
         assertNull(PoiWire.decode(ByteBuffer.wrap(byteArrayOf(1, 2))))
         assertNull(PoiWire.decode(ByteBuffer.wrap(byteArrayOf(1, 2, 3, 4))))
-        assertNull(PoiWire.decode(ByteBuffer.wrap(byteArrayOf(1, 6, 0))))
-        // A spot this game doesn't know (a newer one's): none, the area kept.
-        val h = PoiWire.decode(ByteBuffer.wrap(byteArrayOf(99, 2, 10)))!!
-        assertEquals(0, h.poi); assertEquals(2, h.area)
+        // A spot this game doesn't know (a newer one's): none.
+        assertEquals(0, PoiWire.decode(ByteBuffer.wrap(byteArrayOf(1, 99, 10)))!!.poi)
     }
 }
 
 class PoiPresenceTest {
     private val ee3 = PointsOfInterest.EE3.id
+    private val seen = PoiPresence.Source.SEEN
 
-    @Test fun aFreshShareWins() {
+    @Test fun aFreshShareIsSure() {
         val p = PoiPresence()
-        p.shared("a", ee3, 3, 2_000, 10_000)
-        p.seen("a", 0, 2, 10_500, PoiPresence.Source.SEEN)
-        val w = p.where("a", 11_000, 2)!!
-        assertEquals(ee3, w.poi); assertEquals(PoiPresence.Source.SHARED, w.source); assertEquals(8_000, w.since)
-        // Stale: the newer sighting stands.
-        assertEquals(0, p.where("a", 10_000 + PoiPresence.SHARE_FRESH_MS + 1, 2)!!.poi)
+        assertTrue(p.shared("a", 0, ee3, 2_000, 10_000))
+        val w = p.sureAt("a", 10_100)!!
+        assertEquals(ee3, w.poi); assertEquals(8_000, w.since); assertEquals(8_250, w.sureFrom)
+        assertEquals(setOf(PoiPresence.Source.SHARED), w.sources)
+        // Stale: unknown, not where they were.
+        assertNull(p.sureAt("a", 10_000 + PoiPresence.SHARE_FRESH_MS + 1))
     }
 
-    @Test fun theSameSpotKeepsItsFirstTime() {
+    @Test fun anySourceSayingOtherwiseIsNo() {
         val p = PoiPresence()
-        p.shared("a", ee3, 3, 1_000, 10_000)
-        p.shared("a", ee3, 3, 1_900, 11_000) // rounded down, and late
-        assertEquals(9_000, p.where("a", 11_000, 2)!!.since)
-        p.seen("b", ee3, 3, 5_000, PoiPresence.Source.SEEN)
-        p.seen("b", ee3, 3, 6_000, PoiPresence.Source.POSE)
-        assertEquals(5_000, p.where("b", 6_000, 2)!!.since)
+        p.shared("a", 0, ee3, 2_000, 10_000)
+        p.seen("a", 0, 10_000, seen) // their player, in view, isn't on it (or is in a leap's drag)
+        assertNull(p.sureAt("a", 10_050))
+        assertEquals(mapOf(PoiPresence.Source.SHARED to ee3, seen to 0), p.current("a", 10_050))
+        // Once both have them on it, and have for long enough: yes, by both.
+        for (t in 10_050L..10_400L step 50) { p.seen("a", ee3, t, seen); if (t % 250 == 0L) p.shared("a", (t / 250).toInt(), ee3, t - 8_000, t) }
+        assertNull(p.sureAt("a", 10_250))
+        val w = p.sureAt("a", 10_300)!!
+        assertEquals(setOf(PoiPresence.Source.SHARED, seen), w.sources); assertEquals(8_000, w.since); assertEquals(10_300, w.sureFrom)
     }
 
-    @Test fun calloutsOnlyInTheirSectionAndOnlyWhenNewest() {
+    @Test fun onlyOnceSettled() {
         val p = PoiPresence()
-        p.seen("a", 0, 1, 1_000, PoiPresence.Source.SEEN)
-        p.callout("a", ee3, 2_000, 2)
-        assertEquals(PoiPresence.Source.CHAT, p.where("a", 3_000, 2)!!.source)
-        // Not in another section.
-        assertEquals(PoiPresence.Source.SEEN, p.where("a", 3_000, 3)!!.source)
-        // Seen somewhere after it: that stands.
-        p.seen("a", 0, 1, 2_500, PoiPresence.Source.SEEN)
-        assertEquals(0, p.where("a", 3_000, 2)!!.poi)
+        for (t in 0L..200L step 50) p.seen("a", ee3, t, seen)
+        assertNull(p.sureAt("a", 200))
+        p.seen("a", ee3, 250, seen)
+        assertEquals(0, p.sureAt("a", 250)!!.since)
     }
 
-    @Test fun earliestSourceGivesTheTime() {
+    @Test fun outOfViewIsUnknownAndStartsAgain() {
         val p = PoiPresence()
-        p.callout("a", ee3, 1_000, 2)
-        p.shared("a", ee3, 3, 500, 2_000)
-        val w = p.where("a", 2_000, 2)!!
-        assertEquals(PoiPresence.Source.SHARED, w.source); assertEquals(1_000, w.since)
+        for (t in 0L..1_000L step 50) p.seen("a", ee3, t, seen)
+        assertEquals(ee3, p.sureAt("a", 1_000)!!.poi)
+        // No reading for a few ticks: not "still there".
+        assertNull(p.sureAt("a", 1_000 + PoiPresence.SIGHT_FRESH_MS + 1))
+        // Back in view on it: nothing says they stayed, so it settles again.
+        p.seen("a", ee3, 1_300, seen)
+        assertNull(p.sureAt("a", 1_300))
+        for (t in 1_350L..1_550L step 50) p.seen("a", ee3, t, seen)
+        assertEquals(1_300, p.sureAt("a", 1_550)!!.since)
+    }
+
+    @Test fun anOlderFrameIsDropped() {
+        val p = PoiPresence()
+        p.shared("a", 10, 0, 0, 1_000)
+        // "On EE3" sent before "off it", come in after it: dropped.
+        assertFalse(p.shared("a", 9, ee3, 3_000, 1_010))
+        assertNull(p.sureAt("a", 1_300))
+        // Across the wrap, and after a restart once the last is stale.
+        p.shared("a", 255, 0, 0, 2_000)
+        assertTrue(p.shared("a", 0, 0, 0, 2_250))
+        assertTrue(p.shared("a", 200, ee3, 5_000, 2_250 + PoiPresence.SHARE_FRESH_MS + 1))
+    }
+
+    @Test fun theirOwnTimeOnItSaysWhenTheyGotBack() {
+        val p = PoiPresence()
+        p.shared("a", 0, ee3, 5_000, 10_000)
+        // Stepped off and on between frames: their game says 0.1 s, so it settles again.
+        p.shared("a", 1, ee3, 100, 10_250)
+        assertNull(p.sureAt("a", 10_300))
+        assertEquals(10_150, p.sureAt("a", 10_400)!!.since)
+        // Past 25.5 s their time tops out: the first time stands.
+        val q = PoiPresence()
+        q.shared("b", 0, ee3, PoiWire.MAX_HELD_MS, 30_000)
+        q.shared("b", 1, ee3, PoiWire.MAX_HELD_MS, 30_250)
+        assertEquals(30_000 - PoiWire.MAX_HELD_MS, q.sureAt("b", 30_250)!!.since)
+    }
+
+    @Test fun noSpotIsNothingToHighlight() {
+        val p = PoiPresence()
+        for (t in 0L..500L step 50) p.seen("a", 0, t, seen)
+        assertNull(p.sureAt("a", 500))
     }
 
     @Test fun forgotten() {
         val p = PoiPresence()
-        p.shared("a", ee3, 3, 0, 1_000)
+        p.shared("a", 0, ee3, 1_000, 1_000)
         p.forget("a")
-        assertNull(p.where("a", 1_000, 2))
+        assertNull(p.sureAt("a", 1_000))
     }
 }

@@ -1,52 +1,72 @@
 package com.engineerclient.poi
 
-/**
- * Where each teammate is, as far as the points of interest go, from whichever source knows: their own game over the party
- * link ([Source.SHARED], exact and theirs), their player in view or their shared pose ([Source.SEEN], [Source.POSE]), or a
- * party message ("at ee3!", [Source.CHAT]) from games without this. Names in lower case, times in ms; one thread (the game's).
- *
- * A fresh share wins (their own game, every tick's position); otherwise the newest of the rest, so a callout after they went
- * out of view counts, and one before they were seen elsewhere doesn't. Someone unseen keeps their place, as in Recore. A
- * callout only counts in the section it came in.
- */
-class PoiPresence(private val shareFreshMs: Long = SHARE_FRESH_MS) {
-    enum class Source(val label: String) { SHARED("shared"), SEEN("seen"), POSE("pose"), CHAT("party chat") }
+import java.util.EnumMap
 
-    /** On spot [poi] (0 none) in section area [area] (see [PoiWire]) since [since], by [source]. */
-    class Where(val poi: Int, val area: Int, val since: Long, val source: Source)
+/**
+ * Whether each teammate is surely on a point of interest right now. A wrong highlight sends you leaping to someone who isn't
+ * where it says, which is worse than no highlight, so this only answers when it's sure:
+ *  - only readings that are current count: their own game's frame over the party link ([Source.SHARED], at most
+ *    [shareFreshMs] old), their player in view this tick ([Source.SEEN]) or their shared pose this tick ([Source.POSE]).
+ *    Someone out of view with no fresh frame is unknown, never "where they were last".
+ *  - every current reading has to say the same spot; any that says otherwise (they've stepped off, or are in a leap's drag)
+ *    and it's no.
+ *  - they've been on it, by all of them, for at least [settleMs], so a pass across a box's edge doesn't flash.
+ * Names in lower case, times in ms; one thread (the game's).
+ */
+class PoiPresence(
+    private val shareFreshMs: Long = SHARE_FRESH_MS,
+    private val sightFreshMs: Long = SIGHT_FRESH_MS,
+    private val settleMs: Long = SETTLE_MS,
+) {
+    enum class Source(val label: String) { SHARED("shared"), SEEN("seen"), POSE("pose") }
+
+    /**
+     * Surely on [poi]: there since [since] (the first any of [sources] had them there, for who got there first), sure of it
+     * from [sureFrom] (every current source had had them there for [settleMs]: when the highlight shows).
+     */
+    class Where(val poi: Int, val since: Long, val sureFrom: Long, val sources: Set<Source>)
+
+    /** One source's latest: on [poi] (0 none) since [since], last heard [at]. */
+    private class Reading(val poi: Int, val since: Long, val at: Long)
 
     private class Entry {
-        var shared: Where? = null; var sharedAt = 0L
-        var seen: Where? = null; var seenAt = 0L
-        var chat: Where? = null; var chatSection = 0
+        val readings = EnumMap<Source, Reading>(Source::class.java)
+        var seq = -1
     }
 
     private val book = HashMap<String, Entry>()
 
-    /** Their game's own frame: on [poi] in [area] for [heldMs] so far, heard at [now]. */
-    fun shared(name: String, poi: Int, area: Int, heldMs: Long, now: Long) {
-        val e = book.getOrPut(name) { Entry() }
-        val since = now - heldMs
-        val was = e.shared
-        // The same spot again: its first time stands (a frame's tenths are rounded down, and the link adds a few ms).
-        e.shared = if (was != null && was.poi == poi && was.area == area) was else Where(poi, area, since, Source.SHARED)
-        e.sharedAt = now
+    private fun freshFor(s: Source) = if (s == Source.SHARED) shareFreshMs else sightFreshMs
+
+    /**
+     * [s] has them on [poi] since [since]. The same spot, still current: its first time stands. After a gap (out of view,
+     * frames lost) it starts again, as nothing says they stayed; so does a frame whose own time on it ([since] from their
+     * game) is clearly later than the one kept (they stepped off and back on between frames).
+     */
+    private fun put(e: Entry, s: Source, poi: Int, since: Long, now: Long, ownTime: Boolean = false) {
+        val was = e.readings[s]
+        val keep = was != null && was.poi == poi && now - was.at <= freshFor(s) && (!ownTime || since - was.since < SHARE_JITTER_MS)
+        e.readings[s] = Reading(poi, if (keep) minOf(was.since, since) else since, now)
     }
 
-    /** Their position as this game has it now ([Source.SEEN] or [Source.POSE]). */
-    fun seen(name: String, poi: Int, area: Int, now: Long, source: Source) {
+    /**
+     * Their game's own frame number [seq]: on [poi] for [heldMs] so far, heard at [now]. One older than the newest current
+     * frame came out of order and is dropped. False if it was.
+     */
+    fun shared(name: String, seq: Int, poi: Int, heldMs: Long, now: Long): Boolean {
         val e = book.getOrPut(name) { Entry() }
-        val was = e.seen
-        e.seen = if (was != null && was.poi == poi && was.area == area) Where(poi, area, was.since, source) else Where(poi, area, now, source)
-        e.seenAt = now
+        val last = e.readings[Source.SHARED]
+        if (e.seq >= 0 && last != null && now - last.at <= shareFreshMs && !PoiWire.after(seq, e.seq)) return false
+        e.seq = seq
+        // Their time on it tops out at 25.5 s: past that it says nothing about when they got there.
+        put(e, Source.SHARED, poi, now - heldMs, now, ownTime = heldMs < PoiWire.MAX_HELD_MS)
+        return true
     }
 
-    /** A party message saying they just got to [poi], in [section]. */
-    fun callout(name: String, poi: Int, now: Long, section: Int) {
-        val e = book.getOrPut(name) { Entry() }
-        val p = PointsOfInterest.byId(poi) ?: return
-        e.chat = Where(poi, p.opens, now, Source.CHAT)
-        e.chatSection = section
+    /** Their position as this game has it this tick ([Source.SEEN] or [Source.POSE]): on [poi], 0 for none or moving. */
+    fun seen(name: String, poi: Int, now: Long, source: Source) {
+        require(source != Source.SHARED)
+        put(book.getOrPut(name) { Entry() }, source, poi, now, now)
     }
 
     /** Dead (or gone): whatever was known about them no longer holds. */
@@ -54,26 +74,28 @@ class PoiPresence(private val shareFreshMs: Long = SHARE_FRESH_MS) {
 
     fun clear() = book.clear()
 
-    /** Where [name] is at [now], in [section] (for the callouts), as best known; null when nothing is. */
-    fun where(name: String, now: Long, section: Int): Where? {
-        val e = book[name] ?: return null
-        val shared = e.shared
-        if (shared != null && now - e.sharedAt <= shareFreshMs) return shared.earliest(e)
-        val chat = e.chat?.takeIf { e.chatSection == section }
-        val best = listOfNotNull(shared?.let { it to e.sharedAt }, e.seen?.let { it to e.seenAt }, chat?.let { it to it.since })
-            .maxByOrNull { it.second }?.first ?: return null
-        return best.earliest(e)
-    }
+    /** Each source's current reading for [name] (spot id, 0 none), for the log. */
+    fun current(name: String, now: Long): Map<Source, Int> =
+        book[name]?.readings?.filter { (s, r) -> now - r.at <= freshFor(s) }?.mapValues { it.value.poi } ?: emptyMap()
 
-    /** This answer, with the earliest time any source had them on the same spot (each source sees the arrival at its own moment). */
-    private fun Where.earliest(e: Entry): Where {
-        val same = listOfNotNull(e.shared, e.seen, e.chat).filter { it.poi == poi && it.area == area }
-        val first = same.minOfOrNull { it.since } ?: since
-        return if (first < since) Where(poi, area, first, source) else this
+    /** The spot [name] is surely on at [now], or null: not known, not on one, sources disagreeing or not settled yet. */
+    fun sureAt(name: String, now: Long): Where? {
+        val cur = book[name]?.readings?.filter { (s, r) -> now - r.at <= freshFor(s) } ?: return null
+        val poi = cur.values.firstOrNull()?.poi ?: return null
+        if (poi == 0 || cur.values.any { it.poi != poi }) return null
+        val sureFrom = cur.values.maxOf { it.since } + settleMs
+        if (now < sureFrom) return null
+        return Where(poi, cur.values.minOf { it.since }, sureFrom, cur.keys.toSet())
     }
 
     companion object {
-        /** A shared frame older than this is stale: they're sent once a second, so this is two missed. */
-        const val SHARE_FRESH_MS = 2_500L
+        /** Frames come every 250 ms: this is one lost, and the link's jitter. */
+        const val SHARE_FRESH_MS = 700L
+        /** Seen and pose readings are taken every tick (50 ms): a couple missed and they're no longer current. */
+        const val SIGHT_FRESH_MS = 150L
+        /** On the spot, by every current source, at least this long. */
+        const val SETTLE_MS = 250L
+        /** A frame's time on its spot is in tenths, rounded down, and the link adds its jitter: no more than this between frames. */
+        private const val SHARE_JITTER_MS = 200L
     }
 }
