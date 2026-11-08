@@ -107,6 +107,39 @@ class MazeMapTest {
         assertEquals(f, m.final)
     }
 
+    @Test fun theStartPadsTeleportCountsEvenWhenItKeepsYourLook() {
+        // 8 of 153 recorded start-pad teleports kept the player's own yaw, which looks at no pad
+        val m = MazeMap()
+        assertTrue(MazePads.aim(2, 7.0).isEmpty())
+        assertTrue(m.teleport(15.5, 12.4, 2, 7.0, exact = true))
+        assertEquals(START, m.partnerOf(2))
+        // the pad you landed beside leads back out to the corridor: it is never the one to try next
+        assertEquals(setOf(0, 1, 3), MazePlan.plan(m, mapOf("a" to 0, "b" to 0, "c" to 0)).values.map { it.pad }.toSet())
+    }
+
+    @Test fun onlyTheStartPadCanTakeYouOutOfTheCorridor() {
+        val m = MazeMap()
+        // nowhere near the frame by the time the packet is read: the corridor has one pad, so it was that one
+        assertTrue(m.teleport(13.0, 9.0, 2, MazePads.yawTo(9.5, 11.5, 25), exact = true))
+        assertEquals(START, m.partnerOf(2))
+    }
+
+    @Test fun aSetbackInsideTheMazeIsStillNoPadsTeleport() {
+        val m = MazeMap()
+        val noPad = (0 until 3600).map { it / 10.0 }.first { MazePads.aim(8, it).isEmpty() }
+        // from cell 1's pad at (4, 12) to a landing in cell 3, keeping a look at nothing
+        assertTrue(!m.teleport(4.5, 12.5, 8, noPad, exact = true))
+        assertNull(m.partnerOf(8))
+        assertNull(m.partnerOf(0))
+    }
+
+    @Test fun aPadsTeleportLinksAndRecordsTheLook() {
+        val m = MazeMap()
+        assertTrue(m.teleport(4.5, 12.5, 8, MazePads.yawTo(LAND[8][0] + 0.5, LAND[8][1] + 0.5, 25), exact = true))
+        assertEquals(0, m.partnerOf(8))
+        assertTrue(25 in m.candidates())
+    }
+
     @Test fun playersInOneCellSplitItsUnusedPads() {
         val m = MazeMap()
         m.link(START, 2)

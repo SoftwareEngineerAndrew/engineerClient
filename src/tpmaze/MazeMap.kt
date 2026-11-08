@@ -141,6 +141,27 @@ class MazeMap {
         return true
     }
 
+    /**
+     * A player at room (ox, oz) was put on pad [land]'s landing cell looking [yaw] (the room's frame). True if the map changed.
+     *
+     * A pad's teleport starts in the maze, and no pad leads into its own cell, so a "landing" where you already were (a setback, a
+     * position resync) is no pad's; a setback elsewhere keeps your own yaw, which looks at no pad. The corridor is the exception: it
+     * has one pad and nothing else takes you out of it, so leaving it onto a landing cell is that pad, wherever you were read and
+     * whatever the yaw (5% of the recorded start-pad teleports keep the player's own look).
+     */
+    fun teleport(ox: Double, oz: Double, land: Int, yaw: Double, exact: Boolean, reach: Double = 1.2): Boolean {
+        val origin = MazePads.regionAt(ox, oz)
+        if (origin < 0 || hypot(ox - MazePads.LAND[land][0] - 0.5, oz - MazePads.LAND[land][1] - 0.5) < 1.5 || origin == MazePads.cell(land)) return false
+        val fromCorridor = origin == MazePads.START_AREA
+        val from = if (fromCorridor) MazePads.START else MazePads.padUnder(ox, oz, reach)
+        if (land == MazePads.END) return from in 0 until 28 && link(from, MazePads.END, exact)
+        val aimed = MazePads.aim(land, yaw).isNotEmpty()
+        if (!aimed && !fromCorridor) return false
+        var changed = aimed && look(land, yaw)
+        if (from >= 0) changed = link(from, land, exact) or changed
+        return changed
+    }
+
     /** A landing beside pad [land] looking [yaw] (the room's frame). False when it looks at no pad, or at none still possible. */
     fun look(land: Int, yaw: Double): Boolean {
         if (land !in 0 until 28 && land != MazePads.START) return false

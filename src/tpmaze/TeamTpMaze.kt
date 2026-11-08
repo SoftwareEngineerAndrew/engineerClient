@@ -63,9 +63,11 @@ object TeamTpMaze {
     private val tracer = BooleanSetting("Team Maze Tracer", true, desc = "A line to the pad you should take next.").withDependency { dropdown.value && on.value }
     private val labels = BooleanSetting("Team Maze Labels", true,
         desc = "Over each used pad, where it leads; over a teammate's next pad in your cell, their name.").withDependency { dropdown.value && on.value }
-    private val nextColor = ColorSetting("Your Pad Color", Colors.MINECRAFT_GREEN.withAlpha(.6f), true, desc = "The pad you should take next.").withDependency { dropdown.value && on.value }
-    private val finalColor = ColorSetting("Final Pad Color", Colors.MINECRAFT_GOLD.withAlpha(.6f), true,
-        desc = "The pad into the end (an outline while it could still be one of a few).").withDependency { dropdown.value && on.value }
+    // Odin saves colours by setting name: these two are new names so the new defaults reach anyone who has the old ones saved.
+    private val nextColor = ColorSetting("Recommended Pad Color", Colors.MINECRAFT_YELLOW.withAlpha(.6f), true,
+        desc = "The pad you should take next and the line to it, and the outlines while the answer could still be one of a few.").withDependency { dropdown.value && on.value }
+    private val finalColor = ColorSetting("Known Answer Color", Colors.MINECRAFT_GREEN.withAlpha(.6f), true,
+        desc = "The pad into the end once it's known, and the line to it.").withDependency { dropdown.value && on.value }
     private val usedColor = ColorSetting("Used Pad Color", Colors.MINECRAFT_RED.withAlpha(.35f), true,
         desc = "Pads the party already knows the way of.").withDependency { dropdown.value && on.value }
     private val mateColor = ColorSetting("Teammate Pad Color", Colors.MINECRAFT_AQUA.withAlpha(.45f), true,
@@ -198,22 +200,7 @@ object TeamTpMaze {
         val land = MazePads.landingAt(rx, rz)
         if (land < 0) return
         val (ox, oz) = f.toRoom(fromX, fromZ).let { it[0] to it[1] }
-        // A pad's teleport starts in the maze (a leap onto a teammate standing on a landing cell doesn't), and no pad leads into its own
-        // cell: a "landing" where you already were (a setback, a position resync) is no pad's.
-        val origin = MazePads.regionAt(ox, oz)
-        if (origin < 0 || kotlin.math.hypot(ox - rx, oz - rz) < 1.5 || origin == MazePads.cell(land)) return
-        val from = MazePads.padUnder(ox, oz, REACH)
-        val ryaw = f.yawToRoom(yaw)
-        var changed = false
-        if (land == MazePads.END) {
-            if (from in 0 until 28) changed = map.link(from, MazePads.END, exact)
-        } else {
-            // A setback (Hypixel putting you back) keeps your own yaw: it looks at no pad, and isn't a pad's teleport.
-            if (MazePads.aim(land, ryaw).isEmpty()) return
-            changed = map.look(land, ryaw)
-            if (from >= 0) changed = map.link(from, land, exact) or changed
-        }
-        if (changed) dirty = true
+        if (map.teleport(ox, oz, land, f.yawToRoom(yaw), exact, REACH)) dirty = true
     }
 
     private fun tick() {
@@ -293,12 +280,12 @@ object TeamTpMaze {
             val box = AABB(b.x.toDouble(), b.y.toDouble(), b.z.toDouble(), b.x + 1.0, b.y + FRAME_TOP, b.z + 1.0)
             val top = Vec3(b.x + 0.5, b.y + FRAME_TOP + 0.6, b.z + 0.5)
             when {
-                p == mine?.pad -> event.drawFilledBox(box, nextColor.value, false)
                 p == fin -> event.drawFilledBox(box, finalColor.value, false)
+                p == mine?.pad -> event.drawFilledBox(box, nextColor.value, false)
                 mates.values.any { it.pad == p } -> event.drawFilledBox(box, mateColor.value, false)
                 map.known(p) && p < 28 -> event.drawFilledBox(box, usedColor.value, true)
             }
-            if (fin == null && p in maybe && maybe.size <= 4) event.drawWireFrameBox(box, finalColor.value, 2f, false)
+            if (fin == null && p in maybe && maybe.size <= 4) event.drawWireFrameBox(box, nextColor.value, 2f, false)
             if (labels.value) {
                 val who = mates.filter { it.value.pad == p }.keys.sorted()
                 when {
@@ -309,7 +296,7 @@ object TeamTpMaze {
         }
         if (tracer.value && mine != null) {
             val b = room.getRealCoords(BlockPos(MazePads.FRAMES[mine.pad][0], 69, MazePads.FRAMES[mine.pad][1]))
-            event.drawTracer(Vec3(b.x + 0.5, b.y + FRAME_TOP, b.z + 0.5), nextColor.value, false)
+            event.drawTracer(Vec3(b.x + 0.5, b.y + FRAME_TOP, b.z + 0.5), if (mine.pad == fin) finalColor.value else nextColor.value, false)
         }
     }
 }
