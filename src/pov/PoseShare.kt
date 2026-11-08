@@ -48,11 +48,17 @@ object PoseShare {
     @Volatile var frameNs = 16_666_666L
     /**
      * TURN kinds ([TurnLink]'s header): the relay's own numbers for the frames both carry (3 terminal, 4 closed, 7 and 8
-     * TermProgress), but rooms (the relay's 9) as [PoseWire.D_ROOMS], and its own: [PoseWire.D_TICK], [PoseWire.D_LOOK] and
+     * TermProgress, 13 EE Highlight), but rooms (the relay's 9) as [PoseWire.D_ROOMS], and its own: [PoseWire.D_TICK], [PoseWire.D_LOOK] and
      * [PoseWire.D_ROUTE] (see [PoseWire]).
      */
     private const val D_TICK = PoseWire.D_TICK
     private const val D_LOOK = PoseWire.D_LOOK
+    /**
+     * The kinds [shareExtra] frames can be, read by whoever registered for them ([onExtra]): the same number on the relay and
+     * over TURN, and taken by nothing else on either (TURN's 0-2 are [TurnLink]'s own, 3 and 4 terminals, 9-12 [PoseWire]'s;
+     * the relay's 0-5 and 9 its own), below TURN's limit of 16.
+     */
+    private val EXTRA_KINDS = setOf(7, 8, 13, 14, 15)
     /** A shared view older than this isn't shown: an old frame would pass for where they are now. */
     private const val STALE_NS = PoseTrack.STALE_NS
     private const val GUI_STALE_NS = 3_000_000_000L
@@ -302,12 +308,24 @@ object PoseShare {
         if (!direct.containsAll(roster.keys)) sendBinary(frame)
     }
 
-    /** Who reads kinds 7 and 8 when they come (the dev build's party progress; a sender in lower case, the frame just past its kind), from this object's threads. */
-    @Volatile var extras: ((String, Int, java.nio.ByteBuffer) -> Unit)? = null
+    /**
+     * Who reads each kind of [shareExtra] frame when one comes (7 and 8 Term Progress, 13 EE Highlight): a sender in lower case
+     * and the frame just past its kind, from this object's threads.
+     */
+    private val extraReaders = ConcurrentHashMap<Int, (String, ByteBuffer) -> Unit>()
+
+    /** [read] gets every [kind] frame a teammate sends with [shareExtra]: one of the kinds left free on both paths ([EXTRA_KINDS]). */
+    fun onExtra(kind: Int, read: (String, ByteBuffer) -> Unit) {
+        require(kind in EXTRA_KINDS) { "kind $kind isn't free for extras" }
+        extraReaders[kind] = read
+    }
+
+    private fun extra(sender: String, kind: Int, b: ByteBuffer) { extraReaders[kind]?.invoke(sender, b) }
 
     /**
-     * One of the party progress frames (kind 7 or 8): over TURN as [share], and through the relay only once
-     * it says it takes that kind (one that doesn't would close the socket on it). Sent whether or not anyone is watching.
+     * A frame the relay may not take (Term Progress's 7 and 8 and EE Highlight's 13, read by whoever [onExtra] has for them;
+     * the rooms' 9): over TURN as [share], and through the relay only once it says it takes that kind (one that doesn't would
+     * close the socket on it). Sent whether or not anyone is watching. How many teammates it surely reached over TURN.
      */
     fun shareExtra(frame: ByteArray): Int {
         if (!ready || roster.isEmpty()) return 0
@@ -563,7 +581,7 @@ object PoseShare {
             3 -> gui(sender, data, now)
             9 -> rooms(sender, data)
             4 -> tracks[sender]?.gui = null
-            7, 8 -> extras?.invoke(sender, kind, data)
+            else -> if (kind in EXTRA_KINDS) extra(sender, kind, data)
         }
     }
 
@@ -579,7 +597,7 @@ object PoseShare {
             3 -> gui(sender, b, now)
             PoseWire.D_ROOMS -> rooms(sender, b)
             4 -> if (body.isEmpty()) tracks[sender]?.gui = null
-            7, 8 -> extras?.invoke(sender, kind, b)
+            else -> if (kind in EXTRA_KINDS) extra(sender, kind, b)
         }
     }
 

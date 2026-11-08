@@ -88,7 +88,8 @@ object TermProgress : Module(
     private val sses = ConcurrentHashMap<String, Ss>()
 
     init {
-        PoseShare.extras = { sender, kind, b -> heard(sender, kind, b) }
+        PoseShare.onExtra(7) { sender, b -> heard(sender, 7, b) }
+        PoseShare.onExtra(8) { sender, b -> heard(sender, 8, b) }
         ClientTickEvents.END_CLIENT_TICK.register { EngineerClient.safely("term progress") { tick() } }
         on<RenderExtractEvent> { EngineerClient.safely("term progress labels") { if (labels) drawLabels(this) } }
     }
