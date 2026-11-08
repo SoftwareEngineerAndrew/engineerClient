@@ -119,6 +119,7 @@ object EngineerClient : ClientModInitializer {
         safely("map sizes") { com.engineerclient.mapicons.MapSizes.install() }
         // Team TP Maze: settings on Odin's Puzzle Solvers (its TP Maze), the party's shared maze map over Odin's websocket.
         safely("team tp maze") { com.engineerclient.tpmaze.TeamTpMaze.install() }
+        safely("water board") { com.engineerclient.waterboard.WaterBoardSolver.install() }
         safely("map configs") { ModuleManager.loadConfigurations() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
         safely("click limit") { com.engineerclient.misc.OdinClickLimit.install() }
