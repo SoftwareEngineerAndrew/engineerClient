@@ -67,25 +67,36 @@ class PlannerEval {
             val next = todo.removeFirstOrNull()
             if (next == null) { s.runTo(limit, stopWhenSolved = true); break }
             val lever = hand.lever(next.lever, levers)
-            if (lever < 0) continue
-            val at = maxOf(s.time + 1, next.tick + hand.lateness())
-            if (adapt) {
-                // the rest of the old plan is late by as much, as the player sees it on screen
+            if (lever < 0) {
+                // missed: the solver sees the flip overdue a few ticks past its time and plans again from there
+                if (!adapt) continue
+                s.runTo(maxOf(s.time, next.tick + 6), stopWhenSolved = true)
+                if (s.solvedAt != WaterSim.NONE) break
+                todo = replan(planner, s, todo, lead, replanMs, seed + done + 7777).toMutableList()
+                continue
             }
+            val at = maxOf(s.time + 1, next.tick + hand.lateness())
             s.runTo(at - 1, stopWhenSolved = true)
             if (s.solvedAt != WaterSim.NONE) break
             s.step(1 shl lever); done++
-            if (adapt && s.solvedAt == WaterSim.NONE) {
-                // re-plan from what really happened; flips due before the player could react stay as they were
-                val keep = todo.filter { it.tick <= s.time + lead }
-                val base = s.copy()
-                val at2 = HashMap<Int, Int>(); for (f in keep) at2.merge(f.tick, 1 shl f.lever) { a, b -> a xor b }
-                while (base.time < s.time + lead) base.step(at2[base.time + 1] ?: 0)
-                val p = planner.plan(base, listOf(todo.filter { it.tick > s.time + lead }), replanMs, Random(seed + done))
-                todo = (keep + p.flips).sortedBy { it.tick }.toMutableList()
-            }
+            if (adapt && s.solvedAt == WaterSim.NONE) todo = replan(planner, s, todo, lead, replanMs, seed + done).toMutableList()
         }
         return (if (s.solvedAt == WaterSim.NONE) -1 else s.solvedAt) to done
+    }
+
+    /**
+     * As the module does: from the board a reaction time on (the plan's flips before then as good as done), seeded with
+     * the rest of the plan; tried again with more time while nothing solves.
+     */
+    private fun replan(planner: Planner, s: WaterSim, todo: List<Flip>, lead: Int, ms: Long, seed: Long): List<Flip> {
+        val keep = todo.filter { it.tick <= s.time + lead }
+        val base = s.copy()
+        val at2 = HashMap<Int, Int>(); for (f in keep) at2.merge(f.tick, 1 shl f.lever) { a, b -> a xor b }
+        while (base.time < s.time + lead) base.step(at2[base.time + 1] ?: 0)
+        var p = planner.plan(base, listOf(todo.filter { it.tick > s.time + lead }), ms, Random(seed))
+        var tries = 0
+        while (!p.solved && tries++ < 3) p = planner.plan(base, listOf(p.flips), ms * 3, Random(seed + tries))
+        return (keep + p.flips).sortedBy { it.tick }
     }
 
     @Test fun sloppyPlay() {

@@ -48,6 +48,8 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
     var relocks = 0; private set
     var matched = 0; private set
     var observed = 0; private set
+    /** Lever packets in the order they came (tick as first placed, lever): what the player did, for the solver. */
+    val arrivals = ArrayList<Pair<Int, Int>>()
     /** Every flip the tracker has placed (tick, lever), for the solver to tell what was done. */
     val flips: List<Pair<Int, Int>> get() = flipAt.entries.sortedBy { it.key }.flatMap { (t, b) -> (0..6).filter { b and (1 shl it) != 0 }.map { t to it } }
 
@@ -100,6 +102,7 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
         flipAt.merge(t, 1 shl lever) { a, b -> a xor b }
         advanceTo(maxOf(top, t))
         pending += Pending(t, lever, t + 16 + SPAN)
+        arrivals += t to lever
     }
 
     /** A board cell's block packet: [view] a water level, [WaterSim.AIR] or [WaterSim.SOLID]. */

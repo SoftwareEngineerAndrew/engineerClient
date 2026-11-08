@@ -76,7 +76,11 @@ object WaterBoardSolver {
     private var tracker: Tracker? = null
     private var todo: MutableList<Flip> = ArrayList()
     private var solveAt = WaterSim.NONE
-    private var windows: List<IntRange> = emptyList()
+    /** Per planned flip, how early/late (ticks) it can be and still solve about as soon. */
+    private var windowOf: Map<Flip, IntRange> = emptyMap()
+    /** Lever packets when the running job was started: if more came, its base is out of date. */
+    private var jobArrivals = 0
+    private var lastGates = -1
     private var seenFlips = 0
     private var job: Future<Plan>? = null
     private var jobBase: WaterSim? = null
@@ -86,7 +90,8 @@ object WaterBoardSolver {
     /** Ticks from a click to its lever packet coming back with a server tick's packets (measured on our own clicks). */
     private var clickTicks = -1.0
     private val clickMs = DoubleArray(7) { Double.NaN }
-    private val planner = Planner()
+    private val spacing = Planner.Spacing()
+    private val planner = Planner(spacing)
     private val coordinator = Executors.newSingleThreadExecutor { r -> Thread(r, "ec-waterboard").apply { isDaemon = true } }
 
     fun install() {
@@ -108,7 +113,7 @@ object WaterBoardSolver {
     private fun nowMs(): Double = System.nanoTime() / 1e6
 
     private fun reset() {
-        frame = null; room = null; geo = null; tracker = null; todo = ArrayList(); solveAt = WaterSim.NONE; windows = emptyList()
+        frame = null; room = null; geo = null; tracker = null; todo = ArrayList(); solveAt = WaterSim.NONE; windowOf = emptyMap()
         seenFlips = 0; job?.cancel(true); job = null; jobBase = null; dirty = true; inbox.clear(); leverPowered.fill(null)
         clickMs.fill(Double.NaN)
     }
@@ -177,8 +182,10 @@ object WaterBoardSolver {
         }
         val now = nowMs()
         tr.advance(now)
-        tr.gates(now, readGates(f))
-        managePlan(tr, now)
+        val gates = readGates(f)
+        if (gates != lastGates) { lastGates = gates; dirty = true }
+        tr.gates(now, gates)
+        managePlan(tr, now, f)
     }
 
     private fun leverPacket(tr: Tracker, e: Ev) {
@@ -201,27 +208,33 @@ object WaterBoardSolver {
     /** Ticks from clicking to the server's tick it lands on: measured, else from the ping. */
     private fun latencyTicks(): Double = if (clickTicks >= 0) clickTicks else ServerUtils.averagePing / 50.0 + 1.0
 
-    private fun managePlan(tr: Tracker, now: Double) {
+    private fun managePlan(tr: Tracker, now: Double, f: RoomFrame) {
         // flips that happened: the plan's matching ones are done; anything else means re-planning
-        val flips = tr.flips
-        if (flips.size != seenFlips) {
-            for (i in seenFlips until flips.size) {
-                val (t, lv) = flips[i]
+        val arr = tr.arrivals
+        if (arr.size != seenFlips) {
+            for (i in seenFlips until arr.size) {
+                val (t, lv) = arr[i]
                 val k = todo.indexOfFirst { it.lever == lv && kotlin.math.abs(it.tick - t) <= 40 }
                 if (k >= 0) todo.removeAt(k)
             }
-            seenFlips = flips.size; dirty = true
+            seenFlips = arr.size; dirty = true
         }
         val j = job
         if (j != null && j.isDone) {
             job = null
             val p = runCatching { j.get() }.getOrNull()
             val base = jobBase
-            if (p != null && base != null) adopt(p, base)
+            // a lever moved while it planned: its board is out of date (and a new plan is already due)
+            if (p != null && base != null && jobArrivals == arr.size) adopt(p, base)
         }
-        // a flip overdue past its window: missed, plan again
         val tNow = tr.now(now)
-        todo.firstOrNull()?.let { f -> if (f.tick + (windows.firstOrNull()?.last ?: 0) + 4 < tNow) dirty = true }
+        // flips whose time has gone without them (their packet would be in by now): missed, plan again
+        val gone = todo.filter { it.tick + (windowOf[it]?.last ?: 0) + 6 < tNow }
+        if (gone.isNotEmpty()) { todo.removeAll(gone.toSet()); dirty = true }
+        // and keep at it while nothing solves
+        if (solveAt == WaterSim.NONE && (todo.isNotEmpty() || tr.head.sourceOn || arr.isNotEmpty())) dirty = true
+        // nothing to solve until the puzzle has closed its gates
+        if (tr.head.closed == 0 && solveAt == WaterSim.NONE) { todo.clear(); return }
         if (job == null && (dirty || now - lastPlanMs > 3000)) {
             val leadTicks = maxOf(Tracker.AHEAD, Math.ceil(lead.value.toDouble() / 50.0 + latencyTicks()).toInt())
             // from the server's board a reaction time from now, with the plan's flips before that as good as done
@@ -234,10 +247,13 @@ object WaterBoardSolver {
             val rest = todo.filter { it.tick > target }
             val seeds = listOf(rest, rest.map { Flip(maxOf(it.tick, target + 1), it.lever) })
             jobCommitted = committed
-            val fresh = !base.sourceOn && base.cells.none { it >= 0 } && flips.isEmpty()
-            val budget = if (fresh) 2500L else 350L
+            val fresh = !base.sourceOn && base.cells.none { it >= 0 } && arr.isEmpty()
+            jobArrivals = arr.size
+            val budget = if (fresh) 2500L else if (solveAt == WaterSim.NONE) 1000L else 350L
             jobBase = base; dirty = false; lastPlanMs = now
-            job = coordinator.submit<Plan> { planner.plan(base, seeds, budget, Random.Default) }
+            // no lever sooner than you can get to it from where you stand
+            val first = mc.player?.let { pl -> val r = f.toRoom(pl.blockPosition()); IntArray(7) { lv -> maxOf(0, spacing.from(r[0] + 0.5, r[2] + 0.5, lv) - leadTicks) } }
+            job = coordinator.submit<Plan> { planner.plan(base, seeds, budget, Random.Default, first) }
         }
     }
 
@@ -250,7 +266,7 @@ object WaterBoardSolver {
         val pick = if (old == null || !old.solved || (p.solved && p.solvedAt < old.solvedAt - 5) || (p.solved && old.cost > p.cost + 20)) p else old
         todo = (committed + pick.flips).sortedBy { it.tick }.toMutableList()
         solveAt = pick.solvedAt
-        windows = List(committed.size) { -2..2 } + pick.window
+        windowOf = committed.associateWith { -2..2 } + pick.flips.zip(pick.window).toMap()
     }
 
     /** The board's rows from the world (null while a piston is moving or the room isn't loaded), its lever blocks, and its water. */
@@ -326,7 +342,7 @@ object WaterBoardSolver {
             event.drawFilledBox(box.inflate(0.05), if (isNext) nextColor.value else laterColor.value, false)
             val text = flips.joinToString("  ") { (i, fl) ->
                 val secs = (fl.tick - now) / 20.0
-                val w = windows.getOrNull(i)
+                val w = windowOf[fl]
                 val inWindow = w != null && now >= fl.tick + w.first && now <= fl.tick + w.last
                 when {
                     i == 0 && inWindow -> "§a§lNOW"
