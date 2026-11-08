@@ -136,8 +136,8 @@ object LcmStyle {
     @JvmStatic
     fun render(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int>? {
         if (!example && (!DungeonUtils.inDungeons || (disableInBoss() && DungeonUtils.inBoss))) return 0 to 0
-        val (cols, rows) = mapSize(example)
-        val width = cols * TILE - (TILE - ROOM) + PAD * 2
+        val rows = mapSize(example).second
+        val width = mapWidth(example)
         val height = rows * TILE - (TILE - ROOM) + PAD * 2
         g.pose().pushMatrix()
         try {
@@ -163,6 +163,9 @@ object LcmStyle {
     }
 
     internal fun disableInBoss(): Boolean = (DungeonMap.settings["Disable in Boss"] as? BooleanSetting)?.value ?: true
+
+    /** How wide the map HUD is drawn, background included. */
+    internal fun mapWidth(example: Boolean): Int = mapSize(example).first * TILE - (TILE - ROOM) + PAD * 2
 
     /** The floor's rooms across and down, as dtMap sizes its map. */
     internal fun mapSize(example: Boolean): Pair<Int, Int> {

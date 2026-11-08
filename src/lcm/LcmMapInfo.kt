@@ -82,8 +82,8 @@ object LcmMapInfo {
     fun render(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int>? {
         if (!example && (!DungeonUtils.inDungeons || (disableInBoss() && DungeonUtils.inBoss))) return 0 to 0
         return try {
-            if (example) centred(g, listOf("§b10§7-§e49§7-§c55     §a300", "§7D: §c1  §7M: §c✖  §7P: §c✖  §7B: §c✖  §c0§7/§a5"), 2)
-            else centred(g, lines(), 0)
+            if (example) centred(g, listOf("§b10§7-§e49§7-§c55     §a300", "§7D: §c1  §7M: §c✖  §7P: §c✖  §7B: §c✖  §c0§7/§a5"), 2, LcmStyle.mapWidth(true))
+            else centred(g, lines(), 0, LcmStyle.mapWidth(false))
         } catch (t: Throwable) {
             if (!failed) {
                 failed = true
@@ -126,11 +126,14 @@ object LcmMapInfo {
     /** One bat per player in the run, at most 5 (dtMap: 5, or 1 when solo clearing); 5 until the tab list has the team. */
     private fun batsPossible(): Int = DungeonUtils.dungeonTeammates.size.takeIf { it > 0 }?.coerceAtMost(5) ?: 5
 
-    /** The lines centred on each other, [gap] between them (dtMap's: none, 2 on its example). */
-    private fun centred(g: GuiGraphicsExtractor, lines: List<String>, gap: Int): Pair<Int, Int> {
-        val width = lines.maxOf { mc.font.width(it) }
-        for ((i, line) in lines.withIndex()) g.centeredText(mc.font, line, width / 2, i * (mc.font.lineHeight + gap), -1)
-        return width to lines.size * (mc.font.lineHeight + gap) - gap
+    /**
+     * The lines centred on the map's middle, [gap] between them (dtMap's: none, 2 on its example). The HUD is placed by
+     * its left edge, so it's as wide as the map (a box as wide as the text moved the middle whenever the text changed);
+     * a line wider than the map runs over both sides evenly.
+     */
+    private fun centred(g: GuiGraphicsExtractor, lines: List<String>, gap: Int, mapWidth: Int): Pair<Int, Int> {
+        for ((i, line) in lines.withIndex()) g.centeredText(mc.font, line, mapWidth / 2, i * (mc.font.lineHeight + gap), -1)
+        return mapWidth to lines.size * (mc.font.lineHeight + gap) - gap
     }
 
     private fun floorNumber(): Int = DungeonUtils.floor?.floorNumber ?: 0

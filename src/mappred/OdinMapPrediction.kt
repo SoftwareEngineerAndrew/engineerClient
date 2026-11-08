@@ -101,6 +101,8 @@ object OdinMapPrediction {
         desc = "How sure the prediction has to be of a door before it's drawn.").withDependency { on && doorDropdown.value }
     private val exactRooms = BooleanSetting("Exact Last Rooms", true,
         desc = "Once the secrets the tab list counts leave only one way for the last rooms to be (their size, place and name: every room name comes up once a map), they're drawn in full with their name and secrets.").withDependency { on }
+    private val exactOpacity = NumberSetting("Exact Last Rooms Opacity", 75, 0..100, 1, unit = "%",
+        desc = "How solid the rooms Exact Last Rooms draws are (their names and secrets stay fully visible).").withDependency { on && exactRooms.value }
 
     private val colorsDropdown = DropdownSetting("Prediction Colors",
         desc = "The colours predicted rooms are drawn in. Off, they follow the map's own room colours (Odin's, or LCM Colors in LCM Style), darkened.").withDependency { on }
@@ -164,7 +166,7 @@ object OdinMapPrediction {
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
-        for (s in listOf(mode, threadsSetting, aheadSetting, splitText, splitSecrets, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms,
+        for (s in listOf(mode, threadsSetting, aheadSetting, splitText, splitSecrets, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms, exactOpacity,
             colorsDropdown, customColors, predPuzzle, predTrap, predYellow, predRare, predBlood, predFairy, predRoom)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
@@ -571,10 +573,10 @@ object OdinMapPrediction {
         else -> -1
     }
 
-    /** An exact room's colour for a type (-1: a normal room), a little see-through as nobody has opened it. */
+    /** An exact room's colour for a type (-1: a normal room), as solid as Exact Last Rooms Opacity says. */
     private fun exactColor(type: Int): Int =
-        if (lcm) (if (type < 0) LcmStyle.NORMAL else lcmColor(type)) and 0xFFFFFF or (0xBF shl 24)
-        else Color((if (type < 0) DungeonMap.normalRoomColor else colorOf(type)).rgba, 0.75f).rgba
+        if (lcm) (if (type < 0) LcmStyle.NORMAL else lcmColor(type)) and 0xFFFFFF or (exactOpacity.value * 255 / 100 shl 24)
+        else Color((if (type < 0) DungeonMap.normalRoomColor else colorOf(type)).rgba, exactOpacity.value / 100f).rgba
 
     /**
      * An exact room's shape in its type's colour; a 1x1 that can still be more than one kind (likeliest first) as a
