@@ -11,17 +11,32 @@ import kotlin.test.assertTrue
 class PointsOfInterestTest {
     private fun at(x: Double, y: Double, z: Double) = PointsOfInterest.at(x, y, z)
 
-    @Test fun whereLeapsLandedAreEarlyEnters() {
-        // The most common leap targets in Andrew's ADR recordings (2026-11-07), each block's centre.
+    @Test fun standingOnTheSpots() {
+        // On each spot's ground (P3 Sim's arena), or just above it: edges count, as a player's feet still are on it there.
         assertSame(PointsOfInterest.EE2, at(61.0, 132.0, 139.0))
-        assertSame(PointsOfInterest.EE2, at(64.0, 136.0, 139.0))
-        assertSame(PointsOfInterest.EE2, at(41.0, 109.0, 123.0))
+        assertSame(PointsOfInterest.EE2, at(57.0, 131.5, 138.5))   // the front's west end, a stair's low half
+        assertSame(PointsOfInterest.EE2, at(61.5, 133.2, 142.5))   // jumping, by the levers
         assertSame(PointsOfInterest.EE3, at(2.0, 109.0, 105.0))
-        assertSame(PointsOfInterest.EE3, at(6.0, 110.0, 110.0))
-        assertSame(PointsOfInterest.EE3, at(19.0, 122.0, 91.0))
-        assertSame(PointsOfInterest.EE3, at(16.0, 123.0, 94.0))
+        assertSame(PointsOfInterest.EE3, at(3.0, 109.0, 98.0))      // the walkway's corner
+        assertSame(PointsOfInterest.EE3, at(5.0, 109.0, 111.5))     // the walkway in
+        assertSame(PointsOfInterest.EE3, at(8.5, 109.0, 120.0))
+        assertSame(PointsOfInterest.EE3_HIGH, at(18.7, 121.5, 91.5))
+        assertSame(PointsOfInterest.EE3_HIGH, at(18.7, 123.0, 99.5))
         assertSame(PointsOfInterest.EE4, at(54.0, 115.0, 48.0))
         assertSame(PointsOfInterest.EE4, at(54.0, 115.0, 50.0))
+        assertSame(PointsOfInterest.EE4, at(51.5, 114.0, 51.5))     // a step down beside the door
+    }
+
+    @Test fun offTheGroundIsNot() {
+        // Where recorded leaps went that isn't the spots' ground (people leap wrong), and spots that aren't early enters.
+        assertNull(at(3.5, 109.0, 104.0))   // beside EE3's walkway: over the lava
+        assertNull(at(6.0, 110.0, 110.0))   // the gap between EE3's walkways
+        assertNull(at(64.0, 136.0, 139.0))  // up the side of S2's device
+        assertNull(at(58.0, 132.0, 141.0))  // beside EE2's platform: a drop
+        assertNull(at(16.0, 123.0, 94.0))   // off EE3 high's ledge
+        assertNull(at(18.7, 129.5, 95.0))   // the ledge's top slab
+        assertNull(at(41.0, 109.0, 123.0))  // the S2 safe spot: not an early enter
+        assertNull(at(54.0, 115.0, 40.0))   // S4's corridor, not EE4's walkway
     }
 
     @Test fun p3SimsSpotsAreEarlyEnters() {

@@ -6,19 +6,25 @@ package com.engineerclient.poi
  * the party link, [PoiWire], so a number is never reused for another spot), the section it gets you into ([Poi.opens])
  * and the boxes a player's feet are in when they're on it.
  *
- * The boxes are Positional Messages' usual /posmsg boxes (the ee2, ee3 and "out of core" ones Andrew's 26.1.2 instances
- * have), widened to where players were really standing when teammates leapt to them in Andrew's ADR recordings
- * (2026-11-07: 824 P3s, a leap counted when its "Leaped to X!" came while the leaper was still in the section before):
- *  - EE2: on top of S2's device (Lights), 380 of 694 leaps from S1 into S2 at (60-62, 132, 139-140), the rest up the
- *    device to y 137 and x 66; and the S2 floor by the 3rd terminal (40-49, 109, 122-124), "ee2 safe spot".
- *  - EE3: low, at the S3 side of the S2/S3 corner, 200 of 416 leaps from S2 into S3 at (1-4, 109-110, 100-107), and where
- *    players said "at ee3!" (3-8, 109-111, 109-113); high, on the S3 wall's ledge (19, 122, 91) and where they said
- *    "3 safespot" (12-16, 123-126, 94-98).
- *  - EE4: just outside the core on S4's side, (54-55, 115, 45-50) and where they said "at core!" (54, 115, 50-54); it
- *    stops short of z 54, where Recore's core box starts.
+ * Each box is the spot's standable ground, from the boss's own blocks (P3 Sim's arena.bin, the boss as built), and the air
+ * just above it: someone there is standing on the spot or will land on it, and so will whoever leaps to them. Not where
+ * recorded leaps went (people leap to the wrong place too). Every box was checked by dropping a player through it at
+ * points across it: all land on the spot, none in the lava or anywhere lower.
+ *  - EE2: the quartz platform in front of S2's device (Lights), feet at 132: x 57-61 along its front (z 138-139) and
+ *    x 59-61 back to the levers (z 140-142). Not the S2 floor by the 3rd terminal (Andrew, 2026-11-07: not an early enter).
+ *  - EE3: low, past S2's gate on S3's side, the walkways over the lava with feet at 109: the one by the S2 / S3 corner
+ *    (x 1-2, z 98-107), where they wait, and the one before it (z 111-112 from x -1 to 9, then x 8-9 to z 122), where they
+ *    walk in and call "at ee3!", a jump short of it.
+ *  - [EE3_HIGH]: the slab ledge on S3's east wall (x 18, z 91-99), feet at 121.5. A niche strategy some parties use,
+ *    decided ahead of time, so EE Highlight only counts it when its own setting is on.
+ *  - EE4: the walkway from S4's corridor up to the core door (x 53-55, z 43-50), feet at 115, and the step in front of the
+ *    door (z 51-53); it stops at z 54, the door, where Recore's core box starts.
  */
 object PointsOfInterest {
-    /** A box of feet positions, corners in either order: inclusive, except its far z side (so EE4's stops where the core starts). */
+    /**
+     * A box of feet positions, corners in either order: inclusive, except its far z side (so EE4's stops where the core
+     * starts).
+     */
     class Box(x0: Double, y0: Double, z0: Double, x1: Double, y1: Double, z1: Double, private val label: String) {
         val minX = minOf(x0, x1); val maxX = maxOf(x0, x1)
         val minY = minOf(y0, y1); val maxY = maxOf(y0, y1)
@@ -34,23 +40,30 @@ object PointsOfInterest {
     }
 
     val EE2 = Poi(1, "ee2", "EE2", 2, listOf(
-        Box(55.0, 130.0, 135.0, 66.5, 141.0, 144.0, "device top"),
-        Box(38.0, 108.0, 121.0, 50.0, 112.0, 126.0, "safe spot"),
+        Box(57.0, 131.5, 138.0, 62.0, 136.0, 140.0, "platform"),
+        Box(59.0, 131.5, 140.0, 62.0, 136.0, 143.0, "platform, by the levers"),
     ))
 
     val EE3 = Poi(2, "ee3", "EE3", 3, listOf(
-        Box(-1.0, 108.0, 99.0, 9.0, 112.5, 114.0, "low"),
-        Box(11.0, 120.0, 89.0, 20.0, 130.0, 101.0, "high"),
+        Box(1.0, 108.5, 98.0, 3.0, 112.0, 108.0, "walkway"),
+        Box(-1.0, 108.5, 111.0, 10.0, 112.0, 113.0, "walkway in"),
+        Box(8.0, 108.5, 113.0, 10.0, 112.0, 123.0, "walkway in"),
+    ))
+
+    val EE3_HIGH = Poi(4, "ee3high", "EE3 high", 3, listOf(
+        Box(18.0, 121.5, 91.0, 19.0, 125.0, 100.0, "ledge"),
     ))
 
     val EE4 = Poi(3, "ee4", "EE4", 4, listOf(
-        Box(50.0, 114.0, 43.0, 59.0, 121.0, 54.0, "outside core"),
+        Box(53.0, 114.5, 43.0, 56.0, 119.0, 51.0, "walkway"),
+        Box(51.0, 113.5, 51.0, 58.0, 119.0, 53.0, "by the core door"),
+        Box(52.0, 114.5, 53.0, 57.0, 119.0, 54.0, "by the core door"),
     ))
 
-    val ALL: List<Poi> = listOf(EE2, EE3, EE4)
+    val ALL: List<Poi> = listOf(EE2, EE3, EE3_HIGH, EE4)
 
     init {
-        // A number on the wire means one spot for good.
+        // A number on the wire means one spot for good (5 up are free; 1-4 taken).
         check(ALL.map { it.id }.toSet().size == ALL.size && ALL.none { it.id == 0 || it.id > 255 })
     }
 
@@ -58,7 +71,4 @@ object PointsOfInterest {
 
     /** The spot whose box [x], [y], [z] are in, or null. */
     fun at(x: Double, y: Double, z: Double): Poi? = ALL.firstOrNull { it.contains(x, y, z) }
-
-    /** The early enter into [section] (2-4), or null. */
-    fun into(section: Int): Poi? = ALL.firstOrNull { it.opens == section }
 }

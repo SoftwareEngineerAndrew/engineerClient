@@ -44,9 +44,10 @@ object EeHighlight : Module(
     key = null,
     toggled = true,
 ) {
-    private val ee2 by BooleanSetting("EE2", true, desc = "In S1: whoever's on top of S2's device or on the safe spot by its 3rd terminal.")
-    private val ee3 by BooleanSetting("EE3", true, desc = "In S2: whoever's low by the S2 / S3 corner or high on the S3 wall's ledge.")
-    private val ee4 by BooleanSetting("EE4", true, desc = "In S3: whoever's just outside the core.")
+    private val ee2 by BooleanSetting("EE2", true, desc = "In S1: whoever's on the platform in front of S2's device (Lights).")
+    private val ee3 by BooleanSetting("EE3", true, desc = "In S2: whoever's on the low walkways over the lava past S2's gate, by the S2 / S3 corner.")
+    private val ee3High by BooleanSetting("EE3 High", false, desc = "In S2: whoever's on the slab ledge high on S3's east wall. A strategy some parties use, decided ahead of time: turn it on for a party that does.")
+    private val ee4 by BooleanSetting("EE4", true, desc = "In S3: whoever's on the walkway up to the core door.")
     private val all by BooleanSetting("Highlight All", true, desc = "Every teammate who's on the early enter, each where they'll be in the leap menu, not just the first one there.")
     private val hideThere by BooleanSetting("Hide Once You're There", true, desc = "Off for the rest of the section once you're through to the next one yourself.")
     private val look = LeapHighlightLook(this, "EE Leap Look", { true }, "someone is on the early enter",
@@ -92,8 +93,14 @@ object EeHighlight : Module(
     /** The section standing on [poi] puts you in (2-4), 0 for none. */
     private fun opensOf(poi: Int) = PointsOfInterest.byId(poi)?.opens ?: 0
 
-    /** Whether the early enter into [opens] (2-4) is one to highlight. */
-    private fun eeOn(opens: Int) = when (opens) { 2 -> ee2; 3 -> ee3; 4 -> ee4; else -> false }
+    /** Whether [poi] is one to highlight. */
+    private fun poiOn(poi: PointsOfInterest.Poi) = when (poi) {
+        PointsOfInterest.EE2 -> ee2
+        PointsOfInterest.EE3 -> ee3
+        PointsOfInterest.EE3_HIGH -> ee3High
+        PointsOfInterest.EE4 -> ee4
+        else -> false
+    }
 
     // ------------------------------------------------------------------ every tick
 
@@ -209,10 +216,11 @@ object EeHighlight : Module(
     private fun logIfNew(name: String, key: String, opens: Int, now: Long) {
         val w = presence.sureAt(key, now)
         if (w != null) {
-            if (opensOf(w.poi) != opens) return
+            val poi = PointsOfInterest.byId(w.poi) ?: return
+            if (poi.opens != opens || !poiOn(poi)) return
             val k = "S$section $name"
             if (k in picked) return
-            val label = PointsOfInterest.byId(w.poi)!!.label
+            val label = poi.label
             val by = w.sources.joinToString("+") { it.label }
             val at = "%.1f s into S$section".format(java.util.Locale.ROOT, (w.since - sectionStartAt) / 1000.0)
             picked[k] = "$label ($by) $at"
@@ -240,15 +248,16 @@ object EeHighlight : Module(
             )
         } else {
             val opens = section + 1
-            if (section !in 1..3 || !eeOn(opens)) return
+            if (section !in 1..3) return
             if (hideThere && selfThere) return
             val now = System.currentTimeMillis()
             val mates = DungeonUtils.leapTeammates
             val on = mates.withIndex().mapNotNull { (i, m) ->
                 if (i > 3 || m.name == "Empty") return@mapNotNull null
-                val w = presence.sureAt(m.name.lowercase(), now)?.takeIf { opensOf(it.poi) == opens } ?: return@mapNotNull null
+                val w = presence.sureAt(m.name.lowercase(), now) ?: return@mapNotNull null
+                val poi = PointsOfInterest.byId(w.poi)?.takeIf { it.opens == opens && poiOn(it) } ?: return@mapNotNull null
                 // Whoever got there first goes first; each fades in from when it's sure.
-                w.since to LeapHighlightLook.Target(i, m.name, m.clazz.name.lowercase(), m.playerSkin ?: self.skin, w.sureFrom, PointsOfInterest.byId(w.poi)!!.label)
+                w.since to LeapHighlightLook.Target(i, m.name, m.clazz.name.lowercase(), m.playerSkin ?: self.skin, w.sureFrom, poi.label)
             }.sortedBy { it.first }.map { it.second }
             if (all) on else on.take(1)
         }
