@@ -18,8 +18,7 @@ class PointsOfInterestTest {
         assertSame(PointsOfInterest.EE2, at(61.5, 133.2, 142.5))   // jumping, by the levers
         assertSame(PointsOfInterest.EE3, at(2.0, 109.0, 105.0))
         assertSame(PointsOfInterest.EE3, at(3.0, 109.0, 98.0))      // the walkway's corner
-        assertSame(PointsOfInterest.EE3, at(5.0, 109.0, 111.5))     // the walkway in
-        assertSame(PointsOfInterest.EE3, at(8.5, 109.0, 120.0))
+        assertSame(PointsOfInterest.EE3, at(1.5, 109.0, 107.9))     // its end, by the jump
         assertSame(PointsOfInterest.EE3_HIGH, at(18.7, 121.5, 91.5))
         assertSame(PointsOfInterest.EE3_HIGH, at(18.7, 123.0, 99.5))
         assertSame(PointsOfInterest.EE4, at(54.0, 115.0, 48.0))
@@ -36,6 +35,8 @@ class PointsOfInterestTest {
         assertNull(at(16.0, 123.0, 94.0))   // off EE3 high's ledge
         assertNull(at(18.7, 129.5, 95.0))   // the ledge's top slab
         assertNull(at(41.0, 109.0, 123.0))  // the S2 safe spot: not an early enter
+        assertNull(at(5.0, 109.0, 111.5))   // the walkway into EE3, a jump short of it: not an early enter
+        assertNull(at(8.5, 109.0, 120.0))
         assertNull(at(54.0, 115.0, 40.0))   // S4's corridor, not EE4's walkway
     }
 

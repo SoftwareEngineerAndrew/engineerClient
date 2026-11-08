@@ -45,7 +45,7 @@ object EeHighlight : Module(
     toggled = true,
 ) {
     private val ee2 by BooleanSetting("EE2", true, desc = "In S1: whoever's on the platform in front of S2's device (Lights).")
-    private val ee3 by BooleanSetting("EE3", true, desc = "In S2: whoever's on the low walkways over the lava past S2's gate, by the S2 / S3 corner.")
+    private val ee3 by BooleanSetting("EE3", true, desc = "In S2: whoever's on the low walkway over the lava past S2's gate, by the S2 / S3 corner.")
     private val ee3High by BooleanSetting("EE3 High", false, desc = "In S2: whoever's on the slab ledge high on S3's east wall. A strategy some parties use, decided ahead of time: turn it on for a party that does.")
     private val ee4 by BooleanSetting("EE4", true, desc = "In S3: whoever's on the walkway up to the core door.")
     private val all by BooleanSetting("Highlight All", true, desc = "Every teammate who's on the early enter, each where they'll be in the leap menu, not just the first one there.")

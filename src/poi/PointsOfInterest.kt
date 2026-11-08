@@ -12,9 +12,9 @@ package com.engineerclient.poi
  * points across it: all land on the spot, none in the lava or anywhere lower.
  *  - EE2: the quartz platform in front of S2's device (Lights), feet at 132: x 57-61 along its front (z 138-139) and
  *    x 59-61 back to the levers (z 140-142). Not the S2 floor by the 3rd terminal (Andrew, 2026-11-07: not an early enter).
- *  - EE3: low, past S2's gate on S3's side, the walkways over the lava with feet at 109: the one by the S2 / S3 corner
- *    (x 1-2, z 98-107), where they wait, and the one before it (z 111-112 from x -1 to 9, then x 8-9 to z 122), where they
- *    walk in and call "at ee3!", a jump short of it.
+ *  - EE3: low, past S2's gate on S3's side, the walkway over the lava by the S2 / S3 corner (x 1-2, z 98-107), feet at
+ *    109, where they wait. Not the walkway they come in on, a jump short of it (z 111-112, x 8-9; Andrew, 2026-11-07: not
+ *    an early enter).
  *  - [EE3_HIGH]: the slab ledge on S3's east wall (x 18, z 91-99), feet at 121.5. A niche strategy some parties use,
  *    decided ahead of time, so EE Highlight only counts it when its own setting is on.
  *  - EE4: the walkway from S4's corridor up to the core door (x 53-55, z 43-50), feet at 115, and the step in front of the
@@ -46,8 +46,6 @@ object PointsOfInterest {
 
     val EE3 = Poi(2, "ee3", "EE3", 3, listOf(
         Box(1.0, 108.5, 98.0, 3.0, 112.0, 108.0, "walkway"),
-        Box(-1.0, 108.5, 111.0, 10.0, 112.0, 113.0, "walkway in"),
-        Box(8.0, 108.5, 113.0, 10.0, 112.0, 123.0, "walkway in"),
     ))
 
     val EE3_HIGH = Poi(4, "ee3high", "EE3 high", 3, listOf(
