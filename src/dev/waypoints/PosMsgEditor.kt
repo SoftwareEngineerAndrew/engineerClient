@@ -92,6 +92,9 @@ object PosMsgEditor : BrWaypoints2.WandUser {
                 else drawCylinder(Vec3(s.msg.x, s.msg.y, s.msg.z), s.radius.toFloat(), cylHeight().toFloat(), PURPLE)
             }
         }
+        // Not a module: Odin's bus calls this object's listeners only once it's subscribed (it never was, so with Show
+        // Positions off the boxes being edited, and the face aimed at, were never drawn).
+        com.odtheking.odin.events.core.EventBus.subscribe(this)
     }
 
     private fun shapes(): List<Shape> = list().mapIndexed { i, m -> Shape(i, m) }

@@ -42,7 +42,10 @@ object CoffeeClient : ClientModInitializer {
 
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
-        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim, HighlightLevers, TermInfoHud, Timers2, QuietMedia)
+        val modules = arrayOf(PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim, HighlightLevers, TermInfoHud, Timers2, QuietMedia)
+        ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), *modules)
+        // Leap Extras starts on (toggled = true): Odin leaves such a module off its event bus.
+        safely("subscribe enabled") { com.engineerclient.EngineerClient.subscribeEnabled(modules.asList()) }
         // Instant Open lives in Odin's Leap Menu settings; Odin's config is read again so its saved value applies.
         safely("instant open setting") { com.odtheking.odin.features.impl.dungeon.LeapMenu.registerSetting(LeapExtras.instantOpen); ModuleManager.loadConfigurations() }
 

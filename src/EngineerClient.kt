@@ -95,6 +95,7 @@ object EngineerClient : ClientModInitializer {
         // ("Engineer Client"), own config file (config/odin/addons/engineerclient.json), own event
         // subscription lifecycle. This is Odin's documented addon path.
         ModuleManager.registerModules(ModuleConfig("engineerclient.json"), *MODULES.toTypedArray())
+        safely("subscribe enabled") { subscribeEnabled(MODULES) }
 
         // Additions to Odin's own modules (e.g. the Engineer Splits look on Odin's Splits) go in
         // before anything saves the configs, which would drop saved values for settings that don't
@@ -164,6 +165,20 @@ object EngineerClient : ClientModInitializer {
         registerCommand()
 
         logger.info("[ec] initialized — class stash=${EcConfig.data.lastKnownClass}")
+    }
+
+    /**
+     * Subscribes those of [modules] that are on to Odin's event bus. Odin subscribes a module only when it's toggled on
+     * (onEnable) or always active: one made with `toggled = true` starts on but unsubscribed, and a config load toggles
+     * only a module whose saved state differs, so with "enabled" saved it stays that way for good. On in the ClickGUI,
+     * yet every `on<...>` / `onReceive<...>` of its is never called until it's turned off and on again (Terminal Hitboxes'
+     * boxes, EE Highlight's Show Spots, Term Progress's labels; 2026-11-07, Odin 0.4.0). Call right after
+     * registerModules: a later config load that turns one off then unsubscribes it as usual. Subscribing twice is nothing.
+     */
+    fun subscribeEnabled(modules: Iterable<com.odtheking.odin.features.Module>) {
+        val fixed = modules.filter { it.enabled && !it.alwaysActive && it !in EventBus.activeSubscribers }
+        for (m in fixed) EventBus.subscribe(m)
+        if (fixed.isNotEmpty()) logger.info("[ec] on but left off Odin's event bus, subscribed: ${fixed.joinToString { it.name }}")
     }
 
     /** Every handler that runs inside Odin's bus or a coroutine must not be able to take Odin down with it. */
