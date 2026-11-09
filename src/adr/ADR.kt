@@ -71,6 +71,7 @@ object ADR : Module(
 ) {
     private var privateRuns by BooleanSetting("Unlisted Runs", true, desc = "Uploaded runs aren't listed on the viewer's home page: only people you give the link to can open them, unless someone in your party uploads the same run publicly - then yours shows as one of its POVs. /adr gives you a link to all your runs, unlisted ones included.")
     private val hidePrivateChats by BooleanSetting("Hide Private Chats", true, desc = "Leaves private messages, guild, officer and co-op chat, friend requests and friends coming online out of recordings, so they are never saved (they are never uploaded either way).")
+    private val hideInventory by BooleanSetting("Hide Inventory", false, desc = "Leaves every window you open out of recordings except terminals: your inventory, chests, menus and what's in them (and your clicks and mouse there) are never saved. Terminals are still recorded, so the viewer can show them.")
     private val hidePartyChat by BooleanSetting("Hide Party Chat", false, desc = "Leaves party chat out of recordings and uploads. Off, the viewer shows what your party said during the run.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
     val savedMessage by BooleanSetting("Saved Message", true, desc = "Says \"saved run\" in chat, with the file's size, when a run's recording is saved.")
@@ -147,7 +148,7 @@ object ADR : Module(
         on<TickEvent.End> {
             val s = session ?: return@on
             EngineerClient.safely("adr tick") { s.onTick(level) }
-            (EngineerClient.mc.gui.screen() as? AbstractContainerScreen<*>)?.let { screen ->
+            trackedScreen()?.let { screen ->
                 EngineerClient.safely("adr gui tick") { s.onContainerTick(screen.menu.slots.map { it.item }, screen.menu.carried) }
             }
             if (s.abandoned) session = null
@@ -160,7 +161,7 @@ object ADR : Module(
             val pt = EngineerClient.mc.deltaTracker.getGameTimeDeltaPartialTick(true)
             EngineerClient.safely("adr frame") { s.onFrame(pt, player.yRot, player.xRot) }
             // The mouse over an open container, relative to its window (GUI pixels).
-            (EngineerClient.mc.gui.screen() as? AbstractContainerScreen<*>)?.let { screen ->
+            trackedScreen()?.let { screen ->
                 EngineerClient.safely("adr gui mouse") {
                     val mc = EngineerClient.mc
                     val box = screen as ContainerScreenAccessor
@@ -237,13 +238,14 @@ object ADR : Module(
 
         // Container screens you open (terminal GUIs among them), for exact terminal times.
         ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
-            if (screen !is AbstractContainerScreen<*>) return@register
+            if (screen !is AbstractContainerScreen<*> || !tracked(screen)) return@register
             EngineerClient.safely("adr gui") {
                 val s = session ?: return@safely
                 val menu = screen.menu
                 val box = screen as ContainerScreenAccessor
                 // Your own inventory's menu has no registered type.
                 val type = if (menu is InventoryMenu) "inventory" else runCatching { BuiltInRegistries.MENU.getKey(menu.type)?.toString() }.getOrNull() ?: "unknown"
+                recordedScreen = screen
                 s.onContainerOpen(screen.title.string, type, box.adrImageWidth(), box.adrImageHeight(), menu.slots.map { intArrayOf(it.x, it.y) })
                 s.onContainerTick(menu.slots.map { it.item }, menu.carried)
             }
@@ -254,12 +256,30 @@ object ADR : Module(
                 }
                 false
             }
-            ScreenEvents.remove(screen).register { EngineerClient.safely("adr gui close") { session?.onGuiClose() } }
+            ScreenEvents.remove(screen).register {
+                if (recordedScreen === screen) recordedScreen = null
+                EngineerClient.safely("adr gui close") { session?.onGuiClose() }
+            }
         }
     }
 
     /** A container slot click sent to the server (from GameModeRecordMixin, whatever sent it). */
-    fun onSlotClick(slot: Int, button: Int, type: String) = EngineerClient.safely("adr slot click") { session?.onSlotClick(slot, button, type) }
+    fun onSlotClick(slot: Int, button: Int, type: String) = EngineerClient.safely("adr slot click") {
+        if (hideInventory && trackedScreen() == null) return@safely // (a hidden window, or none: an inventory key)
+        session?.onSlotClick(slot, button, type)
+    }
+
+    // Terminal windows' titles (Hide Inventory records only these).
+    private val TERMINAL_TITLE = Regex("^(Click in order!|Select all the .+ items!|What starts with: '.+'\\?|Correct all the panes!|Change all to same color!|Click the button on time!)$")
+
+    /** Whether this window is recorded: every one, or with Hide Inventory only terminals. */
+    private fun tracked(screen: AbstractContainerScreen<*>) = !hideInventory || TERMINAL_TITLE.matches(screen.title.string)
+
+    // The window whose "gui" line was written: only it gets slots, mouse and clicks (even if Hide Inventory changes while it's open).
+    private var recordedScreen: AbstractContainerScreen<*>? = null
+
+    /** The open container window, if it is the one being recorded. */
+    private fun trackedScreen() = (EngineerClient.mc.gui.screen() as? AbstractContainerScreen<*>)?.takeIf { it === recordedScreen }
 
     /** A block you right-clicked (from GameModeRecordMixin). */
     fun onBlockUse(pos: BlockPos) = EngineerClient.safely("adr use") { session?.onBlockUse(pos) }
