@@ -1,19 +1,14 @@
 package com.coffeeclient
 
-import com.coffeeclient.leap.LeapExtras
 import com.coffeeclient.misc.CameraOffset
 import com.coffeeclient.misc.OldBlocking
-import com.coffeeclient.misc.EntityDistance
 import com.coffeeclient.misc.HighlightLevers
 import com.coffeeclient.misc.Termsim
 import com.coffeeclient.misc.TermInfoHud
 import com.coffeeclient.misc.Timers2
-import com.coffeeclient.misc.QuietMedia
 import com.coffeeclient.misc.PreRequeue
 import com.coffeeclient.misc.RandomStuff
 import com.coffeeclient.misc.SoundEditor
-import com.coffeeclient.misc.SpeedHud
-import com.coffeeclient.pf.ADRMenu
 import com.odtheking.odin.config.ModuleConfig
 import com.odtheking.odin.features.ModuleManager
 import net.fabricmc.api.ClientModInitializer
@@ -28,133 +23,20 @@ object CoffeeClient : ClientModInitializer {
     val mc: Minecraft get() = Minecraft.getInstance()
 
     override fun onInitializeClient() {
-        // No saved module settings yet: a fresh install.
-        val firstRun = !java.nio.file.Files.exists(mc.gameDirectory.toPath().resolve("config/odin/addons/coffeeclient.json"))
-
-        safely("leap extras settings") { adoptLeapExtrasSettings() }
-        safely("adr menu settings") { renameModule("Better PF Menu", "ADR Menu") }
-        // Engineer Client has a Random Stuff too: Odin keeps modules by name (/od toggle), so this one is named apart.
-        safely("coffee random stuff name") { renameModule("Random Stuff", "Coffee Random Stuff") }
-        safely("completion titles setting") { adoptSetting("Term Info", "Coffee Random Stuff", "Hide Completion Titles") }
-        safely("highlight levers settings") { adoptHighlightLevers() }
-        safely("timers2 name") { renameModule("Coffee Timers", "Timers2") }
-        safely("timers2 settings") { adoptStormTimers() }
-
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
-        val modules = arrayOf(PreRequeue, ADRMenu, CameraOffset, OldBlocking, LeapExtras, SpeedHud, SoundEditor, EntityDistance, RandomStuff, Termsim, HighlightLevers, TermInfoHud, Timers2, QuietMedia)
+        val modules = arrayOf(PreRequeue, CameraOffset, OldBlocking, SoundEditor, RandomStuff, Termsim, HighlightLevers, TermInfoHud, Timers2)
         ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), *modules)
-        // Leap Extras starts on (toggled = true): Odin leaves such a module off its event bus.
+        // A module made with toggled = true would start on but off Odin's event bus.
         safely("subscribe enabled") { com.engineerclient.EngineerClient.subscribeEnabled(modules.asList()) }
-        // Instant Open lives in Odin's Leap Menu settings; Odin's config is read again so its saved value applies.
-        safely("instant open setting") { com.odtheking.odin.features.impl.dungeon.LeapMenu.registerSetting(LeapExtras.instantOpen); ModuleManager.loadConfigurations() }
-
-        // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
-        // fresh install nothing has saved state yet, so turn these on once.
-        if (firstRun) {
-            if (!RandomStuff.enabled) RandomStuff.toggle()
-            if (!LeapExtras.enabled) LeapExtras.toggle()
-            if (!HighlightLevers.enabled) HighlightLevers.toggle()
-            if (!Timers2.enabled) Timers2.toggle()
-            ModuleManager.saveConfigurations()
-        }
 
         // On by default, existing installs included (once: turning it off sticks).
-        safely("speed hud default") { SpeedHud.enableByDefault() }
         safely("termsim default") { Termsim.enableByDefault() }
         safely("term info look") { TermInfoHud.adoptOdinLook() }
-        safely("witherborn") { com.coffeeclient.misc.Witherborn.register() }
         safely("cursor reset") { com.coffeeclient.misc.CursorReset.register() }
         safely("no pack") { com.coffeeclient.misc.NoPack.register() }
 
         logger.info("[cc] initialized")
-    }
-
-    /**
-     * Leap Extras used to be an Engineer Client module: the first time it loads here, its saved
-     * settings are copied over from engineerclient.json so they carry across.
-     */
-    private fun adoptLeapExtrasSettings() {
-        val dir = mc.gameDirectory.toPath().resolve("config/odin/addons")
-        val ours = dir.resolve("coffeeclient.json")
-        val theirs = dir.resolve("engineerclient.json")
-        if (!java.nio.file.Files.exists(ours) || !java.nio.file.Files.exists(theirs)) return
-        val target = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(ours)).asJsonArray
-        if (target.any { it.asJsonObject.get("name")?.asString == "Leap Extras" }) return
-        val source = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray
-        val entry = source.firstOrNull { it.asJsonObject.get("name")?.asString == "Leap Extras" } ?: return
-        target.add(entry)
-        java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
-        logger.info("[cc] Leap Extras settings copied from engineerclient.json")
-    }
-
-    /** A setting that moved here from an Engineer Client module keeps its value: copied once, while this file has none. */
-    private fun adoptSetting(fromModule: String, toModule: String, key: String) {
-        val dir = mc.gameDirectory.toPath().resolve("config/odin/addons")
-        val ours = dir.resolve("coffeeclient.json")
-        val theirs = dir.resolve("engineerclient.json")
-        if (!java.nio.file.Files.exists(ours) || !java.nio.file.Files.exists(theirs)) return
-        fun module(list: com.google.gson.JsonArray, name: String) = list.firstOrNull { it.asJsonObject.get("name")?.asString == name }?.asJsonObject
-        val target = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(ours)).asJsonArray
-        val to = module(target, toModule) ?: return
-        val toSettings = to.getAsJsonObject("settings") ?: com.google.gson.JsonObject().also { to.add("settings", it) }
-        if (toSettings.has(key)) return
-        val source = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray
-        val value = module(source, fromModule)?.getAsJsonObject("settings")?.get(key) ?: return
-        toSettings.add(key, value)
-        java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
-    }
-
-    /**
-     * Highlight Levers used to be part of Term Info: the first time it loads here it takes Term Info's
-     * lever settings, on if Term Info and its Highlight Levers were (that setting was on by default).
-     */
-    private fun adoptHighlightLevers() {
-        val dir = mc.gameDirectory.toPath().resolve("config/odin/addons")
-        val ours = dir.resolve("coffeeclient.json")
-        val theirs = dir.resolve("engineerclient.json")
-        if (!java.nio.file.Files.exists(ours) || !java.nio.file.Files.exists(theirs)) return
-        fun module(list: com.google.gson.JsonArray, name: String) = list.firstOrNull { it.asJsonObject.get("name")?.asString == name }?.asJsonObject
-        val target = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(ours)).asJsonArray
-        if (module(target, "Highlight Levers") != null) return
-        val termInfo = module(com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray, "Term Info")
-        val from = termInfo?.getAsJsonObject("settings") ?: com.google.gson.JsonObject()
-        val on = (termInfo?.get("enabled")?.asBoolean ?: false) && (from.get("Highlight Levers")?.asBoolean ?: true)
-        val settings = com.google.gson.JsonObject()
-        for (key in listOf("Lever Color", "Lever Fill", "Levers Through Walls", "Lights Device Levers")) from.get(key)?.let { settings.add(key, it) }
-        target.add(com.google.gson.JsonObject().apply { addProperty("name", "Highlight Levers"); addProperty("enabled", on); add("settings", settings) })
-        java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
-    }
-
-    /**
-     * Storm Crush Check and Storm Lightning were Engineer Client's Timers' HUDs: the first time Timers2 loads it
-     * takes them (place, scale, on/off), on if Timers was.
-     */
-    private fun adoptStormTimers() {
-        val dir = mc.gameDirectory.toPath().resolve("config/odin/addons")
-        val ours = dir.resolve("coffeeclient.json")
-        val theirs = dir.resolve("engineerclient.json")
-        if (!java.nio.file.Files.exists(ours) || !java.nio.file.Files.exists(theirs)) return
-        fun module(list: com.google.gson.JsonArray, name: String) = list.firstOrNull { it.asJsonObject.get("name")?.asString == name }?.asJsonObject
-        val target = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(ours)).asJsonArray
-        if (module(target, "Timers2") != null) return
-        val timers = module(com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(theirs)).asJsonArray, "Timers")
-        val from = timers?.getAsJsonObject("settings") ?: com.google.gson.JsonObject()
-        val settings = com.google.gson.JsonObject()
-        for (key in listOf("Storm Crush Check", "Storm Lightning")) from.get(key)?.let { settings.add(key, it) }
-        target.add(com.google.gson.JsonObject().apply { addProperty("name", "Timers2"); addProperty("enabled", timers?.get("enabled")?.asBoolean ?: true); add("settings", settings) })
-        java.nio.file.Files.writeString(ours, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(target))
-    }
-
-    /** A module that was renamed keeps its settings: its entry in coffeeclient.json takes the new name, once. */
-    private fun renameModule(old: String, new: String) {
-        val file = mc.gameDirectory.toPath().resolve("config/odin/addons/coffeeclient.json")
-        if (!java.nio.file.Files.exists(file)) return
-        val modules = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(file)).asJsonArray
-        if (modules.any { it.asJsonObject.get("name")?.asString == new }) return
-        val entry = modules.firstOrNull { it.asJsonObject.get("name")?.asString == old }?.asJsonObject ?: return
-        entry.addProperty("name", new)
-        java.nio.file.Files.writeString(file, com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(modules))
     }
 
     /** Every handler that runs inside Odin's bus or a coroutine must not be able to take Odin down with it. */

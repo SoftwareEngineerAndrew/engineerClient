@@ -4,11 +4,6 @@
   "package": "com.coffeeclient.mixin.odin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "LeapMenuClickMixin",
-    "LeapMenuLeapToMixin",
-    "LeapMenuMapMixin",
-    "LeapMenuQuadrantMixin",
-    "LeapMenuReleaseMixin"
   ],
   "injectors": {
     "defaultRequire": 0

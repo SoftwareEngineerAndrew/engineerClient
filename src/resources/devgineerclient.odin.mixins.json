@@ -4,7 +4,6 @@
   "package": "com.devgineerclient.mixin.odin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "ArrowsDeviceAimMixin"
   ],
   "injectors": {
     "defaultRequire": 0

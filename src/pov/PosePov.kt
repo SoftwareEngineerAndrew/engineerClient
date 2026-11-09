@@ -245,7 +245,7 @@ object PosePov : Module(
         // (An unloaded chunk keeps what was built from it: the best there is until it comes back, checked then.)
         // Arm swings, timed from the packet: the game's own swing state sticks for some remote players, as their head yaw does.
         onReceive<ClientboundSwingAnimationPacket> { if (hand() == InteractionHand.MAIN_HAND) swings[entityId()] = System.nanoTime() }
-        // Blood rush ends at the blood door, read straight off the network ([ShowIn]; Leap Extras feeds it too, only while it is on).
+        // Blood rush ends at the blood door, read straight off the network ([ShowIn]).
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) { if (!overlay) ShowIn.onChat(content.string) }
         on<LevelEvent.Load> { for (g in ghosts.values) g.real = null; KnownWorld.reset(); ShowIn.reset(); BlockMesh.newRun(); portals = null; for (c in culls) c.reset() }
     }

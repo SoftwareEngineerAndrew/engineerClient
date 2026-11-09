@@ -56,9 +56,6 @@ object ConfigMigration {
      *  - POV Previews' Show In choice is its matching Only In checkbox (Everywhere: none ticked).
      *  - Sub Splits' Blood Rush Sub Splits HUD is the BR Sub Split;
      *  - Agro Leaderboard is Agro Sphere (on only if its Sphere Mode was);
-     *  - BR Roles' Posmsg Re-trigger and Posmsg Here Keybind are Positional Messages' Re-trigger and
-     *    Box Here Keybind (Positional Messages itself is
-     *    looked after where it is installed);
      *  - Storm Phase's Crush Hitbox is Sub Splits' Show Crush Info (on only if Storm Phase was), its
      *    hitbox settings with it.
      *  - Term Info is gone: its HUD is Odin's Terminals Status (switched on where ours was if Odin's
@@ -158,15 +155,6 @@ object ConfigMigration {
             s.remove("Agro Leaderboard")
             it.addProperty("name", "Agro Sphere")
             it.addProperty("enabled", (it["enabled"]?.asBoolean ?: true) && sphere)
-            changed = true
-        }
-
-        // The /posmsg settings moved from BR Roles to Positional Messages.
-        module(modules, "BR Roles")?.let(::settings)?.let { br ->
-            val moved = POSMSG_KEYS.filterKeys { br.has(it) }
-            if (moved.isEmpty()) return@let
-            val to = settings(module(modules, "Positional Messages") ?: ensure("Positional Messages").also { it.addProperty("enabled", false) })
-            for ((old, new) in moved) br.remove(old).let { if (!to.has(new)) to.add(new, it) }
             changed = true
         }
 
@@ -325,7 +313,6 @@ object ConfigMigration {
 
     private val STORM_HITBOX_KEYS = listOf("Hitbox Seconds", "Hitbox Margins", "Pillar Outline", "Inside Color", "Outside Color")
 
-    private val POSMSG_KEYS = mapOf("Posmsg Re-trigger" to "Re-trigger", "Posmsg Here Keybind" to "Box Here Keybind")
 
     private val TIMERS_KEYS = mapOf("Boss Enter Timer" to "Clear Countdown", "Portal Text" to "Portal Text", "Portal Chime" to "Portal Chime")
 
