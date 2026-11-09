@@ -176,7 +176,7 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
         for (o in geo.outletCell.indices) if (water[geo.outletCell[o]] >= 0) wet = wet or (1 shl o)
         val src = head.sourceOn
         val rebuilt = WaterSim.observed(geo, head.slotIn, head.closed, water, src, wet, now(ms))
-        rebuilt.solvedAt = head.solvedAt
+        rebuilt.solvedAt = head.solvedAt; rebuilt.hold = head.hold; rebuilt.openSince = head.openSince
         head = rebuilt
         snaps.clear(); carries.clear(); snaps.addLast(head.copy()); carries.addLast(IntArray(0)); sends.clear(); used.clear(); carry.clear(); recent.clear(); pending.clear()
         flipAt.keys.removeIf { it > head.time }

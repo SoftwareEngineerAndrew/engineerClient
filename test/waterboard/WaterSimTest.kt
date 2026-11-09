@@ -4,7 +4,6 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
-import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -100,50 +99,77 @@ class WaterSimTest {
         }
     }
 
-    private fun odinTable(): JsonObject? {
-        val f = File("libs/odin/assets/odin/puzzles/water-solutions.json")
-        return if (f.exists()) JsonParser.parseString(f.readText()).asJsonObject else null
-    }
-
     /** Odin's tables (read from Odin's own file) on fresh boards: the same solve tick and outlet hits as the validated model. */
     @Test fun theOneFlowTablesPlayOutAsTheModelSays() {
-        val tab = odinTable()
+        val tab = OdinTable.load()
         assumeTrue(tab != null, "Odin's water-solutions.json is not in libs/odin")
         val layouts = json("layouts.json")
         val expected = json("table-expected.json")
-        val names = mapOf("gold_block" to 1, "quartz_block" to 0, "coal_block" to 2, "diamond_block" to 3, "emerald_block" to 4, "hardened_clay" to 5, "water" to 6)
         var cases = 0; var oneFlowSolved = 0
-        for (opt in listOf("false", "true")) for (v in 0..3) {
-            val rows = layouts.getAsJsonArray(v.toString()).map { it.asString }
-            for ((key, entry) in tab!!.getAsJsonObject(opt).getAsJsonObject(v.toString()).entrySet()) {
-                var closed = 0
-                for (ch in key) closed = closed or (1 shl (ch - '0'))
-                // Odin's times: seconds after the water lever; 0.0 for a block lever means before it
-                val plan = ArrayList<Pair<Int, Int>>()
-                for ((lever, times) in entry.asJsonObject.entrySet()) {
-                    val id = names[lever]!!
-                    for (t in times.asJsonArray.map { it.asDouble }) plan += (if (id == 6) Math.round(t * 20).toInt() else if (t == 0.0) -20 + plan.size else Math.round(t * 20).toInt()) to id
-                }
-                for (rot in listOf("NORTH", "EAST", "SOUTH", "WEST")) {
-                    val (geo, inn) = Geometry.parse(rows, rot)
-                    val sim = WaterSim.fresh(geo, inn, closed, time = -41)
-                    sim.arrivals = IntArrayList()
-                    val at = HashMap<Int, Int>()
-                    for ((t, id) in plan) at.merge(t, 1 shl id) { a, b -> a xor b }
-                    while (sim.time < -40) sim.step()
-                    while (sim.time < 600) sim.step(at[sim.time + 1] ?: 0)
-                    val exp = expected.getAsJsonArray("$opt/$v/$key/$rot")
-                    val solved = if (exp[0].isJsonNull) null else exp[0].asInt
-                    assertEquals(solved, if (sim.solvedAt == WaterSim.NONE) null else sim.solvedAt, "$opt/$v/$key/$rot solved")
-                    val arr = sim.arrivals!!
-                    val wrong = (0 until arr.size).count { closed and (1 shl (arr[it] and 7)) == 0 }
-                    assertEquals(exp[1].asInt, wrong, "$opt/$v/$key/$rot arrivals at outlets that started open")
-                    cases++
-                    if (opt == "false" && solved != null) oneFlowSolved++
-                }
+        for (c in OdinTable.cases(tab!!)) {
+            val rows = layouts.getAsJsonArray(c.v.toString()).map { it.asString }
+            val at = c.bits()
+            for (rot in listOf("NORTH", "EAST", "SOUTH", "WEST")) {
+                val (geo, inn) = Geometry.parse(rows, rot)
+                val sim = WaterSim.fresh(geo, inn, c.closed, time = -41)
+                sim.arrivals = IntArrayList()
+                while (sim.time < -40) sim.step()
+                while (sim.time < 600) sim.step(at[sim.time + 1] ?: 0)
+                val name = "${c.opt}/${c.v}/${c.key}/$rot"
+                val exp = expected.getAsJsonArray(name)
+                val solved = if (exp[0].isJsonNull) null else exp[0].asInt
+                assertEquals(solved, if (sim.solvedAt == WaterSim.NONE) null else sim.solvedAt, "$name solved")
+                val arr = sim.arrivals!!
+                val wrong = (0 until arr.size).count { c.closed and (1 shl (arr[it] and 7)) == 0 }
+                assertEquals(exp[1].asInt, wrong, "$name arrivals at outlets that started open")
+                cases++
+                if (c.opt == "false" && solved != null) oneFlowSolved++
             }
         }
         assertEquals(320, cases)
         assertEquals(160, oneFlowSolved, "the hand-made one-flow table solves every board in every rotation")
+    }
+
+    /**
+     * With the chest's hold, solved is the first time every gate is open and no water reaches an outlet (closing one again)
+     * for the hold: worked out here from the outlet arrivals alone, on Odin's table plans. Odin's plans keep the gates open
+     * well past [Planner.HOLD], so longer holds are tried too, for gates that do close again.
+     */
+    @Test fun aSolveCountsOnlyOnceEveryGateStaysOpen() {
+        val tab = OdinTable.load()
+        assumeTrue(tab != null, "Odin's water-solutions.json is not in libs/odin")
+        val layouts = json("layouts.json")
+        val end = 600
+        val cases = OdinTable.cases(tab!!)
+        assertEquals(80, cases.size)
+        val reopened = HashMap<Int, Int>()
+        for (hold in listOf(1, Planner.HOLD, 40, 120)) {
+            var closedAgain = 0
+            for (c in cases) {
+                val (geo, inn) = Geometry.parse(layouts.getAsJsonArray(c.v.toString()).map { it.asString }, "NORTH")
+                val sim = WaterSim.fresh(geo, inn, c.closed, time = -41)
+                sim.hold = hold
+                sim.arrivals = IntArrayList()
+                val at = c.bits()
+                while (sim.time < end) sim.step(at[sim.time + 1] ?: 0)
+                val arr = sim.arrivals!!
+                var closed = c.closed; var want: Int? = null; var firstOpen: Int? = null
+                var i = 0
+                while (i < arr.size) {
+                    val t = arr[i] shr 3
+                    while (i < arr.size && arr[i] shr 3 == t) { closed = closed xor (1 shl (arr[i] and 7)); i++ }
+                    if (closed != 0) continue
+                    if (firstOpen == null) firstOpen = t
+                    val next = if (i < arr.size) arr[i] shr 3 else Int.MAX_VALUE
+                    if (next > t + hold - 1 && t + hold - 1 <= end) { want = t; break }
+                }
+                if (firstOpen != null && firstOpen != want) closedAgain++
+                assertEquals(want, if (sim.solvedAt == WaterSim.NONE) null else sim.solvedAt, "${c.opt}/${c.v}/${c.key} solved, held $hold")
+            }
+            reopened[hold] = closedAgain
+        }
+        assertEquals(0, reopened[1], "with no hold the first all-open is the solve")
+        assertTrue(reopened[120]!! > 0, "some table plan closes a gate again within 120 ticks: $reopened")
+        println("table plans whose gates were all open and closed again within the hold: $reopened")
     }
 }

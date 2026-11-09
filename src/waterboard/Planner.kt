@@ -10,9 +10,9 @@ import kotlin.random.Random
 data class Flip(val tick: Int, val lever: Int)
 
 /**
- * A plan from a board state: the flips, in tick order, and what simulating them gives. [solvedAt]: the tick every gate is open
- * ([WaterSim.NONE] if never within the horizon); [window]: per flip, how many ticks early and late it can be and still solve
- * as well (within [Planner.SLACK] ticks): what the player has to hit.
+ * A plan from a board state: the flips, in tick order, and what simulating them gives. [solvedAt]: the tick every gate is open,
+ * to stay open [Planner.HOLD] ticks ([WaterSim.NONE] if never within the horizon); [window]: per flip, how many ticks early
+ * and late it can be and still solve as well (within [Planner.SLACK] ticks): what the player has to hit.
  */
 class Plan(val flips: List<Flip>, val solvedAt: Int, val cost: Double, val window: List<IntRange> = emptyList()) {
     val solved get() = solvedAt != WaterSim.NONE
@@ -25,8 +25,9 @@ class Plan(val flips: List<Flip>, val solvedAt: Int, val cost: Double, val windo
  * simulated to the end on [WaterSim]; a person has to be able to do it, so flips are spaced by the walk between levers.
  *
  * [seeds]: plans to start from (the last plan, still mostly right after a small deviation; a known plan for a fresh board).
+ * [hold]: ticks every gate has to stay open at once for it to count ([WaterSim.hold]).
  */
-class Planner(private val spacing: Spacing = Spacing()) {
+class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = HOLD) {
 
     /** Ticks a person needs between flipping lever a and lever b (walking within reach, clicking). */
     class Spacing(val minGap: Int = 6, val reach: Double = 3.0, val blocksPerTick: Double = 0.28) {
@@ -58,9 +59,9 @@ class Planner(private val spacing: Spacing = Spacing()) {
         val budgetNs = budgetMs * 1_000_000
         val seedsRnd = LongArray(threads) { rnd.nextLong() }
         // independent annealers from the same starts, each its own scratch board; the best wins
-        val runs = if (threads <= 1) listOf(anneal(Evaluator(base, t0, horizon, spacing, first), starts, budgetNs, Random(seedsRnd[0]), levers))
-            else (0 until threads).map { k -> pool.submit<Pair<List<Flip>, Double>> { anneal(Evaluator(base, t0, horizon, spacing, first), starts, budgetNs, Random(seedsRnd[k]), levers) } }.map { it.get() }
-        val eval = Evaluator(base, t0, horizon, spacing, first)
+        val runs = if (threads <= 1) listOf(anneal(Evaluator(base, t0, horizon, spacing, first, hold), starts, budgetNs, Random(seedsRnd[0]), levers))
+            else (0 until threads).map { k -> pool.submit<Pair<List<Flip>, Double>> { anneal(Evaluator(base, t0, horizon, spacing, first, hold), starts, budgetNs, Random(seedsRnd[k]), levers) } }.map { it.get() }
+        val eval = Evaluator(base, t0, horizon, spacing, first, hold)
         val flips = polish(eval, runs.minByOrNull { it.second }!!.first)
         val solved = eval.solvedAt(flips)
         return Plan(flips, solved, eval.cost(flips), if (solved != WaterSim.NONE) windows(eval, flips, solved) else emptyList())
@@ -126,7 +127,7 @@ class Planner(private val spacing: Spacing = Spacing()) {
     /** Scores [flips] from [base] as the planner would (tests, and checking an old plan on a new state). */
     fun score(base: WaterSim, flips: List<Flip>, first: IntArray? = null, horizon: Int = 700): Plan {
         val t0 = base.time + 1
-        val eval = Evaluator(base, t0, horizon, spacing, first)
+        val eval = Evaluator(base, t0, horizon, spacing, first, hold)
         val f = normalize(flips, t0)
         val solved = eval.solvedAt(f)
         return Plan(f, solved, eval.cost(f), if (solved != WaterSim.NONE) windows(eval, f, solved) else emptyList())
@@ -175,7 +176,7 @@ class Planner(private val spacing: Spacing = Spacing()) {
     }
 
     /** Simulates flip lists from one state; scratch reused. */
-    private class Evaluator(val base: WaterSim, val t0: Int, val horizon: Int, val spacing: Spacing, val first: IntArray?) {
+    private class Evaluator(val base: WaterSim, val t0: Int, val horizon: Int, val spacing: Spacing, val first: IntArray?, val hold: Int) {
         private val sim = base.copy()
         private var lastWrongs = 0
 
@@ -184,6 +185,8 @@ class Planner(private val spacing: Spacing = Spacing()) {
 
         private fun run(f: List<Flip>) {
             sim.setFrom(base)
+            // solved from here on: a solve before this state is history (a gate closed since, or the puzzle would be done)
+            sim.hold = hold; sim.solvedAt = WaterSim.NONE
             val wrong0 = base.wrongHits
             var i = 0
             val end = t0 + horizon
@@ -192,15 +195,15 @@ class Planner(private val spacing: Spacing = Spacing()) {
                 while (i < f.size && f[i].tick == sim.time + 1) { bits = bits xor (1 shl f[i].lever); i++ }
                 sim.step(bits)
                 if (sim.solvedAt != WaterSim.NONE) break
-                // nothing left to happen: stop early
-                if (i >= f.size && !sim.moving()) break
+                // nothing left to happen: stop early (every gate open then stays open)
+                if (i >= f.size && !sim.moving()) { if (sim.closed == 0) sim.solvedAt = sim.openSince; break }
             }
             lastWrongs = sim.wrongHits - wrong0
         }
 
         fun cost(f: List<Flip>): Double {
             run(f)
-            var c: Double = if (sim.solvedAt != WaterSim.NONE) (sim.solvedAt - t0).toDouble()
+            var c: Double = if (sim.solvedAt != WaterSim.NONE) max(0, sim.solvedAt - t0).toDouble()
                 else 10_000.0 + 1_000.0 * Integer.bitCount(sim.closed)
             c += FLIP_COST * f.size + 15.0 * lastWrongs
             // a person must be able to do it
@@ -220,6 +223,8 @@ class Planner(private val spacing: Spacing = Spacing()) {
         /** A flip may be off by this much and still count (ticks later solved). */
         const val SLACK = 10
         const val WINDOW_PROBE = 20
+        /** Every gate open at least this long (ticks: 500 ms, more when the server lags) for the chest. */
+        const val HOLD = 10
         /** What a flip costs, in ticks of solve time: each is a walk, a click, a chance to get it wrong. */
         const val FLIP_COST = 12.0
         val THREADS = maxOf(1, minOf(4, Runtime.getRuntime().availableProcessors() - 2))

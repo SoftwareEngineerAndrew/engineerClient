@@ -16,16 +16,17 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
-import com.odtheking.odin.utils.Color.Companion.withAlpha
+import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.ServerUtils
-import com.odtheking.odin.utils.render.drawFilledBox
+import com.odtheking.odin.utils.render.drawLine
 import com.odtheking.odin.utils.render.drawText
 import com.odtheking.odin.utils.render.drawTracer
 import com.odtheking.odin.utils.render.drawWireFrameBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.Puzzle
 import com.odtheking.odin.utils.skyblock.dungeon.PuzzleStatus
+import com.odtheking.odin.utils.toFixed
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
@@ -48,16 +49,15 @@ import kotlin.random.Random
  * The board is read from the room's blocks ([Geometry]); the server's block packets keep a simulation of it in step with
  * the server, tick for tick ([Tracker], on [WaterSim], Hypixel's 1.8 water); a planner ([Planner]) searches lever flips on
  * that simulation for the soonest all-gates-open, spaced so a person can do them, in the background, again whenever what
- * happened isn't what the plan said. Each lever shows when to flip it; the next one has a box and a line. Draws instead of
- * Odin's own Water Board solver (WaterSolverRenderMixin) while it has a plan.
+ * happened isn't what the plan said. A solve counts once every gate stays open [Planner.HOLD] ticks (the chest needs them
+ * open a while). Drawn as Odin's own Water Board solver draws (each lever's coming flips over it, "CLICK ME!" when due, its
+ * tracer to the next lever and on to the one after, with its "Water Tracer" and tracer colours), instead of it
+ * (WaterSolverRenderMixin) once this has a plan or a lever has been flipped.
  */
 object WaterBoardSolver {
-    private val dropdown = DropdownSetting("Dynamic Water Board", desc = "Settings for the dynamic Water Board solver. Added by engineerClient.")
+    private val dropdown = DropdownSetting("Dynamic Water Board", desc = "Settings for the dynamic Water Board solver. Its tracer and colours are the Water Board ones above. Added by engineerClient.")
     private val on = BooleanSetting("Dynamic Water Solver", true,
-        desc = "Works the lever timings out from the board as it is, and again whenever a flip goes differently (late, early, wrong, missed) or the server lags. Draws instead of Odin's Water Board solver. Added by engineerClient.").withDependency { dropdown.value }
-    private val tracer = BooleanSetting("Water Tracer", true, desc = "A line to the next lever.").withDependency { dropdown.value && on.value }
-    private val nextColor = ColorSetting("Next Lever Color", Colors.MINECRAFT_GREEN.withAlpha(.5f), true, desc = "The next lever to flip, and the line to it.").withDependency { dropdown.value && on.value }
-    private val laterColor = ColorSetting("Later Lever Color", Colors.MINECRAFT_YELLOW.withAlpha(.35f), true, desc = "Levers to flip after that.").withDependency { dropdown.value && on.value }
+        desc = "Works the lever timings out from the board as it is, and again whenever a flip goes differently (late, early, wrong, missed) or the server lags. Draws instead of Odin's Water Board solver, the same way. Added by engineerClient.").withDependency { dropdown.value }
     private val lead = NumberSetting("Reaction Time", 400, 150..1000, 50, desc = "How long you need from seeing a time to clicking: nothing is planned sooner than this.", unit = "ms").withDependency { dropdown.value && on.value }
     private val showSim = BooleanSetting("Show Simulated Water", false, desc = "Draws the water the solver thinks is on the board, and where the server disagreed lately. For checking it.").withDependency { dropdown.value && on.value }
 
@@ -95,7 +95,7 @@ object WaterBoardSolver {
     private val coordinator = Executors.newSingleThreadExecutor { r -> Thread(r, "ec-waterboard").apply { isDaemon = true } }
 
     fun install() {
-        for (s in listOf(dropdown, on, tracer, nextColor, laterColor, lead, showSim)) PuzzleSolvers.registerSetting(s)
+        for (s in listOf(dropdown, on, lead, showSim)) PuzzleSolvers.registerSetting(s)
         on<LevelEvent.Load> { EngineerClient.safely("water board reset") { reset() } }
         onReceive<ClientboundBlockUpdatePacket> { val f = frame ?: return@onReceive; packet(f, pos, blockState) }
         onReceive<ClientboundSectionBlocksUpdatePacket> { val f = frame ?: return@onReceive; runUpdates { p, s -> packet(f, p, s) } }
@@ -105,8 +105,15 @@ object WaterBoardSolver {
         EventBus.subscribe(this)
     }
 
-    /** Odin's Water Board solver stays quiet while this draws. */
-    @JvmStatic fun drawsInstead(): Boolean = active() && tracker != null && todo.isNotEmpty()
+    /**
+     * Odin's Water Board solver stays quiet while this draws: once it has a plan, and from the first flip on (Odin's table no
+     * longer fits the board then, and would show its leftover flips once this has none left).
+     */
+    @JvmStatic fun drawsInstead(): Boolean = active() && tracker.let { it != null && (todo.isNotEmpty() || it.arrivals.isNotEmpty()) }
+
+    /** Odin's own Water Board settings, so the tracer is drawn as its solver draws it (Odin's "Water Tracer" and colours). */
+    private fun odinBool(name: String, def: Boolean): Boolean = (PuzzleSolvers.settings[name] as? BooleanSetting)?.value ?: def
+    private fun odinColor(name: String, def: Color): Color = (PuzzleSolvers.settings[name] as? ColorSetting)?.value ?: def
 
     private fun active(): Boolean = on.value && PuzzleSolvers.enabled && DungeonUtils.inDungeons && Puzzle.WATER_BOARD.status != PuzzleStatus.Completed
 
@@ -233,8 +240,9 @@ object WaterBoardSolver {
         if (gone.isNotEmpty()) { todo.removeAll(gone.toSet()); dirty = true }
         // and keep at it while nothing solves
         if (solveAt == WaterSim.NONE && (todo.isNotEmpty() || tr.head.sourceOn || arr.isNotEmpty())) dirty = true
-        // nothing to solve until the puzzle has closed its gates
-        if (tr.head.closed == 0 && solveAt == WaterSim.NONE) { todo.clear(); return }
+        // every gate open with nothing moving: solved, or the puzzle hasn't closed its gates yet. Open with water still moving,
+        // it plans on: a gate about to close again is put right (and one staying open plans nothing)
+        if (tr.head.closed == 0 && !tr.head.moving()) { todo.clear(); return }
         if (job == null && (dirty || now - lastPlanMs > 3000)) {
             val leadTicks = maxOf(Tracker.AHEAD, Math.ceil(lead.value.toDouble() / 50.0 + latencyTicks()).toInt())
             // from the server's board a reaction time from now, with the plan's flips before that as good as done
@@ -329,32 +337,26 @@ object WaterBoardSolver {
         if (!active() || DungeonUtils.currentRoomName != ROOM) return
         val f = frame ?: return
         val tr = tracker ?: return
+        // the tick a click now would come back on
         val now = tr.now(nowMs()) + latencyTicks()
         if (showSim.value) drawSim(event, f, tr)
         if (todo.isEmpty()) return
-        val next = todo.first()
-        // per lever: its coming flips' times
-        val byLever = todo.withIndex().groupBy { it.value.lever }
-        for ((lever, flips) in byLever) {
-            val p = f.toWorld(Geometry.LEVER_POS[lever])
-            val box = AABB(p.x + 0.0, p.y + 0.0, p.z + 0.0, p.x + 1.0, p.y + 1.0, p.z + 1.0)
-            val isNext = lever == next.lever
-            event.drawFilledBox(box.inflate(0.05), if (isNext) nextColor.value else laterColor.value, false)
-            val text = flips.joinToString("  ") { (i, fl) ->
-                val secs = (fl.tick - now) / 20.0
-                val w = windowOf[fl]
-                val inWindow = w != null && now >= fl.tick + w.first && now <= fl.tick + w.last
-                when {
-                    i == 0 && inWindow -> "§a§lNOW"
-                    i == 0 -> "§a${"%.1f".format(maxOf(0.0, secs))}s"
-                    else -> "§e${"%.1f".format(maxOf(0.0, secs))}s"
-                }
-            }
-            event.drawText(text, Vec3(p.x + 0.5, p.y + 1.4, p.z + 0.5), 1.1f, false)
+        fun center(lever: Int): Vec3 { val p = f.toWorld(Geometry.LEVER_POS[lever]); return Vec3(p.x + 0.5, p.y + 0.5, p.z + 0.5) }
+        // as Odin's solver: a tracer to the next lever, and a line on from it to the one after when that is another lever
+        if (odinBool("Water Tracer", true)) {
+            val first = todo[0].lever
+            event.drawTracer(center(first), odinColor("Tracer Color First", Colors.MINECRAFT_GREEN), false)
+            if (todo.size > 1 && todo[1].lever != first)
+                event.drawLine(listOf(center(first), center(todo[1].lever)), odinColor("Tracer Color Second", Colors.MINECRAFT_GOLD), false)
         }
-        if (tracer.value) {
-            val p = f.toWorld(Geometry.LEVER_POS[next.lever])
-            event.drawTracer(Vec3(p.x + 0.5, p.y + 0.5, p.z + 0.5), nextColor.value, false)
+        // and over each lever its coming flips, the soonest lowest: seconds to go, "CLICK ME!" when due
+        for ((lever, flips) in todo.groupBy { it.lever }) {
+            val p = f.toWorld(Geometry.LEVER_POS[lever])
+            flips.forEachIndexed { i, fl ->
+                val ticks = fl.tick - now
+                val text = if (ticks <= 0) "§a§lCLICK ME!" else "§e${(ticks / 20.0).toFixed()}s"
+                event.drawText(text, Vec3(p.x + 0.5, p.y + 1.5 + 0.5 * i, p.z + 0.5), 1f, true)
+            }
         }
         if (solveAt != WaterSim.NONE) {
             val c = f.toWorld(intArrayOf(15, 80, 25))

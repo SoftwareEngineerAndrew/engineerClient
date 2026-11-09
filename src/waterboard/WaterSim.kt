@@ -34,9 +34,16 @@ class WaterSim private constructor(
     var time: Int = 0; private set
     /** The water lever's source is in. */
     var sourceOn: Boolean = false; private set
-    /** Gates closed, a bit per [Geometry.OUTLET_X] colour. 0: solved. */
+    /** Gates closed, a bit per [Geometry.OUTLET_X] colour. 0: every gate open. */
     var closed: Int = 0
-    /** The first tick every gate was open at once, or [NONE]. */
+    /**
+     * Ticks every gate has to stay open at once to count as solved (1: the moment they are). The chest needs a while:
+     * water reaching another outlet a tick later closes a gate again.
+     */
+    var hold: Int = 1
+    /** The tick the current run of every-gate-open began, or [NONE] while one is closed. */
+    var openSince: Int = NONE; internal set
+    /** The first tick of the first run of every gate open that lasted [hold] ticks, or [NONE]. */
     var solvedAt: Int = NONE
     /** Outlets with water in them now. */
     var wet: Int = 0; private set
@@ -56,6 +63,7 @@ class WaterSim private constructor(
     fun copy(): WaterSim {
         val s = WaterSim(geo, cells.copyOf(), due.copyOf(), Array(8) { queue[it].copyOf() }, queueLen.copyOf(), slotIn.copyOf(), landAt.copyOf())
         s.time = time; s.sourceOn = sourceOn; s.closed = closed; s.solvedAt = solvedAt; s.wet = wet; s.wrongHits = wrongHits
+        s.hold = hold; s.openSince = openSince
         s.arrivals = arrivals?.copy()
         return s
     }
@@ -69,6 +77,7 @@ class WaterSim private constructor(
         System.arraycopy(o.slotIn, 0, slotIn, 0, slotIn.size)
         System.arraycopy(o.landAt, 0, landAt, 0, landAt.size)
         time = o.time; sourceOn = o.sourceOn; closed = o.closed; solvedAt = o.solvedAt; wet = o.wet; wrongHits = o.wrongHits
+        hold = o.hold; openSince = o.openSince
         arrivals = o.arrivals?.copy()
     }
 
@@ -86,6 +95,12 @@ class WaterSim private constructor(
         phase = 1
         if (flips and BLOCK_LEVERS != 0) for (k in geo.slotCell.indices) if (flips and (1 shl geo.slotLever[k]) != 0) toggle(k)
         for (k in landAt.indices) if (landAt[k] == time) { landAt[k] = NONE; set(geo.slotCell[k], SOLID, true) }
+        // solved once every gate has been open [hold] ticks running
+        if (closed != 0) openSince = NONE
+        else {
+            if (openSince == NONE) openSince = time
+            if (solvedAt == NONE && time - openSince + 1 >= hold) solvedAt = openSince
+        }
     }
 
     /** Ticks with no flips until [t] (or until solved, when [stopWhenSolved]). */
@@ -128,7 +143,6 @@ class WaterSim private constructor(
             closed = closed xor (1 shl o)
             arrivals?.add((time shl 3) or o)
         }
-        if (closed == 0 && solvedAt == NONE) solvedAt = time
     }
 
     private fun write(c: Int, v: Int) {

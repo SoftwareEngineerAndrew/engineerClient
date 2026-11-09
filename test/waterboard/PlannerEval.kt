@@ -61,6 +61,7 @@ class PlannerEval {
         val planner = Planner()
         val levers = start.geo.slotLever.distinct().sorted().toIntArray() + WaterSim.WATER_LEVER
         val s = start.copy()
+        s.hold = Planner.HOLD       // solved as the planner means it: every gate open long enough for the chest
         var todo = first.flips.toMutableList()
         var done = 0
         while (s.time < limit && s.solvedAt == WaterSim.NONE) {
