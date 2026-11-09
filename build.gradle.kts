@@ -63,9 +63,10 @@ tasks {
     processResources {
         // The version is expanded into fabric.mod.json: without it as an input, a version bump alone
         // leaves the processed resources "up to date" and the jar keeps the old version.
-        inputs.property("version", version)
+        val v = version.toString()
+        inputs.property("version", v)
         filesMatching("fabric.mod.json") {
-            expand(mapOf("version" to version))
+            expand(mapOf("version" to v))
         }
     }
 

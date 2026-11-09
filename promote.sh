@@ -30,7 +30,7 @@ MSG="${1:-}"
 
 TEAM="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 PUB="${EC_PUBLIC:-$HOME/Projects/engineerclient-public}"
-GRADLE="$HOME/.cache/ec-build/gradle-9.6.1/bin/gradle"
+GRADLE="$HOME/.cache/ec-build/gradle-9.8.0/bin/gradle"
 # Every Minecraft version with a release (tag release-<mc>, jar ADM-<mc>.jar), newest first.
 VERSIONS="26.3 26.2 26.1.2"
 # ADM's own version (the jar's mod version and the release notes); this dev build keeps its date+commit versions.
@@ -179,7 +179,7 @@ rsync -a --delete --exclude .git --exclude build --exclude .gradle --exclude .ko
   cd "$CHECK"
   export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
   # The default 512 MB heap runs out on EngineerLook's tables.
-  if ! "$GRADLE" -q -Dorg.gradle.jvmargs=-Xmx3g -Pkotlin.daemon.jvmargs=-Xmx3g compileKotlin compileJava > build.log 2>&1; then
+  if ! "$GRADLE" -q --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -Pkotlin.compiler.execution.strategy=in-process compileKotlin compileJava > build.log 2>&1; then
     grep -v '^w:' build.log >&2; echo "promote: the public tree does not compile" >&2; exit 1
   fi
 )
