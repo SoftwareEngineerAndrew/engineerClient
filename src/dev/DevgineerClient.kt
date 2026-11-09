@@ -27,7 +27,7 @@ object DevgineerClient : ClientModInitializer {
         safely("adopt settings") { adoptSettings("Dynamic Term Roles", "i4 Aim") }
         safely("posmsg migration") { PosMsgSetup.migrate(mc.gameDirectory.toPath().resolve("config").resolve("odin")) }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
-        val modules = arrayOf(DungeonRecorder, com.devgineerclient.betterrecorder.BetterRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PositionalMessages, com.devgineerclient.practice.I4Aims, com.devgineerclient.rotation.P3Rotation, com.devgineerclient.misc.FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.HubCapture)
+        val modules = arrayOf(DungeonRecorder, com.devgineerclient.betterrecorder.BetterRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PositionalMessages, com.devgineerclient.practice.I4Aims, com.devgineerclient.rotation.P3Rotation, com.devgineerclient.misc.FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.HubCapture, com.devgineerclient.misc.SoundCollector)
         ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), *modules)
         // A module made with toggled = true would start on but off Odin's event bus.
         safely("subscribe enabled") { com.engineerclient.EngineerClient.subscribeEnabled(modules.asList()) }
@@ -42,6 +42,7 @@ object DevgineerClient : ClientModInitializer {
         safely("role vignette") { com.devgineerclient.rotation.RoleVignette.register() }
         safely("rotation commands") { com.devgineerclient.rotation.RotationCommands.install() }
         safely("edt") { com.devgineerclient.misc.Edt.install() }
+        safely("sound collector") { com.devgineerclient.misc.SoundCollector.install() }
         safely("posmsg") { PosMsgSetup.install() }
         safely("pace targets") { PaceTargets.install() }
         safely("witherborn") { Witherborn.register() }

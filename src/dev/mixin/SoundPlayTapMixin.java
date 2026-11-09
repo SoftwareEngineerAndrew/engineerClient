@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Dungeon Recorder: every sound the engine is asked to play, with how it went, and every stop.
+ * Dungeon Recorder (and Sound Collector): every sound the engine is asked to play, with how it went, and every stop.
  *
  * play() is the one funnel for the server's sounds, the client's own and every mod's (SoundManager
  * and the delayed queue both end here). Its RETURN sees each outcome, including the early
@@ -38,6 +38,11 @@ public abstract class SoundPlayTapMixin {
             EffectsCapture.played(instance, cir.getReturnValue());
         } catch (Throwable ignored) {
             // Never let the recorder break the game.
+        }
+        try {
+            com.devgineerclient.misc.SoundCollector.played(instance, cir.getReturnValue());
+        } catch (Throwable ignored) {
+            // Never let the collector break the game.
         }
     }
 
