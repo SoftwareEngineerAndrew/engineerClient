@@ -15,7 +15,8 @@ import net.minecraft.network.chat.HoverEvent
 
 /**
  * Every sound the game plays, in chat (the server's, the client's own and every mod's: SoundPlayTapMixin on SoundEngine.play).
- * Each sound gets a number, counting up from the first one heard this launch; /sound <number> stops (or brings back) its lines.
+ * Each sound gets a number, counting up from the first one heard this launch; /sound <number> stops (or brings back) its lines;
+ * /sound <number> a hides it and adds it to [muted] (which nothing uses yet).
  */
 object SoundCollector : Module(
     name = "Sound Collector",
@@ -26,6 +27,8 @@ object SoundCollector : Module(
     private val ids = HashMap<String, Int>()
     private val names = ArrayList<String>()
     private val hidden = HashSet<Int>()
+    /** /sound <number> a: hidden from chat and kept here by name. Nothing reads it yet. */
+    val muted = LinkedHashSet<String>()
 
     /** SoundPlayTapMixin, as each play returns: only sounds that really started (not muted, silent or unknown ones). */
     @JvmStatic
@@ -50,7 +53,13 @@ object SoundCollector : Module(
                     else -> { hidden += id; DevgineerClient.msg("§7Hiding [$id] $name. §8(/sound $id to show it again)") }
                 }
                 1
-            }))
+            }.then(literal("a").executes { c ->
+                val id = IntegerArgumentType.getInteger(c, "id")
+                val name = names.getOrNull(id - 1)
+                if (name == null) DevgineerClient.msg("§cNo sound $id yet.")
+                else { hidden += id; muted += name; DevgineerClient.msg("§7Hiding [$id] $name and added it to the mute list.") }
+                1
+            })))
         }
     }
 }
