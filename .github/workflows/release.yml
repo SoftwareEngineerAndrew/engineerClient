@@ -71,7 +71,7 @@ jobs:
             --title "EngineerClient for Minecraft $MC" \
             --notes "$notes" $latest
 
-  # The headless tests, alongside the release rather than before it: a failure shows on the commit.
+  # The few headless tests (test/), alongside the release rather than before it: a failure shows on the commit.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -89,17 +89,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && mkdir -p libs && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
-      # Its own compiler state, as the release job's (above), so it doesn't compile everything cold first (a minute); the
-      # first run starts from the release job's.
-      - uses: actions/cache@v4
-        with:
-          path: |
-            .gradle
-            build/kotlin
-            build/classes
-            build/tmp
-          key: ec-test-compile-${{ github.ref_name }}-${{ github.sha }}
-          restore-keys: |
-            ec-test-compile-${{ github.ref_name }}-
-            ec-compile-${{ github.ref_name }}-
       - run: gradle test --console=plain -Dorg.gradle.jvmargs=-Xmx6G -Pkotlin.daemon.jvmargs=-Xmx6G

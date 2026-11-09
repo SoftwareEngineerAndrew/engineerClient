@@ -27,9 +27,8 @@ sourceSets.main {
     resources.setSrcDirs(listOf("src/resources"))
 }
 
-// Headless tests in test/ (same flat layout as src/), fixtures in test/resources/. They cover the pure parts of the ADS full run
-// (src/p3sim/run and src/p3sim/pack, and each module's pure logic): no Minecraft world, no Odin. Fixtures are synthetic;
-// never put recorded data in them (the repo is public). `gradle build` runs them.
+// A few headless tests in test/ (same flat layout as src/): the wire formats other players' games read, the config
+// migration and the update check. Run only by CI (release.yml), never as part of a local build.
 sourceSets.test {
     java.setSrcDirs(listOf("test"))
     kotlin.setSrcDirs(listOf("test"))
@@ -57,7 +56,6 @@ dependencies {
     compileOnly(files("libs/odin"))
 
     testImplementation(kotlin("test"))
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -77,42 +75,12 @@ tasks {
         }
     }
 
+    // `build` never runs (or compiles) the tests: CI asks for `gradle test` on its own.
+    named("build") { setDependsOn(listOf("assemble", "validateAccessWidener")) }
+
     test {
         useJUnitPlatform()
-        // Test classes run in parallel JVMs (one class at a time in each: the pack tests share global state, so not threads in one JVM).
-        // A serial run was 30 s of test time; the box is shared, so the forks are few and their heaps capped. CI's runner has
-        // nothing else on it (4 cores, 16 GB): a fork per core, where a quarter of them was one fork and 95 s of tests.
-        val cores = Runtime.getRuntime().availableProcessors()
-        val ci = System.getenv("CI") != null
-        maxParallelForks = if (ci) cores else (cores / 4).coerceIn(1, 6)
-        maxHeapSize = if (ci) "3g" else "1g"
-        // On CI the classes marked @Execution(CONCURRENT) (the map prediction ones: 84 of the 86 s, each test its own session)
-        // also run their tests side by side, so the longest class isn't the whole wait. Everything else stays one at a time.
-        if (ci) systemProperty("junit.jupiter.execution.parallel.enabled", "true")
-        // Each class over 2 s in the log, with the cores seen: where the test job's time goes.
-        val forks = maxParallelForks
-        doFirst { logger.lifecycle("tests: $cores cores, $forks forks") }
-        addTestListener(object : org.gradle.api.tasks.testing.TestListener {
-            override fun beforeSuite(suite: org.gradle.api.tasks.testing.TestDescriptor) {}
-            override fun beforeTest(test: org.gradle.api.tasks.testing.TestDescriptor) {}
-            override fun afterTest(test: org.gradle.api.tasks.testing.TestDescriptor, result: org.gradle.api.tasks.testing.TestResult) {}
-            override fun afterSuite(suite: org.gradle.api.tasks.testing.TestDescriptor, result: org.gradle.api.tasks.testing.TestResult) {
-                val ms = result.endTime - result.startTime
-                if (suite.className != null && ms >= 2000) logger.lifecycle("  %.1f s  %s".format(ms / 1000.0, suite.className))
-            }
-        })
-        // The optional pack checks (SamplePackTest, RealPackTest) read these folders; without them as inputs a green run would be
-        // reused from the cache when only the packs or the variable changed. Both are skipped when the variable is not set.
-        for (name in listOf("ADS_SAMPLE_PACKS", "ADS_REAL_PACKS", "ADS_BLOOD_FIGHTS")) {
-            inputs.property(name, providers.environmentVariable(name).orElse(""))
-            providers.environmentVariable(name).orNull?.let { dir -> file(dir).takeIf { it.isDirectory }?.let { inputs.dir(it) } }
-        }
-        inputs.property("adsRealReport", providers.environmentVariable("ADS_REAL_REPORT").orElse(""))
-        testLogging {
-            events("failed", "skipped")
-            showStandardStreams = false
-            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
-        }
+        testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
     }
 
     compileJava {

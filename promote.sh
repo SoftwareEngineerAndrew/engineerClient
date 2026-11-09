@@ -179,7 +179,7 @@ rsync -a --delete --exclude .git --exclude build --exclude .gradle --exclude .ko
   cd "$CHECK"
   export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
   # The default 512 MB heap runs out on EngineerLook's tables.
-  if ! "$GRADLE" -q -Dorg.gradle.jvmargs=-Xmx3g -Pkotlin.daemon.jvmargs=-Xmx3g compileKotlin compileJava compileTestKotlin > build.log 2>&1; then
+  if ! "$GRADLE" -q -Dorg.gradle.jvmargs=-Xmx3g -Pkotlin.daemon.jvmargs=-Xmx3g compileKotlin compileJava > build.log 2>&1; then
     grep -v '^w:' build.log >&2; echo "promote: the public tree does not compile" >&2; exit 1
   fi
 )

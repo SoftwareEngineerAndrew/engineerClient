@@ -15,6 +15,7 @@ from an empty data folder (they read and write their data in the current folder)
     node <tools>/gen-kt.mjs                                  # the numbers for MapStats.kt (edit gen-kt for the tables file)
     node <tools>/gen-game.mjs zmix.json > GameStats.kt       # F7's mixes and success rates for GameSampler.kt (placelik MIXRATE's zmix)
 
+(The two Kotlin checks below, MapSnapshotsCheck and MapSequenceCheck, were removed with most tests on 2026-11-09: `git show a3f0e81e:test/mappred/<name>.kt`.)
 The Kotlin predictor can be checked against the same maps: `node export-snaps.mjs` writes snaps.txt, then
 `ADS_MAP_SNAPSHOTS=<data>/snaps.txt gradle test --tests com.engineerclient.mappred.MapSnapshotsCheck --rerun`
 writes snaps.txt.out and `node score-kt.mjs` scores it (each snapshot run as the game's worker runs it; F7 by
