@@ -27,7 +27,7 @@ object DevgineerClient : ClientModInitializer {
         safely("adopt settings") { adoptSettings("Dynamic Term Roles", "i4 Aim") }
         safely("posmsg migration") { PosMsgSetup.migrate(mc.gameDirectory.toPath().resolve("config").resolve("odin")) }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
-        val modules = arrayOf(DungeonRecorder, com.devgineerclient.betterrecorder.BetterRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PositionalMessages, com.devgineerclient.practice.I4Aims, com.devgineerclient.rotation.P3Rotation, com.devgineerclient.misc.FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.HubCapture, com.devgineerclient.misc.SoundCollector)
+        val modules = arrayOf(DungeonRecorder, com.devgineerclient.betterrecorder.BetterRecorder, BossRecorder, MaxorCrystals, DungeonSplits, PositionalMessages, com.devgineerclient.practice.I4Aims, com.devgineerclient.rotation.P3Rotation, com.devgineerclient.misc.FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.HubCapture, com.devgineerclient.misc.SoundCollector, com.devgineerclient.perf.PerfMonitor)
         ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), *modules)
         // A module made with toggled = true would start on but off Odin's event bus.
         safely("subscribe enabled") { com.engineerclient.EngineerClient.subscribeEnabled(modules.asList()) }
@@ -35,6 +35,7 @@ object DevgineerClient : ClientModInitializer {
         safely("term progress settings") { adoptTermProgress() }
         // Fast Launch pieces: after registration, so they can read its (loaded) settings.
         safely("fast launch default") { com.devgineerclient.misc.FastLaunch.enableByDefault() }
+        safely("perf monitor default") { com.devgineerclient.perf.PerfMonitor.enableByDefault() }
         safely("early join") { com.devgineerclient.misc.EarlyJoin.install() }
         safely("f7 control") { com.devgineerclient.misc.F7Control.install() }
         safely("fast exit") { com.devgineerclient.misc.FastExit.install() }
