@@ -65,6 +65,7 @@ object CoffeeClient : ClientModInitializer {
         safely("term info look") { TermInfoHud.adoptOdinLook() }
         safely("witherborn") { com.coffeeclient.misc.Witherborn.register() }
         safely("cursor reset") { com.coffeeclient.misc.CursorReset.register() }
+        safely("no pack") { com.coffeeclient.misc.NoPack.register() }
 
         logger.info("[cc] initialized")
     }
