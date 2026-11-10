@@ -21,7 +21,7 @@ import java.util.Locale
  *  - Timers' Section Time ([sectionTime]): when a section is done, how long it took, in purple, for a few seconds
  *    (server ticks). S1 runs from Goldor's first line, each next one from the last one's end.
  *  - Recore: told when S3 is done by this count ([Recore.s3Done]) and when the sim starts ([Recore.simStart]).
- *  - Coffee Client's Hide Completion Titles ([isCompletionTitle]) and Role Times ([sectionNumber], [deviceDone]).
+ *  - Term Info's Completion Titles ([isCompletionTitle]) and Role Times ([sectionNumber], [deviceDone]).
  *
  * Terminals run from Goldor's first line (or the first task message) to "The Core entrance is
  * opening!". Chat and titles are read straight off the network.
@@ -290,7 +290,7 @@ object TermInfo {
     /**
      * Whether a title or subtitle is a terminal one: "X activated a terminal! (3/7)" and the like while
      * terminals run (or in the P3 sim), the gate destroyed and core entrance opening ones whenever. For
-     * Coffee Client's Hide Completion Titles.
+     * Term Info's Completion Titles.
      */
     fun isCompletionTitle(raw: String): Boolean {
         val text = raw.replace(CONTROL_CODES, "")

@@ -41,7 +41,7 @@ object I4Complete {
     private fun reset() { tagWasActive = null; shown = false }
 
     /** You stand on the plate: your box over its block, feet on it. */
-    private fun onPlate(): Boolean {
+    internal fun onPlate(): Boolean {
         val b = mc.player?.boundingBox ?: return false
         return b.maxX > PLATE.x && b.minX < PLATE.x + 1 && b.maxZ > PLATE.z && b.minZ < PLATE.z + 1 && b.minY >= PLATE.y - 0.01 && b.minY < PLATE.y + 0.25
     }

@@ -71,8 +71,6 @@ object RandomStuff : Module(
         return stack.item == Items.STAINED_GLASS_PANE.black() && stack.hoverName.string.isBlank()
     }
 
-    private val hideCompletionTitles by BooleanSetting("Hide Completion Titles", true, desc = "Hides the \"X activated a terminal! (3/7)\" titles during terminals, and the gate destroyed and core entrance opening ones.")
-
     /** Off: the sidebar is the game's own, where the game puts it, whatever the Scoreboard HUD says. */
     private val forceCursorReset by BooleanSetting("Force Cursor Reset", true, desc = "Opening a menu always puts the cursor in the middle of the screen. On Linux (Xwayland) the game sometimes leaves it where it was; this moves it again.")
 
@@ -146,14 +144,6 @@ object RandomStuff : Module(
     init {
         // Block Filler Pane Clicks: Odin's slot click event, cancelled before the click reaches the server.
         on<GuiEvent.SlotClick> { if (isFillerClick(screen, slotIndex)) cancel() }
-
-        // Hide Completion Titles: which titles are the terminal ones is Term Info's to say.
-        onReceive<net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket> {
-            if (hideCompletionTitles && com.engineerclient.practice.TermInfo.isCompletionTitle(text.string)) it.cancel()
-        }
-        onReceive<net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket> {
-            if (hideCompletionTitles && com.engineerclient.practice.TermInfo.isCompletionTitle(text.string)) it.cancel()
-        }
 
         // Completion ding (see CompletionDing): both packets on the network thread, in arrival order.
         onReceive<ClientboundSoundPacket> {
