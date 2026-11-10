@@ -26,8 +26,8 @@ object TermInfoHud : Module(
 ) {
     private var simple by BooleanSetting("Simple Mode", false, desc = "Only the total progress of the section, e.g. 3/7 (green once the gate is down). Off: terms, levers, device and gate on their own lines.")
 
-    private val completionTitles by SelectorSetting("Completion Titles", Titles.HIDE_ALL, desc = "What to do with the server's P3 titles (\"X activated a terminal! (3/7)\", levers, devices, the gate). Hide Others': only those naming another player. Final Only: only the one that finishes the section; the gate's are hidden too.")
-    private val hideOnI4Ss by BooleanSetting("Hide Titles On i4/SS", false, desc = "While you stand on the i4 plate or at Simon Says, these titles are hidden whatever Completion Titles says.")
+    private val completionTitles by SelectorSetting("Completion Titles", Titles.SHOW_ALL, desc = "What to do with the server's P3 titles (\"X activated a terminal! (3/7)\", levers, devices, the gate). Hide Others': only those naming another player. Final Only: only the one that finishes the section; the gate's are hidden too.")
+    private val hideOnI4Ss by BooleanSetting("Hide Titles On i4/SS", true, desc = "While you stand on the i4 plate or at Simon Says, these titles are hidden whatever Completion Titles says.")
 
     private enum class Titles(private val label: String) {
         SHOW_ALL("Show All"), HIDE_ALL("Hide All"), HIDE_OTHERS("Hide Others'"), FINAL_ONLY("Final Only");
