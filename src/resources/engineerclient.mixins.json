@@ -56,7 +56,9 @@
     "AdsEngineLeaveScreenMixin",
     "ServerTeleportAccessor",
     "PosePovRenderMixin",
-    "PosePovUnderGuiMixin"
+    "PosePovUnderGuiMixin",
+    "FirstPersonDropAnimationMixin",
+    "DropAnimationAttackMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -60,6 +60,9 @@ object RandomStuff : Module(
     private val partyFinderStats by BooleanSetting("Party Finder Classes", true, desc = "In the Party Finder, which classes each party is missing (yours in bold).")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
 
+    /** Read by [DropAnimation]: keep the held item raised after a rejected drop, in dungeons. */
+    val noDropAnimation by BooleanSetting("No Drop Animation", false, desc = "In dungeons, after you press drop on the held item (the server rejects it), the item stays drawn raised instead of vanishing and rising again.")
+
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
 
