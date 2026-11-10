@@ -82,7 +82,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.clearbreakdown.ClearBreakdown,
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning,
             com.engineerclient.practice.TerminalHitboxes,
-            com.engineerclient.misc.BossAlerts, com.engineerclient.misc.ItemHighlight,
+            com.engineerclient.misc.ItemHighlight,
         )
     }
 
@@ -103,6 +103,7 @@ object EngineerClient : ClientModInitializer {
         // exist yet.
         safely("ss solver") { com.engineerclient.practice.OdinSimonSays.install() }
         safely("masks used") { com.engineerclient.misc.OdinMasksUsed.install() }
+        safely("chat melody") { com.engineerclient.misc.OdinMelodyChat.install() }
         safely("tick timers") { com.engineerclient.misc.OdinTickTimers.install() }
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("splits look") { OdinSplitsLook.install() }

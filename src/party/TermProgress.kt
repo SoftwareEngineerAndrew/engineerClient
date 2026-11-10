@@ -1,6 +1,7 @@
 package com.engineerclient.party
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.misc.OdinMelodyChat
 import com.engineerclient.pov.PoseShare
 import com.engineerclient.p3sim.Station
 import com.engineerclient.practice.OdinSimonSays
@@ -52,6 +53,7 @@ object TermProgress : Module(
 ) {
     private val labels by BooleanSetting("Terminal Labels", true, desc = "Over each terminal a teammate has open: who, and the countdown to when it should be done. Seen through walls.")
     private val labelSize by NumberSetting("Label Size", 1.5f, 0.5..4.0, 0.1f, desc = "How big the terminal labels are.")
+    private val chatMelody by BooleanSetting("Chat Melody", true, desc = "A teammate who isn't sending terminal frames but whose party chat shows melody progress (\"Melody 67%\") gets a row in Terminal Progress, with a bar and no countdown.")
     private val predictions by BooleanSetting("Countdown", true, desc = "A countdown to when each terminal and Simon Says should be done, from that player's own history in ADR runs (config/engineerclient/party-skill.json), or everyone's. It skips down when they're quicker than that and holds when they're slower.")
 
     private val termHud by HUD("Terminal Progress", "Each teammate on a terminal: their name, how far it has got and the countdown.", true, 10, 200, 1f) { example ->
@@ -62,6 +64,8 @@ object TermProgress : Module(
     }
 
     private const val STALE_NS = 2_500_000_000L
+    /** A melody percent heard in the party chat is shown this long after the last message. */
+    private const val CHAT_MELODY_NS = 10_000_000_000L
     private const val RESEND_MS = 1000L
     private const val REACH = 6.0
     private const val SS_RANGE = 10.0
@@ -341,8 +345,13 @@ object TermProgress : Module(
 
     private fun drawTerms(gfx: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
         if (example) return rows(gfx, listOf(Triple("§bSoloF7", 0.6, "§e0.9"), Triple("§bTheBadOne", 0.3, "§63.2")))
-        if (terms.isEmpty()) return 0 to 0
         val now = System.nanoTime()
+        // Melody from the party chat, for teammates with no frame of their own; no countdown, which rows() leaves out for null.
+        val fromChat = if (!chatMelody) emptyList() else OdinMelodyChat.heard().entries
+            .filter { (name, h) -> now - h.at <= CHAT_MELODY_NS && terms.keys.none { it.equals(name, ignoreCase = true) } }
+            .sortedBy { it.key }
+            .map { (name, h) -> Triple("§b${shown(name)}", h.percent / 100.0, null as String?) }
+        if (terms.isEmpty() && fromChat.isEmpty()) return 0 to 0
         return rows(gfx, terms.entries.sortedBy { it.value.terminal }.map { (name, t) ->
             val c = if (predictions) termCountdown(name, t, now) else null
             val fraction = when {
@@ -351,7 +360,7 @@ object TermProgress : Module(
                 else -> (now - t.openedAt) / 1e6 / (PartySkill.solveMs(name, t.type) ?: 5000.0)
             }
             Triple("§b${shown(name)}", fraction, c?.let { clock(it) })
-        })
+        } + fromChat)
     }
 
     private fun drawSs(gfx: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {

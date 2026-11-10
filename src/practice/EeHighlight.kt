@@ -6,12 +6,16 @@ import com.engineerclient.poi.PoiWire
 import com.engineerclient.poi.PointsOfInterest
 import com.engineerclient.pov.PoseShare
 import com.engineerclient.rotation.P3Sections
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Color
+import com.odtheking.odin.utils.Colors
+import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.render.drawText
 import com.odtheking.odin.utils.render.drawWireFrameBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -34,6 +38,9 @@ import net.minecraft.world.phys.Vec3
  * on each change and four times a second, this on or not, as Term Progress does), at most 0.7 s old. Out of view with no
  * fresh frame is no highlight, never "where they were last"; party messages ("at ee3!") don't count.
  *
+ * Leap Count: while you stand on one of those spots in the boss, shows how many living teammates in view are on it with you,
+ * out of how many you expect there (set per spot), red until all but one have arrived, then blue.
+ *
  * Each P3's end logs a line: frames out, how many teammates TURN reached, what came in, and who was highlighted where, by
  * which sources; and each time a teammate's sources disagreed about them being on a spot.
  */
@@ -50,6 +57,16 @@ object EeHighlight : Module(
     private val ee4 by BooleanSetting("EE4", true, desc = "In S3: whoever's on the walkway up to the core door.")
     private val all by BooleanSetting("Highlight All", true, desc = "Every teammate who's on the early enter, each where they'll be in the leap menu, not just the first one there.")
     private val hideThere by BooleanSetting("Hide Once You're There", true, desc = "Off for the rest of the section once you're through to the next one yourself.")
+    private val leapCount by BooleanSetting("Leap Count", true, desc = "While you stand on an early enter spot, shows how many teammates are on it with you, out of how many you expect there.")
+    private val ee2Players by NumberSetting("EE2 Players", 4, 1..4, 1, desc = "How many teammates you expect to leap to you on EE2 (not counting you), for Leap Count.").withDependency { leapCount }
+    private val ee3Players by NumberSetting("EE3 Players", 3, 1..4, 1, desc = "How many teammates you expect to leap to you on EE3 and EE3 High (not counting you), for Leap Count.").withDependency { leapCount }
+    private val ee4Players by NumberSetting("EE4 Players", 4, 1..4, 1, desc = "How many teammates you expect to leap to you on EE4 (not counting you), for Leap Count.").withDependency { leapCount }
+    private val leapHud by HUD("Leap Count HUD", "How many teammates have leapt to the early enter you are on.", true, 400, 280, 2f) { example ->
+        if (example) return@HUD drawLeap("§c2/4 Leaped")
+        val max = leapMax
+        if (!enabled || !leapCount || max == 0) return@HUD 0 to 0
+        drawLeap((if (leapNow >= max - 1) "§9" else "§c") + "$leapNow/$max Leaped")
+    }
     private val look = LeapHighlightLook(this, "EE Leap Look", { true }, "someone is on the early enter",
         "Shows the highlight now, top right, as if someone were on EE2 (also over this menu), to try the looks below; with Highlight All, bottom left too. Turn it off after.",
         Color(0, 200, 255, 121 / 255f))
@@ -66,6 +83,14 @@ object EeHighlight : Module(
     private var section = 0
     /** You've been through to the next section during this one. */
     private var selfThere = false
+    /** Leap Count's numbers: the teammates expected on the spot you stand on (0 on none), and how many are there. */
+    private var leapMax = 0
+    private var leapNow = 0
+
+    private fun GuiGraphicsExtractor.drawLeap(s: String): Pair<Int, Int> {
+        text(s, 0, 0, Colors.WHITE, shadow = true)
+        return mc.font.width(s) to 9
+    }
 
     init {
         PoseShare.onExtra(PoiWire.KIND) { sender, b ->
@@ -117,7 +142,9 @@ object EeHighlight : Module(
         val level = mc.level
         val sec = if (me != null && level != null && (DungeonUtils.inBoss || com.engineerclient.p3sim.P3Sim.inSim)) TermInfo.sectionNumber() ?: 0 else 0
         if (sec != section) sectionChanged(sec)
-        if (sec !in 1..3 || me == null || level == null) return
+        if (me == null || level == null) { leapMax = 0; leapNow = 0; return }
+        val inBoss = DungeonUtils.inBoss || com.engineerclient.p3sim.P3Sim.inSim
+        if (sec !in 1..3 && !(inBoss && enabled && leapCount)) { leapMax = 0; leapNow = 0; return }
         val now = System.currentTimeMillis()
 
         // Yourself, for teammates: whether or not this is on (as Term Progress does), unless Pose POV's sharing is off. On a
@@ -125,6 +152,8 @@ object EeHighlight : Module(
         val dead = me.isSpectator || com.engineerclient.DeadPlayers.isDead(me.name.string)
         val moving = LeapTeammates.inFlight(me)
         val myPoi = if (dead || moving) 0 else poiAt(me.x, me.y, me.z)
+        countLeaps(me, level, myPoi, inBoss && enabled && leapCount)
+        if (sec !in 1..3) return
         if (myPoi != curPoi) { curPoi = myPoi; curSince = now }
         if ((curPoi != sentPoi && now - sentAt >= CHANGE_GAP_MS) || now - sentAt >= RESEND_MS) {
             sentPoi = curPoi; sentAt = now
@@ -157,6 +186,22 @@ object EeHighlight : Module(
                 }
             }
             logIfNew(m.name, key, opens, now)
+        }
+    }
+
+    /** Leap Count's numbers: the spot you stand on ([myPoi], 0 for none) and the living teammates in view on it. */
+    private fun countLeaps(me: net.minecraft.world.entity.Entity, level: net.minecraft.client.multiplayer.ClientLevel, myPoi: Int, on: Boolean) {
+        leapMax = 0; leapNow = 0
+        val spot = PointsOfInterest.byId(myPoi)?.takeIf { on } ?: return
+        leapMax = when (spot) {
+            PointsOfInterest.EE2 -> ee2Players
+            PointsOfInterest.EE4 -> ee4Players
+            else -> ee3Players
+        }
+        leapNow = DungeonUtils.leapTeammates.count { m ->
+            if (m.name == me.name.string || com.engineerclient.DeadPlayers.isDead(m)) return@count false
+            val e = LeapTeammates.entity(m, level) ?: return@count false
+            !LeapTeammates.inFlight(e) && spot.contains(e.x, e.y, e.z)
         }
     }
 

@@ -18,6 +18,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.level.block.Blocks
 import com.engineerclient.DeadPlayers
+import com.engineerclient.EngineerClient
 import com.engineerclient.storm.StormCrush
 
 /**
@@ -83,6 +84,10 @@ object Timers : Module(
     private val purplePadHud by HUD("Purple Pad", "Storm: counts down to the pad read to be on Purple's pad for (t 599, then t 619 if that one's missed), so he's crushed the moment he gets there. Gone once the pillar comes down.", true, 10, 160, 1.5f) { example ->
         if (example) timer("Purple", 30, PAD_TOTAL, true) else padLeft(purpleReads())?.let { timer("Purple", it, PAD_TOTAL) } ?: (0 to 0)
     }
+    private val stormDeathHud by HUD("Storm Death Time", "Storm: when \"Storm is enraged!\" arrives, says in chat how long he took to die (from his first line) and shows it here for 2 s.", true, 10, 145, 1.5f) { example ->
+        if (!example && (!enabled || stormShownUntil - serverTicks <= 0)) return@HUD 0 to 0
+        draw("§bStorm died at: §f" + time(if (example) 31 * 20 + 7 else stormDiedTicks))
+    }
     private val sectionHud: HudElement by HUD("Section Time", "When a terminal section is done, how long it took, in purple. S1 from Goldor's first line, the rest from the last section's end.", true, 420, 330, 5f) { example ->
         draw(if (example) "§514.35" else com.engineerclient.practice.TermInfo.sectionTime(sectionSeconds) ?: return@HUD 0 to 0)
     }
@@ -111,11 +116,14 @@ object Timers : Module(
     /** Maxor's health once his armour is off: a laser hit. Flickers within one stun are one hit. */
     private const val DAMAGEABLE = 500f
     private const val HIT_DEBOUNCE = 30
+    /** How long Storm's death time stays on screen, in server ticks. */
+    private const val STORM_SHOW = 40
 
     private const val WATCHER = "[BOSS] The Watcher: "
     private const val WATCHER_DONE = "[BOSS] The Watcher: You have proven yourself. You may pass."
     private const val MAXOR_START = "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!"
     private const val STORM_START = "[BOSS] Storm: Pathetic Maxor, just like expected."
+    private const val STORM_ENRAGED = "⚠ Storm is enraged! ⚠"
     private const val STORM_DEAD = "[BOSS] Storm: I should have known that I stood no chance."
     private val STORM_LIGHTNING = setOf("[BOSS] Storm: ENERGY HEED MY CALL!", "[BOSS] Storm: THUNDER LET ME BE YOUR CATALYST!")
     private val STORM_CRUSHED = setOf("[BOSS] Storm: Oof", "[BOSS] Storm: Ouch, that hurt!")
@@ -145,6 +153,9 @@ object Timers : Module(
     private var maxorHealth = 0f
     private var stormStart: Int? = null
     private var stormDead = false
+    /** Server ticks from Storm's first line to his enraged line, and the server tick it goes off the HUD on. */
+    private var stormDiedTicks = 0
+    private var stormShownUntil = 0
     private var lightningAt: Int? = null
     private var crushes = 0
     /** When Purple's pillar last stepped down. */
@@ -220,6 +231,15 @@ object Timers : Module(
                 lightningAt = null; crushes = 0; purpleStepAt = null
             }
             message == STORM_DEAD -> stormDead = true
+            message == STORM_ENRAGED -> {
+                val start = stormStart
+                if (stormDeathHud.enabled && start != null && !stormDead) {
+                    // stormStart is a tick early, to line up with the crush checks.
+                    stormDiedTicks = serverTicks - start - 1
+                    stormShownUntil = serverTicks + STORM_SHOW
+                    EngineerClient.chat("Storm died at: ${time(stormDiedTicks)}")
+                }
+            }
             message in STORM_LIGHTNING -> if (stormStart != null && lightningAt == null) lightningAt = serverTicks
             message in STORM_CRUSHED -> if (stormStart != null) crushes++
             message == GOLDOR_START -> stormStart = null
@@ -280,13 +300,14 @@ object Timers : Module(
         bossAt = null; bloodSeen = false; portalOpen = false; portalUntil = 0; coreOpen = false; exitCoreUntil = 0
         maxorMoveAt = null; inMaxor = false; crystalsAt = null; lastHit = Int.MIN_VALUE / 2; maxorHealth = 0f
         stormStart = null; stormDead = false; necronDpsAt = null
+        stormDiedTicks = 0; stormShownUntil = 0
         lightningAt = null; crushes = 0; purpleStepAt = null
     }
 
     init {
         clearHud.enabled = true; portalHud.enabled = true
         maxorHud.enabled = true; crystalHud.enabled = true
-        necronHud.enabled = true; purplePadHud.enabled = true; sectionHud.enabled = true
+        necronHud.enabled = true; purplePadHud.enabled = true; stormDeathHud.enabled = true; sectionHud.enabled = true
 
         on<MessageEvent.Chat> { chat(message) }
 
