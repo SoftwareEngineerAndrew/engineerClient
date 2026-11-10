@@ -4,6 +4,9 @@ import com.devgineerclient.maxor.MaxorCrystals
 import com.devgineerclient.misc.FastLaunch
 import com.devgineerclient.perf.PerfMonitor
 import com.devgineerclient.recorder.DungeonRecorder
+import com.devgineerclient.splits.DungeonSplits
+import com.devgineerclient.splits.PaceTargets
+import com.devgineerclient.splits.Witherborn
 import com.odtheking.odin.config.ModuleConfig
 import com.odtheking.odin.features.ModuleManager
 import net.fabricmc.api.ClientModInitializer
@@ -20,7 +23,7 @@ object DevgineerClient : ClientModInitializer {
     override fun onInitializeClient() {
         safely("launch timeline") { com.devgineerclient.misc.LaunchTimeline.install() }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
-        val modules = arrayOf(DungeonRecorder, MaxorCrystals, FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.SoundCollector, PerfMonitor)
+        val modules = arrayOf(DungeonRecorder, MaxorCrystals, DungeonSplits, com.devgineerclient.practice.I4Aims, FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.SoundCollector, PerfMonitor)
         ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), *modules)
         // A module made with toggled = true would start on but off Odin's event bus.
         safely("subscribe enabled") { com.engineerclient.EngineerClient.subscribeEnabled(modules.asList()) }
@@ -33,6 +36,8 @@ object DevgineerClient : ClientModInitializer {
         safely("fast exit") { com.devgineerclient.misc.FastExit.install() }
         safely("edt") { com.devgineerclient.misc.Edt.install() }
         safely("sound collector") { com.devgineerclient.misc.SoundCollector.install() }
+        safely("pace targets") { PaceTargets.install() }
+        safely("witherborn") { Witherborn.register() }
     }
 
     /** Every handler that runs inside Odin's bus or a coroutine must not be able to take Odin down with it. */
