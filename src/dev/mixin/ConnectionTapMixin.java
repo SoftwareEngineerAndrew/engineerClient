@@ -1,5 +1,6 @@
 package com.devgineerclient.mixin;
 
+import com.devgineerclient.bossrecorder.BossRecorder;
 import com.devgineerclient.maxor.MaxorCrystals;
 import com.devgineerclient.recorder.DungeonRecorder;
 import com.devgineerclient.recorder.PacketFate;
@@ -27,6 +28,7 @@ public class ConnectionTapMixin {
         at = @At("HEAD")
     )
     private void dc$tap(ChannelHandlerContext ctx, Packet<?> packet, CallbackInfo ci) {
+        BossRecorder.INSTANCE.tap(packet);
         MaxorCrystals.INSTANCE.tap(packet);
         DungeonRecorder.INSTANCE.tap((Connection) (Object) this, packet);
     }

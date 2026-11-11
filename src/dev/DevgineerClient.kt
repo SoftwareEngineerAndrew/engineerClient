@@ -1,5 +1,7 @@
 package com.devgineerclient
 
+import com.devgineerclient.betterrecorder.BetterRecorder
+import com.devgineerclient.bossrecorder.BossRecorder
 import com.devgineerclient.maxor.MaxorCrystals
 import com.devgineerclient.misc.FastLaunch
 import com.devgineerclient.perf.PerfMonitor
@@ -23,7 +25,7 @@ object DevgineerClient : ClientModInitializer {
     override fun onInitializeClient() {
         safely("launch timeline") { com.devgineerclient.misc.LaunchTimeline.install() }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
-        val modules = arrayOf(DungeonRecorder, MaxorCrystals, DungeonSplits, com.devgineerclient.practice.I4Aims, FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.SoundCollector, PerfMonitor)
+        val modules = arrayOf(DungeonRecorder, BetterRecorder, BossRecorder, MaxorCrystals, DungeonSplits, com.devgineerclient.practice.I4Aims, FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.SoundCollector, PerfMonitor)
         ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), *modules)
         // A module made with toggled = true would start on but off Odin's event bus.
         safely("subscribe enabled") { com.engineerclient.EngineerClient.subscribeEnabled(modules.asList()) }
@@ -31,6 +33,8 @@ object DevgineerClient : ClientModInitializer {
         safely("fast launch default") { FastLaunch.enableByDefault() }
         safely("perf monitor default") { PerfMonitor.enableByDefault() }
         safely("maxor crystals default") { MaxorCrystals.enableByDefault() }
+        safely("boss recorder default") { BossRecorder.enableByDefault() }
+        safely("better recorder default") { BetterRecorder.enableByDefault() }
         safely("class warmup") { com.devgineerclient.misc.ClassWarmup.install() }
         safely("early join") { com.devgineerclient.misc.EarlyJoin.install() }
         safely("f7 control") { com.devgineerclient.misc.F7Control.install() }
