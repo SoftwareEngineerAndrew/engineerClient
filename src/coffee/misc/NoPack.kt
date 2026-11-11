@@ -23,6 +23,8 @@ import java.util.UUID
  * at launch; until then items draw as their own vanilla item.
  */
 object NoPack {
+    /** Off when the PackDisabler mod is installed: it does the same, its own way, with its own settings. */
+    @JvmField val ON: Boolean = !net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("packdisabler")
     @Volatile private var models: Map<String, Identifier> = emptyMap()
     @Volatile private var skulls: Map<String, ResolvableProfile> = emptyMap()
     private val ARROW by lazy(LazyThreadSafetyMode.NONE) { model(Items.ARROW) }
@@ -34,6 +36,7 @@ object NoPack {
     private val DAGGERS = mapOf("FIREDUST_DAGGER" to 1, "BURSTFIRE_DAGGER" to 1, "HEARTFIRE_DAGGER" to 1, "MAWDUST_DAGGER" to 3, "BURSTMAW_DAGGER" to 3, "HEARTMAW_DAGGER" to 3)
 
     fun register() {
+        if (!ON) { CoffeeClient.logger.info("[cc] No Pack: off, PackDisabler is installed"); return }
         Thread.ofVirtual().name("coffee-nopack").start {
             runCatching { load() }.onFailure { CoffeeClient.logger.warn("[cc] No Pack: skyblock-items.json didn't load", it) }
         }
@@ -62,7 +65,7 @@ object NoPack {
 
     /** The model to draw [stack] with, for the [current] one the server gave it (a Hypixel pack model has none here). */
     @JvmStatic fun model(stack: ItemStack, current: Identifier?): Identifier? {
-        if (current == null || current.namespace != "hypixel_skyblock") return current
+        if (!ON || current == null || current.namespace != "hypixel_skyblock") return current
         val vanilla = stack.item.components().get(DataComponents.ITEM_MODEL) ?: current
         val tag = tag(stack)
         val id = idOf(tag, "id")
@@ -87,7 +90,7 @@ object NoPack {
 
     /** The head texture to draw [stack] with when it was a head before the pack (its skin's, else its own). */
     @JvmStatic fun profile(stack: ItemStack, current: ResolvableProfile?): ResolvableProfile? {
-        if (stack.isEmpty || stack.`is`(Items.PLAYER_HEAD)) return current
+        if (!ON || stack.isEmpty || stack.`is`(Items.PLAYER_HEAD)) return current
         val tag = tag(stack)
         val id = idOf(tag, "id") ?: return current
         return idOf(tag, "skin")?.let(skulls::get) ?: skulls[id] ?: current
