@@ -45,7 +45,7 @@ import net.minecraft.world.phys.Vec3
  * - Etherwarp (sneaking, an etherwarp item): alldata's etherwarp law ([TeleportLaw.etherwarp]), 57 + tuners blocks.
  * - Teleport (AOTE / AOTV unsneaked, Hyperion-type blades with all three scrolls either way): alldata's blink law
  *   ([TeleportLaw.blink]). 8 blocks + Transmission tuners, 10 for Wither Impact.
- * - Clicks the server likely won't cast (a Wither Impact within 125 ms of the last, an etherwarp under 180 mana) stay out
+ * - Clicks the server likely won't cast (a Wither Impact within 100 ms of the last, an etherwarp with under 180 mana and overflow mana together) stay out
  *   of the camera's chain but are still matched, in case it does.
  * - The look (alldata #items.teleport-look): a plain click casts with its own yaw and pitch; a click on a block casts
  *   with the look of the last move packet sent.
@@ -196,7 +196,8 @@ object Zpew : Module(
             if (etherData != null) {
                 if (!etherwarp) return@onSend
                 click = Click(true, yaw, pitch, true, Etherwarp.getEtherwarpDistance(etherData))
-                expected = ActionBarListener.maxMana == 0 || ActionBarListener.currentMana >= 180
+                // Overflow mana pays too (it is spent first), so it counts with the bar's mana.
+                expected = ActionBarListener.maxMana == 0 || ActionBarListener.currentMana + ActionBarListener.overflowMana >= 180
             } else {
                 if (!teleport) return@onSend
                 val id = stack.itemId
