@@ -60,7 +60,8 @@ object Zpew : Module(
     key = null,
 ) {
     private val etherwarp by BooleanSetting("Etherwarp", true, desc = "Sneaking etherwarps.")
-    private val teleport by BooleanSetting("Teleport", true, desc = "AOTE, AOTV and Hyperion (Wither Impact) teleports.")
+    private val aotv by BooleanSetting("AOTE / AOTV", true, desc = "Aspect of the End and Aspect of the Void teleports (unsneaked).")
+    private val hyperion by BooleanSetting("Hyperion", true, desc = "Wither Impact teleports: Hyperion, Valkyrie, Astraea, Scylla, Necron's Blade with all three scrolls.")
     private val debugLog by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera move to logs/zpew.log (for working out a flicker).")
 
     /** One click: worked out again from any start with its own look. */
@@ -199,11 +200,10 @@ object Zpew : Module(
                 // Overflow mana pays too (it is spent first), so it counts with the bar's mana.
                 expected = ActionBarListener.maxMana == 0 || ActionBarListener.currentMana + ActionBarListener.overflowMana >= 180
             } else {
-                if (!teleport) return@onSend
                 val id = stack.itemId
                 val distance = when {
-                    id == "ASPECT_OF_THE_END" || id == "ASPECT_OF_THE_VOID" -> 8 + stack.customData.getInt("tuned_transmission").orElse(0)
-                    id in WITHER_BLADES && stack.customData.getListOrEmpty("ability_scroll").size == 3 -> 10
+                    id == "ASPECT_OF_THE_END" || id == "ASPECT_OF_THE_VOID" -> if (aotv) 8 + stack.customData.getInt("tuned_transmission").orElse(0) else return@onSend
+                    id in WITHER_BLADES && stack.customData.getListOrEmpty("ability_scroll").size == 3 -> if (hyperion) 10 else return@onSend
                     else -> return@onSend
                 }
                 click = Click(false, yaw, pitch, sneaking, distance.toDouble())

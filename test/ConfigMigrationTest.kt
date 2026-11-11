@@ -97,4 +97,16 @@ class ConfigMigrationTest {
         assertEquals(true, m["enabled"].asBoolean)
         assertEquals(15, m.getAsJsonObject("settings")["Timeout"].asInt)
     }
+
+    @Test fun zpewTeleportSplitsIntoAotvAndHyperion() {
+        val odin = Files.createTempDirectory("odin")
+        Files.createDirectories(odin.resolve("addons"))
+        val file = odin.resolve("addons").resolve("engineerclient.json")
+        Files.writeString(file, """[{"name":"Zpew","enabled":true,"settings":{"Teleport":false}}]""")
+        ConfigMigration.run(odin)
+        val s = JsonParser.parseString(Files.readString(file)).asJsonArray.map { it.asJsonObject }.first { it["name"].asString == "Legit Zpew" }.getAsJsonObject("settings")
+        assertEquals(false, s["AOTE / AOTV"].asBoolean)
+        assertEquals(false, s["Hyperion"].asBoolean)
+        assertFalse(s.has("Teleport"))
+    }
 }
