@@ -82,7 +82,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.clearbreakdown.ClearBreakdown,
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning,
             com.engineerclient.practice.TerminalHitboxes,
-            com.engineerclient.misc.ItemHighlight,
+            com.engineerclient.misc.ItemHighlight, com.engineerclient.misc.Zpew,
         )
     }
 
