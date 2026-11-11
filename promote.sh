@@ -4,6 +4,7 @@
 #   src/coffee/   Coffee Client features   (+ src/resources/coffeeclient{,.odin}.mixins.json)
 #   src/dev/      Devgineer Client features (+ src/resources/devgineerclient.mixins.json)
 #   promote.sh    this script
+#   src/waterboard/ the dynamic Water Board solver, unfinished (+ its WaterSolverRenderMixin and install line)
 # fabric.mod.json loses their entrypoints, mixin configs and the "breaks" line. The result must
 # compile on its own before it is committed. One squashed commit lands on the public branch of the
 # same name (main, or mc/<version> for an older Minecraft; run it from that branch's worktree) and
@@ -58,6 +59,14 @@ rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
   "$PUB/src/resources/devgineerclient.odin.mixins.json" \
   "$PUB/src/resources/rotation" "$PUB/src/resources/coffeeclient" \
   "$PUB/src/resources/assets/engineerclient/dungeonpack/packs"/{layouts.json.gz,mobs.json.gz,doors.json.gz,runstate.json.gz,traps.json,secrets.json.gz}
+# Water Board isn't finished: ADM leaves it out (Odin's own Water Board solver draws as before).
+rm -rf "$PUB/src/waterboard" "$PUB/src/mixin/odin/WaterSolverRenderMixin.java"
+sed -i '/safely("water board") {/d' "$PUB/src/EngineerClient.kt"
+ODIN_MIXINS="$PUB/src/resources/engineerclient.odin.mixins.json"
+jq --indent 2 '.client |= map(select(. != "WaterSolverRenderMixin"))' "$ODIN_MIXINS" > "$ODIN_MIXINS.tmp" && mv "$ODIN_MIXINS.tmp" "$ODIN_MIXINS"
+if grep -rnE 'waterboard|WaterBoardSolver|WaterSolverRenderMixin' "$PUB/src"; then
+  echo "promote: the lines above still reference Water Board" >&2; exit 1
+fi
 # POV Previews keeps the room pack (rooms.index.json.gz, rooms.blocks.bin), its shaders and posepov/.
 
 FMJ="$PUB/src/resources/fabric.mod.json"
