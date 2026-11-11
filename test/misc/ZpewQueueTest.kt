@@ -113,6 +113,15 @@ class ZpewQueueTest {
         assert(q.limit() > q.roundTrip + ZpewQueue.GRACE) { "limit ${q.limit()} round trip ${q.roundTrip}" }
     }
 
+    @Test fun aRefusedClickBringsTheCameraBack() {
+        val q = queue()
+        q.click(10.0, 0, start); q.click(10.0, 1, start)
+        q.teleport(at(10.5), 3)
+        // "You cannot do that in this room!" for the second: nothing left waiting, the camera is back on the player.
+        q.refuse()
+        assertEquals(0, q.size); assertNull(q.camera)
+    }
+
     @Test fun aTeleportWithNothingWaitingIsIgnored() {
         val q = queue()
         q.teleport(at(5.5), 0)

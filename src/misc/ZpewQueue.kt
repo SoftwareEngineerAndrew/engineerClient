@@ -91,6 +91,13 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         roundTrip = roundTrip * 0.875 + wait * 0.125
     }
 
+    /** The server refused the oldest waiting click (a refusal line): it won't move you. */
+    fun refuse() {
+        if (waiting.isEmpty()) return
+        waiting.removeFirst()
+        rechain()
+    }
+
     /** Clicks waiting longer than [limit] are taken as never answered; returns how many. */
     fun expire(now: Long): Int {
         val limit = limit()

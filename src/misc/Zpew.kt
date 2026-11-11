@@ -2,12 +2,17 @@ package com.engineerclient.misc
 
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onSend
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
+import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
+import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.features.impl.render.Etherwarp
+import com.odtheking.odin.utils.IVec2
 import com.odtheking.odin.utils.customData
 import com.odtheking.odin.utils.isEtherwarpItem
 import com.odtheking.odin.utils.itemId
@@ -50,8 +55,9 @@ import net.minecraft.world.phys.Vec3
  * - The look (alldata #items.teleport-look): a plain click casts with its own yaw and pitch; a click on a block casts
  *   with the look of the last move packet sent.
  *
- * Off where rsm turns it off: F7/M7 boss, and Boulder / Teleport Maze (except on the room's edge). A right click on a
- * chest, lever, button and the like opens that instead, so it's skipped.
+ * Never where the server refuses the ability (alldata #items.room-refusals): the F7/M7 boss, a trap room (cast from), the
+ * Teleport Maze and Boulder (cast from or landing in); any other refusal line brings the camera straight back. A right
+ * click on a chest, lever, button and the like opens that instead, so it's skipped.
  */
 object Zpew : Module(
     name = "Legit Zpew",
@@ -121,24 +127,51 @@ object Zpew : Module(
         }
     }
 
+    /**
+     * Where a click lands from [from], or null when the server refuses it (alldata #items.room-refusals): a trap room
+     * refuses every ability by the room you stand in, and the Teleport Maze and Boulder refuse an item teleport that
+     * starts or would land in them. Checked for every click of a chain, from where that click is cast.
+     */
     private fun predict(from: DoubleArray, c: Click): DoubleArray? {
         val cells = LevelCells(mc.level ?: return null)
-        return if (c.ether) TeleportLaw.etherwarp(from[0], from[1], from[2], c.yaw, c.pitch, c.distance, cells)
+        if (inRoom(from[0], from[2]) { it.type == RoomType.TRAP || it.data?.name in NO_TELEPORT }) return null
+        val to = if (c.ether) TeleportLaw.etherwarp(from[0], from[1], from[2], c.yaw, c.pitch, c.distance, cells)
         else TeleportLaw.blink(from[0], from[1], from[2], c.yaw, c.pitch, c.sneaking, c.distance.toInt(), cells)
+        return to?.takeUnless { inRoom(it[0], it[2]) { r -> r.data?.name in NO_TELEPORT } }
     }
 
-    private fun allowedHere(): Boolean {
-        val p = mc.player ?: return false
-        if (DungeonUtils.inBoss && DungeonUtils.isFloor(7)) return false
-        if (DungeonUtils.currentRoomName in listOf("Boulder", "Teleport Maze")) {
-            // On the room's edge (between rooms) is fine.
-            return Math.floorMod(p.blockX + 201, 32) == 0 || Math.floorMod(p.blockZ + 201, 32) == 0
+    private val NO_TELEPORT = setOf("Teleport Maze", "Boulder")
+
+    /**
+     * Whether [x], [z] is in (or within a block of) a scanned room that [test] picks. The room grid: tile t spans
+     * -200 + 32t to + 30, a 1-block gap before the next; a spot a block from a tile's edge counts for both sides, since
+     * the server's room reaches the doorway (alldata: refusals "at its edge").
+     */
+    private fun inRoom(x: Double, z: Double, test: (DungeonRoom) -> Boolean): Boolean {
+        val tiles = HashSet<Long>()
+        for (dx in -1..1) for (dz in -1..1) {
+            tiles += IVec2(Math.floorDiv(kotlin.math.floor(x).toInt() + dx + 200, 32), Math.floorDiv(kotlin.math.floor(z).toInt() + dz + 200, 32)).data
         }
-        return true
+        return DungeonScan.rooms.any { room -> test(room) && room.tiles.any { it.data in tiles } }
     }
+
+    /** The boss room refuses abilities (alldata #items.room-refusals): F7 / M7. */
+    private fun allowedHere(): Boolean = mc.player != null && !(DungeonUtils.inBoss && DungeonUtils.isFloor(7))
+
+    /** Hypixel's lines for an ability the room refused (alldata #items.room-refusals): that click won't move you. */
+    private val REFUSALS = listOf(
+        "You cannot use abilities in this room!",
+        "You cannot do that in this room!",
+        "A mystical force in this room prevents you from using that ability!",
+    )
 
     init {
         on<LevelEvent.Load> { reset() }
+
+        // Anywhere else abilities are off: the refusal line comes in the click's tick, so the camera comes straight back.
+        on<MessageEvent> {
+            if (queue.size > 0 && REFUSALS.any { message.contains(it) }) { queue.refuse(); sync() }
+        }
 
         on<TickEvent.End> {
             blockClickThisTick = false
