@@ -60,10 +60,10 @@ class ZpewQueueTest {
         assertNull(q.camera)
         q.click(10.0, 5, start)
         assertContentEquals(at(10.5), q.camera)
-        q.expire(20, 20)
+        q.expire(20)
         assertEquals(1, q.size)
         assertContentEquals(at(10.5), q.camera)
-        q.expire(25, 20)
+        q.expire(25)
         assertEquals(0, q.size); assertNull(q.camera)
     }
 
@@ -76,9 +76,9 @@ class ZpewQueueTest {
         assertEquals(1, q.size)
         assertContentEquals(at(30.5), q.camera)
         // Well before the 20-tick timeout, once it is GRACE past the round trip, it lets go.
-        q.expire(12, 20)
+        q.expire(12)
         assertEquals(1, q.size)
-        q.expire(4 + kotlin.math.ceil(q.limit(20)).toLong(), 20)
+        q.expire(4 + kotlin.math.ceil(q.limit()).toLong())
         assertEquals(0, q.size); assertNull(q.camera)
     }
 
@@ -86,7 +86,7 @@ class ZpewQueueTest {
         val q = queue()
         q.click(1.0, 0, start); q.teleport(at(1.5), 2)  // a 2-tick round trip: clicks expire 6 ticks in
         q.click(10.0, 10, at(1.5)); q.click(5.0, 11, at(1.5))
-        assertEquals(2, q.expire(17, 20))
+        assertEquals(2, q.expire(17))
         assertEquals(0, q.size); assertNull(q.camera)
         // ...but the first one's teleport turns up: it is that click's, not the one waiting now.
         q.click(3.0, 17, at(1.5))
@@ -95,12 +95,22 @@ class ZpewQueueTest {
         assertContentEquals(at(14.5), q.camera)
     }
 
+    @Test fun theWaitIsNeverShorterThanTheRoundTrip() {
+        val q = queue()
+        assertEquals(ZpewQueue.FIRST.toDouble(), q.limit())
+        // A slow connection: 15 ticks a teleport. Clicks wait for it instead of expiring and bouncing the camera.
+        q.click(10.0, 0, start); assertEquals(0, q.expire(15)); assertContentEquals(at(10.5), q.camera)
+        q.teleport(at(10.5), 15)
+        assert(q.limit() >= 15 + ZpewQueue.GRACE)
+        q.click(10.0, 20, at(10.5)); assertEquals(0, q.expire(50)); assertContentEquals(at(20.5), q.camera)
+    }
+
     @Test fun jitterWidensTheLimit() {
         val q = queue()
         var t = 0L
         for (wait in listOf(6L, 12L, 5L, 13L, 6L, 12L)) { q.click(1.0, t, at(0.5)); q.teleport(at(1.5), t + wait); q.teleport(at(0.5), t + wait); t += 20 }
         // A steady 6 would give 6 + 4; this connection swings 5-13, so the limit sits well above its mean.
-        assert(q.limit(40) > q.roundTrip + ZpewQueue.GRACE) { "limit ${q.limit(40)} round trip ${q.roundTrip}" }
+        assert(q.limit() > q.roundTrip + ZpewQueue.GRACE) { "limit ${q.limit()} round trip ${q.roundTrip}" }
     }
 
     @Test fun aTeleportWithNothingWaitingIsIgnored() {

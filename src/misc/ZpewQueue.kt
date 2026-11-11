@@ -14,8 +14,9 @@ package com.engineerclient.misc
  * guess never sends the camera back to a player who is still several teleports behind.
  *
  * Each answered click's wait (click to teleport, in ticks) feeds a running round trip and its spread (TCP's smoothed
- * RTT and RTTVAR); a click left waiting past round trip + max([GRACE], 4 × spread) is taken as dropped (up to the
- * timeout). With the same look clicked again and again a dropped cast can't be told from the others, so this is what
+ * RTT and RTTVAR); a click left waiting past round trip + max([GRACE], 4 × spread) is taken as dropped ([FIRST] ticks
+ * until a round trip is known, never more than [MAX]). There is no user timeout: one shorter than the round trip
+ * expired every click before its teleport and sent the camera back and forth on each one. With the same look clicked again and again a dropped cast can't be told from the others, so this is what
  * stops the camera sitting one teleport too far; the spread keeps a jittery connection's late teleports from being
  * expired. A teleport that arrives for an expired click anyway still matches it ([late]), so it doesn't eat the next one.
  */
@@ -23,7 +24,7 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     private class Waiting<C>(val click: C, val tick: Long, val expected: Boolean)
 
     private val waiting = ArrayDeque<Waiting<C>>()
-    /** Clicks expired without an answer, kept until the timeout in case their teleport is only late. */
+    /** Clicks expired without an answer, kept [LATE_KEEP] ticks in case their teleport is only late. */
     private val late = ArrayDeque<Waiting<C>>()
     private var origin: DoubleArray? = null
 
@@ -40,9 +41,9 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     var spread: Double = 0.0
         private set
 
-    /** How long a click may wait before it is taken as dropped, in ticks. */
-    fun limit(timeout: Int): Double =
-        if (roundTrip.isNaN()) timeout.toDouble() else minOf(timeout.toDouble(), roundTrip + maxOf(GRACE.toDouble(), 4 * spread))
+    /** How long a click may wait before it is taken as dropped, in ticks. Never under the round trip. */
+    fun limit(): Double =
+        if (roundTrip.isNaN()) FIRST.toDouble() else minOf(MAX.toDouble(), roundTrip + maxOf(GRACE.toDouble(), 4 * spread))
 
     /**
      * A click sent at server tick [tick]. [player] is the player's spot now (the start when nothing is waiting).
@@ -91,11 +92,11 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     }
 
     /** Clicks waiting longer than [limit] are taken as never answered; returns how many. */
-    fun expire(now: Long, timeout: Int): Int {
-        val limit = limit(timeout)
+    fun expire(now: Long): Int {
+        val limit = limit()
         var dropped = 0
         while (waiting.isNotEmpty() && now - waiting.first().tick >= limit) { late.addLast(waiting.removeFirst()); dropped++ }
-        while (late.isNotEmpty() && now - late.first().tick >= timeout) late.removeFirst()
+        while (late.isNotEmpty() && now - late.first().tick >= LATE_KEEP) late.removeFirst()
         if (dropped > 0) rechain()
         return dropped
     }
@@ -110,6 +111,12 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     companion object {
         /** Ticks past the round trip estimate before a waiting click is taken as dropped. */
         const val GRACE = 4
+        /** The wait before any round trip is known. */
+        const val FIRST = 20
+        /** The longest wait, however slow the connection. */
+        const val MAX = 60
+        /** How long an expired click can still be matched by a late teleport. */
+        const val LATE_KEEP = 60
         const val LATE = -1
         const val UNMATCHED = -2
         const val NONE = -3

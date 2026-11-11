@@ -1,7 +1,6 @@
 package com.engineerclient.misc
 
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
@@ -62,7 +61,6 @@ object Zpew : Module(
 ) {
     private val etherwarp by BooleanSetting("Etherwarp", true, desc = "Sneaking etherwarps.")
     private val teleport by BooleanSetting("Teleport", true, desc = "AOTE, AOTV and Hyperion (Wither Impact) teleports.")
-    private val timeout by NumberSetting("Timeout", 20, 2..40, 1, desc = "A click the server hasn't answered after this long is taken as refused (sooner once your round trip and its jitter are known).", unit = " ticks")
     private val debugLog by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera move to logs/zpew.log (for working out a flicker).")
 
     /** One click: worked out again from any start with its own look. */
@@ -165,10 +163,10 @@ object Zpew : Module(
         on<TickEvent.End> {
             blockClickThisTick = false
             ticks++
-            val dropped = queue.expire(ticks, timeout)
+            val dropped = queue.expire(ticks)
             if (dropped > 0) {
                 sync()
-                if (debugLog) log("EXPIRE $dropped limit=${"%.1f".format(queue.limit(timeout))} waiting=${queue.size} -> camera ${fmt(camera)}")
+                if (debugLog) log("EXPIRE $dropped limit=${"%.1f".format(queue.limit())} waiting=${queue.size} -> camera ${fmt(camera)}")
             }
             if (!debugLog && logOut != null) { runCatching { logOut?.close() }; logOut = null }
             logOut?.let { runCatching { it.flush() } }
