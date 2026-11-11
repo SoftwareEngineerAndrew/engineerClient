@@ -5,7 +5,6 @@ import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.events.core.onSend
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
@@ -15,14 +14,13 @@ import com.odtheking.odin.utils.isEtherwarpItem
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.skyblock.ActionBarListener
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.core.registries.BuiltInRegistries
-import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket
-import net.minecraft.world.entity.Relative
 import net.minecraft.world.level.block.AnvilBlock
 import net.minecraft.world.level.block.ButtonBlock
 import net.minecraft.world.level.block.CauldronBlock
@@ -39,20 +37,22 @@ import net.minecraft.world.phys.Vec3
  * etherwarp or teleport (AOTE, AOTV, Hyperion), the camera jumps to where you will land instead of waiting a round trip
  * for the server's teleport. Your player isn't moved; only the view (ZpewCameraMixin). rsm's No Rotate is left out.
  *
- * Each click (a use-item packet) is worked out from where the camera is now (so several in a row chain), and the landing
- * is queued. Each server teleport takes the oldest queued landing: if it isn't exactly there, or nothing is left queued,
- * the camera goes back to the player. A click the server never answers lets go after the timeout.
+ * Every click is kept with its look until the server answers ([ZpewQueue]): the camera is the end of the chain of
+ * waiting clicks, each worked out from the one before. When a teleport is applied (ZpewTeleportMixin, the moment the game
+ * moves you, so no frame shows the old spot) it is matched against the waiting clicks and the rest of the chain is worked
+ * out again from the real landing. So with high ping (several clicks waiting at once) a wrong guess or a cast the server
+ * dropped only moves the camera to the right spot, instead of back to a player still several teleports behind.
  *
- * - Etherwarp (sneaking, an etherwarp item): Odin's etherwarp ray from the sneak eye; the landing is the block's centre
- *   1.05 above it, 2.05 on a wall/fence/closed gate (alldata #items.etherwarp-landing).
+ * - Etherwarp (sneaking, an etherwarp item): alldata's etherwarp law ([TeleportLaw.etherwarp]), 57 + tuners blocks.
  * - Teleport (AOTE / AOTV unsneaked, Hyperion-type blades with all three scrolls either way): alldata's blink law
- *   ([BlinkLaw]). 8 blocks + Transmission tuners, 10 for Wither Impact. A Wither Impact within 125 ms of the last isn't
- *   cast by the server (rsm's gate), so it isn't predicted.
+ *   ([TeleportLaw.blink]). 8 blocks + Transmission tuners, 10 for Wither Impact.
+ * - Clicks the server likely won't cast (a Wither Impact within 125 ms of the last, an etherwarp under 180 mana) stay out
+ *   of the camera's chain but are still matched, in case it does.
  * - The look (alldata #items.teleport-look): a plain click casts with its own yaw and pitch; a click on a block casts
  *   with the look of the last move packet sent.
  *
- * Off where rsm turns it off: F7/M7 boss, and Boulder / Teleport Maze (except on the room's edge); etherwarp under 180
- * mana. A right click on a chest, lever, button and the like opens that instead, so it's skipped.
+ * Off where rsm turns it off: F7/M7 boss, and Boulder / Teleport Maze (except on the room's edge). A right click on a
+ * chest, lever, button and the like opens that instead, so it's skipped.
  */
 object Zpew : Module(
     name = "Zpew",
@@ -62,14 +62,16 @@ object Zpew : Module(
 ) {
     private val etherwarp by BooleanSetting("Etherwarp", true, desc = "Sneaking etherwarps.")
     private val teleport by BooleanSetting("Teleport", true, desc = "AOTE, AOTV and Hyperion (Wither Impact) teleports.")
-    private val timeout by NumberSetting("Timeout", 20, 2..40, 1, desc = "A click the server hasn't answered after this long puts the camera back on you.", unit = " ticks")
+    private val timeout by NumberSetting("Timeout", 20, 2..40, 1, desc = "A click the server hasn't answered after this long is taken as refused (sooner once your round trip is known: 4 ticks past it).", unit = " ticks")
 
-    private class Pending(val pos: Vec3, val tick: Long)
+    /** One click: worked out again from any start with its own look. */
+    private class Click(val ether: Boolean, val yaw: Float, val pitch: Float, val sneaking: Boolean, val distance: Double)
 
-    /** Where the camera is drawn while a teleport is on its way (null: at the player). */
+    private val queue = ZpewQueue<Click> { from, c -> predict(from, c) }
+
+    /** Where the camera is drawn while teleports are on their way (null: at the player). */
     @Volatile private var camera: Vec3? = null
-    private val pending = ArrayDeque<Pending>()
-    private var serverTicks = 0L
+    private var ticks = 0L
     private var lastWitherImpact = 0L
 
     /** The look of the last move packet sent with one: the server casts a block click with it. */
@@ -89,14 +91,41 @@ object Zpew : Module(
     /** The camera position for ZpewCameraMixin (feet height; the eye height is added there), or null. */
     @JvmStatic fun cameraPos(): Vec3? = if (enabled) camera else null
 
+    /** ZpewTeleportMixin: the game has just moved you to [x], [y], [z] for a server teleport. */
+    @JvmStatic fun onTeleportApplied(x: Double, y: Double, z: Double) {
+        if (queue.size == 0) return
+        queue.teleport(doubleArrayOf(x, y, z), ticks)
+        sync()
+    }
+
+    private fun sync() {
+        camera = queue.camera?.let { Vec3(it[0], it[1], it[2]) }
+    }
+
     private fun reset() {
-        pending.clear()
+        queue.clear()
         camera = null
     }
 
     override fun onDisable() {
         reset()
         super.onDisable()
+    }
+
+    private class LevelCells(val level: ClientLevel) : TeleportLaw.Cells {
+        private val pos = BlockPos.MutableBlockPos()
+        override fun id(x: Int, y: Int, z: Int): String = BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos.set(x, y, z)).block).path
+        override fun top(x: Int, y: Int, z: Int): Double {
+            pos.set(x, y, z)
+            val shape = level.getBlockState(pos).getCollisionShape(level, pos)
+            return if (shape.isEmpty) 0.0 else shape.max(Direction.Axis.Y)
+        }
+    }
+
+    private fun predict(from: DoubleArray, c: Click): DoubleArray? {
+        val cells = LevelCells(mc.level ?: return null)
+        return if (c.ether) TeleportLaw.etherwarp(from[0], from[1], from[2], c.yaw, c.pitch, c.distance, cells)
+        else TeleportLaw.blink(from[0], from[1], from[2], c.yaw, c.pitch, c.sneaking, c.distance.toInt(), cells)
     }
 
     private fun allowedHere(): Boolean {
@@ -109,22 +138,14 @@ object Zpew : Module(
         return true
     }
 
-    private fun queue(landing: Vec3) {
-        pending.addLast(Pending(landing, serverTicks))
-        camera = landing
-    }
-
     init {
         on<LevelEvent.Load> { reset() }
 
-        on<TickEvent.Server> {
-            serverTicks++
-            val first = pending.firstOrNull()
-            if (first != null && serverTicks - first.tick >= timeout) reset()
-            else if (first == null && camera != null) camera = null
+        on<TickEvent.End> {
+            blockClickThisTick = false
+            ticks++
+            if (queue.size > 0) { queue.expire(ticks, timeout); sync() }
         }
-
-        on<TickEvent.End> { blockClickThisTick = false }
 
         onSend<ServerboundMovePlayerPacket> {
             if (hasRotation()) { moveYaw = getYRot(0f); movePitch = getXRot(0f) }
@@ -142,57 +163,32 @@ object Zpew : Module(
             }
             val stack = p.getItemInHand(hand)
             val sneaking = p.lastSentInput.shift()
-            val from = camera ?: p.position()
+            val (yaw, pitch) = if (blockClickThisTick && !moveYaw.isNaN()) moveYaw to movePitch else yRot to xRot
 
             val etherData = if (sneaking) stack.isEtherwarpItem() else null
+            val click: Click
+            var expected = true
             if (etherData != null) {
                 if (!etherwarp) return@onSend
-                if (ActionBarListener.maxMana > 0 && ActionBarListener.currentMana < 180) return@onSend
-                val ether = Etherwarp.getEtherPos(from, Etherwarp.getEtherwarpDistance(etherData), false, true, true)
-                val pos = ether.pos
-                if (!ether.succeeded || pos == null) return@onSend
-                // A block taller than a cell (wall, fence, closed gate: collision top 1.5) is landed on a cell higher (alldata #items.etherwarp-landing).
-                val tall = level.getBlockState(pos).getCollisionShape(level, pos).let { !it.isEmpty && it.max(Direction.Axis.Y) > 1.0 }
-                queue(Vec3(pos.x + 0.5, pos.y + if (tall) 2.05 else 1.05, pos.z + 0.5))
-                return@onSend
+                click = Click(true, yaw, pitch, true, Etherwarp.getEtherwarpDistance(etherData))
+                expected = ActionBarListener.maxMana == 0 || ActionBarListener.currentMana >= 180
+            } else {
+                if (!teleport) return@onSend
+                val id = stack.itemId
+                val distance = when {
+                    id == "ASPECT_OF_THE_END" || id == "ASPECT_OF_THE_VOID" -> 8 + stack.customData.getInt("tuned_transmission").orElse(0)
+                    id in WITHER_BLADES && stack.customData.getListOrEmpty("ability_scroll").size == 3 -> 10
+                    else -> return@onSend
+                }
+                click = Click(false, yaw, pitch, sneaking, distance.toDouble())
+                if (id in WITHER_BLADES) {
+                    val now = System.currentTimeMillis()
+                    expected = now - lastWitherImpact >= WITHER_IMPACT_GATE_MS
+                    if (expected) lastWitherImpact = now
+                }
             }
-
-            if (!teleport) return@onSend
-            val id = stack.itemId
-            val distance = when {
-                id == "ASPECT_OF_THE_END" || id == "ASPECT_OF_THE_VOID" -> 8 + (stack.customData.getInt("tuned_transmission").orElse(0))
-                id in WITHER_BLADES && stack.customData.getListOrEmpty("ability_scroll").size == 3 -> 10
-                else -> return@onSend
-            }
-            val witherImpact = id in WITHER_BLADES
-            val now = System.currentTimeMillis()
-            if (witherImpact && now - lastWitherImpact < WITHER_IMPACT_GATE_MS) return@onSend
-
-            val (yaw, pitch) = if (blockClickThisTick && !moveYaw.isNaN()) moveYaw to movePitch else yRot to xRot
-            val to = BlinkLaw.predict(from.x, from.y, from.z, yaw, pitch, sneaking, distance,
-                solid = { x, y, z -> BlinkLaw.isSolid(BuiltInRegistries.BLOCK.getKey(level.getBlockState(BlockPos(x, y, z)).block).path) },
-                top = { x, y, z ->
-                    val bp = BlockPos(x, y, z)
-                    val shape = level.getBlockState(bp).getCollisionShape(level, bp)
-                    if (shape.isEmpty) 0.0 else shape.max(Direction.Axis.Y)
-                },
-            ) ?: return@onSend
-            if (witherImpact) lastWitherImpact = now
-            queue(Vec3(to[0], to[1], to[2]))
-        }
-
-        // Teleports arrive on the network thread: handled on the client thread, just before the game moves you.
-        onReceive<ClientboundPlayerPositionPacket> {
-            val c = change
-            val rel = relatives
-            mc.execute {
-                val p = mc.player ?: return@execute
-                val x = if (Relative.X in rel) p.x + c.position.x else c.position.x
-                val y = if (Relative.Y in rel) p.y + c.position.y else c.position.y
-                val z = if (Relative.Z in rel) p.z + c.position.z else c.position.z
-                val sent = pending.removeFirstOrNull()
-                if (sent == null || sent.pos.x != x || sent.pos.y != y || sent.pos.z != z || pending.isEmpty()) reset()
-            }
+            queue.click(click, ticks, doubleArrayOf(p.x, p.y, p.z), expected)
+            sync()
         }
     }
 }

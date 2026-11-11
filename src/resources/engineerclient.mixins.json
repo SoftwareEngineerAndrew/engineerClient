@@ -59,7 +59,8 @@
     "PosePovUnderGuiMixin",
     "FirstPersonDropAnimationMixin",
     "DropAnimationAttackMixin",
-    "ZpewCameraMixin"
+    "ZpewCameraMixin",
+    "ZpewTeleportMixin"
   ],
   "injectors": {
     "defaultRequire": 1
