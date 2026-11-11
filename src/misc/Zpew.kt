@@ -33,7 +33,7 @@ import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.Vec3
 
 /**
- * Zpew (zero ping camera), the camera half of rsm's Ether "Zpew" (github.com/rs-mod/rsm, Ether.java): the moment you
+ * Legit Zpew (zero ping camera; was "Zpew"), the camera half of rsm's Ether "Zpew" (github.com/rs-mod/rsm, Ether.java): the moment you
  * etherwarp or teleport (AOTE, AOTV, Hyperion), the camera jumps to where you will land instead of waiting a round trip
  * for the server's teleport. Your player isn't moved; only the view (ZpewCameraMixin). rsm's No Rotate is left out.
  *
@@ -55,14 +55,15 @@ import net.minecraft.world.phys.Vec3
  * chest, lever, button and the like opens that instead, so it's skipped.
  */
 object Zpew : Module(
-    name = "Zpew",
+    name = "Legit Zpew",
     category = Category.custom("Engineer Client", 860, 10),
     description = "Zero ping camera: your view jumps to where an etherwarp or AOTE/AOTV/Hyperion teleport lands as you click, before the server moves you.",
     key = null,
 ) {
     private val etherwarp by BooleanSetting("Etherwarp", true, desc = "Sneaking etherwarps.")
     private val teleport by BooleanSetting("Teleport", true, desc = "AOTE, AOTV and Hyperion (Wither Impact) teleports.")
-    private val timeout by NumberSetting("Timeout", 20, 2..40, 1, desc = "A click the server hasn't answered after this long is taken as refused (sooner once your round trip is known: 4 ticks past it).", unit = " ticks")
+    private val timeout by NumberSetting("Timeout", 20, 2..40, 1, desc = "A click the server hasn't answered after this long is taken as refused (sooner once your round trip and its jitter are known).", unit = " ticks")
+    private val debugLog by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera move to logs/zpew.log (for working out a flicker).")
 
     /** One click: worked out again from any start with its own look. */
     private class Click(val ether: Boolean, val yaw: Float, val pitch: Float, val sneaking: Boolean, val distance: Double)
@@ -81,7 +82,8 @@ object Zpew : Module(
     private var blockClickThisTick = false
 
     private val WITHER_BLADES = setOf("NECRON_BLADE", "SCYLLA", "HYPERION", "VALKYRIE", "ASTRAEA")
-    private const val WITHER_IMPACT_GATE_MS = 125L
+    /** Wither Impact's recast gate: 100 ms of real time since the last cast, read when the server handles the click (alldata items/hyperion, 18,520 pairs). */
+    private const val WITHER_IMPACT_GATE_MS = 100L
 
     private val ignored = listOf(
         HopperBlock::class.java, AnvilBlock::class.java, ChestBlock::class.java, EnderChestBlock::class.java,
@@ -89,14 +91,33 @@ object Zpew : Module(
     )
 
     /** The camera position for ZpewCameraMixin (feet height; the eye height is added there), or null. */
-    @JvmStatic fun cameraPos(): Vec3? = if (enabled) camera else null
+    @JvmStatic fun cameraPos(): Vec3? {
+        val c = if (enabled) camera else null
+        if (debugLog && c !== lastDrawn) { log("FRAME camera ${fmt(c)}"); lastDrawn = c }
+        return c
+    }
+    private var lastDrawn: Vec3? = null
 
     /** ZpewTeleportMixin: the game has just moved you to [x], [y], [z] for a server teleport. */
     @JvmStatic fun onTeleportApplied(x: Double, y: Double, z: Double) {
-        if (queue.size == 0) return
-        queue.teleport(doubleArrayOf(x, y, z), ticks)
+        val r = queue.teleport(doubleArrayOf(x, y, z), ticks)
+        if (r == ZpewQueue.NONE) return
         sync()
+        if (debugLog) log("TP ${fmt(x, y, z)} answered=${when (r) { ZpewQueue.LATE -> "late"; ZpewQueue.UNMATCHED -> "none"; else -> r.toString() }} waiting=${queue.size} rtt=${"%.1f".format(queue.roundTrip)}±${"%.1f".format(queue.spread)} -> camera ${fmt(camera)}")
     }
+
+    // ---- Debug Log: logs/zpew.log, one line per event, real ms and client tick ----
+    private var logOut: java.io.BufferedWriter? = null
+    private fun log(line: String) {
+        val out = logOut ?: runCatching {
+            val f = mc.gameDirectory.toPath().resolve("logs").resolve("zpew.log")
+            java.nio.file.Files.createDirectories(f.parent)
+            java.nio.file.Files.newBufferedWriter(f, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
+        }.getOrNull()?.also { logOut = it } ?: return
+        runCatching { out.write("${System.currentTimeMillis()} t$ticks $line"); out.newLine() }
+    }
+    private fun fmt(v: Vec3?) = if (v == null) "player" else fmt(v.x, v.y, v.z)
+    private fun fmt(x: Double, y: Double, z: Double) = "(%.2f, %.2f, %.2f)".format(x, y, z)
 
     private fun sync() {
         camera = queue.camera?.let { Vec3(it[0], it[1], it[2]) }
@@ -144,7 +165,13 @@ object Zpew : Module(
         on<TickEvent.End> {
             blockClickThisTick = false
             ticks++
-            if (queue.size > 0) { queue.expire(ticks, timeout); sync() }
+            val dropped = queue.expire(ticks, timeout)
+            if (dropped > 0) {
+                sync()
+                if (debugLog) log("EXPIRE $dropped limit=${"%.1f".format(queue.limit(timeout))} waiting=${queue.size} -> camera ${fmt(camera)}")
+            }
+            if (!debugLog && logOut != null) { runCatching { logOut?.close() }; logOut = null }
+            logOut?.let { runCatching { it.flush() } }
         }
 
         onSend<ServerboundMovePlayerPacket> {
@@ -189,6 +216,7 @@ object Zpew : Module(
             }
             queue.click(click, ticks, doubleArrayOf(p.x, p.y, p.z), expected)
             sync()
+            if (debugLog) log("CLICK ${if (click.ether) "ether" else "blink ${click.distance.toInt()}"} look=(%.1f, %.1f)${if (blockClickThisTick) " block" else ""} sneak=$sneaking expected=$expected player ${fmt(p.x, p.y, p.z)} waiting=${queue.size} -> camera ${fmt(camera)}".format(yaw, pitch))
         }
     }
 }

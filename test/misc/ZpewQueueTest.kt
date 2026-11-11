@@ -78,8 +78,29 @@ class ZpewQueueTest {
         // Well before the 20-tick timeout, once it is GRACE past the round trip, it lets go.
         q.expire(12, 20)
         assertEquals(1, q.size)
-        q.expire(4 + kotlin.math.ceil(q.roundTrip).toLong() + ZpewQueue.GRACE, 20)
+        q.expire(4 + kotlin.math.ceil(q.limit(20)).toLong(), 20)
         assertEquals(0, q.size); assertNull(q.camera)
+    }
+
+    @Test fun aLateTeleportStillMatchesItsExpiredClick() {
+        val q = queue()
+        q.click(1.0, 0, start); q.teleport(at(1.5), 2)  // a 2-tick round trip: clicks expire 6 ticks in
+        q.click(10.0, 10, at(1.5)); q.click(5.0, 11, at(1.5))
+        assertEquals(2, q.expire(17, 20))
+        assertEquals(0, q.size); assertNull(q.camera)
+        // ...but the first one's teleport turns up: it is that click's, not the one waiting now.
+        q.click(3.0, 17, at(1.5))
+        assertEquals(ZpewQueue.LATE, q.teleport(at(11.5), 18))
+        assertEquals(1, q.size)
+        assertContentEquals(at(14.5), q.camera)
+    }
+
+    @Test fun jitterWidensTheLimit() {
+        val q = queue()
+        var t = 0L
+        for (wait in listOf(6L, 12L, 5L, 13L, 6L, 12L)) { q.click(1.0, t, at(0.5)); q.teleport(at(1.5), t + wait); q.teleport(at(0.5), t + wait); t += 20 }
+        // A steady 6 would give 6 + 4; this connection swings 5-13, so the limit sits well above its mean.
+        assert(q.limit(40) > q.roundTrip + ZpewQueue.GRACE) { "limit ${q.limit(40)} round trip ${q.roundTrip}" }
     }
 
     @Test fun aTeleportWithNothingWaitingIsIgnored() {

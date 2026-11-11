@@ -86,4 +86,15 @@ class ConfigMigrationTest {
         assertEquals(true, s["Unlisted Runs"].asBoolean)
         assertFalse(s.has("Unlisted Runs Checked"))
     }
+
+    @Test fun zpewIsRenamedLegitZpewWithItsSettings() {
+        val odin = Files.createTempDirectory("odin")
+        Files.createDirectories(odin.resolve("addons"))
+        val file = odin.resolve("addons").resolve("engineerclient.json")
+        Files.writeString(file, """[{"name":"Zpew","enabled":true,"settings":{"Timeout":15}}]""")
+        ConfigMigration.run(odin)
+        val m = JsonParser.parseString(Files.readString(file)).asJsonArray.map { it.asJsonObject }.first { it["name"].asString == "Legit Zpew" }
+        assertEquals(true, m["enabled"].asBoolean)
+        assertEquals(15, m.getAsJsonObject("settings")["Timeout"].asInt)
+    }
 }

@@ -91,6 +91,11 @@ object ConfigMigration {
             if (module(modules, "ADS") == null) { it.addProperty("name", "ADS"); changed = true }
         }
 
+        // Zpew -> Legit Zpew: its settings keep under the new name.
+        module(modules, "Zpew")?.let {
+            if (module(modules, "Legit Zpew") == null) { it.addProperty("name", "Legit Zpew"); changed = true }
+        }
+
         // ADS's Shortbow Cooldown is its Shortbow Shot Cooldown; 2 (a wrong default from 2026-10-07: shots every 2 ticks)
         // becomes the recorded 5, any other value is kept. The old key goes, so this runs once.
         module(modules, "ADS")?.let(::settings)?.let { ads ->
