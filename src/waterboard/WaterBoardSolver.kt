@@ -27,7 +27,6 @@ import com.odtheking.odin.utils.render.drawWireFrameBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.Puzzle
 import com.odtheking.odin.utils.skyblock.dungeon.PuzzleStatus
-import com.odtheking.odin.utils.toFixed
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
@@ -217,7 +216,7 @@ object WaterBoardSolver {
         if (!clickSound.value) return
         val next = todo.firstOrNull() ?: return
         if (next == dinged) return
-        if (next.tick - (tr.now(nowMs()) + latencyTicks()) <= 0) { dinged = next; playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), 1f, 2f) }
+        if (next.tick - clickTick(tr) <= 0) { dinged = next; playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), 1f, 2f) }
     }
 
     private fun leverPacket(tr: Tracker, e: Ev) {
@@ -239,6 +238,15 @@ object WaterBoardSolver {
 
     /** Ticks from clicking to the server's tick it lands on: measured, else from the ping. */
     private fun latencyTicks(): Double = if (clickTicks >= 0) clickTicks else ServerUtils.averagePing / 50.0 + 1.0
+
+    /**
+     * The server tick a click made now would come back on: the tracker's server tick (the water's clock, which stops when the
+     * server freezes) plus the click's latency, in whole ticks. The countdown counts these, so it moves one tick at a time.
+     */
+    private fun clickTick(tr: Tracker): Int = tr.now(nowMs()) + Math.round(latencyTicks()).toInt()
+
+    /** Whole ticks as seconds, two decimals (one tick is 0.05 s). */
+    private fun seconds(ticks: Int): String = String.format(java.util.Locale.ROOT, "%.2f", ticks / 20.0)
 
     private fun managePlan(tr: Tracker, now: Double, f: RoomFrame) {
         // flips that happened: the plan's matching ones are done; anything else means re-planning
@@ -373,8 +381,7 @@ object WaterBoardSolver {
         if (!active() || DungeonUtils.currentRoomName != ROOM) return
         val f = frame ?: return
         val tr = tracker ?: return
-        // the tick a click now would come back on
-        val now = tr.now(nowMs()) + latencyTicks()
+        val now = clickTick(tr)
         if (showSim.value) drawSim(event, f, tr)
         if (todo.isEmpty()) return
         fun center(lever: Int): Vec3 { val p = f.toWorld(Geometry.LEVER_POS[lever]); return Vec3(p.x + 0.5, p.y + 0.5, p.z + 0.5) }
@@ -385,18 +392,19 @@ object WaterBoardSolver {
             if (todo.size > 1 && todo[1].lever != first)
                 event.drawLine(listOf(center(first), center(todo[1].lever)), secondColor.value, false)
         }
-        // and over each lever its coming flips, the soonest lowest: seconds to go, "CLICK ME!" when due
+        // and over each lever its coming flips, the soonest lowest: server ticks to go, shown as seconds (steps of 0.05 s, one
+        // per tick), "CLICK ME!" when due
         for ((lever, flips) in todo.groupBy { it.lever }) {
             val p = f.toWorld(Geometry.LEVER_POS[lever])
             flips.forEachIndexed { i, fl ->
                 val ticks = fl.tick - now
-                val text = if (ticks <= 0) "§a§lCLICK ME!" else "§e${(ticks / 20.0).toFixed()}s"
+                val text = if (ticks <= 0) "§a§lCLICK ME!" else "§e${seconds(ticks)}s"
                 event.drawText(text, Vec3(p.x + 0.5, p.y + 1.5 + 0.5 * i, p.z + 0.5), 1f, true)
             }
         }
         if (solveAt != WaterSim.NONE) {
             val c = f.toWorld(intArrayOf(15, 80, 25))
-            event.drawText("§bsolved in ${"%.1f".format(maxOf(0.0, (solveAt - tr.now(nowMs())) / 20.0))}s", Vec3(c.x + 0.5, c.y + 0.5, c.z + 0.5), 1.2f, false)
+            event.drawText("§bsolved in ${seconds(maxOf(0, solveAt - tr.now(nowMs())))}s", Vec3(c.x + 0.5, c.y + 0.5, c.z + 0.5), 1.2f, false)
         }
     }
 
