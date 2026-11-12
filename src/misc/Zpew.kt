@@ -55,6 +55,9 @@ import net.minecraft.world.phys.Vec3
  * - The look (alldata #items.teleport-look): a plain click casts with its own yaw and pitch; a click on a block casts
  *   with the look of the last move packet sent.
  *
+ * Odin's etherwarp overlay follows the camera too (ZpewEtherwarpOverlayMixin): it shows where the next etherwarp lands
+ * from the end of the chain, not from the player still waiting for the server.
+ *
  * Never where the server refuses the ability (alldata #items.room-refusals): the F7/M7 boss, a trap room (cast from), the
  * Teleport Maze and Boulder (cast from or landing in); any other refusal line brings the camera straight back. A right
  * click on a chest, lever, button and the like opens that instead, so it's skipped.
