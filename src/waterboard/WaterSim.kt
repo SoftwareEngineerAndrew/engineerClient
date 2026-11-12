@@ -1,5 +1,7 @@
 package com.engineerclient.waterboard
 
+import kotlin.math.ln
+
 /**
  * The Water Board's water, exactly as Hypixel's server moves it: Minecraft 1.8's BlockDynamicLiquid / BlockStaticLiquid with the
  * world's scheduled ticks, on the board's vertical plane (room z=26; the glass in front and the wall behind never let water by).
@@ -65,6 +67,13 @@ class WaterSim private constructor(
 
     private var adj = 0
 
+    /**
+     * Monte Carlo: random ticks drawn from [rng], each flowing cell with probability [randomRate] a tick. Off while null (the
+     * deterministic board). Not copied by [copy] / [setFrom]: each trial sets its own.
+     */
+    var rng: java.util.Random? = null
+    var randomRate = 0.0
+
     fun copy(): WaterSim {
         val s = WaterSim(geo, cells.copyOf(), due.copyOf(), Array(8) { queue[it].copyOf() }, queueLen.copyOf(), slotIn.copyOf(), landAt.copyOf())
         s.time = time; s.sourceOn = sourceOn; s.closed = closed; s.solvedAt = solvedAt; s.wet = wet; s.wrongHits = wrongHits
@@ -96,6 +105,13 @@ class WaterSim private constructor(
         phase = 0
         runDue()
         if (random != null) for (c in random) randomTick(c)
+        val r = rng
+        if (r != null && randomRate > 0.0) {
+            // each flowing cell is random-ticked with probability [randomRate]: geometric gaps over the cells
+            val lq = ln(1.0 - randomRate)
+            var c = (ln(1.0 - r.nextDouble()) / lq).toInt()
+            while (c in cells.indices) { randomTick(c); c += 1 + (ln(1.0 - r.nextDouble()) / lq).toInt() }
+        }
         outlets()
         onSend?.invoke()
         phase = 1

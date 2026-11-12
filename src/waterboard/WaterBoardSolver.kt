@@ -7,6 +7,7 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
@@ -18,6 +19,7 @@ import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.ServerUtils
+import com.odtheking.odin.utils.playSoundAtPlayer
 import com.odtheking.odin.utils.render.drawLine
 import com.odtheking.odin.utils.render.drawText
 import com.odtheking.odin.utils.render.drawTracer
@@ -29,6 +31,7 @@ import com.odtheking.odin.utils.toFixed
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
+import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.LeverBlock
@@ -65,6 +68,10 @@ object WaterBoardSolver {
     private val secondColor = ColorSetting("Dynamic Lever After Color", Colors.MINECRAFT_GOLD, true,
         desc = "The line from the next lever to the one after.").withDependency { dropdown.value && on.value && tracer.value }
     private val showSim = BooleanSetting("Show Simulated Water", false, desc = "Draws the water the solver thinks is on the board, and where the server disagreed lately. For checking it.").withDependency { dropdown.value && on.value }
+    private val objective = SelectorSetting("Water Board Plan", Objective.SAFEST,
+        desc = "What the plan is chosen for. Fastest: the soonest solve if nothing goes off (it often does: the server's random water ticks and clicks a tick off break it about half the time). Safest: the soonest solve that still solves when those happen (about 97% first try). Easiest: few clicks and little walking. Balanced: Safest with fewer clicks and more room between them.",
+        Objective.entries).withDependency { dropdown.value && on.value }
+    private val clickSound = BooleanSetting("Click Sound", true, desc = "A ding on the tick to click the next lever.").withDependency { dropdown.value && on.value }
 
     private const val ROOM = "Water Board"
 
@@ -92,6 +99,11 @@ object WaterBoardSolver {
     private var jobCommitted: List<Flip> = emptyList()
     private var dirty = true
     private var lastPlanMs = 0.0
+    /** The board's rows as read (to find it in [PlanTable]), and the objective the plan is for. */
+    private var boardRows: List<String>? = null
+    private var planFor: Objective? = null
+    /** The flip the click sound last played for. */
+    private var dinged: Flip? = null
     /** Ticks from a click to its lever packet coming back with a server tick's packets (measured on our own clicks). */
     private var clickTicks = -1.0
     private val clickMs = DoubleArray(7) { Double.NaN }
@@ -100,7 +112,7 @@ object WaterBoardSolver {
     private val coordinator = Executors.newSingleThreadExecutor { r -> Thread(r, "ec-waterboard").apply { isDaemon = true } }
 
     fun install() {
-        for (s in listOf(dropdown, on, lead, tracer, firstColor, secondColor, showSim)) PuzzleSolvers.registerSetting(s)
+        for (s in listOf(dropdown, on, lead, objective, clickSound, tracer, firstColor, secondColor, showSim)) PuzzleSolvers.registerSetting(s)
         on<LevelEvent.Load> { EngineerClient.safely("water board reset") { reset() } }
         onReceive<ClientboundBlockUpdatePacket> { val f = frame ?: return@onReceive; packet(f, pos, blockState) }
         onReceive<ClientboundSectionBlocksUpdatePacket> { val f = frame ?: return@onReceive; runUpdates { p, s -> packet(f, p, s) } }
@@ -124,7 +136,7 @@ object WaterBoardSolver {
     private fun reset() {
         frame = null; room = null; geo = null; tracker = null; todo = ArrayList(); solveAt = WaterSim.NONE; windowOf = emptyMap()
         seenFlips = 0; job?.cancel(true); job = null; jobBase = null; dirty = true; inbox.clear(); leverPowered.fill(null)
-        clickMs.fill(Double.NaN)
+        clickMs.fill(Double.NaN); boardRows = null; planFor = null; dinged = null
     }
 
     // ---- network thread -----------------------------------------------------------------------------------------------------
@@ -194,7 +206,18 @@ object WaterBoardSolver {
         val gates = readGates(f)
         if (gates != lastGates) { lastGates = gates; dirty = true }
         tr.gates(now, gates)
+        // another objective chosen: plan again for it (from the table while nothing has been flipped)
+        if (planFor != null && planFor != objective.value) { todo = ArrayList(); solveAt = WaterSim.NONE; windowOf = emptyMap(); job?.cancel(true); job = null; dirty = true }
         managePlan(tr, now, f)
+        ding(tr)
+    }
+
+    /** The click sound: once per flip, on the tick a click must be made for it to come back on its tick. */
+    private fun ding(tr: Tracker) {
+        if (!clickSound.value) return
+        val next = todo.firstOrNull() ?: return
+        if (next == dinged) return
+        if (next.tick - (tr.now(nowMs()) + latencyTicks()) <= 0) { dinged = next; playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), 1f, 2f) }
     }
 
     private fun leverPacket(tr: Tracker, e: Ev) {
@@ -263,7 +286,14 @@ object WaterBoardSolver {
             jobBase = base; dirty = false; lastPlanMs = now
             // no lever sooner than you can get to it from where you stand
             val first = mc.player?.let { pl -> val r = f.toRoom(pl.blockPosition()); IntArray(7) { lv -> maxOf(0, spacing.from(r[0] + 0.5, r[2] + 0.5, lv) - leadTicks) } }
-            job = coordinator.submit<Plan> { planner.plan(base, seeds, budget, Random.Default, first) }
+            val obj = objective.value
+            planFor = obj
+            // a board as Hypixel built it: the precomputed plan, started as soon as you can get to its first lever
+            val table = if (fresh && todo.isEmpty()) boardRows?.let { PlanTable.lookup(it, f.rotation, base.closed, obj) } else null
+            job = if (table != null && table.flips.isNotEmpty()) {
+                val start = base.time + 1 + (first?.get(table.flips[0].lever) ?: 0)
+                coordinator.submit<Plan> { planner.score(base, table.at(start), first, objective = obj) }
+            } else coordinator.submit<Plan> { planner.plan(base, seeds, budget, Random.Default, first, objective = obj) }
         }
     }
 
@@ -272,8 +302,11 @@ object WaterBoardSolver {
         // the flips that were due before the plan's start stay; those the player has done since are gone from [todo]
         val committed = jobCommitted.filter { c -> todo.any { it == c } }
         val rest = todo.filter { it.tick > base.time }
-        val old = if (rest.isEmpty()) null else planner.score(base, rest)
-        val pick = if (old == null || !old.solved || (p.solved && p.solvedAt < old.solvedAt - 5) || (p.solved && old.cost > p.cost + 20)) p else old
+        val obj = planFor ?: Objective.FASTEST
+        val old = if (rest.isEmpty()) null else planner.score(base, rest, objective = obj)
+        // the old plan stays unless it no longer solves or the new one is clearly better by the objective's own measure
+        val pick = if (old == null || !old.solved || (p.solved && old.cost > p.cost + 20) ||
+            (obj == Objective.FASTEST && p.solved && p.solvedAt < old.solvedAt - 5)) p else old
         todo = (committed + pick.flips).sortedBy { it.tick }.toMutableList()
         solveAt = pick.solvedAt
         windowOf = committed.associateWith { -2..2 } + pick.flips.zip(pick.window).toMap()
@@ -300,6 +333,7 @@ object WaterBoardSolver {
             rows += sb.toString()
         }
         if (rows.sumOf { r -> r.count { it.uppercaseChar() in Geometry.SLOT_CHARS } } < 10) return null
+        boardRows = rows
         val (g, inn) = Geometry.parse(rows, f.rotation)
         val water = IntArray(g.w * g.h) { -1 }
         for (c in water.indices) {
