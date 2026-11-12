@@ -132,7 +132,7 @@ object PosePov : Module(
 
     private val prerender by BooleanSetting("Prerender", true, desc = "Builds the whole dungeon and the boss arena in the background while you're in a dungeon, so the leap menu only has to draw. Room geometry is kept across runs either way.")
     private val useShared by BooleanSetting("Use shared POVs", true, desc = "Draws teammates who share from their own view (exact and smooth). Off: only from what your game sees of them, and the map's guess out of range.")
-    private val shareFps by NumberSetting("Sharing FPS", 60, ShareFps.NONE..240, 5, desc = "How many times a second your look goes to teammates (whether or not this module is on). Higher is smoother for them. At the lowest, off: nothing of yours is shared.")
+    private val shareFps by NumberSetting("Sharing FPS ❗", 60, ShareFps.NONE..240, 5, desc = "How many times a second your look goes to teammates (whether or not this module is on). Higher is smoother for them. At the lowest, off: nothing of yours is shared.")
     private val onlyBloodRush by BooleanSetting("Only In Blood Rush", false, desc = "Shows the views on blood rush: from the dungeon starting until the blood door opens. Adds to the other Only In place; neither ticked is everywhere.")
     private val onlyTerms by BooleanSetting("Only In Terms", false, desc = "Shows the views in terms: F7/M7 phase 3, the terminals, devices and levers, and the Goldor split after them until you drop to Necron. Adds to the other Only In place; neither ticked is everywhere.")
     private val places get() = buildList { if (onlyBloodRush) add(ShowIn.Place.BLOOD_RUSH); if (onlyTerms) add(ShowIn.Place.GOLDOR) }

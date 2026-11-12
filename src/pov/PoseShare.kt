@@ -44,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap
 object PoseShare {
     private const val SITE = "undonecoffee.com"
     private const val TICK_NS = 50_000_000L
-    /** Look frames over TURN: one a frame at most, as often as this (the "Sharing FPS" setting; 60 a second), each with the frame's look rather than the tick's. */
+    /** Look frames over TURN: one a frame at most, as often as this (the "Sharing FPS ❗" setting; 60 a second), each with the frame's look rather than the tick's. */
     @Volatile var frameNs = 16_666_666L
     /**
      * TURN kinds ([TurnLink]'s header): the relay's own numbers for the frames both carry (3 terminal, 4 closed, 7 and 8
@@ -95,7 +95,7 @@ object PoseShare {
 
     /** Whether you're looking at your teammates' views, or about to (set by [PosePov] each tick). */
     @Volatile var watching = false
-    /** "Sharing FPS" isn't off: your pose, look, terminal and rooms go to teammates (set by [PosePov] each tick, on or off). Off, nothing of yours is sent; theirs still come. */
+    /** "Sharing FPS ❗" isn't off: your pose, look, terminal and rooms go to teammates (set by [PosePov] each tick, on or off). Off, nothing of yours is sent; theirs still come. */
     @Volatile var sharing = true
     /** Each teammate's frames go whichever way is quicker to them right now, TURN or the relay, measured for each one. */
     @Volatile var optimize = true

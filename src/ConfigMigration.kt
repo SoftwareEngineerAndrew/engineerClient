@@ -66,6 +66,7 @@ object ConfigMigration {
      *  - ADS's Shortbow Cooldown is its Shortbow Shot Cooldown (the wrong default 2 dropped, so it reads 5).
      *  - ADR's Private Runs is its Unlisted Runs (2026-10-30, ADM 1.0.10).
      *  - Engineer Client's Terminals Status goes (2026-11-06).
+     *  - POV Previews' Sharing FPS is its Sharing FPS ❗ (2026-11-11).
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -119,6 +120,13 @@ object ConfigMigration {
             if (adr.has("Unlisted Runs")) return@let
             adr.add("Unlisted Runs", old)
             adr.addProperty("Unlisted Runs Checked", true)
+        }
+
+        // POV Previews' Sharing FPS is its Sharing FPS ❗: the value comes with it. The old key goes, so this runs once.
+        module(modules, "POV Previews")?.let(::settings)?.let { pov ->
+            val old = pov.remove("Sharing FPS") ?: return@let
+            changed = true
+            if (!pov.has("Sharing FPS ❗")) pov.add("Sharing FPS ❗", old)
         }
 
         module(modules, "Random Stuff")?.let(::settings)?.let { rs ->
