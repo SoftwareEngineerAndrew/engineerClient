@@ -33,6 +33,12 @@ object TeleportLaw {
         }
     }
 
+    /**
+     * The eye the server casts a click from: its pose's, which takes a sneak change a tick after the input packet. [changed]: the
+     * sneak changed in the click's own server tick, so the eye is the one before it ([sneaking] is the click's own sneak).
+     */
+    fun eye(sneaking: Boolean, changed: Boolean): Double = if (sneaking != changed) SNEAK_EYE else STAND_EYE
+
     /** The look vector for a yaw and pitch in degrees (Minecraft's). */
     fun look(yaw: Float, pitch: Float): DoubleArray {
         val y = Math.toRadians(yaw.toDouble()); val p = Math.toRadians(pitch.toDouble())
@@ -52,10 +58,13 @@ object TeleportLaw {
      *   cell and the one above it not solid, and the feet cell not on a tall block.
      * - The first bad step ends the walk; you land on the last good one at (x.5, feet, z.5). None good: refused.
      * - A landing in your own column is refused when it's your spot, under 1.5 straight up, or under 0.55 straight down.
+     * - [eye]: the eye height the server casts from when it isn't [sneaking]'s. The server reads its own pose, which takes a sneak
+     *   change a tick later: a click sent in the same tick as letting go of sneak is cast from 1.27 (101279 and 165424, 2026-11-12:
+     *   both blinks landed where 1.27's steps stop, 1 and 2 blocks short of 1.62's).
      */
-    fun blink(fx: Double, fy: Double, fz: Double, yaw: Float, pitch: Float, sneaking: Boolean, distance: Int, w: Cells): DoubleArray? {
+    fun blink(fx: Double, fy: Double, fz: Double, yaw: Float, pitch: Float, sneaking: Boolean, distance: Int, w: Cells, eye: Double? = null): DoubleArray? {
         val d = look(yaw, pitch)
-        val ey = fy + if (sneaking) SNEAK_EYE else STAND_EYE
+        val ey = fy + (eye ?: if (sneaking) SNEAK_EYE else STAND_EYE)
         fun solid(x: Int, y: Int, z: Int) = isSolid(w.id(x, y, z))
         fun tall(x: Int, y: Int, z: Int) = w.top(x, y - 1, z) > 1.0
         fun feet(x: Int, y: Int, z: Int) = if (solid(x, y - 1, z) || tall(x, y - 1, z)) y else y - 1

@@ -69,6 +69,8 @@ object Zpew : Module(
     /** [from]: where the chain had you when you clicked (the camera); [cells]: the blocks around the ray then, when Capture Misses is on. */
     private class Click(val ether: Boolean, val yaw: Float, val pitch: Float, val sneaking: Boolean, val distance: Double, val witherImpact: Boolean = false) {
         var from: DoubleArray? = null
+        /** The eye the server casts from: its pose is the sneak before a change sent this tick (TeleportLaw.eye). */
+        var eye: Double? = null
         var cells: String? = null
     }
 
@@ -78,6 +80,9 @@ object Zpew : Module(
     /** Server ticks as they reach us (counted on the network thread): they stop while the server lags. */
     private val serverTicks = java.util.concurrent.atomic.AtomicLong()
     private var lastWitherImpact = 0L
+    /** The last sent sneak and the client tick it changed on (TeleportLaw.eye). */
+    private var sentSneak = false
+    private var sneakChangedAt = Long.MIN_VALUE / 2
 
     /** The last move packet's look: a block click is cast with it. */
     private var moveYaw = Float.NaN
@@ -207,8 +212,8 @@ object Zpew : Module(
     private fun land(from: DoubleArray, c: Click): DoubleArray? {
         val cells = LevelCells(mc.level ?: return null)
         if (nearRoom(from) { it.type == RoomType.TRAP || it.data?.name in NO_TELEPORT }) return null
-        val to = if (c.ether) TeleportLaw.etherwarp(from[0], from[1], from[2], c.yaw, c.pitch, c.distance, cells)
-        else TeleportLaw.blink(from[0], from[1], from[2], c.yaw, c.pitch, c.sneaking, c.distance.toInt(), cells)
+        val to = if (c.ether) TeleportLaw.etherwarp(from[0], from[1], from[2], c.yaw, c.pitch, c.distance, cells, c.eye ?: TeleportLaw.SNEAK_EYE)
+        else TeleportLaw.blink(from[0], from[1], from[2], c.yaw, c.pitch, c.sneaking, c.distance.toInt(), cells, c.eye)
         return to?.takeUnless { nearRoom(it) { r -> r.data?.name in NO_TELEPORT } }
     }
 
@@ -227,14 +232,16 @@ object Zpew : Module(
         val stack = p.getItemInHand(packet.hand)
         val sneaking = p.lastSentInput.shift()
         val (yaw, pitch) = if (blockClick == false && !moveYaw.isNaN()) moveYaw to movePitch else packet.yRot to packet.xRot
-        if (sneaking) stack.isEtherwarpItem()?.let { return if (etherwarp) Click(true, yaw, pitch, true, Etherwarp.getEtherwarpDistance(it)) else null }
+        // a sneak change sent this tick reaches the server with the click: it casts from the pose before it
+        val eye = TeleportLaw.eye(sneaking, ticks - sneakChangedAt <= 1)
+        if (sneaking) stack.isEtherwarpItem()?.let { return if (etherwarp) Click(true, yaw, pitch, true, Etherwarp.getEtherwarpDistance(it)).also { c -> c.eye = eye } else null }
         val id = stack.itemId
         val distance = when {
             id == "ASPECT_OF_THE_END" || id == "ASPECT_OF_THE_VOID" -> if (aotv) 8 + stack.customData.getInt("tuned_transmission").orElse(0) else return null
             id in WITHER_BLADES && stack.customData.getListOrEmpty("ability_scroll").size == 3 -> if (hyperion) 10 else return null
             else -> return null
         }
-        return Click(false, yaw, pitch, sneaking, distance.toDouble(), id in WITHER_BLADES)
+        return Click(false, yaw, pitch, sneaking, distance.toDouble(), id in WITHER_BLADES).also { it.eye = eye }
     }
 
     init {
@@ -267,6 +274,11 @@ object Zpew : Module(
                     sync("blocked")
                 }
             }
+        }
+
+        onSend<net.minecraft.network.protocol.game.ServerboundPlayerInputPacket> {
+            val s = input().shift()
+            if (s != sentSneak) { sentSneak = s; sneakChangedAt = ticks }
         }
 
         onSend<ServerboundMovePlayerPacket> {
