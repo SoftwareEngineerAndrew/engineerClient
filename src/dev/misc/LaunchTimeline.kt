@@ -42,7 +42,7 @@ import java.time.LocalDateTime
  *  sb-world      Skyblock drawn
  */
 object LaunchTimeline {
-    private val startMs = ProcessHandle.current().info().startInstant().map { it.toEpochMilli() }.orElse(ManagementFactory.getRuntimeMXBean().startTime)
+    private val startMs = procStartMs() ?: ProcessHandle.current().info().startInstant().map { it.toEpochMilli() }.orElse(ManagementFactory.getRuntimeMXBean().startTime)
     private val marks = LinkedHashMap<String, Long>()
     private var written = false
     private var overlayWasUp = false
@@ -51,6 +51,17 @@ object LaunchTimeline {
     private var firstJoinAt = 0L
 
     private fun now() = System.currentTimeMillis() - startMs
+
+    /**
+     * The process's start from its start tick and the boot time worked out from the uptime. Java's own start
+     * time uses the boot time rounded down to a whole second, which put up to a second on every mark.
+     */
+    private fun procStartMs(): Long? = runCatching {
+        val stat = Files.readString(java.nio.file.Path.of("/proc/self/stat"))
+        val startTicks = stat.substring(stat.lastIndexOf(')') + 2).split(' ')[19].toLong()
+        val uptimeS = Files.readString(java.nio.file.Path.of("/proc/uptime")).substringBefore(' ').toDouble()
+        System.currentTimeMillis() - (uptimeS * 1000).toLong() + startTicks * 10
+    }.getOrNull()
 
     fun mark(name: String) {
         if (written || name in marks) return
@@ -93,6 +104,7 @@ object LaunchTimeline {
 
     private fun write() {
         written = true
+        ClassWarmup.finish()
         var prev = 0L
         var line = marks.entries.joinToString("  ") { (k, v) -> "$k ${v}ms (+${v - prev})".also { prev = v } }
         DevgineerClient.logger.info("[dc] launch timeline: {}", line)

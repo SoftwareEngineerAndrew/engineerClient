@@ -31,6 +31,7 @@ object DevgineerClient : ClientModInitializer {
         safely("fast launch default") { FastLaunch.enableByDefault() }
         safely("perf monitor default") { PerfMonitor.enableByDefault() }
         safely("maxor crystals default") { MaxorCrystals.enableByDefault() }
+        safely("class warmup") { com.devgineerclient.misc.ClassWarmup.install() }
         safely("early join") { com.devgineerclient.misc.EarlyJoin.install() }
         safely("f7 control") { com.devgineerclient.misc.F7Control.install() }
         safely("fast exit") { com.devgineerclient.misc.FastExit.install() }
