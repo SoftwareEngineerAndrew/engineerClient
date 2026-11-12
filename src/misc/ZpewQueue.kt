@@ -14,11 +14,15 @@ package com.engineerclient.misc
  * ticks ([wall]) is the cap if the server never answers.
  */
 class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleArray?) {
-    private class Waiting<C>(val click: C, val tick: Long, val wall: Long, var counts: Boolean)
+    private class Waiting<C>(val click: C, val tick: Long, val wall: Long, var counts: Boolean) {
+        /** The server tick a "There are blocks in the way!" line came for this click, or -1. */
+        var blockedAt = -1L
+    }
 
     private val waiting = ArrayDeque<Waiting<C>>()
     private var origin: DoubleArray? = null
     private var roundTrip = Double.NaN
+    private var lastTeleportTick = -1L
     private var spread = 0.0
 
     /** Where the camera goes (feet), or null: at the player. */
@@ -26,6 +30,28 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         private set
 
     val isEmpty get() = waiting.isEmpty()
+
+    /** Called with each click that stops counting without an answer (the server dropped or refused it silently). */
+    var onDrop: ((C) -> Unit)? = null
+
+    /**
+     * The server synced you to [to] (a position packet that answers no click) while clicks were waiting: it casts them from
+     * there, so the chain is worked out again from it.
+     */
+    fun synced(to: DoubleArray) {
+        if (waiting.isEmpty()) return
+        origin = to
+        rechain()
+    }
+
+    /** Whether [to] is where one of the waiting clicks lands. */
+    fun matches(to: DoubleArray): Boolean {
+        val from = origin ?: return false
+        return waiting.any { same(predict(from, it.click), to) }
+    }
+
+    /** The oldest click still counting: the one a teleport that matches nothing is taken for. */
+    fun oldestCounting(): C? = waiting.firstOrNull { it.counts }?.click
     val size get() = waiting.size
 
     /** The last [teleport]: which waiting click it matched (-1: none did, the oldest was taken), and where the oldest counting one was predicted. */
@@ -43,6 +69,7 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
 
     /** A teleport to [to] was applied at [tick]. False when nothing was waiting for it. */
     fun teleport(to: DoubleArray, tick: Long): Boolean {
+        lastTeleportTick = tick
         if (waiting.isEmpty()) return false
         val from = origin ?: to
         var i = waiting.indexOfFirst { same(predict(from, it.click), to) }
@@ -51,6 +78,27 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         if (i >= 0) sample((tick - waiting[i].tick).toDouble()) else i = waiting.indexOfFirst { it.counts }
         repeat(i + 1) { waiting.removeFirst() }
         origin = to
+        rechain()
+        return true
+    }
+
+    /**
+     * "There are blocks in the way!" came at [tick]. It also comes just before a blink cut short by a wall that still moves you
+     * (alldata #items.blink-refusal: in the move's tick, or up to 4 ticks earlier for a Hyperion), so it is only marked here;
+     * [settleBlocked] refuses the click once no move followed.
+     */
+    fun blocked(tick: Long) {
+        if (lastTeleportTick == tick) return // the cut-short blink this line came with was already applied
+        waiting.firstOrNull { it.counts && it.blockedAt < 0 }?.blockedAt = tick
+    }
+
+    /** Refuses the oldest counting click whose blocked line wasn't followed by its move within [early] ticks. True when one was. */
+    fun settleBlocked(tick: Long, early: (C) -> Int): Boolean {
+        val i = waiting.indexOfFirst { it.counts }
+        if (i < 0) return false
+        val w = waiting[i]
+        if (w.blockedAt < 0 || tick - w.blockedAt <= early(w.click)) return false
+        waiting.removeAt(i)
         rechain()
         return true
     }
@@ -67,7 +115,7 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     fun expire(tick: Long, wall: Long = tick): Boolean {
         val limit = if (roundTrip.isNaN()) FIRST.toDouble() else minOf(MAX.toDouble(), roundTrip + maxOf(GRACE.toDouble(), 4 * spread))
         var changed = false
-        for (w in waiting) if (w.counts && (tick - w.tick >= limit || wall - w.wall >= HARD)) { w.counts = false; changed = true }
+        for (w in waiting) if (w.counts && (tick - w.tick >= limit || wall - w.wall >= HARD)) { w.counts = false; changed = true; onDrop?.invoke(w.click) }
         while (waiting.isNotEmpty() && (tick - waiting.first().tick >= KEEP || wall - waiting.first().wall >= HARD + KEEP)) waiting.removeFirst()
         if (!changed) return false
         rechain()
