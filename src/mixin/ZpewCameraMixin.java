@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Zpew: while an etherwarp is on its way, the camera is put at its landing (at eye height) instead of on the player. */
+/** Legit Zpew: while teleports are on their way, the camera is at the last one's landing (eye height), not on the player. */
 @Mixin(Camera.class)
 public abstract class ZpewCameraMixin {
 
