@@ -24,6 +24,9 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
     var drift = 0.0; private set
     /** Lever flips so far: tick to lever bits. */
     private val flipAt = HashMap<Int, Int>()
+    /** Random ticks the packets showed (tick to cells): Hypixel's flowing water gets them, and no one can predict them. */
+    private val randomAt = HashMap<Int, IntArray>()
+    var randomTicks = 0; private set
     /** Per tick, the board at the end of it (to wind back to), oldest first, consecutive. */
     private val snaps = ArrayDeque<WaterSim>()
     /** Per snapshot, the cells written after its tick's send (they go out with the next tick's). */
@@ -75,7 +78,7 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
         val dirty = LinkedHashSet<Int>(carry)
         head.onWrite = { c, _ -> dirty += c }
         head.onSend = { for (c in dirty) log[c] = view(head.cells[c]); dirty.clear() }
-        head.step(flipAt[head.time + 1] ?: 0)
+        head.step(flipAt[head.time + 1] ?: 0, randomAt[head.time + 1])
         head.onWrite = null; head.onSend = null
         carry = dirty
         sends[head.time] = log
@@ -116,14 +119,46 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
         val o = Obs(r, cell, view, t ?: Int.MIN_VALUE)
         recent.addLast(o); while (recent.size > 80) recent.removeFirst()
         trace?.invoke("cell ${geo.x(cell)},${geo.y(cell)} v$view raw ${"%.1f".format(r)} e $e -> $t (head ${head.time}, drift ${"%.1f".format(drift)}) sendsAtE ${sends[e]?.entries?.joinToString { "${geo.x(it.key)},${geo.y(it.key)}=${it.value}" }}")
-        if (t != null) {
-            used += key(t, cell); matched++; streak = 0
-            lags.addLast(t - r); while (lags.size > 15) lags.removeFirst()
+        val tt = t ?: randomTick(cell, view, e)
+        if (tt != null) {
+            o.tick = tt
+            used += key(tt, cell); matched++; streak = 0
+            lags.addLast(tt - r); while (lags.size > 15) lags.removeFirst()
             drift = lags.sorted()[lags.size / 2]
             return
         }
         if (++streak >= 6) relock()
         checkDivergence(ms)
+    }
+
+    /**
+     * A packet nothing simulated explains, tried as a random tick: on that cell or a neighbour, flowing at the time, a few ticks
+     * before the packet's tick. The first that makes the server send exactly this is kept (the board is wound back and played
+     * again with it). Its signature: a cell updated off its 5-tick step, sooner than scheduled (its own scheduled tick then
+     * finds it settled, or is merged into the one it already had). Returns the tick the packet now matches, or null.
+     */
+    private fun randomTick(cell: Int, view: Int, e: Int): Int? {
+        val top = head.time
+        val first = snaps.first().time
+        for (t in e - RANDOM_SPAN..e + 1) {
+            if (t <= first || t > top) continue
+            val before = snaps.firstOrNull { it.time == t - 1 } ?: continue
+            for (d in intArrayOf(0, geo.w, -geo.w, 1, -1)) {
+                val c = cell + d
+                if (c !in before.cells.indices) continue
+                val v = before.cells[c]
+                if (v < 0 || v and WaterSim.DYN == 0) continue
+                if (randomAt[t]?.contains(c) == true) continue
+                randomAt[t] = (randomAt[t] ?: IntArray(0)) + c
+                rewind(t - 1); advanceTo(top)
+                val m = nearest(cell, view, e, 2)
+                if (m != null) { randomTicks++; trace?.invoke("random tick ${geo.x(c)},${geo.y(c)} at $t"); return m }
+                val left = randomAt[t]!!.filter { it != c }.toIntArray()
+                if (left.isEmpty()) randomAt.remove(t) else randomAt[t] = left
+                rewind(t - 1); advanceTo(top)
+            }
+        }
+        return null
     }
 
     /** A cell as the client sees it: the water level (flowing and still look the same), air or solid. */
@@ -180,6 +215,7 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
         head = rebuilt
         snaps.clear(); carries.clear(); snaps.addLast(head.copy()); carries.addLast(IntArray(0)); sends.clear(); used.clear(); carry.clear(); recent.clear(); pending.clear()
         flipAt.keys.removeIf { it > head.time }
+        randomAt.keys.removeIf { it > head.time }
         streak = 0; resyncs++
     }
 
@@ -222,7 +258,7 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
                 val dirty = LinkedHashSet<Int>()
                 s.onWrite = { cell, _ -> dirty += cell }
                 s.onSend = { val m = log.getOrPut(s.time) { HashMap() }; for (d in dirty) m[d] = view(s.cells[d]); dirty.clear() }
-                while (s.time < p.checkAt + 4) s.step(bits[s.time + 1] ?: 0)
+                while (s.time < p.checkAt + 4) s.step(bits[s.time + 1] ?: 0, randomAt[s.time + 1])
                 var score = 0
                 for (o in window) {
                     val e = (o.raw + drift).roundToInt()
@@ -248,5 +284,7 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
         const val KEEP = 120
         /** How far (ticks) a flip may be moved once the packets after it are in. */
         const val SPAN = 8
+        /** How many ticks before a packet's tick a random tick that explains it is looked for. */
+        const val RANDOM_SPAN = 4
     }
 }

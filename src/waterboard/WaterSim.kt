@@ -15,6 +15,11 @@ package com.engineerclient.waterboard
  *  5. block events: the levers flipped this tick move their pistons (a pulled block leaves its cell at once; a pushed one turns
  *     the cell into a moving piston, destroying water there, and lands [LAND] ticks later).
  *
+ * Rechecked 2026-11-12 on two Dungeon Recorder runs (test/waterboard/WaterBoardRecordedTest): every board packet the server
+ * sent, on its tick, once the random ticks the packets show are put in ([randomTick]). Where Hypixel isn't vanilla 1.8: a block
+ * that dries up leaves nothing below it. Not deterministic: flowing water gets random ticks, so from flips alone the water is
+ * exact only until the first one, and then a few ticks early at most (never late); the [Tracker] places them from the packets.
+ *
  * The order 1.8 visits east/west/north/south in matters (which update reads which), and in room terms it depends on how the
  * room is turned: [Geometry.of] takes the rotation.
  */
@@ -85,11 +90,12 @@ class WaterSim private constructor(
      * One server tick. [flips]: a bit per lever ([Geometry.LEVERS] order, the water lever included) flipped so that its packet
      * comes with this tick's; the water lever acts at the start, the others' pistons at the end.
      */
-    fun step(flips: Int = 0) {
+    fun step(flips: Int = 0, random: IntArray? = null) {
         time++
         if (flips and WATER_BIT != 0) { time--; phase = 1; setSource(!sourceOn); time++ }
         phase = 0
         runDue()
+        if (random != null) for (c in random) randomTick(c)
         outlets()
         onSend?.invoke()
         phase = 1
@@ -125,7 +131,9 @@ class WaterSim private constructor(
             set(c, AIR, true)                                                   // pulled back: open at once
         } else {
             if (cells[c] >= 0) set(c, AIR, true)                               // pushed into water: the water is destroyed
-            write(c, SOLID)                                                     // the moving piston
+            // the moving piston, placed with flag 4 (BlockPistonBase.doMove): not sent. The client sees it only when the water
+            // destroyed there had marked the cell (then as moving_piston); otherwise the cell stays air until the block lands.
+            cells[c] = SOLID
             landAt[k] = time + LAND
         }
         slotIn[k] = !slotIn[k]
@@ -232,7 +240,10 @@ class WaterSim private constructor(
         } else {
             write(c, i)
         }
-        // 1.8 carries on with the new level even when the block just dried up (i = -1): water above air leaves a level-7 block.
+        // Vanilla 1.8 carries on with the new level when the block just dried up (i = -1) and drops a level-7 block into air
+        // below it. Hypixel's server doesn't: recorded 2026-10-12 (a88e9b, coal pushed over a falling column), the dried block
+        // went to air and nothing was ever written below it.
+        if (i < 0) return
         val below = c - geo.w
         if (cells[below] == AIR) {
             tryFlow(below, if (i >= 8) i else i + 8)
@@ -242,6 +253,17 @@ class WaterSim private constructor(
             if (k1 >= 8) return
             for (d in geo.setOrder) if (dirs and dirBit(d) != 0) tryFlow(c + d, k1)
         }
+    }
+
+    /**
+     * A random tick (WorldServer.updateBlocks, after the scheduled ticks): flowing water is randomly ticked in 1.8 (BlockLiquid
+     * sets tickRandomly; only BlockStaticLiquid of water turns it off), and a random tick is a whole updateTick. It can only
+     * move water sooner, never later. Hypixel's random ticks can't be predicted; [Tracker] places them from the packets.
+     * Measured on Hypixel: about 1 per 350 flowing-water ticks (3 seen in 1116; vanilla randomTickSpeed 3 would be 1/1365).
+     */
+    fun randomTick(c: Int) {
+        val v = cells[c]
+        if (v >= 0 && v and DYN != 0) update(c)
     }
 
     private fun tryFlow(q: Int, lvl: Int) {
