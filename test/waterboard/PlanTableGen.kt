@@ -14,7 +14,7 @@ import kotlin.test.Test
  * three closed gates, the best plan for each [Objective] from a fresh board, with how it holds up over 1000 Monte Carlo trials.
  *
  * Slow (minutes per board): only when asked. `WB_GEN=1 gradle test --tests '*PlanTableGen*'` (WB_BUDGET: ms per plan,
- * WB_OUT: where to write, WB_ONLY: "layout" or "layout,rotation,closed" to do part of it).
+ * WB_OUT: where to write, WB_ONLY: "layout", "layout,rotation" or "layout,rotation,closed" to do part of it).
  *
  * Plan ticks count from the fresh board's tick 0: the first flip is at tick 1 or later, and a plan is used by shifting all
  * its ticks so that its first flip is as soon as the player can do it.
@@ -58,7 +58,8 @@ class PlanTableGen {
             if (only != null && only[0].toInt() != id) continue
             val rows = layout["rows"].asJsonArray.map { it.asString }
             for (rot in rotations) for (closed in combos) {
-                if (only != null && only.size == 3 && (only[1] != rot || only[2].toInt() != closed)) continue
+                if (only != null && only.size >= 2 && only[1] != rot) continue
+                if (only != null && only.size == 3 && only[2].toInt() != closed) continue
                 keys += Key(id, rows, rot, closed)
             }
         }
@@ -116,7 +117,7 @@ class PlanTableGen {
         root.add("layouts", JsonArray().apply { layouts.forEach { l -> add(JsonObject().apply { add("rows", l.asJsonObject["rows"]); addProperty("id", l.asJsonObject["id"].asInt) }) } })
         root.add("plans", plans)
         out.parentFile.mkdirs()
-        File(out.parentFile, "odin-benchmark.json").writeText(GsonBuilder().disableHtmlEscaping().create().toJson(odinPlansOut))
+        File(out.parentFile, out.nameWithoutExtension + ".odin.json").writeText(GsonBuilder().disableHtmlEscaping().create().toJson(odinPlansOut))
         out.writeText(GsonBuilder().disableHtmlEscaping().create().toJson(root))
         println("wrote ${plans.size()} plans to $out")
     }
