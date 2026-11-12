@@ -46,4 +46,13 @@ class ZpewQueueLagTest {
         assertFalse(q.matches(doubleArrayOf(0.4, 70.0, 0.0)))
         assertTrue(q.matches(doubleArrayOf(10.0, 70.0, 0.0)))
     }
+
+    @Test
+    fun aSyncReCastsTheWaitingClicksFromIt() {
+        val q = queue()
+        q.click(Unit, 0, doubleArrayOf(0.0, 70.0, 0.0), true, wall = 0)
+        q.synced(doubleArrayOf(0.4, 70.0, 0.0))
+        assertContentEquals(doubleArrayOf(10.4, 70.0, 0.0), assertNotNull(q.camera))
+        assertTrue(q.matches(doubleArrayOf(10.4, 70.0, 0.0)))
+    }
 }

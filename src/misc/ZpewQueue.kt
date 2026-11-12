@@ -34,6 +34,16 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     /** Called with each click that stops counting without an answer (the server dropped or refused it silently). */
     var onDrop: ((C) -> Unit)? = null
 
+    /**
+     * The server synced you to [to] (a position packet that answers no click) while clicks were waiting: it casts them from
+     * there, so the chain is worked out again from it.
+     */
+    fun synced(to: DoubleArray) {
+        if (waiting.isEmpty()) return
+        origin = to
+        rechain()
+    }
+
     /** Whether [to] is where one of the waiting clicks lands. */
     fun matches(to: DoubleArray): Boolean {
         val from = origin ?: return false

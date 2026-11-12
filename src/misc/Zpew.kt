@@ -114,6 +114,8 @@ object Zpew : Module(
         if (was != null && !queue.isEmpty && !queue.matches(doubleArrayOf(x, y, z)) &&
             (0..2).sumOf { (doubleArrayOf(x, y, z)[it] - was[it]).let { d -> d * d } } < NEAR * NEAR) {
             log("SYNC to=${fmt(doubleArrayOf(x, y, z))} was=${fmt(was)} waiting=$waited")
+            queue.synced(doubleArrayOf(x, y, z))
+            sync("server-sync")
             return
         }
         val oldest = queue.oldestCounting()
