@@ -1,7 +1,7 @@
 name: Release
 
-# Here: a build and test check on each push. In ADM (promote.sh copies this file): one rolling release per
-# Minecraft version, main the newest (Latest), each older one on an mc/<version> branch.
+# One rolling release per Minecraft version (here EngineerClient, in ADM through promote.sh ADM): main the newest
+# (Latest), each older one on an mc/<version> branch.
 on:
   push:
     branches: [main, "mc/**"]
@@ -47,7 +47,6 @@ jobs:
           restore-keys: ec-compile-${{ github.ref_name }}-
       - run: gradle build -x test --console=plain -Dorg.gradle.jvmargs=-Xmx6G -Pkotlin.daemon.jvmargs=-Xmx6G
       - name: Publish
-        if: github.repository == 'undonecoffee/adm'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
