@@ -119,7 +119,7 @@ const rules = [
   ['jar="EngineerClient-$MC.jar"', 'jar="ADM-$MC.jar"', true],
   ['echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}"', 'echo "EC_VERSION=' + process.env.ADM_VERSION + '"', true],
   ['**[Download EngineerClient for Minecraft %s](%s)**', '**[Download ADM for Minecraft %s](%s)**', true],
-  ['--title "EngineerClient for Minecraft $MC"', '--title "ADM for Minecraft $MC"', true],
+  ['--title "EngineerClient"', '--title "ADM for Minecraft $MC"', true],
   // Panel, prefix, commands, text.
   ['Category.custom("Engineer Client"', 'Category.custom("ADM"', true],
   // ADM hides the beta's unfinished ADS buttons: the title screen's Run and GUI, the ADS menu's Full Run.
