@@ -62,7 +62,8 @@
     "DropAnimationAttackMixin",
     "ZpewCameraMixin",
     "ZpewTeleportMixin",
-    "ZpewEtherwarpOverlayMixin"
+    "ZpewEtherwarpOverlayMixin",
+    "ZpewPlayerRenderMixin"
   ],
   "injectors": {
     "defaultRequire": 1
