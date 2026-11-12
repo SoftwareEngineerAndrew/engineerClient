@@ -26,6 +26,12 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         private set
 
     val isEmpty get() = waiting.isEmpty()
+
+    /** Called with each click that stops counting without an answer (the server dropped or refused it silently). */
+    var onDrop: ((C) -> Unit)? = null
+
+    /** The oldest click still counting: the one a teleport that matches nothing is taken for. */
+    fun oldestCounting(): C? = waiting.firstOrNull { it.counts }?.click
     val size get() = waiting.size
 
     /** The last [teleport]: which waiting click it matched (-1: none did, the oldest was taken), and where the oldest counting one was predicted. */
@@ -67,7 +73,7 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     fun expire(tick: Long, wall: Long = tick): Boolean {
         val limit = if (roundTrip.isNaN()) FIRST.toDouble() else minOf(MAX.toDouble(), roundTrip + maxOf(GRACE.toDouble(), 4 * spread))
         var changed = false
-        for (w in waiting) if (w.counts && (tick - w.tick >= limit || wall - w.wall >= HARD)) { w.counts = false; changed = true }
+        for (w in waiting) if (w.counts && (tick - w.tick >= limit || wall - w.wall >= HARD)) { w.counts = false; changed = true; onDrop?.invoke(w.click) }
         while (waiting.isNotEmpty() && (tick - waiting.first().tick >= KEEP || wall - waiting.first().wall >= HARD + KEEP)) waiting.removeFirst()
         if (!changed) return false
         rechain()

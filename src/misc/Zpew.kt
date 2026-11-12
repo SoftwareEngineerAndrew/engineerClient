@@ -46,6 +46,7 @@ object Zpew : Module(
     private val aotv by BooleanSetting("AOTE / AOTV", true, desc = "Aspect of the End and Aspect of the Void teleports (unsneaked).")
     private val hyperion by BooleanSetting("Hyperion", true, desc = "Wither Impact teleports: Hyperion, Valkyrie, Astraea, Scylla, Necron's Blade with all three scrolls.")
     private val debug by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera jump to config/engineerclient/zpew-debug.log, for checking the predictions.")
+    private val capture by BooleanSetting("Capture Misses", false, desc = "When a prediction is wrong (warps where the server refuses, lands elsewhere, or refuses where the server warps), saves the click and the blocks around it to config/engineerclient/zpew-misses.txt, to fix the law from.")
 
     private var logOut: java.io.Writer? = null
     private val startMs = System.currentTimeMillis()
@@ -64,7 +65,11 @@ object Zpew : Module(
     private fun fmt(p: DoubleArray?) = p?.joinToString(",") { "%.3f".format(it) } ?: "-"
     private fun fmt(p: Vec3?) = p?.let { fmt(doubleArrayOf(it.x, it.y, it.z)) } ?: "-"
 
-    private class Click(val ether: Boolean, val yaw: Float, val pitch: Float, val sneaking: Boolean, val distance: Double, val witherImpact: Boolean = false)
+    /** [from]: where the chain had you when you clicked (the camera); [cells]: the blocks around the ray then, when Capture Misses is on. */
+    private class Click(val ether: Boolean, val yaw: Float, val pitch: Float, val sneaking: Boolean, val distance: Double, val witherImpact: Boolean = false) {
+        var from: DoubleArray? = null
+        var cells: String? = null
+    }
 
     private val queue = ZpewQueue<Click>(::land)
     @Volatile private var camera: Vec3? = null
@@ -82,6 +87,8 @@ object Zpew : Module(
     private val WITHER_BLADES = setOf("NECRON_BLADE", "SCYLLA", "HYPERION", "VALKYRIE", "ASTRAEA")
     private val ACTS = Regex("^(chest|trapped_chest|ender_chest|lever)$|_button$|_sign$|_fence_gate$|(_head|_skull)$")
     private val NO_TELEPORT = setOf("Teleport Maze", "Boulder")
+    private const val TAB = "\t"
+    private const val NL = "\n"
     private val REFUSALS = listOf(
         "You cannot use abilities in this room!",
         "You cannot do that in this room!",
@@ -94,7 +101,9 @@ object Zpew : Module(
     /** ZpewTeleportMixin: the game has just moved you for a server teleport. */
     @JvmStatic fun onTeleportApplied(x: Double, y: Double, z: Double) {
         val waited = queue.size
+        val oldest = queue.oldestCounting()
         if (queue.teleport(doubleArrayOf(x, y, z), serverTicks.get())) {
+            if (queue.lastMatch < 0 && oldest != null) miss(if (queue.lastExpected == null) "law-refused" else "wrong-landing", oldest, queue.lastExpected, doubleArrayOf(x, y, z))
             val e = queue.lastExpected
             val off = e?.let { Math.sqrt((it[0] - x) * (it[0] - x) + (it[1] - y) * (it[1] - y) + (it[2] - z) * (it[2] - z)) }
             log("TP to=${fmt(doubleArrayOf(x, y, z))} expected=${fmt(e)} off=${off?.let { "%.3f".format(it) } ?: "-"} match=${queue.lastMatch} waiting=$waited left=${queue.size}")
@@ -112,6 +121,49 @@ object Zpew : Module(
             val jump = if (a != null && b != null) a.distanceTo(b) else 0.0
             log("CAM $why ${fmt(old)} -> ${fmt(camera)} player=${fmt(p)} jump=${"%.3f".format(jump)}")
         }
+    }
+
+    /**
+     * Capture Misses: one line per wrong prediction, tab-separated: kind, ether|blink, sneaking, distance, from, yaw pitch, predicted,
+     * actual, then the blocks around the ray as "x y z id top state" joined by ';'. The law's tests read these (test/resources/zpew-misses).
+     */
+    private fun miss(kind: String, c: Click, predicted: DoubleArray?, actual: DoubleArray?) {
+        if (!capture) return
+        val from = c.from ?: return
+        val cells = c.cells ?: return
+        try {
+            val f = mc.gameDirectory.toPath().resolve("config/engineerclient/zpew-misses.txt")
+            java.nio.file.Files.createDirectories(f.parent)
+            val p = { a: DoubleArray? -> a?.joinToString(",") { it.toString() } ?: "-" }
+            val line = listOf(kind, if (c.ether) "ether" else "blink", c.sneaking, c.distance, p(from), "${c.yaw} ${c.pitch}", p(predicted), p(actual), cells).joinToString(TAB)
+            java.nio.file.Files.writeString(f, line + NL, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
+            mc.player?.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7Legit Zpew: saved a $kind miss to zpew-misses.txt"))
+        } catch (_: Throwable) {}
+    }
+
+    /** Every block within a block of the ray (and up to 3 above it), as the law sees them plus the full state. */
+    private fun snapshot(from: DoubleArray, c: Click): String? {
+        val level = mc.level ?: return null
+        val look = TeleportLaw.look(c.yaw, c.pitch)
+        val ey = from[1] + if (c.ether || c.sneaking) TeleportLaw.SNEAK_EYE else TeleportLaw.STAND_EYE
+        val seen = LinkedHashSet<Long>()
+        val out = StringBuilder()
+        val pos = BlockPos.MutableBlockPos()
+        val cells = LevelCells(level)
+        var t = 0.0
+        while (t <= c.distance + 1.5) {
+            val bx = floor(from[0] + look[0] * t).toInt(); val by = floor(ey + look[1] * t).toInt(); val bz = floor(from[2] + look[2] * t).toInt()
+            for (dx in -1..1) for (dz in -1..1) for (dy in -2..3) {
+                val x = bx + dx; val y = by + dy; val z = bz + dz
+                if (!seen.add(BlockPos.asLong(x, y, z))) continue
+                val state = level.getBlockState(pos.set(x, y, z))
+                if (state.isAir) continue
+                if (out.isNotEmpty()) out.append(';')
+                out.append("$x $y $z ${cells.id(x, y, z)} ${cells.top(x, y, z)} ${state.toString().substringAfter('{').substringBefore('}')}${state.toString().substringAfter('}', "")}")
+            }
+            t += 0.25
+        }
+        return out.toString()
     }
 
     private fun reset() {
@@ -168,6 +220,12 @@ object Zpew : Module(
     }
 
     init {
+        queue.onDrop = { c ->
+            // the law warped you but the server never did: the screenshot case
+            val from = c.from
+            if (capture && from != null) land(from, c)?.let { miss("server-refused", c, it, null) }
+        }
+
         on<LevelEvent.Load> { reset() }
 
         on<MessageEvent> {
@@ -199,6 +257,11 @@ object Zpew : Module(
                 val now = System.currentTimeMillis()
                 counts = now - lastWitherImpact >= 100
                 if (counts) lastWitherImpact = now
+            }
+            if (capture && counts) {
+                val from = camera?.let { doubleArrayOf(it.x, it.y, it.z) } ?: doubleArrayOf(p.x, p.y, p.z)
+                c.from = from
+                c.cells = snapshot(from, c)
             }
             queue.click(c, serverTicks.get(), doubleArrayOf(p.x, p.y, p.z), counts, ticks)
             log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.odtheking.odin.utils.ServerUtils.currentPing}")
