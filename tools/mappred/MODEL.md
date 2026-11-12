@@ -66,6 +66,12 @@ The grid is 6x6 cells; a cell is a 1x1 room or part of a big room.
   Played in the Kotlin GameSampler (TreeRule.ENTRANCE_IN, MapSequenceCheck from git, 200 held-out maps, 3774 views,
   pool) it predicts no better: per tile -0.9160 against -0.9149 at 40000 particles (diff -0.0010, s.e. 0.0015), at
   2000 -0.0021 (0.0036); 4-5 rooms known -0.0066 (0.0040). Neither falls back to the classic sampler (1 view of 3774).
+  Missing terms (scorediag.mjs, 300 maps, against alpha 0.5/beta 0.5/mu 0.2): leafU +6.3 z, farEnd +6.3, vFree -6.8,
+  edgeU +6.1. A side x exp(fv x the new cell's free neighbours) x exp(eu) off an edge cell (tree3 fv, eu): fv=-0.4,
+  eu=0.3 +0.17 a map on the 300 it was tuned on, +0.058 (s.e. 0.029) on 600 others; leaves 9.63, big leaf cells
+  3.39. In the Kotlin sampler (TreeRule.EDGE_FV, same 200 maps): -0.9156 against -0.9149 a tile at 40000 particles
+  (diff -0.0007, s.e. 0.0011); at 2000 +0.0085 (0.0038), all of it at 2-3 rooms known (+0.048), gone by 10000, and
+  10% slower. Not the default: the door tree's shape isn't what limits the prediction.
 
 ## 5. Keep the map or make it again
 

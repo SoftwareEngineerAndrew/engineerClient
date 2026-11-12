@@ -13,6 +13,8 @@
 //     bb, b1 the same only for sides into a big room / into a 1x1 (added to beta)
 //     mu     exp(-mu x the new cell's grid steps from the entrance)
 //     kappa  exp(-kappa x its cell's walk from the entrance) (the walk through a 2x2 is its drawn inside's)
+//     fv, eu, ev, fe  exp(fv x the new cell's free neighbours), exp(eu / ev) when the side's / new cell is on the map's
+//            edge, exp(fe) when the side's cell is its big room's furthest from its entry
 //     lf     exp(lf) when its cell has no child in the tree yet (the tree's leaf: corridors go on)
 //     ag, ae (1 + ag x the steps since its cell joined) / exp(ae x that): sides waiting longer
 //     lam    (level cell) a side inside a big room weighs lam
@@ -79,14 +81,25 @@ function sidesOf(st, rule, node) {
 function sideW(st, rule, u, v) {
   // lam: a side inside a big room (level cell) weighs this much
   if (rule.lam && st.owner[u] === st.owner[v]) return rule.lam;
-  if (!rule.beta && !rule.bb && !rule.b1 && !rule.mu && !rule.kappa && !rule.ag && !rule.ae && !rule.lf) return 1;
+  if (!rule.beta && !rule.bb && !rule.b1 && !rule.mu && !rule.kappa && !rule.ag && !rule.ae && !rule.lf && !rule.fv && !rule.eu && !rule.ev && !rule.fe) return 1;
   // ag / ae: a side waiting longer (steps since its cell joined) weighs (1 + ag * that) / exp(ae * that)
   const age = st.nodes.length - st.born[u], aw = (rule.ag ? 1 + rule.ag * age : 1) * (rule.ae ? Math.exp(rule.ae * age) : 1);
   // bb / b1: beta only for sides into a big room / a 1x1
   const b = (rule.beta || 0) + (st.rooms[st.owner[v]].cells.length > 1 ? rule.bb || 0 : rule.b1 || 0);
   // mu: exp(-mu * the new cell's grid steps from the entrance); kappa: exp(-kappa * the side's cell's walk from it)
   const m = rule.mu ? rule.mu * (Math.abs(v % W - st.ent % W) + Math.abs(((v / W) | 0) - ((st.ent / W) | 0))) : 0;
-  return aw * Math.exp(-b * st.rdist[u] - m - (rule.kappa ? rule.kappa * st.depth[u] : 0) + (rule.lf && !st.ck[u] ? rule.lf : 0));
+  return aw * Math.exp(-b * st.rdist[u] - m - (rule.kappa ? rule.kappa * st.depth[u] : 0) + (rule.lf && !st.ck[u] ? rule.lf : 0) + (rule.fv || rule.eu || rule.ev || rule.fe ? extra(st, rule, u, v) : 0));
+}
+/** fv: x the new cell's free neighbours; eu / ev: the side's cell / the new cell on the map's edge; fe: the side's cell is
+ *  its big room's furthest from where the room was entered */
+function extra(st, rule, u, v) {
+  let e = 0;
+  if (rule.fv) { let n = 0; for (const y of NB[v]) if (!st.inT[y]) n++; e += rule.fv * n; }
+  const onEdge = c => { const x = c % W, z = (c / W) | 0; return x === 0 || x === W - 1 || z === 0 || z === W - 1; };
+  if (rule.eu && onEdge(u)) e += rule.eu;
+  if (rule.ev && onEdge(v)) e += rule.ev;
+  if (rule.fe) { const cs = st.rooms[st.owner[u]].cells; if (cs.length > 1) { let m = 0; for (const c of cs) m = Math.max(m, st.rdist[c]); if (st.rdist[u] === m) e += rule.fe; } }
+  return e;
 }
 /** a node's weight for the pick (node: 1, side: its sides' weight), times the optional terms (header):
  *  alpha: (its free sides' weight)^alpha in place of node/side; gamma: exp(-gamma * its room steps from the

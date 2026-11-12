@@ -50,6 +50,11 @@ const FEATS = {
   cornerV: (st, u, v) => { const x = v % W, z = (v / W) | 0; return ((x === 0 || x === 5) && (z === 0 || z === 5)) ? 1 : 0; },
   horiz: (st, u, v) => Math.abs(u - v) === 1 ? 1 : 0,
   away: (st, u, v) => man(v, st.ent) - man(u, st.ent),
+  leafU: (st, u, v) => st.ck[u] ? 0 : 1,
+  farEnd: (st, u, v) => { const cs = st.rooms[st.owner[u]].cells; if (cs.length < 2) return 0; let m = 0; for (const c of cs) m = Math.max(m, st.rdist[c]); return st.rdist[u] === m ? 1 : 0; },
+  vFree: (st, u, v) => { let n = 0; for (const y of NB[v]) if (!st.inT[y]) n++; return n; },
+  uFree: (st, u, v) => { let n = 0; for (const y of NB[u]) if (!st.inT[y]) n++; return n; },
+  edgeU: (st, u, v) => { const x = u % W, z = (u / W) | 0; return (x === 0 || x === 5 || z === 0 || z === 5) ? 1 : 0; },
   nodeFree: () => 0,  // (onStep fills it in: the log of the node's free sides, alpha's term)
 };
 const FN = Object.keys(FEATS); const K = FN.length;

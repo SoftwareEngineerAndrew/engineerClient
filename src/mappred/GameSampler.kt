@@ -12,11 +12,17 @@ import kotlin.random.Random
  * steps from where the room was entered to the side's cell, over the room's own cells) x exp(-[mu] x the new cell's
  * grid steps from the entrance). The default is treelik.mjs's best on the real maps (room/node/0/0/alpha=0.5/beta=0.5/mu=0.2).
  */
-class TreeRule(val alpha: Double = 0.5, val beta: Double = 0.5, val mu: Double = 0.2, val ein: Boolean = false) {
+class TreeRule(
+    val alpha: Double = 0.5, val beta: Double = 0.5, val mu: Double = 0.2, val ein: Boolean = false,
+    /** A side's weight x exp(fv x the new tile's free neighbours) x exp(eu) when its own tile is on the main grid's edge (tree3.mjs fv, eu). */
+    val fv: Double = 0.0, val eu: Double = 0.0,
+) {
     companion object {
         val DEFAULT = TreeRule()
         /** The entrance in the tree (tree3.mjs ein): its room is a node like any other, and a side taken off it fails the tree (the game redraws the map). */
         val ENTRANCE_IN = TreeRule(alpha = 0.7, beta = 0.4, mu = 0.25, ein = true)
+        /** The default with doors leaning to tiles with few free neighbours and out of edge tiles (treelik.mjs +0.058 a map, s.e. 0.029, on 600 maps it wasn't fitted on). */
+        val EDGE_FV = TreeRule(fv = -0.4, eu = 0.3)
         /** The rule new samplers use. */
         @Volatile var active: TreeRule = DEFAULT
     }
@@ -173,6 +179,8 @@ internal class GameSampler(
     /** Every spot of each big shape inside the map (its tiles). */
     private val spots: Array<Array<IntArray>>
     private val sideBeta = DoubleArray(5) { exp(-rule.beta * it) }
+    private val sideFv = DoubleArray(5) { exp(rule.fv * it) }
+    private val sideEu = exp(rule.eu)
     private val sideMu: DoubleArray
     /** The tiles' chances through the floor's calibration ([FloorRules.gameCalibration]; none: as the samples give them). */
     private val calibrate: ((FloatArray) -> FloatArray)? = rules.gameCalibration?.let { cal -> { p: FloatArray -> MapPredictor.calibrate(p, cal, nKnown) } }
@@ -641,7 +649,9 @@ internal class GameSampler(
             for (u in pt.rooms[r]) {
                 if (u == entCell) continue
                 for (v in nb[u]) if (!pt.inT[v]) {
-                    val x = sideBeta[minOf(pt.rdist[u], 4)] * sideMu[v]
+                    var x = sideBeta[minOf(pt.rdist[u], 4)] * sideMu[v]
+                    if (rule.fv != 0.0) { var f = 0; for (y in nb[v]) if (!pt.inT[y]) f++; x *= sideFv[f] }
+                    if (rule.eu != 0.0) { val ux = u % w; val uz = u / w; if (ux == 0 || ux == gw - 1 || uz == 0 || uz == gh - 1) x *= sideEu }
                     sideU[ns] = u; sideV[ns] = v; sideP[ns] = x; ns++; sw += x
                 }
             }
