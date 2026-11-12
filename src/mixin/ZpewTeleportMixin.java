@@ -17,6 +17,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ClientPacketListener.class)
 public abstract class ZpewTeleportMixin {
 
+    @Inject(method = "handleMovePlayer", at = @At("HEAD"))
+    private void ec$zpewBeforeTeleport(ClientboundPlayerPositionPacket packet, CallbackInfo ci) {
+        LocalPlayer p = Minecraft.getInstance().player;
+        if (p == null || !Minecraft.getInstance().isSameThread()) return;
+        try {
+            Zpew.beforeTeleport(p.getX(), p.getY(), p.getZ());
+        } catch (Throwable ignored) {
+            // Never let the camera break teleports.
+        }
+    }
+
     @Inject(method = "handleMovePlayer", at = @At("TAIL"))
     private void ec$zpewTeleport(ClientboundPlayerPositionPacket packet, CallbackInfo ci) {
         LocalPlayer p = Minecraft.getInstance().player;

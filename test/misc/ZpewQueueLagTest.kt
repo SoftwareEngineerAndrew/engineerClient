@@ -4,6 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 class ZpewQueueLagTest {
     /** Each click moves 10 blocks east. */
@@ -34,5 +36,14 @@ class ZpewQueueLagTest {
         q.click(Unit, 0, doubleArrayOf(0.0, 70.0, 0.0), true, wall = 0)
         q.expire(0, 200)
         assertNull(q.camera)
+    }
+
+    @Test
+    fun matchesOnlyAWaitingLanding() {
+        val q = queue()
+        q.click(Unit, 0, doubleArrayOf(0.0, 70.0, 0.0), true, wall = 0)
+        // a server sync packet near where you stand is no click's landing
+        assertFalse(q.matches(doubleArrayOf(0.4, 70.0, 0.0)))
+        assertTrue(q.matches(doubleArrayOf(10.0, 70.0, 0.0)))
     }
 }

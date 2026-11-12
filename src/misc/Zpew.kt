@@ -87,6 +87,8 @@ object Zpew : Module(
     private val WITHER_BLADES = setOf("NECRON_BLADE", "SCYLLA", "HYPERION", "VALKYRIE", "ASTRAEA")
     private val ACTS = Regex("^(chest|trapped_chest|ender_chest|lever)$|_button$|_sign$|_fence_gate$|(_head|_skull)$")
     private val NO_TELEPORT = setOf("Teleport Maze", "Boulder")
+    /** A position packet this close to where you were is the server syncing you, not a teleport. */
+    private const val NEAR = 1.0
     private const val TAB = "\t"
     private const val NL = "\n"
     private val REFUSALS = listOf(
@@ -99,8 +101,21 @@ object Zpew : Module(
     @JvmStatic fun cameraPos(): Vec3? = if (enabled) camera else null
 
     /** ZpewTeleportMixin: the game has just moved you for a server teleport. */
+    /** Where you were just before the server's position packet ([ZpewTeleportMixin] HEAD), or null. */
+    private var before: DoubleArray? = null
+
+    @JvmStatic fun beforeTeleport(x: Double, y: Double, z: Double) { before = doubleArrayOf(x, y, z) }
+
     @JvmStatic fun onTeleportApplied(x: Double, y: Double, z: Double) {
         val waited = queue.size
+        val was = before.also { before = null }
+        // Hypixel also sends position packets that leave you about where you are (often just before a teleport's landing).
+        // Unless one is a waiting click's landing it answers nothing: taking it for the oldest click made the real landing look unasked.
+        if (was != null && !queue.isEmpty && !queue.matches(doubleArrayOf(x, y, z)) &&
+            (0..2).sumOf { (doubleArrayOf(x, y, z)[it] - was[it]).let { d -> d * d } } < NEAR * NEAR) {
+            log("SYNC to=${fmt(doubleArrayOf(x, y, z))} was=${fmt(was)} waiting=$waited")
+            return
+        }
         val oldest = queue.oldestCounting()
         if (queue.teleport(doubleArrayOf(x, y, z), serverTicks.get())) {
             if (queue.lastMatch < 0 && oldest != null) miss(if (queue.lastExpected == null) "law-refused" else "wrong-landing", oldest, queue.lastExpected, doubleArrayOf(x, y, z))

@@ -34,6 +34,12 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     /** Called with each click that stops counting without an answer (the server dropped or refused it silently). */
     var onDrop: ((C) -> Unit)? = null
 
+    /** Whether [to] is where one of the waiting clicks lands. */
+    fun matches(to: DoubleArray): Boolean {
+        val from = origin ?: return false
+        return waiting.any { same(predict(from, it.click), to) }
+    }
+
     /** The oldest click still counting: the one a teleport that matches nothing is taken for. */
     fun oldestCounting(): C? = waiting.firstOrNull { it.counts }?.click
     val size get() = waiting.size
