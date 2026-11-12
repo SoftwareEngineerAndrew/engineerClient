@@ -1,0 +1,2 @@
+# Odin release jar unpacked for compiling (the release workflow downloads it; build.gradle.kts compileOnly)
+libs/
