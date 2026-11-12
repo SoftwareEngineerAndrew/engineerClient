@@ -349,10 +349,11 @@ object RandomStuff : Module(
             pendingSkyblockJoin = true
             attempts = 0
             ticksUntilSkyblock = (skyblockDelay * 20).toInt()
-            // No delay: now, not on the first tick, which waits behind the lobby's first frame.
+            // No delay: now, not on the first tick, which waits behind the lobby's first frame. As a packet:
+            // Fabric's client commands aren't set up yet this early and would swallow it.
             if (ticksUntilSkyblock == 0) {
                 attempts = 1
-                sendCommand("skyblock")
+                handler.send(net.minecraft.network.protocol.game.ServerboundChatCommandPacket("skyblock"))
                 ticksUntilSkyblock = RETRY_TICKS
             }
         }
