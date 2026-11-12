@@ -51,6 +51,8 @@ object Zpew : Module(
     private val queue = ZpewQueue<Click>(::land)
     @Volatile private var camera: Vec3? = null
     private var ticks = 0L
+    /** Server ticks as they reach us (counted on the network thread): they stop while the server lags. */
+    private val serverTicks = java.util.concurrent.atomic.AtomicLong()
     private var lastWitherImpact = 0L
 
     /** The last move packet's look: a block click is cast with it. */
@@ -73,7 +75,7 @@ object Zpew : Module(
 
     /** ZpewTeleportMixin: the game has just moved you for a server teleport. */
     @JvmStatic fun onTeleportApplied(x: Double, y: Double, z: Double) {
-        if (queue.teleport(doubleArrayOf(x, y, z), ticks)) sync()
+        if (queue.teleport(doubleArrayOf(x, y, z), serverTicks.get())) sync()
     }
 
     private fun sync() {
@@ -140,10 +142,12 @@ object Zpew : Module(
             if (!queue.isEmpty && REFUSALS.any { message.contains(it) }) { queue.refuse(); sync() }
         }
 
+        on<TickEvent.Server> { serverTicks.incrementAndGet() }
+
         on<TickEvent.End> {
             blockClick = null
             ticks++
-            if (queue.expire(ticks)) sync()
+            if (queue.expire(serverTicks.get(), ticks)) sync()
         }
 
         onSend<ServerboundMovePlayerPacket> {
@@ -164,7 +168,7 @@ object Zpew : Module(
                 counts = now - lastWitherImpact >= 100
                 if (counts) lastWitherImpact = now
             }
-            queue.click(c, ticks, doubleArrayOf(p.x, p.y, p.z), counts)
+            queue.click(c, serverTicks.get(), doubleArrayOf(p.x, p.y, p.z), counts, ticks)
             sync()
         }
     }

@@ -10,9 +10,11 @@ package com.engineerclient.misc
  *
  * A dropped click can't be told from the others, so a click waiting longer than the round trip plus its spread
  * (measured from answered clicks, like TCP) stops counting. It can still be matched for a while, in case it was late.
+ * Ticks are the server's as they reach us, so a lag spike (no ticks arriving) doesn't run the clock out; [HARD] client
+ * ticks ([wall]) is the cap if the server never answers.
  */
 class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleArray?) {
-    private class Waiting<C>(val click: C, val tick: Long, var counts: Boolean)
+    private class Waiting<C>(val click: C, val tick: Long, val wall: Long, var counts: Boolean)
 
     private val waiting = ArrayDeque<Waiting<C>>()
     private var origin: DoubleArray? = null
@@ -26,9 +28,9 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     val isEmpty get() = waiting.isEmpty()
 
     /** [counts]: the server should cast it; false still lets a teleport match it. */
-    fun click(click: C, tick: Long, player: DoubleArray, counts: Boolean) {
+    fun click(click: C, tick: Long, player: DoubleArray, counts: Boolean, wall: Long = tick) {
         if (waiting.isEmpty()) origin = player
-        waiting.addLast(Waiting(click, tick, counts))
+        waiting.addLast(Waiting(click, tick, wall, counts))
         rechain()
     }
 
@@ -53,11 +55,11 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     }
 
     /** Clicks waiting too long stop counting, and go after [KEEP]. True when the camera moved. */
-    fun expire(tick: Long): Boolean {
+    fun expire(tick: Long, wall: Long = tick): Boolean {
         val limit = if (roundTrip.isNaN()) FIRST.toDouble() else minOf(MAX.toDouble(), roundTrip + maxOf(GRACE.toDouble(), 4 * spread))
         var changed = false
-        for (w in waiting) if (w.counts && tick - w.tick >= limit) { w.counts = false; changed = true }
-        while (waiting.isNotEmpty() && tick - waiting.first().tick >= KEEP) waiting.removeFirst()
+        for (w in waiting) if (w.counts && (tick - w.tick >= limit || wall - w.wall >= HARD)) { w.counts = false; changed = true }
+        while (waiting.isNotEmpty() && (tick - waiting.first().tick >= KEEP || wall - waiting.first().wall >= HARD + KEEP)) waiting.removeFirst()
         if (!changed) return false
         rechain()
         return true
@@ -90,5 +92,6 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         const val FIRST = 20
         const val MAX = 60
         const val KEEP = 60
+        const val HARD = 200
     }
 }
