@@ -1099,6 +1099,33 @@ internal class GameSampler(
             if (host >= nKnown) t.doorCounts.getOrPut((ct - 1) * n + ct) { DoubleArray(4) }[0] += wgt * pin
         }
         fin.names?.forEach { (k, s) -> t.nameCounts.merge(k, wgt * s, Double::plus) }
+        if (n <= 64) keepWhole(t, pt, fin)
+    }
+
+    /** The sample whole, for [Prediction.map]: its unknown rooms with their classes' chances, and its doors. */
+    private fun keepWhole(t: Tally, pt: Particle, fin: Finish) {
+        val rooms = ArrayList<IntArray>(); val ps = ArrayList<DoubleArray>(); val doors = ArrayList<IntArray>()
+        for (r in nKnown until pt.rooms.size) {
+            val p = DoubleArray(Cls.COUNT)
+            if (pt.big(r)) p[Cls.BIG] = 1.0
+            else {
+                var rest = 1.0
+                fin.dist[r]?.let { d -> for (c in 0 until Cls.COUNT) { p[c] = d[c]; rest -= d[c] } }
+                if (rest > 1e-12) p[Cls.NORMAL] += rest
+            }
+            rooms += pt.rooms[r].copyOf(); ps += p
+            val a = fin.rEntry[r]; val b = if (a >= 0) pt.parent[a] else -1
+            if (b >= 0) doors += intArrayOf(a, b)
+        }
+        for (k in colTiles.indices) {
+            val d = fin.col[k] ?: continue
+            val sum = d.sum()
+            if (sum < 0.5) continue
+            val ct = colTiles[k]
+            rooms += intArrayOf(ct); ps += DoubleArray(Cls.COUNT) { d[it] / sum }
+            doors += intArrayOf(ct - 1, ct)
+        }
+        t.keep(Sampled(rooms, ps, doors))
     }
 
     /** A 1x1's average secrets, its classes' chances [p] (a puzzle column tile's add up to the chance it's a room). */

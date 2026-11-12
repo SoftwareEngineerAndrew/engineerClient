@@ -234,7 +234,22 @@ class Prediction(val w: Int, val h: Int, val probs: Array<FloatArray?>, val spli
                   * The chances as the samples give them, before [FloorRules.calibration] or [GameSampler.CALIBRATION]
                   * (what [probs] draws from).
                   */
-                 val raw: Array<FloatArray?> = probs)
+                 val raw: Array<FloatArray?> = probs,
+                 /** One whole map the samples drew, the one most like the rest ([SampledMap]); null when none was kept. */
+                 val map: SampledMap? = null)
+
+/**
+ * One whole map for the unknown tiles, as one sample drew it, so it keeps every rule at once (the room count, one
+ * blood, the puzzles, specials as dead ends), which the tiles' chances one by one don't: [rooms] their tiles, [cls]
+ * each one's [Cls], [doors] the doors it puts between tiles (a, b). Of the latest samples it is the one whose rooms the
+ * samples agree on most (each big room by how often it is drawn just there, each 1x1 by its tile's chance of not
+ * being in a big room). A game-process sample spreads its specials over its dead ends by their chances, so they are
+ * handed out here: as many of each as the sample has, to its rooms likeliest for it.
+ */
+class SampledMap(val rooms: List<IntArray>, val cls: IntArray, val doors: List<IntArray>)
+
+/** A kept sample's unknown rooms (tiles, chance of each [Cls]) and doors (a, b), for [SampledMap]. */
+internal class Sampled(val rooms: List<IntArray>, val p: List<DoubleArray>, val doors: List<IntArray>)
 
 /**
  * The samples' weights added up, whichever sampler drew them: per tile and class (over [cells]), per door into the
@@ -251,6 +266,14 @@ internal class Tally(cells: Int, entries: Int) {
     val nameCounts = HashMap<Long, Double>()
     val doorCounts = HashMap<Int, DoubleArray>()
     var weight = 0.0
+    /** The latest [KEEP] samples whole, for [Prediction.map]. */
+    val maps = ArrayList<Sampled>()
+    private var mapsSeen = 0
+
+    fun keep(m: Sampled) {
+        if (maps.size < KEEP) maps += m else maps[mapsSeen % KEEP] = m
+        mapsSeen++
+    }
 
     /** Adds [o]'s sums times [k]. */
     fun addScaled(o: Tally, k: Double) {
@@ -263,7 +286,32 @@ internal class Tally(cells: Int, entries: Int) {
         for ((key, v) in o.nameCounts) nameCounts.merge(key, k * v, Double::plus)
         for ((key, v) in o.doorCounts) { val a = doorCounts.getOrPut(key) { DoubleArray(4) }; for (c in 0 until 4) a[c] += k * v[c] }
         weight += k * o.weight
+        for (m in o.maps) keep(m)
     }
+
+    /** The kept sample most like the rest ([SampledMap]), its specials handed out; null without one. */
+    private fun bestMap(raw: Array<FloatArray?>): SampledMap? {
+        var best: Sampled? = null; var bestScore = Double.NEGATIVE_INFINITY
+        for (m in maps) {
+            var sc = 0.0
+            for (tiles in m.rooms) {
+                sc += if (tiles.size > 1) {
+                    var mask = 0L; for (t in tiles) mask = mask or (1L shl t)
+                    kotlin.math.ln(maxOf(1e-6, (bigCounts[mask] ?: 0.0) / weight))
+                } else kotlin.math.ln(maxOf(1e-6, 1.0 - (raw.getOrNull(tiles[0])?.get(Cls.BIG) ?: 0f)))
+            }
+            if (sc > bestScore) { bestScore = sc; best = m }
+        }
+        val m = best ?: return null
+        val cls = IntArray(m.rooms.size) { -1 }
+        for (c in intArrayOf(Cls.BLOOD, Cls.FAIRY, Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE)) {
+            val want = Math.round(m.p.sumOf { it[c] }).toInt()
+            m.rooms.indices.filter { cls[it] < 0 && m.p[it][c] > 1e-9 }.sortedByDescending { m.p[it][c] }.take(want).forEach { cls[it] = c }
+        }
+        for (i in cls.indices) if (cls[i] < 0) cls[i] = if (m.rooms[i].size > 1) Cls.BIG else Cls.NORMAL
+        return SampledMap(m.rooms, cls, m.doors)
+    }
+
 
     /** What the samples agree on, each tile's chances through [calibrate] when there is one; null before any was kept. */
     fun prediction(w: Int, h: Int, cells: IntArray, entries: IntArray, entryDoor: ByteArray, samples: Int, level: Int,
@@ -289,7 +337,12 @@ internal class Tally(cells: Int, entries: Int) {
         val doors = doorCounts.entries.filter { it.value[0] / weight >= 0.05 }.sortedByDescending { it.value[0] }.map { (key, d) ->
             PredictedDoor(key / n, key % n, (d[0] / weight).toFloat(), (d[1] / weight).toFloat(), (d[2] / weight).toFloat(), (d[3] / weight).toFloat())
         }
-        return Prediction(w, h, probs, splits, samples, level, big, named, doors, raw)
+        return Prediction(w, h, probs, splits, samples, level, big, named, doors, raw, bestMap(raw))
+    }
+
+    companion object {
+        /** How many whole samples are kept for [Prediction.map]. */
+        const val KEEP = 256
     }
 }
 
@@ -925,6 +978,11 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
             for (t in rooms[o]) tally.counts[tileIdx[t]][c] += wgt
             if (roomShape[o] != Shape.ONE && n <= 64) { var m = 0L; for (t in rooms[o]) m = m or (1L shl t); tally.bigCounts.merge(m, wgt, Double::plus) }
         }
+        if (n <= 64) tally.keep(Sampled(
+            (0 until all).map { rooms[it].copyOf() },
+            (0 until all).map { o -> DoubleArray(Cls.COUNT).also { it[cls[o]] = 1.0 } },
+            (0 until all).filter { parent[it] >= 0 }.map { intArrayOf(outTile[it], inTile[it]) },
+        ))
         return true
     }
 
