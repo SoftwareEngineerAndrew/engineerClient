@@ -12,9 +12,13 @@ import kotlin.random.Random
  * steps from where the room was entered to the side's cell, over the room's own cells) x exp(-[mu] x the new cell's
  * grid steps from the entrance). The default is treelik.mjs's best on the real maps (room/node/0/0/alpha=0.5/beta=0.5/mu=0.2).
  */
-class TreeRule(val alpha: Double = 0.5, val beta: Double = 0.5, val mu: Double = 0.2) {
+class TreeRule(val alpha: Double = 0.5, val beta: Double = 0.5, val mu: Double = 0.2, val ein: Boolean = false) {
     companion object {
         val DEFAULT = TreeRule()
+        /** The entrance in the tree (tree3.mjs ein): its room is a node like any other, and a side taken off it fails the tree (the game redraws the map). */
+        val ENTRANCE_IN = TreeRule(alpha = 0.7, beta = 0.4, mu = 0.25, ein = true)
+        /** The rule new samplers use. */
+        @Volatile var active: TreeRule = DEFAULT
     }
 }
 
@@ -107,7 +111,7 @@ internal class GameSampler(
     private val unnamedKnown: IntArray,
     /** Each name pool's average secrets ([MapStats.meanSecrets]): what a split's rooms hold. */
     private val poolSecrets: DoubleArray = MapStats.meanSecrets(),
-    private val rule: TreeRule = TreeRule.DEFAULT,
+    private val rule: TreeRule = TreeRule.active,
 ) {
     private val w = view.w
     private val h = view.h
@@ -626,6 +630,12 @@ internal class GameSampler(
      */
     private fun grow(pt: Particle, rnd: Random) {
         var ns = 0; var z = 0.0
+        if (rule.ein) {
+            // the entrance's free sides: the game may pick one (a second door: the map is made again), never allowed below
+            val s0 = ns; var sw = 0.0
+            for (v in nb[entCell]) if (!pt.inT[v]) { val x = sideBeta[0] * sideMu[v]; sideU[ns] = entCell; sideV[ns] = v; sideP[ns] = x; ns++; sw += x }
+            if (ns > s0) { val nw = nodeWeight(sw); for (k in s0 until ns) sideP[k] *= nw / sw; z += nw }
+        }
         for (i in 0 until pt.nNodes) {
             val r = pt.nodes[i]; val s0 = ns; var sw = 0.0
             for (u in pt.rooms[r]) {
@@ -639,7 +649,7 @@ internal class GameSampler(
         }
         if (ns == 0) { pt.done = true; return }
         var c = 0.0
-        for (k in 0 until ns) if (allowed(pt, sideU[k], sideV[k])) { sideP[k] /= z; c += sideP[k] } else sideP[k] = 0.0
+        for (k in 0 until ns) if (sideU[k] != entCell && allowed(pt, sideU[k], sideV[k])) { sideP[k] /= z; c += sideP[k] } else sideP[k] = 0.0
         if (c <= 0) { pt.w = 0.0; return }
         pt.w *= c
         var r = rnd.nextDouble() * c; var pick = -1

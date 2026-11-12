@@ -63,6 +63,9 @@ The grid is 6x6 cells; a cell is a 1x1 room or part of a big room.
   shape at lf=1 (leaves 9.27, big leaf cells 3.03) but isn't likelier: lf=0.5 +0.04 (s.e. 0.04), lf=1 -0.08
   (0.06), on 300 maps. Beta 0.25 +0.06 (0.04), 0 -0.04 (0.06). The entrance-in-tree rule (tree3 `ein`, alpha 0.7,
   beta 0.4, mu 0.25) is as bushy: 9.82 leaf cells, big rooms' 3.58.
+  Played in the Kotlin GameSampler (TreeRule.ENTRANCE_IN, MapSequenceCheck from git, 200 held-out maps, 3774 views,
+  pool) it predicts no better: per tile -0.9160 against -0.9149 at 40000 particles (diff -0.0010, s.e. 0.0015), at
+  2000 -0.0021 (0.0036); 4-5 rooms known -0.0066 (0.0040). Neither falls back to the classic sampler (1 view of 3774).
 
 ## 5. Keep the map or make it again
 
