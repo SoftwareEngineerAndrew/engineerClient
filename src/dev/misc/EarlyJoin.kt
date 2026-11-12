@@ -29,6 +29,7 @@ object EarlyJoin {
     @JvmStatic var started = false
         private set
     private var held: Pair<ClientConfigurationPacketListenerImpl, ClientboundFinishConfigurationPacket>? = null
+    private var heldAt = 0L
 
     fun install() {
         if (System.getProperty("dc.earlyJoin") == "false") return
@@ -39,6 +40,7 @@ object EarlyJoin {
             val (listener, packet) = held ?: return@register
             if (!mc.isGameLoadFinished) return@register
             held = null
+            DevgineerClient.logger.info("[dc] early join: the switch to play waited {} ms for the resource load", (System.nanoTime() - heldAt) / 1_000_000)
             if (listener.isAcceptingMessages) listener.handleConfigurationFinished(packet)
         }
     }
@@ -58,6 +60,7 @@ object EarlyJoin {
     fun hold(listener: ClientConfigurationPacketListenerImpl, packet: ClientboundFinishConfigurationPacket): Boolean {
         if (Minecraft.getInstance().isGameLoadFinished) return false
         held = listener to packet
+        heldAt = System.nanoTime()
         return true
     }
 

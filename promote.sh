@@ -73,6 +73,7 @@ FMJ="$PUB/src/resources/fabric.mod.json"
 sed -i -E \
   -e 's/, "(coffeeclient|devgineerclient)(\.odin)?\.mixins\.json"//g' \
   -e '/"breaks": \{ "coffeeclient"/d' \
+  -e '/"preLaunch": \[/,/^    \],$/d' \
   -e '/"value": "com\.(coffeeclient|devgineerclient)\./d' \
   -e 's/("value": "com\.engineerclient\.EngineerClient" \}),$/\1/' \
   "$FMJ"

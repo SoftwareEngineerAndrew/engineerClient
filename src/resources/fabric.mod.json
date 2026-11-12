@@ -10,6 +10,9 @@
   "breaks": { "coffeeclient": "*", "devgineerclient": "*" },
   "mixins": ["engineerclient.mixins.json", "engineerclient.odin.mixins.json", "coffeeclient.mixins.json", "coffeeclient.odin.mixins.json", "devgineerclient.mixins.json", "devgineerclient.odin.mixins.json"],
   "entrypoints": {
+    "preLaunch": [
+      { "adapter": "kotlin", "value": "com.devgineerclient.misc.ClassWarmup" }
+    ],
     "client": [
       { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" },
       { "adapter": "kotlin", "value": "com.coffeeclient.CoffeeClient" },
