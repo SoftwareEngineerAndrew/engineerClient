@@ -1,7 +1,7 @@
 name: Release
 
-# One rolling release per Minecraft version (here EngineerClient, in ADM through promote.sh ADM): main the newest
-# (Latest), each older one on an mc/<version> branch.
+# One rolling release per Minecraft version, main the newest (Latest), each older one on an mc/<version> branch.
+# promote.sh copies this file to ADM, which releases the same way.
 on:
   push:
     branches: [main, "mc/**"]
