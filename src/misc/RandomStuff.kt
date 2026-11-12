@@ -349,6 +349,12 @@ object RandomStuff : Module(
             pendingSkyblockJoin = true
             attempts = 0
             ticksUntilSkyblock = (skyblockDelay * 20).toInt()
+            // No delay: now, not on the first tick, which waits behind the lobby's first frame.
+            if (ticksUntilSkyblock == 0) {
+                attempts = 1
+                sendCommand("skyblock")
+                ticksUntilSkyblock = RETRY_TICKS
+            }
         }
 
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
