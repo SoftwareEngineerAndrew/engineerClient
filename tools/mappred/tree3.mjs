@@ -13,6 +13,7 @@
 //     bb, b1 the same only for sides into a big room / into a 1x1 (added to beta)
 //     mu     exp(-mu x the new cell's grid steps from the entrance)
 //     kappa  exp(-kappa x its cell's walk from the entrance) (the walk through a 2x2 is its drawn inside's)
+//     lf     exp(lf) when its cell has no child in the tree yet (the tree's leaf: corridors go on)
 //     ag, ae (1 + ag x the steps since its cell joined) / exp(ae x that): sides waiting longer
 //     lam    (level cell) a side inside a big room weighs lam
 //   within a node: pw  the room it opens into by its count of shared sides, then a side of them by weight
@@ -36,7 +37,7 @@ export function parseRule(s) {
 /** A fresh tree over owner (cell -> room), rooms ({cells}), from the entrance cell: its first door taken. */
 export function startTree(owner, rooms, ent) {
   // closed: a node with no free side left (it never gets one again: the tree only grows), skipped by growStep
-  const st = { owner, rooms, inT: new Uint8Array(N), parent: new Int32Array(N).fill(-1), depth: new Int32Array(N), entered: new Uint8Array(rooms.length), rentry: new Int32Array(rooms.length).fill(-1), kids: new Int32Array(N), rdepth: new Int32Array(rooms.length), rdist: new Int8Array(N), born: new Int32Array(N), closed: new Uint8Array(N), nodes: [], head: 0, w: 1, done: false };
+  const st = { owner, rooms, inT: new Uint8Array(N), parent: new Int32Array(N).fill(-1), depth: new Int32Array(N), entered: new Uint8Array(rooms.length), rentry: new Int32Array(rooms.length).fill(-1), kids: new Int32Array(N), rdepth: new Int32Array(rooms.length), rdist: new Int8Array(N), born: new Int32Array(N), closed: new Uint8Array(N), ck: new Int32Array(N), nodes: [], head: 0, w: 1, done: false };
   st.inT[ent] = 1; st.entered[owner[ent]] = 1; st.rentry[owner[ent]] = ent; st.ent = ent;
   return st;
 }
@@ -52,7 +53,7 @@ export function seedTree(st, rule) {
 /** Put cell v in the tree off u (and, at room level, the rest of v's room off it inside). */
 export function addCell(st, rule, u, v) {
   const { owner, inT, parent, depth } = st;
-  inT[v] = 1; parent[v] = u; depth[v] = u < 0 ? 0 : depth[u] + 1; st.born[v] = st.nodes.length;
+  inT[v] = 1; parent[v] = u; depth[v] = u < 0 ? 0 : depth[u] + 1; st.born[v] = st.nodes.length; if (u >= 0) st.ck[u]++;
   if (!st.entered[owner[v]]) { st.entered[owner[v]] = 1; st.rentry[owner[v]] = v; st.rdepth[owner[v]] = u < 0 ? 0 : st.rdepth[owner[u]] + 1;
     // each of the room's cells' steps from v over the room's own cells (the grid's, not the tree's)
     const R = owner[v], cs = st.rooms[R].cells; if (cs.length > 1) { st.rdist[v] = 0; const qq = [v], seen = [v]; for (let i = 0; i < qq.length; i++) for (const y of NB[qq[i]]) if (owner[y] === R && !seen.includes(y)) { seen.push(y); st.rdist[y] = st.rdist[qq[i]] + 1; qq.push(y); } } }
@@ -62,7 +63,7 @@ export function addCell(st, rule, u, v) {
     // the room's other cells joined inside by a random tree grown from v (a random free side each time)
     const R = owner[v], inR = [v];
     for (;;) { const fr = []; for (const a of inR) for (const b of NB[a]) if (owner[b] === R && !inT[b]) fr.push([a, b]); if (!fr.length) break;
-      const [a, b] = fr[Math.floor(st.rnd() * fr.length)]; inT[b] = 1; parent[b] = a; depth[b] = depth[a] + 1; st.born[b] = st.nodes.length; inR.push(b); }
+      const [a, b] = fr[Math.floor(st.rnd() * fr.length)]; inT[b] = 1; parent[b] = a; st.ck[a]++; depth[b] = depth[a] + 1; st.born[b] = st.nodes.length; inR.push(b); }
     st.nodes.push(owner[v]);
   } else st.nodes.push(v);
 }
@@ -77,14 +78,14 @@ function sidesOf(st, rule, node) {
 function sideW(st, rule, u, v) {
   // lam: a side inside a big room (level cell) weighs this much
   if (rule.lam && st.owner[u] === st.owner[v]) return rule.lam;
-  if (!rule.beta && !rule.bb && !rule.b1 && !rule.mu && !rule.kappa && !rule.ag && !rule.ae) return 1;
+  if (!rule.beta && !rule.bb && !rule.b1 && !rule.mu && !rule.kappa && !rule.ag && !rule.ae && !rule.lf) return 1;
   // ag / ae: a side waiting longer (steps since its cell joined) weighs (1 + ag * that) / exp(ae * that)
   const age = st.nodes.length - st.born[u], aw = (rule.ag ? 1 + rule.ag * age : 1) * (rule.ae ? Math.exp(rule.ae * age) : 1);
   // bb / b1: beta only for sides into a big room / a 1x1
   const b = (rule.beta || 0) + (st.rooms[st.owner[v]].cells.length > 1 ? rule.bb || 0 : rule.b1 || 0);
   // mu: exp(-mu * the new cell's grid steps from the entrance); kappa: exp(-kappa * the side's cell's walk from it)
   const m = rule.mu ? rule.mu * (Math.abs(v % W - st.ent % W) + Math.abs(((v / W) | 0) - ((st.ent / W) | 0))) : 0;
-  return aw * Math.exp(-b * st.rdist[u] - m - (rule.kappa ? rule.kappa * st.depth[u] : 0));
+  return aw * Math.exp(-b * st.rdist[u] - m - (rule.kappa ? rule.kappa * st.depth[u] : 0) + (rule.lf && !st.ck[u] ? rule.lf : 0));
 }
 /** a node's weight for the pick (node: 1, side: its sides' weight), times the optional terms (header):
  *  alpha: (its free sides' weight)^alpha in place of node/side; gamma: exp(-gamma * its room steps from the
@@ -149,7 +150,7 @@ export function growStep(st, rule, allowed) {
   return true;
 }
 export function cloneTree(st, w) {
-  return { ...st, inT: Uint8Array.from(st.inT), parent: Int32Array.from(st.parent), depth: Int32Array.from(st.depth), entered: Uint8Array.from(st.entered), rentry: Int32Array.from(st.rentry), kids: Int32Array.from(st.kids), rdepth: Int32Array.from(st.rdepth), rdist: Int8Array.from(st.rdist), born: Int32Array.from(st.born), closed: st.closed && Uint8Array.from(st.closed), nodes: [...st.nodes], w };
+  return { ...st, inT: Uint8Array.from(st.inT), parent: Int32Array.from(st.parent), depth: Int32Array.from(st.depth), entered: Uint8Array.from(st.entered), rentry: Int32Array.from(st.rentry), kids: Int32Array.from(st.kids), rdepth: Int32Array.from(st.rdepth), rdist: Int8Array.from(st.rdist), born: Int32Array.from(st.born), closed: st.closed && Uint8Array.from(st.closed), ck: Int32Array.from(st.ck), nodes: [...st.nodes], w };
 }
 
 /**
