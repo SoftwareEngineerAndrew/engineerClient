@@ -118,7 +118,6 @@ object OdinInternals {
         Probe("odin.solver", "BlazeSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "BlazeSolver", "blazes", "inBlazeRoom")),
         Probe("odin.solver", "BoulderSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "BoulderSolver", "currentPositions")),
         Probe("odin.solver", "IceFillSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "IceFillSolver", "currentPatterns")),
-        Probe("odin.solver", "TPMazeSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "TPMazeSolver", "tpPads", "correctPortals", "visited", "best")),
         Probe("odin.solver", "WeirdosSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "WeirdosSolver", "correctPos", "wrongPositions")),
         Probe("odin.solver", "BeamsSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "BeamsSolver", "currentLanternPairs", "scanned")),
         Probe("odin.solver", "PuzzleSolvers", PUZZLE + "PuzzleSolvers", listOf(M("puzzleTimersMap") {

@@ -6,6 +6,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.odtheking.odin.OdinMod.mc
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.Setting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
@@ -53,13 +54,13 @@ import net.minecraft.world.phys.Vec3
  *
  * From the map, [MazePlan] gives everyone in the maze a pad: the final pad once you're in its cell, a known way to its cell, else an
  * unused pad of your cell split by name between the teammates there who run this, else known pads to the nearest cell with unused ones. Your pad
- * is drawn with a tracer; teammates' pads in your cell carry their names; used pads say where they lead. Odin's own TP Maze boxes
- * are left out while this draws (TpMazeRenderMixin).
+ * is drawn with a tracer; teammates' pads in your cell carry their names; used pads say where they lead. Odin's own TP Maze solver
+ * is switched off (TpMazeRenderMixin) and its settings are replaced by these, in the same spot.
  */
 object TeamTpMaze {
     private val dropdown = DropdownSetting("Team TP Maze", desc = "Settings for the shared TP Maze map. Added by engineerClient.")
     private val on = BooleanSetting("Team Maze Solver", true,
-        desc = "One TP Maze map for the whole party: every pad pair anyone learns is shared over Odin's websocket, teammates in the same cell are given different unused pads, and you're shown yours. Draws instead of Odin's TP Maze boxes. Added by engineerClient.").withDependency { dropdown.value }
+        desc = "One TP Maze map for the whole party: every pad pair anyone learns is shared over Odin's websocket, teammates in the same cell are given different unused pads, and you're shown yours. Replaces Odin's TP Maze solver. Added by engineerClient.").withDependency { dropdown.value }
     private val tracer = BooleanSetting("Team Maze Tracer", true, desc = "A line to the pad you should take next.").withDependency { dropdown.value && on.value }
     private val labels = BooleanSetting("Team Maze Labels", true,
         desc = "Over each used pad, where it leads; over a teammate's next pad in your cell, their name.").withDependency { dropdown.value && on.value }
@@ -103,7 +104,7 @@ object TeamTpMaze {
     private val self: String get() = mc.player?.name?.string ?: ""
 
     fun install() {
-        for (s in listOf(dropdown, on, tracer, labels, nextColor, finalColor, usedColor, mateColor)) PuzzleSolvers.registerSetting(s)
+        replaceOdinSettings(listOf(dropdown, on, tracer, labels, nextColor, finalColor, usedColor, mateColor))
         on<LevelEvent.Load> { EngineerClient.safely("team tp maze reset") { reset() } }
         on<RoomEnterEvent> { EngineerClient.safely("team tp maze room") { room?.takeIf { it.data?.name == ROOM }?.let { enter(it) } } }
         // Teleports arrive on the network thread, before the game moves anyone: where they stood is read now, the rest on the client thread.
@@ -152,8 +153,23 @@ object TeamTpMaze {
         mc.execute { EngineerClient.safely("team tp maze teammate") { teleport(from.x, from.z, x, y, z, yaw.toDouble(), exact = false) } }
     }
 
-    /** Odin's own TP Maze boxes are left out (TpMazeRenderMixin) while this draws. */
-    @JvmStatic fun drawsInstead(): Boolean = active() && frame != null
+    /** Odin's TP Maze settings, whose solver is switched off (TpMazeRenderMixin): ours go in their place in Puzzle Solvers. */
+    private val ODIN_MAZE = listOf("mazeDropDown", "tpMaze", "mazeColorOne", "mazeColorMultiple", "mazeColorVisited", "mazeShowTracer", "mazeTracerColor", "mazeReset")
+
+    private fun replaceOdinSettings(ours: List<Setting<*>>) {
+        val old = ODIN_MAZE.mapNotNull { n ->
+            runCatching { PuzzleSolvers::class.java.getDeclaredField("$n\$delegate").apply { isAccessible = true }.get(PuzzleSolvers) }.getOrNull()
+        }.toSet()
+        val settings = PuzzleSolvers.settings
+        if (old.isEmpty() || settings.values.none { it in old }) { for (s in ours) PuzzleSolvers.registerSetting(s); return }
+        val rebuilt = LinkedHashMap<String, Setting<*>>()
+        var placed = false
+        for ((k, v) in settings) {
+            if (v in old) { if (!placed) { for (s in ours) rebuilt[s.name] = s; placed = true }; continue }
+            rebuilt[k] = v
+        }
+        settings.clear(); settings.putAll(rebuilt)
+    }
 
     private fun active(): Boolean = on.value && PuzzleSolvers.enabled && DungeonUtils.inDungeons && Puzzle.TP_MAZE.status != PuzzleStatus.Completed
 
