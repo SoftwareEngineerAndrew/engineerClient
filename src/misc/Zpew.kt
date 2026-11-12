@@ -230,6 +230,10 @@ object Zpew : Module(
 
         on<MessageEvent> {
             if (!queue.isEmpty && REFUSALS.any { message.contains(it) }) { log("REFUSED $message"); queue.refuse(); sync("refuse") }
+            if (!queue.isEmpty && message.contains("There are blocks in the way!")) {
+                val mark = { log("BLOCKED"); queue.blocked(serverTicks.get()) }
+                if (mc.isSameThread) mark() else mc.execute { mark() }
+            }
         }
 
         on<TickEvent.Server> { serverTicks.incrementAndGet() }
@@ -238,6 +242,13 @@ object Zpew : Module(
             blockClick = null
             ticks++
             if (queue.expire(serverTicks.get(), ticks)) sync("expire")
+            queue.oldestCounting()?.let { c ->
+                if (queue.settleBlocked(serverTicks.get()) { if (it.witherImpact) 4 else 0 }) {
+                    // the law warped you but the server said blocks in the way: a miss to learn from
+                    c.from?.let { from -> if (capture) land(from, c)?.let { miss("server-refused", c, it, null) } }
+                    sync("blocked")
+                }
+            }
         }
 
         onSend<ServerboundMovePlayerPacket> {
