@@ -44,7 +44,8 @@ export function startTree(owner, rooms, ent) {
 /** The tree's first step: the entrance's door inward; or (start=room / start=cell) the growth begins in a
  *  random room / at a random cell, the entrance kept out of it and joined inward at the end (rooted()). */
 export function seedTree(st, rule) {
-  if (!rule.start) { addCell(st, rule, st.ent, inwardOf(st.ent)); return; }
+  // ein: the entrance's room is a node of the tree too; a side taken off it fails the tree (the game redraws the map)
+  if (!rule.start) { addCell(st, rule, st.ent, inwardOf(st.ent)); if (rule.ein) st.nodes.unshift(st.owner[st.ent]); return; }
   const entR = st.owner[st.ent]; let c0;
   if (rule.start === 'cell') { do c0 = Math.floor(st.rnd() * N); while (st.owner[c0] === entR); }
   else { let R0; do R0 = Math.floor(st.rnd() * st.rooms.length); while (R0 === entR); const cs = st.rooms[R0].cells; c0 = cs[Math.floor(st.rnd() * cs.length)]; }
@@ -71,7 +72,7 @@ export function addCell(st, rule, u, v) {
 function sidesOf(st, rule, node) {
   const { owner, inT, entered, rooms } = st; const out = [];
   const cells = rule.level === 'room' ? rooms[node].cells : [node];
-  for (const u of cells) { if (u === st.ent) continue; for (const v of NB[u]) if (!inT[v] && (owner[v] === owner[u] || !entered[owner[v]])) out.push([u, v]); }
+  for (const u of cells) { if (u === st.ent && !rule.ein) continue; for (const v of NB[u]) if (!inT[v] && (owner[v] === owner[u] || !entered[owner[v]])) out.push([u, v]); }
   return out;
 }
 /** a free side's weight under the rule (1 with none of the side terms) */
@@ -95,7 +96,7 @@ function nodeW(st, rule, nd, sw) {
   const room = rule.level === 'room' ? nd : st.owner[nd];
   let w = rule.alpha !== undefined ? Math.pow(sw, rule.alpha) : rule.pick === 'side' ? sw : 1;
   // cw: times its cells with a free side (a tree cell with one alike, then its room)
-  if (rule.cw) { const cells = rule.level === 'room' ? st.rooms[nd].cells : [nd]; let n = 0; for (const u of cells) { if (u === st.ent) continue; if (NB[u].some(v => !st.inT[v] && (st.owner[v] === st.owner[u] || !st.entered[st.owner[v]]))) n++; } w *= n; }
+  if (rule.cw) { const cells = rule.level === 'room' ? st.rooms[nd].cells : [nd]; let n = 0; for (const u of cells) { if (u === st.ent && !rule.ein) continue; if (NB[u].some(v => !st.inT[v] && (st.owner[v] === st.owner[u] || !st.entered[st.owner[v]]))) n++; } w *= n; }
   if (rule.gamma) w *= Math.exp(-rule.gamma * st.rdepth[room]);
   if (rule.delta) w *= Math.exp(-rule.delta * st.kids[nd]);
   if (rule.eta) w *= Math.pow(st.rooms[room].cells.length, rule.eta);
@@ -146,6 +147,7 @@ export function growStep(st, rule, allowed) {
   st.w *= C; let r = st.rnd() * C, k = 0; while (r > ps[k] && k < ps.length - 1) r -= ps[k++];
   // onStep(st, every free side as [side, chance, node], the one taken): for diagnostics
   if (st.onStep) { st.onStep(st, st.all, cand[k]); st.all = null; }
+  if (rule.ein && cand[k][0] === st.ent) { st.w = 0; st.done = true; return false; }
   addCell(st, rule, cand[k][0], cand[k][1]);
   return true;
 }

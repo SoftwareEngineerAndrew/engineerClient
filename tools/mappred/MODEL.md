@@ -61,7 +61,8 @@ The grid is 6x6 cells; a cell is a 1x1 room or part of a big room.
   stubs of 1 cell 5.00/4.65, 2 cells 2.74/2.23, 3+ 2.18/2.42. Not mu: mu 0 or -0.2 leaves the shape as it is and
   mu 0 costs 0.20 a map (s.e. 0.04). A side off a cell with no child yet x exp(lf) (tree3 `lf`) matches the
   shape at lf=1 (leaves 9.27, big leaf cells 3.03) but isn't likelier: lf=0.5 +0.04 (s.e. 0.04), lf=1 -0.08
-  (0.06), on 300 maps. Beta 0.25 +0.06 (0.04), 0 -0.04 (0.06).
+  (0.06), on 300 maps. Beta 0.25 +0.06 (0.04), 0 -0.04 (0.06). The entrance-in-tree rule (tree3 `ein`, alpha 0.7,
+  beta 0.4, mu 0.25) is as bushy: 9.82 leaf cells, big rooms' 3.58.
 
 ## 5. Keep the map or make it again
 

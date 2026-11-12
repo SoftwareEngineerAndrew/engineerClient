@@ -51,7 +51,7 @@ const row = (tag, f) => { for (const [k, v] of Object.entries(f)) add(`${tag}|${
 for (const M of maps) row('real', figures(M, M.door));
 for (const rule of RULES) for (const M of maps) {
   for (let tr = 0; tr < 5000; tr++) {
-    const st = startTree(M.owner, M.rooms, M.ent); st.rnd = rnd; seedTree(st, rule); while (growStep(st, rule, null));
+    const st = startTree(M.owner, M.rooms, M.ent); st.rnd = rnd; seedTree(st, rule); while (growStep(st, rule, null)); if (!(st.w > 0)) continue;
     const vs = rooted(st, rule); let r = rnd(), va = vs[0]; for (const x of vs) { va = x; if ((r -= x.p) <= 0) break; }
     const { dead, spot } = deadAndSpot(M, va.parent, va.depth);
     if (tr < 20) add(`${rule.name}|free dead`, dead), add(`${rule.name}|free n`, 1);
