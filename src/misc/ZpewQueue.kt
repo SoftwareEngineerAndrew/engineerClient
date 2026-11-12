@@ -26,6 +26,13 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         private set
 
     val isEmpty get() = waiting.isEmpty()
+    val size get() = waiting.size
+
+    /** The last [teleport]: which waiting click it matched (-1: none did, the oldest was taken), and where the oldest counting one was predicted. */
+    var lastMatch = -1
+        private set
+    var lastExpected: DoubleArray? = null
+        private set
 
     /** [counts]: the server should cast it; false still lets a teleport match it. */
     fun click(click: C, tick: Long, player: DoubleArray, counts: Boolean, wall: Long = tick) {
@@ -39,6 +46,8 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         if (waiting.isEmpty()) return false
         val from = origin ?: to
         var i = waiting.indexOfFirst { same(predict(from, it.click), to) }
+        lastMatch = i
+        lastExpected = waiting.firstOrNull { it.counts }?.let { predict(from, it.click) }
         if (i >= 0) sample((tick - waiting[i].tick).toDouble()) else i = waiting.indexOfFirst { it.counts }
         repeat(i + 1) { waiting.removeFirst() }
         origin = to

@@ -45,6 +45,24 @@ object Zpew : Module(
     private val etherwarp by BooleanSetting("Etherwarp", true, desc = "Sneaking etherwarps.")
     private val aotv by BooleanSetting("AOTE / AOTV", true, desc = "Aspect of the End and Aspect of the Void teleports (unsneaked).")
     private val hyperion by BooleanSetting("Hyperion", true, desc = "Wither Impact teleports: Hyperion, Valkyrie, Astraea, Scylla, Necron's Blade with all three scrolls.")
+    private val debug by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera jump to config/engineerclient/zpew-debug.log, for checking the predictions.")
+
+    private var logOut: java.io.Writer? = null
+    private val startMs = System.currentTimeMillis()
+
+    private fun log(line: String) {
+        if (!debug) return
+        try {
+            val w = logOut ?: mc.gameDirectory.toPath().resolve("config/engineerclient/zpew-debug.log").let {
+                java.nio.file.Files.createDirectories(it.parent)
+                java.nio.file.Files.newBufferedWriter(it, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
+            }.also { logOut = it }
+            w.write("${System.currentTimeMillis() - startMs} t=$ticks st=${serverTicks.get()} $line\n"); w.flush()
+        } catch (_: Throwable) {}
+    }
+
+    private fun fmt(p: DoubleArray?) = p?.joinToString(",") { "%.3f".format(it) } ?: "-"
+    private fun fmt(p: Vec3?) = p?.let { fmt(doubleArrayOf(it.x, it.y, it.z)) } ?: "-"
 
     private class Click(val ether: Boolean, val yaw: Float, val pitch: Float, val sneaking: Boolean, val distance: Double, val witherImpact: Boolean = false)
 
@@ -75,11 +93,25 @@ object Zpew : Module(
 
     /** ZpewTeleportMixin: the game has just moved you for a server teleport. */
     @JvmStatic fun onTeleportApplied(x: Double, y: Double, z: Double) {
-        if (queue.teleport(doubleArrayOf(x, y, z), serverTicks.get())) sync()
+        val waited = queue.size
+        if (queue.teleport(doubleArrayOf(x, y, z), serverTicks.get())) {
+            val e = queue.lastExpected
+            val off = e?.let { Math.sqrt((it[0] - x) * (it[0] - x) + (it[1] - y) * (it[1] - y) + (it[2] - z) * (it[2] - z)) }
+            log("TP to=${fmt(doubleArrayOf(x, y, z))} expected=${fmt(e)} off=${off?.let { "%.3f".format(it) } ?: "-"} match=${queue.lastMatch} waiting=$waited left=${queue.size}")
+            sync("tp")
+        } else log("TP-UNASKED to=${fmt(doubleArrayOf(x, y, z))}")
     }
 
-    private fun sync() {
+    private fun sync(why: String = "") {
+        val old = camera
         camera = queue.camera?.let { Vec3(it[0], it[1], it[2]) }
+        if (debug) {
+            // where the view was and is: the player when there's no camera
+            val p = mc.player?.position()
+            val a = old ?: p; val b = camera ?: p
+            val jump = if (a != null && b != null) a.distanceTo(b) else 0.0
+            log("CAM $why ${fmt(old)} -> ${fmt(camera)} player=${fmt(p)} jump=${"%.3f".format(jump)}")
+        }
     }
 
     private fun reset() {
@@ -139,7 +171,7 @@ object Zpew : Module(
         on<LevelEvent.Load> { reset() }
 
         on<MessageEvent> {
-            if (!queue.isEmpty && REFUSALS.any { message.contains(it) }) { queue.refuse(); sync() }
+            if (!queue.isEmpty && REFUSALS.any { message.contains(it) }) { log("REFUSED $message"); queue.refuse(); sync("refuse") }
         }
 
         on<TickEvent.Server> { serverTicks.incrementAndGet() }
@@ -147,7 +179,7 @@ object Zpew : Module(
         on<TickEvent.End> {
             blockClick = null
             ticks++
-            if (queue.expire(serverTicks.get(), ticks)) sync()
+            if (queue.expire(serverTicks.get(), ticks)) sync("expire")
         }
 
         onSend<ServerboundMovePlayerPacket> {
@@ -169,7 +201,8 @@ object Zpew : Module(
                 if (counts) lastWitherImpact = now
             }
             queue.click(c, serverTicks.get(), doubleArrayOf(p.x, p.y, p.z), counts, ticks)
-            sync()
+            log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.odtheking.odin.utils.ServerUtils.currentPing}")
+            sync("click")
         }
     }
 }
