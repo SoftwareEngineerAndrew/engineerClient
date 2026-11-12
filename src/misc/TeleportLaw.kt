@@ -3,6 +3,8 @@ package com.engineerclient.misc
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sign
 import kotlin.math.sin
 
@@ -19,6 +21,16 @@ object TeleportLaw {
     interface Cells {
         fun id(x: Int, y: Int, z: Int): String
         fun top(x: Int, y: Int, z: Int): Double
+
+        /**
+         * The cell's collision boxes, each (minX, minY, minZ, maxX, maxY, maxZ) relative to the cell (the blink's line check).
+         * Default: one box over the whole cell up to [top], exact for full blocks and bottom slabs; a world that has the real
+         * shapes (stairs, top slabs, fences) should give them.
+         */
+        fun boxes(x: Int, y: Int, z: Int): List<DoubleArray> {
+            val t = top(x, y, z)
+            return if (t > 0.0) listOf(doubleArrayOf(0.0, 0.0, 0.0, 1.0, t, 1.0)) else emptyList()
+        }
     }
 
     /** The look vector for a yaw and pitch in degrees (Minecraft's). */
@@ -28,10 +40,13 @@ object TeleportLaw {
     }
 
     /**
-     * The blink (AOTE, AOTV, Wither Impact): #items.blink-ray and #items.blink-refusal, LAW = tall + body. 92.4% exactly
-     * right over 12,312 BR blinks.
+     * The blink (AOTE, AOTV, Wither Impact): #items.blink-ray and #items.blink-refusal, LAW = tall + body + exact. 92.7%
+     * exactly right over 13,443 BR casts (items-teleports-br's "line between steps checked exactly" row: 31 more blinks and
+     * 14 more refusals right than without the line check).
      *
      * - From the eye (feet + 1.62 standing, 1.27 sneaking) along the look, whole-block steps p_i = eye + i·look, i = 1..D.
+     * - The line from the step before (p_0 the eye) to the step must not enter a solid block's collision box: a corner the
+     *   ray grazes between two steps ends the walk.
      * - A step is good when its cell isn't solid (1.8 material) and doesn't sit on a block taller than a cell, and you fit:
      *   feet in the cell under the step's cell, or the step's cell itself when the one under is solid or tall; the feet
      *   cell and the one above it not solid, and the feet cell not on a tall block.
@@ -44,8 +59,10 @@ object TeleportLaw {
         fun solid(x: Int, y: Int, z: Int) = isSolid(w.id(x, y, z))
         fun tall(x: Int, y: Int, z: Int) = w.top(x, y - 1, z) > 1.0
         fun feet(x: Int, y: Int, z: Int) = if (solid(x, y - 1, z) || tall(x, y - 1, z)) y else y - 1
+        fun at(i: Int) = doubleArrayOf(fx + d[0] * i, ey + d[1] * i, fz + d[2] * i)
         var land: DoubleArray? = null
         for (i in 1..distance) {
+            if (lineHits(at(i - 1), at(i), w)) break
             val x = floor(fx + d[0] * i).toInt(); val y = floor(ey + d[1] * i).toInt(); val z = floor(fz + d[2] * i).toInt()
             if (solid(x, y, z) || tall(x, y, z)) break
             val f = feet(x, y, z)
@@ -60,19 +77,48 @@ object TeleportLaw {
         return to
     }
 
+    /** Whether the segment [a] -> [b] enters the collision box of a solid block (items-teleports-br's lineHits). */
+    private fun lineHits(a: DoubleArray, b: DoubleArray, w: Cells): Boolean {
+        for (x in floor(min(a[0], b[0])).toInt()..floor(max(a[0], b[0])).toInt())
+            for (y in floor(min(a[1], b[1])).toInt()..floor(max(a[1], b[1])).toInt())
+                for (z in floor(min(a[2], b[2])).toInt()..floor(max(a[2], b[2])).toInt()) {
+                    if (!isSolid(w.id(x, y, z))) continue
+                    val cell = intArrayOf(x, y, z)
+                    for (k in w.boxes(x, y, z)) {
+                        var t0 = 0.0; var t1 = 1.0; var ok = true
+                        for (n in 0..2) {
+                            val lo = cell[n] + k[n]; val hi = cell[n] + k[n + 3]
+                            val s = b[n] - a[n]
+                            if (abs(s) < 1e-9) { ok = a[n] >= lo && a[n] <= hi; if (!ok) break; continue }
+                            val u = (lo - a[n]) / s; val v = (hi - a[n]) / s
+                            t0 = max(t0, min(u, v)); t1 = min(t1, max(u, v))
+                            ok = t0 < t1
+                            if (!ok) break
+                        }
+                        if (ok) return true
+                    }
+                }
+        return false
+    }
+
     /**
      * Etherwarp: #items.etherwarp-ray and #items.etherwarp-landing (the law: stop = 'page', free = 'noColl'). 98.1% exact
      * over 3,451 BR warps.
      *
-     * - From the sneak eye (feet + 1.27) along the look, every cell the line passes through in order, up to [distance].
+     * - From the eye along the look, every cell the line passes through in order, up to [distance]. The eye is feet + [eye]:
+     *   1.27 (the sneaking eye, #items.etherwarp-ray), but 1.62 ([STAND_EYE]) when the sneak reaches the server in the same
+     *   tick as the click (its eye isn't sneaking yet): in a 120 ms log (2026-11-12) the three etherwarps cast that way (two
+     *   sneaks sent with the click, one sent 8 ticks earlier but handled with it after a 3 s server freeze) all landed from
+     *   1.62, while 41 casts with the sneak a tick or more earlier landed where only 1.27's ray goes. One more cast (sneak
+     *   held 3 s) needed 1.54 or more and stays unexplained.
      * - The first cell that stops the ray is the target: any block with a collision box (carpets and lily pads too) and
      *   signs, banners, tripwire hooks and pressure plates; never heads, ladders, flower pots, buttons or levers.
      * - A sign, wall banner or tripwire hook is no floor: refused. Else you land on top (x.5, y + 1.05, z.5), a cell
      *   higher on a block taller than a cell, when the two cells there have no collision (a chest counts as free).
      */
-    fun etherwarp(fx: Double, fy: Double, fz: Double, yaw: Float, pitch: Float, distance: Double, w: Cells): DoubleArray? {
+    fun etherwarp(fx: Double, fy: Double, fz: Double, yaw: Float, pitch: Float, distance: Double, w: Cells, eye: Double = SNEAK_EYE): DoubleArray? {
         val d = look(yaw, pitch)
-        val e = doubleArrayOf(fx, fy + SNEAK_EYE, fz)
+        val e = doubleArrayOf(fx, fy + eye, fz)
         val c = IntArray(3) { floor(e[it]).toInt() }
         val s = IntArray(3) { sign(d[it]).toInt() }
         val inv = DoubleArray(3) { if (d[it] != 0.0) abs(1 / d[it]) else Double.POSITIVE_INFINITY }
