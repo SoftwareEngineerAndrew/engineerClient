@@ -46,6 +46,7 @@ object Zpew : Module(
     private val aotv by BooleanSetting("AOTE / AOTV", true, desc = "Aspect of the End and Aspect of the Void teleports (unsneaked).")
     private val hyperion by BooleanSetting("Hyperion", true, desc = "Wither Impact teleports: Hyperion, Valkyrie, Astraea, Scylla, Necron's Blade with all three scrolls.")
     private val debug by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera jump to config/engineerclient/zpew-debug.log, for checking the predictions.")
+    private val zeroPingSound by BooleanSetting("0 Ping Etherwarp Sound", true, desc = "Plays the etherwarp sound (Odin's Etherwarp sound when that is on) the moment your camera etherwarps, and not when the server's etherwarp arrives.")
     private val capture by BooleanSetting("Capture Misses", false, desc = "When a prediction is wrong (warps where the server refuses, lands elsewhere, or refuses where the server warps), saves the click and the blocks around it to config/engineerclient/zpew-misses.txt, to fix the law from.")
 
     private var logOut: java.io.Writer? = null
@@ -243,7 +244,7 @@ object Zpew : Module(
             if (capture && from != null) land(from, c)?.let { miss("server-refused", c, it, null) }
         }
 
-        on<LevelEvent.Load> { reset() }
+        on<LevelEvent.Load> { reset(); EtherSound.clear() }
 
         on<MessageEvent> {
             if (!queue.isEmpty && REFUSALS.any { message.contains(it) }) { log("REFUSED $message"); queue.refuse(); sync("refuse") }
@@ -290,6 +291,10 @@ object Zpew : Module(
                 val from = camera?.let { doubleArrayOf(it.x, it.y, it.z) } ?: doubleArrayOf(p.x, p.y, p.z)
                 c.from = from
                 c.cells = snapshot(from, c)
+            }
+            if (zeroPingSound && counts && c.ether) {
+                val from = camera?.let { doubleArrayOf(it.x, it.y, it.z) } ?: doubleArrayOf(p.x, p.y, p.z)
+                if (land(from, c) != null) EtherSound.played()
             }
             queue.click(c, serverTicks.get(), doubleArrayOf(p.x, p.y, p.z), counts, ticks)
             log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.odtheking.odin.utils.ServerUtils.currentPing}")

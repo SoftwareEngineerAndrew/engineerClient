@@ -4,6 +4,8 @@
   "package": "com.engineerclient.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "EtherSoundMixin",
+    "EtherSoundOdinMixin",
     "ArmorFoilMixin",
     "HideBotsSimMixin",
     "OwnArrowsHideMixin",
