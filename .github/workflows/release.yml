@@ -1,12 +1,10 @@
 name: Release
 
-# One rolling release per Minecraft version, named after it ("26.3", "26.2", "26.1.2"): main builds the
-# newest one, marked Latest; each older version lives on an mc/<version> branch. Every push replaces
-# that branch's release.
+# Here: a build and test check on each push. In ADM (promote.sh copies this file): one rolling release per
+# Minecraft version, main the newest (Latest), each older one on an mc/<version> branch.
 on:
   push:
     branches: [main, "mc/**"]
-    # Text only: the jar would be the same.
     paths-ignore: ["**.md", "docs/**"]
 
 permissions:
@@ -14,7 +12,6 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref_name }}
-  # A newer push makes the build in progress pointless: it's cancelled and the newest goes out.
   cancel-in-progress: true
 
 jobs:
@@ -28,7 +25,7 @@ jobs:
           java-version: 25
       - uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: 9.6.1
+          gradle-version: 9.8.0
       - name: Odin 0.4.0
         if: github.ref_name == 'main'
         env:
@@ -39,9 +36,6 @@ jobs:
           echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
           MC=$(grep -oP 'com\.mojang:minecraft:\K[^"]+' build.gradle.kts)
           echo "MC=$MC" >> "$GITHUB_ENV"
-          echo "CHANNEL=$MC" >> "$GITHUB_ENV"
-      # The last build's compiler state, so a push recompiles only what it touched (Kotlin's incremental compile needs the
-      # earlier outputs and Gradle's record of them; a miss just compiles everything, as without it).
       - uses: actions/cache@v4
         with:
           path: |
@@ -51,28 +45,26 @@ jobs:
             build/tmp
           key: ec-compile-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: ec-compile-${{ github.ref_name }}-
-      # The tests run in their own job alongside (below): the release doesn't wait for them.
       - run: gradle build -x test --console=plain -Dorg.gradle.jvmargs=-Xmx6G -Pkotlin.daemon.jvmargs=-Xmx6G
       - name: Publish
+        if: github.repository == 'undonecoffee/adm'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete "release-$CHANNEL" --yes --cleanup-tag || true
+          gh release delete "release-$MC" --yes --cleanup-tag || true
           if [ "$GITHUB_REF_NAME" = main ]; then latest=--latest; else latest=--latest=false; fi
-          # One jar with a fixed name per Minecraft version, so its download link never changes:
           # releases/download/release-<channel>/EngineerClient-<mc>.jar
           jar="EngineerClient-$MC.jar"
           cp build/libs/*.jar "$jar"
-          url="https://github.com/$GITHUB_REPOSITORY/releases/download/release-$CHANNEL/$jar"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/release-$MC/$jar"
           notes="$(printf '**[Download EngineerClient for Minecraft %s](%s)** · %s\n\nPut the jar in your `mods` folder. Needs Fabric, Fabric API, Fabric Language Kotlin and Odin.' "$MC" "$url" "$EC_VERSION")"
-          # ADM's update.json (promote.sh) goes beside the jar, for UpdateCheck.
           extra=; [ -f update.json ] && extra=update.json
-          gh release create "release-$CHANNEL" "$jar" $extra --target "$GITHUB_SHA" \
+          gh release create "release-$MC" "$jar" $extra --target "$GITHUB_SHA" \
             --title "EngineerClient for Minecraft $MC" \
             --notes "$notes" $latest
 
-  # The few headless tests (test/), alongside the release rather than before it: a failure shows on the commit.
   test:
+    if: github.repository != 'undonecoffee/adm'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -82,7 +74,7 @@ jobs:
           java-version: 25
       - uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: 9.6.1
+          gradle-version: 9.8.0
           cache-read-only: true
       - name: Odin 0.4.0
         if: github.ref_name == 'main'

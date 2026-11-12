@@ -54,7 +54,7 @@ PREV_NOW="$(jq -r '.now // ""' "$PUB/update.json" 2>/dev/null || true)"
 git -C "$PUB" rm -rq --ignore-unmatch .
 git -C "$TEAM" archive HEAD | tar x -C "$PUB"
 rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
-  "$PUB/docs" "$PUB/test" "$PUB/tools" "$PUB/.github/workflows/test-build.yml" \
+  "$PUB/docs" "$PUB/test" "$PUB/tools" \
   "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/coffeeclient.odin.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json" \
   "$PUB/src/resources/devgineerclient.odin.mixins.json" \
   "$PUB/src/resources/rotation" "$PUB/src/resources/coffeeclient" \
