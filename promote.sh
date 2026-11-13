@@ -46,8 +46,8 @@ else
 fi
 
 # The hard and now floors so far (update.json, from the last promote).
-PREV_HARD="$(jq -r '.hard // ""' "$PUB/update.json" 2>/dev/null || true)"
-PREV_NOW="$(jq -r '.now // ""' "$PUB/update.json" 2>/dev/null || true)"
+PREV_HARD="$(jq -r '.hard // ""' "$PUB/.github/update.json" 2>/dev/null || true)"
+PREV_NOW="$(jq -r '.now // ""' "$PUB/.github/update.json" 2>/dev/null || true)"
 
 # Replace the public tree with the dev HEAD, then drop the extras and what only the dev repo needs (notes, tests, tools).
 git -C "$PUB" rm -rq --ignore-unmatch .
@@ -166,7 +166,7 @@ HARD="$PREV_HARD"; NOW="$PREV_NOW"
 [ "$LEVEL" = hard ] && HARD="$ADM_VERSION"
 [ "$LEVEL" = now ] && { HARD="$ADM_VERSION"; NOW="$ADM_VERSION"; }
 NOTE="${MSG#ADM $ADM_VERSION: }"; NOTE="${NOTE%%. *}"; NOTE="${NOTE:0:160}"
-jq -n --arg v "$ADM_VERSION" --arg note "$NOTE" --arg hard "$HARD" --arg now "$NOW" '{version: $v, note: $note, hard: $hard, now: $now}' > "$PUB/update.json"
+jq -n --arg v "$ADM_VERSION" --arg note "$NOTE" --arg hard "$HARD" --arg now "$NOW" '{version: $v, note: $note, hard: $hard, now: $now}' > "$PUB/.github/update.json"
 
 # Must build without the extras. Untracked compile-only jars (libs/, e.g. the Odin 26.3 port, which
 # CI downloads itself) are borrowed for the check and never committed.
