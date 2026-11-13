@@ -75,6 +75,9 @@ object LcmStyle {
     private val borderWidth = NumberSetting("LCM Border Width", 1, 1..5, 1,
         desc = "How thick LCM Style's outline is, drawn inside the map's edge.").withDependency { style.value && colors.value }
 
+    private val ownMarkerColor = ColorSetting("LCM Own Marker", Color(0xFFFFFFFF.toInt()), true,
+        desc = "LCM Style's colour for your own marker (dtMap's white to begin with).").withDependency { style.value && colors.value }
+
     private fun colorSetting(type: String, default: Int, what: String) =
         ColorSetting("LCM $type Room", Color(default), true, desc = "LCM Style's colour for $what.").withDependency { style.value && colors.value }
 
@@ -125,7 +128,7 @@ object LcmStyle {
         DungeonMap.registerSetting(style)
         // right below LCM Style
         for (s in listOf(colors, unopenedColor, normalColor, puzzleColor, trapColor, yellowColor, bloodColor, entranceColor, fairyColor, rareColor,
-            backgroundColor, borderColor, borderWidth)) DungeonMap.registerSetting(s)
+            backgroundColor, borderColor, borderWidth, ownMarkerColor)) DungeonMap.registerSetting(s)
     }
 
     /** True while the map HUD is drawn here instead of by Odin (LcmStyleMixin). */
@@ -458,7 +461,7 @@ object LcmStyle {
         }
         g.pose().rotate(Math.toRadians(180.0 + yaw).toFloat())
         // yours: dtMap's white marker (its MC Map Pointer), drawn as dtMap does, no class square
-        if (own) g.blit(RenderPipelines.GUI_TEXTURED, selfMarker, 5, 5, 10f, 10f, -10, -10, 10, 10)
+        if (own) g.blit(RenderPipelines.GUI_TEXTURED, selfMarker, 5, 5, 10f, 10f, -10, -10, 10, 10, ownMarkerColor.value.rgba)
         else {
             g.fill(-6, -6, 6, 6, color)
             if (skin != null) PlayerFaceExtractor.extractRenderState(g, skin, -5, -5, 10)
