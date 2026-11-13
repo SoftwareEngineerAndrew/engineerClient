@@ -79,7 +79,8 @@
     "MonoAudioChannelMixin",
     "MonoAudioEngineMixin",
     "SoundVolumeMultiplierMixin",
-    "InfoDisplayClickMixin"
+    "InfoDisplayClickMixin",
+    "HubMapRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1
