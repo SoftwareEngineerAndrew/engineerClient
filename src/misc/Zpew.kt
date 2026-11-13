@@ -236,7 +236,7 @@ object Zpew : Module(
     /** The click as the server will cast it, or null when it isn't a teleport we show. */
     private fun click(packet: ServerboundUseItemPacket): Click? {
         val p = mc.player ?: return null
-        if (blockClick == true || (DungeonUtils.inBoss && DungeonUtils.isFloor(7))) return null
+        if (blockClick == true || (DungeonUtils.inBoss && DungeonUtils.isFloor(7)) || DungeonUtils.currentRoomName == "Ice Fill") return null
         val stack = p.getItemInHand(packet.hand)
         val sneaking = p.lastSentInput.shift()
         val (yaw, pitch) = if (blockClick == false && !moveYaw.isNaN()) moveYaw to movePitch else packet.yRot to packet.xRot
