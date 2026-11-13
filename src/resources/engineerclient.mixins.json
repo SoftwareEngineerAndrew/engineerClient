@@ -107,7 +107,10 @@
     "MoveDisconnectMixin",
     "DungeonBreakerTorchGuardMixin",
     "WorldBorderClickMixin",
-    "WorldBorderUseMixin"
+    "WorldBorderUseMixin",
+    "ItemAnimationsRendererMixin",
+    "ItemAnimationsSwingMixin",
+    "ItemAnimationsEquipMixin"
   ],
   "injectors": {
     "defaultRequire": 1
