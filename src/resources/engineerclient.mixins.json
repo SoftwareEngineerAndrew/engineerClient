@@ -80,7 +80,6 @@
     "MonoAudioEngineMixin",
     "SoundVolumeMultiplierMixin",
     "InfoDisplayClickMixin",
-    "HubMapRendererMixin",
     "ScreenTweaksHudMixin",
     "ScreenTweaksGameRendererMixin",
     "ScreenTweaksOverlayMixin",
