@@ -31,25 +31,36 @@ object TileRule {
     }
 
     /**
-     * The tiles that matter from tile ([tx], [tz]): its room (the tiles joined to it, [Link.joins]) and the four straight
-     * lines from it ([Link.passes]). [link]: what stands in slot number i ([Links.index]).
+     * Hypixel's rooms are 4 tiles at most (and one entrance reads as joined to the room in front of it: [Links]). Blocks
+     * that join more tiles than this into one aren't a dungeon's: a singleplayer world, which Odin counts as a dungeon
+     * too, with its ground running under every gap. Nothing is left out there.
      */
-    fun relevant(tx: Int, tz: Int, link: (Int) -> Link): Long {
-        if (tx !in 0 until N || tz !in 0 until N) return 0L
+    const val MAX_ROOM = 8
+
+    /** The tiles joined to tile ([tx], [tz]) through slots that [joined] says are, itself among them: its room. */
+    fun room(tx: Int, tz: Int, joined: (Int) -> Boolean): Long {
         var set = bit(tx, tz)
-        // the room: every tile joined to this one, through any of its tiles
         val stack = IntArray(N * N); var top = 0
         stack[top++] = tz * N + tx
         while (top > 0) {
             val t = stack[--top]; val x = t % N; val z = t / N
             for (d in DIRS) {
                 val slot = Links.between(x, z, d[0], d[1])
-                if (slot < 0 || !link(slot).joins) continue
+                if (slot < 0 || !joined(slot)) continue
                 val b = bit(x + d[0], z + d[1])
                 if (set and b == 0L) { set = set or b; stack[top++] = (z + d[1]) * N + x + d[0] }
             }
         }
-        // the lines: from the camera's own tile, up to the first gap
+        return set
+    }
+
+    /**
+     * The tiles that matter from tile ([tx], [tz]): its room (the tiles joined to it, [Link.joins]) and the four straight
+     * lines from it ([Link.passes]), each up to the first gap. [link]: what stands in slot number i ([Links.index]).
+     */
+    fun relevant(tx: Int, tz: Int, link: (Int) -> Link): Long {
+        if (tx !in 0 until N || tz !in 0 until N) return 0L
+        var set = room(tx, tz) { link(it).joins }
         for (d in DIRS) {
             var x = tx; var z = tz
             while (true) {
@@ -62,10 +73,16 @@ object TileRule {
         return set
     }
 
-    /** [relevant] from every tile the camera's block column ([x], [z]) stands on; 0 when that is off the grid. */
+    /**
+     * [relevant] from every tile the camera's block column ([x], [z]) stands on. 0, nothing to leave out, when that is
+     * off the grid or on something that isn't a dungeon room (more than [MAX_ROOM] tiles known to be joined).
+     */
     fun relevantAt(x: Int, z: Int, link: (Int) -> Link): Long {
         var set = 0L
-        for (tz in tilesAt(z)) for (tx in tilesAt(x)) set = set or relevant(tx, tz, link)
+        for (tz in tilesAt(z)) for (tx in tilesAt(x)) {
+            if (java.lang.Long.bitCount(room(tx, tz) { link(it) == Link.JOIN }) > MAX_ROOM) return 0L
+            set = set or relevant(tx, tz, link)
+        }
         return set
     }
 }

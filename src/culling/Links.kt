@@ -35,10 +35,13 @@ fun interface Columns {
  * The gap between two tiles is one block wide and 31 long. Between two rooms it is empty but for a door: Hypixel's door
  * units are 5 wide around the middle of the side (13 to 17 along it; the opening 14 to 16), every one with blocks in the
  * gap's middle column (its floor and lintel, the door's own blocks while it is shut). Inside one room the room's floor,
- * walls and roof run across the whole gap. So the middle column tells a gap from the rest, and the columns well to either
- * side of a door tell one room from a doorway. Checked on all 31,680 slots of the 528 recorded layouts the bundled packs
- * build (LinksPackTest). One room reads wrong, on the safe side: an entrance design that walls up the whole gap beside
- * its door reads as joined to the room in front of it, so one tile more than needed is drawn from there.
+ * walls and roof run across the whole gap: every column of it holds blocks. So the middle column tells a gap from the
+ * rest, and the columns well to either side of a door tell one room from a doorway. Most of those have to hold blocks,
+ * not one: on Hypixel a room's trim now and then sticks a block or two into an empty gap (seen in the recorded chunks:
+ * 2 of a gap's 31 columns). Checked on all 31,680 slots of the 528 recorded layouts the bundled packs build
+ * (LinksPackTest), where a join fills all seven of those columns and a door or a gap none, and on the chunks of 60
+ * recorded runs. One room reads wrong, on the safe side: an entrance design that walls up the whole gap beside its door
+ * reads as joined to the room in front of it, so one tile more than needed is drawn from there.
  */
 object Links {
     const val COUNT = 60
@@ -75,7 +78,7 @@ object Links {
     fun read(axis: Char, tx: Int, tz: Int, columns: Columns): Link {
         fun empty(along: Int): Boolean? = cell(axis, tx, tz, along).let { (x, z) -> columns.empty(x, z) }
         val middle = empty(MIDDLE) ?: return Link.UNKNOWN
-        for (a in BESIDE) if (empty(a) == false) return Link.JOIN
+        if (BESIDE.count { empty(it) == false } * 2 > BESIDE.size) return Link.JOIN
         return if (middle) Link.GAP else Link.DOOR
     }
 

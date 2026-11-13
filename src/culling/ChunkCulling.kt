@@ -28,7 +28,9 @@ import net.minecraft.world.level.chunk.status.ChunkStatus
  * frame its tile starts to matter. A section left out takes its block entities with it (Sodium draws those per listed
  * section); entities are not touched.
  *
- * Off outside a dungeon, in the boss, and with the camera off the 6x6 grid: everything draws.
+ * Off outside a dungeon, in the boss, and with the camera off the 6x6 grid: everything draws. Odin counts every
+ * singleplayer world as a dungeon, so the rule runs there too (a simulated dungeon, a practice map): a world whose blocks
+ * don't make rooms is left alone ([TileRule.MAX_ROOM]).
  */
 object ChunkCulling : Module(
     name = "Chunk Culling",

@@ -56,6 +56,20 @@ class TileRuleTest {
         assertTiles(tiles(3 to 3, 4 to 3), TileRule.relevant(3, 3, map))
     }
 
+    @Test fun aWorldThatIsNotADungeonIsLeftAlone() {
+        // a singleplayer world (Odin counts it as a dungeon): ground under every gap, so every slot reads as one room
+        assertEquals(0L, TileRule.relevantAt(-153, -153) { Link.JOIN })
+        // nine tiles joined in a row and a column is no room either; eight still is (an entrance and a room, with room to spare)
+        val nine = links(join = "E 0,0 E 1,0 E 2,0 E 3,0 E 4,0 S 5,0 S 5,1 S 5,2")
+        assertEquals(0L, TileRule.relevantAt(DungeonFrame.tileCentre(0), DungeonFrame.tileCentre(0), nine))
+        val eight = links(join = "E 0,0 E 1,0 E 2,0 E 3,0 E 4,0 S 5,0 S 5,1")
+        assertEquals(8, java.lang.Long.bitCount(TileRule.relevantAt(DungeonFrame.tileCentre(0), DungeonFrame.tileCentre(0), eight)))
+        // what isn't loaded doesn't count towards it: a dungeon whose far side hasn't come yet is still culled
+        assertEquals(36, java.lang.Long.bitCount(TileRule.relevantAt(-153, -153) { Link.UNKNOWN }))
+        val farUnknown = links(join = "E 1,1", unknown = "E 2,1 E 3,1 E 4,1 S 5,1 S 5,2 S 5,3 S 5,4 E 4,5 E 3,5")
+        assertTrue(TileRule.relevantAt(DungeonFrame.tileCentre(1), DungeonFrame.tileCentre(1), farUnknown) != 0L)
+    }
+
     @Test fun offTheGridNothingMatters() {
         assertEquals(0L, TileRule.relevant(-1, 2, links()))
         assertEquals(0L, TileRule.relevantAt(-202, -185, links()))
@@ -128,12 +142,18 @@ class TileRuleTest {
         // a door unit is 5 wide: still a door
         for (a in 13..17) blocks += Links.cell('E', 1, 2, a)
         assertEquals(Link.DOOR, Links.read('E', 1, 2, world))
-        // a room's blocks across the gap, away from where a door would be
-        blocks += Links.cell('E', 1, 2, 22)
+        // a block or two of a neighbour's trim in the gap, away from the door: still two rooms
+        blocks += Links.cell('E', 1, 2, 22); blocks += Links.cell('E', 1, 2, 9)
+        assertEquals(Link.DOOR, Links.read('E', 1, 2, world))
+        // a room's own blocks run across the gap: most of the columns beside the middle hold some
+        for (a in listOf(8, 10, 20, 21)) blocks += Links.cell('E', 1, 2, a)
         assertEquals(Link.JOIN, Links.read('E', 1, 2, world))
         // and with the middle open (a room with a hole there)
-        blocks -= x to z
+        for (a in 13..17) blocks -= Links.cell('E', 1, 2, a)
         assertEquals(Link.JOIN, Links.read('E', 1, 2, world))
+        // trim alone in an empty gap is a gap
+        blocks.clear(); blocks += Links.cell('E', 1, 2, 22); blocks += Links.cell('E', 1, 2, 23); blocks += Links.cell('E', 1, 2, 8)
+        assertEquals(Link.GAP, Links.read('E', 1, 2, world))
         assertEquals(Link.UNKNOWN, Links.read('E', 1, 2) { _, _ -> null })
         // every column a slot is read from is in one chunk
         for (axis in "ES") for (t in 0 until 5) {

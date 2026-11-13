@@ -91,6 +91,9 @@ class LinksPackTest {
                 if (wall) walled++
                 val want = if (wall) Link.JOIN else truth(layout, axis, tx, tz)
                 val got = Links.read(axis, tx, tz, world)
+                // the margin the rule has: a room fills every column beside the middle, a door or a gap none
+                val beside = Links.BESIDE.count { a -> Links.cell(axis, tx, tz, a).let { (x, z) -> world.empty(x, z) } == false }
+                if (!wall && beside != (if (want == Link.JOIN) Links.BESIDE.size else 0)) wrong += "${layout.id} $axis $tx,$tz: $beside columns beside the middle hold blocks, in a $want"
                 read++
                 counts.merge(want, 1, Int::plus)
                 if (got != want) {
