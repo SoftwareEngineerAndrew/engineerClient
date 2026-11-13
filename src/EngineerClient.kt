@@ -93,6 +93,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.RunsLogger,
             com.engineerclient.skyblock.NametagTweaks,
             com.engineerclient.skyblock.NoItemPlace,
+            com.engineerclient.skyblock.ArrowFix,
         )
     }
 
