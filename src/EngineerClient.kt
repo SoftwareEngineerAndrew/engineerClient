@@ -83,7 +83,7 @@ object EngineerClient : ClientModInitializer {
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning,
             com.engineerclient.misc.BlockInstaclear,
             com.engineerclient.practice.TerminalHitboxes,
-            com.engineerclient.misc.ItemHighlight, com.engineerclient.misc.Zpew, com.engineerclient.misc.PuzzleOverlay,
+            com.engineerclient.misc.ItemHighlight, com.engineerclient.misc.Zpew, com.engineerclient.misc.PuzzleOverlay, com.engineerclient.culling.ChunkCulling,
         )
     }
 

@@ -1,0 +1,13 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.engineerclient.mixin.sodium",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ChunkCullingCollectorMixin",
+    "ChunkCullingFrameMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
