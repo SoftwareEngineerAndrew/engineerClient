@@ -90,6 +90,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.TabTweaks,
             com.engineerclient.skyblock.ItemTweaks,
             com.engineerclient.skyblock.CloseChestOnKey,
+            com.engineerclient.skyblock.RunsLogger,
         )
     }
 
