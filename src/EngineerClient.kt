@@ -85,7 +85,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.practice.TerminalHitboxes,
             com.engineerclient.misc.ItemHighlight, com.engineerclient.misc.Zpew, com.engineerclient.misc.PuzzleOverlay, com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,
-            com.engineerclient.dungeon.RoomAlerts,
+            com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs,
         )
     }
 
