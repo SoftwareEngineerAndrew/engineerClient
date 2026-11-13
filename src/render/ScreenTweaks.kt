@@ -7,6 +7,8 @@ import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Color
 import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.world.effect.MobEffects
+import net.minecraft.world.level.material.FogType
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.inventory.InventoryMenu
 import net.minecraft.world.inventory.Slot
@@ -19,13 +21,12 @@ object ScreenTweaks : Module(
     key = null,
 ) {
     private val noHurtCamera by BooleanSetting("No Hurt Camera", false, desc = "No camera shake when you take damage.")
-    private val noBlindness by BooleanSetting("No Blindness", false, desc = "No blindness fog.")
     private val noVignette by BooleanSetting("No Vignette", false, desc = "No dark screen edges.")
     private val noWaterOverlay by BooleanSetting("No Water Overlay", false, desc = "No underwater screen texture.")
     private val noSuffocationOverlay by BooleanSetting("No Suffocation Overlay", false, desc = "No block texture when your head is inside a block.")
     private val hidePotionHud by BooleanSetting("Hide Potion Effect HUD", false, desc = "Hides the effect icons at the top right.")
     private val hideInventoryEffects by BooleanSetting("Hide Inventory Effects", false, desc = "Hides the effect list beside the inventory.")
-    private val noFog by BooleanSetting("No Fog", false, desc = "No world fog.")
+    private val noFog by BooleanSetting("No Fog", false, desc = "No world fog; lava, water, blindness and darkness fog stay.")
     private val fullbright by BooleanSetting("Fullbright", false, desc = "Everything fully lit.")
     private val noTextShadow by BooleanSetting("No Text Shadow", false, desc = "Text is drawn without its shadow.")
     private val noPaneHighlight by BooleanSetting("No Glass Pane Highlight", false, desc = "No hover highlight on unnamed glass panes in menus.")
@@ -36,13 +37,17 @@ object ScreenTweaks : Module(
     private val sidebarBodyColor by ColorSetting("Sidebar Body Color", Color(0, 0, 0, 0.3f), true, desc = "Behind the scoreboard lines.").withDependency { sidebarColors }
 
     fun noHurtCamera() = enabled && noHurtCamera
-    fun noBlindness() = enabled && noBlindness
     fun noVignette() = enabled && noVignette
     fun noWaterOverlay() = enabled && noWaterOverlay
     fun noSuffocationOverlay() = enabled && noSuffocationOverlay
     fun hidePotionHud() = enabled && hidePotionHud
     fun hideInventoryEffects() = enabled && hideInventoryEffects
-    fun noFog() = enabled && noFog
+    fun noFog(): Boolean {
+        if (!enabled || !noFog) return false
+        val player = mc.player ?: return true
+        return mc.gameRenderer.mainCamera().fluidInCamera == FogType.NONE &&
+            !player.hasEffect(MobEffects.BLINDNESS) && !player.hasEffect(MobEffects.DARKNESS)
+    }
     fun fullbright() = enabled && fullbright
     fun noTextShadow() = enabled && noTextShadow
     fun fixRidingCamera(entity: Entity) = enabled && fixRidingCamera && entity === mc.player && entity.isPassenger

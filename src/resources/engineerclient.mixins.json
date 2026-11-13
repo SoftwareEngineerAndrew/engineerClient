@@ -86,7 +86,6 @@
     "ScreenTweaksOverlayMixin",
     "ScreenTweaksInventoryEffectsMixin",
     "ScreenTweaksFogMixin",
-    "ScreenTweaksBlindnessMixin",
     "ScreenTweaksLightmapMixin",
     "ScreenTweaksTextShadowMixin",
     "ScreenTweaksSlotMixin",
