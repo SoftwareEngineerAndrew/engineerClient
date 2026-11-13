@@ -130,6 +130,7 @@ object EngineerClient : ClientModInitializer {
         safely("chat melody") { com.engineerclient.misc.OdinMelodyChat.install() }
         safely("tick timers") { com.engineerclient.misc.OdinTickTimers.install() }
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
+        safely("door outline") { com.engineerclient.misc.OdinDoorOutline.install() }
         safely("splits look") { OdinSplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }
