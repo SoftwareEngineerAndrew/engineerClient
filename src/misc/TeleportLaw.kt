@@ -24,8 +24,9 @@ object TeleportLaw {
 
         /**
          * The cell's collision boxes, each (minX, minY, minZ, maxX, maxY, maxZ) relative to the cell (the blink's line check).
-         * Default: one box over the whole cell up to [top], exact for full blocks and bottom slabs; a world that has the real
-         * shapes (stairs, top slabs, fences) should give them.
+         * Default: one box over the whole cell up to [top], exact for full blocks and bottom slabs only. A world that has the
+         * block states should give [shapes]: a wall or fence as a whole cell 1.5 high ends a blink that passes beside it
+         * (2026-11-12 misses: two AOTV blinks past cobblestone walls and stairs refused by the law, moved by the server).
          */
         fun boxes(x: Int, y: Int, z: Int): List<DoubleArray> {
             val t = top(x, y, z)
@@ -33,11 +34,112 @@ object TeleportLaw {
         }
     }
 
+    private fun box(x0: Double, y0: Double, z0: Double, x1: Double, y1: Double, z1: Double) = doubleArrayOf(x0, y0, z0, x1, y1, z1)
+    private val FULL = listOf(box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0))
+    private val HALF = mapOf(
+        "north" to box(0.0, 0.0, 0.0, 1.0, 1.0, 0.5), "south" to box(0.0, 0.0, 0.5, 1.0, 1.0, 1.0),
+        "west" to box(0.0, 0.0, 0.0, 0.5, 1.0, 1.0), "east" to box(0.5, 0.0, 0.0, 1.0, 1.0, 1.0),
+    )
+    private val LEFT = mapOf("north" to "west", "west" to "south", "south" to "east", "east" to "north")
+    private val OPP = mapOf("north" to "south", "south" to "north", "east" to "west", "west" to "east")
+    private fun inter(a: DoubleArray, b: DoubleArray) = DoubleArray(6) { if (it < 3) max(a[it], b[it]) else min(a[it], b[it]) }
+
     /**
-     * The eye the server casts a click from: its pose's, which takes a sneak change a tick after the input packet. [changed]: the
-     * sneak changed in the click's own server tick, so the eye is the one before it ([sneaking] is the click's own sneak).
+     * A solid block's collision boxes on Hypixel's 1.8 server, relative to the cell (alldata query/world.mjs boxesOf, the shapes
+     * the blink's line check was measured with): [id] without "minecraft:", [prop] a property of its modern state ("facing",
+     * "half", "north", ...). Not-solid blocks get none: the line check only looks at solid ones.
      */
-    fun eye(sneaking: Boolean, changed: Boolean): Double = if (sneaking != changed) SNEAK_EYE else STAND_EYE
+    fun shapes(id: String, prop: (String) -> String?): List<DoubleArray> {
+        if (!isSolid(id)) return emptyList()
+        fun on(k: String) = prop(k).let { it != null && it != "none" && it != "false" }
+        return when {
+            id.endsWith("_slab") -> when (prop("type")) {
+                "double" -> FULL
+                "top" -> listOf(box(0.0, 0.5, 0.0, 1.0, 1.0, 1.0))
+                else -> listOf(box(0.0, 0.0, 0.0, 1.0, 0.5, 1.0))
+            }
+            id.endsWith("_stairs") -> {
+                val top = prop("half") == "top"
+                val slab = if (top) box(0.0, 0.5, 0.0, 1.0, 1.0, 1.0) else box(0.0, 0.0, 0.0, 1.0, 0.5, 1.0)
+                val f = prop("facing") ?: "north"
+                val l = LEFT.getValue(f); val r = OPP.getValue(l)
+                val h = HALF.getValue(f)
+                val up = when (prop("shape")) {
+                    "outer_left" -> listOf(inter(h, HALF.getValue(l)))
+                    "outer_right" -> listOf(inter(h, HALF.getValue(r)))
+                    "inner_left" -> listOf(h, inter(HALF.getValue(OPP.getValue(f)), HALF.getValue(l)))
+                    "inner_right" -> listOf(h, inter(HALF.getValue(OPP.getValue(f)), HALF.getValue(r)))
+                    else -> listOf(h)
+                }
+                listOf(slab) + up.map { it.copyOf().also { b -> b[1] = if (top) 0.0 else 0.5; b[4] = if (top) 0.5 else 1.0 } }
+            }
+            id.endsWith("_wall") -> {
+                val n = on("north"); val s = on("south"); val w = on("west"); val e = on("east")
+                var x0 = 0.25; var x1 = 0.75; var z0 = 0.25; var z1 = 0.75
+                if (n) z0 = 0.0; if (s) z1 = 1.0; if (w) x0 = 0.0; if (e) x1 = 1.0
+                if (n && s && !w && !e) { x0 = 0.3125; x1 = 0.6875 } else if (!n && !s && w && e) { z0 = 0.3125; z1 = 0.6875 }
+                listOf(box(x0, 0.0, z0, x1, 1.5, z1))
+            }
+            id.endsWith("_fence") -> {
+                val n = on("north"); val s = on("south"); val w = on("west"); val e = on("east")
+                val out = mutableListOf(box(0.375, 0.0, 0.375, 0.625, 1.5, 0.625))
+                if (n || s) out += box(0.375, 0.0, if (n) 0.0 else 0.375, 0.625, 1.5, if (s) 1.0 else 0.625)
+                if (w || e) out += box(if (w) 0.0 else 0.375, 0.0, 0.375, if (e) 1.0 else 0.625, 1.5, 0.625)
+                out
+            }
+            id.endsWith("_fence_gate") -> when {
+                prop("open") == "true" -> emptyList()
+                prop("facing") == "north" || prop("facing") == "south" -> listOf(box(0.0, 0.0, 0.375, 1.0, 1.5, 0.625))
+                else -> listOf(box(0.375, 0.0, 0.0, 0.625, 1.5, 1.0))
+            }
+            id == "iron_bars" || id.endsWith("glass_pane") -> {
+                val n = on("north"); val s = on("south"); val w = on("west"); val e = on("east"); val any = n || s || w || e
+                val out = mutableListOf<DoubleArray>()
+                if ((!w || !e) && any) { if (w) out += box(0.0, 0.0, 0.4375, 0.5, 1.0, 0.5625) else if (e) out += box(0.5, 0.0, 0.4375, 1.0, 1.0, 0.5625) }
+                else out += box(0.0, 0.0, 0.4375, 1.0, 1.0, 0.5625)
+                if ((!n || !s) && any) { if (n) out += box(0.4375, 0.0, 0.0, 0.5625, 1.0, 0.5) else if (s) out += box(0.4375, 0.0, 0.5, 0.5625, 1.0, 1.0) }
+                else out += box(0.4375, 0.0, 0.0, 0.5625, 1.0, 1.0)
+                out
+            }
+            id.endsWith("_trapdoor") -> {
+                val t = 0.1875
+                if (prop("open") == "true") listOf(when (prop("facing")) {
+                    "north" -> box(0.0, 0.0, 1 - t, 1.0, 1.0, 1.0); "south" -> box(0.0, 0.0, 0.0, 1.0, 1.0, t)
+                    "west" -> box(1 - t, 0.0, 0.0, 1.0, 1.0, 1.0); else -> box(0.0, 0.0, 0.0, t, 1.0, 1.0)
+                }) else listOf(if (prop("half") == "top") box(0.0, 1 - t, 0.0, 1.0, 1.0, 1.0) else box(0.0, 0.0, 0.0, 1.0, t, 1.0))
+            }
+            id.endsWith("_door") -> {
+                val t = 0.1875; val r = prop("hinge") == "right"
+                fun side(f: String?) = when (f) {
+                    "east" -> box(0.0, 0.0, 0.0, t, 1.0, 1.0); "west" -> box(1 - t, 0.0, 0.0, 1.0, 1.0, 1.0)
+                    "south" -> box(0.0, 0.0, 0.0, 1.0, 1.0, t); else -> box(0.0, 0.0, 1 - t, 1.0, 1.0, 1.0)
+                }
+                if (prop("open") != "true") listOf(side(prop("facing"))) else listOf(when (prop("facing")) {
+                    "east" -> if (r) box(0.0, 0.0, 1 - t, 1.0, 1.0, 1.0) else box(0.0, 0.0, 0.0, 1.0, 1.0, t)
+                    "west" -> if (r) box(0.0, 0.0, 0.0, 1.0, 1.0, t) else box(0.0, 0.0, 1 - t, 1.0, 1.0, 1.0)
+                    "south" -> if (r) box(0.0, 0.0, 0.0, t, 1.0, 1.0) else box(1 - t, 0.0, 0.0, 1.0, 1.0, 1.0)
+                    else -> if (r) box(1 - t, 0.0, 0.0, 1.0, 1.0, 1.0) else box(0.0, 0.0, 0.0, t, 1.0, 1.0)
+                })
+            }
+            CHEST.containsMatchIn(id) -> listOf(box(0.0625, 0.0, 0.0625, 0.9375, 0.875, 0.9375))
+            id == "hopper" || id == "cauldron" || id == "water_cauldron" || id == "lava_cauldron" -> listOf(
+                box(0.0, 0.0, 0.0, 1.0, if (id == "hopper") 0.625 else 0.3125, 1.0), box(0.0, 0.0, 0.0, 0.125, 1.0, 1.0),
+                box(0.0, 0.0, 0.0, 1.0, 1.0, 0.125), box(0.875, 0.0, 0.0, 1.0, 1.0, 1.0), box(0.0, 0.0, 0.875, 1.0, 1.0, 1.0),
+            )
+            id.endsWith("anvil") -> listOf(if (prop("facing") == "east" || prop("facing") == "west") box(0.0, 0.0, 0.125, 1.0, 1.0, 0.875) else box(0.125, 0.0, 0.0, 0.875, 1.0, 1.0))
+            id == "end_portal_frame" -> listOf(box(0.0, 0.0, 0.0, 1.0, 0.8125, 1.0)) + (if (prop("eye") == "true") listOf(box(0.3125, 0.8125, 0.3125, 0.6875, 1.0, 0.6875)) else emptyList())
+            id == "enchanting_table" -> listOf(box(0.0, 0.0, 0.0, 1.0, 0.75, 1.0))
+            id.endsWith("daylight_detector") -> listOf(box(0.0, 0.0, 0.0, 1.0, 0.375, 1.0))
+            id == "brewing_stand" -> listOf(box(0.4375, 0.0, 0.4375, 0.5625, 0.875, 0.5625), box(0.0, 0.0, 0.0, 1.0, 0.125, 1.0))
+            id == "cake" -> listOf(box(0.0625 + 0.125 * (prop("bites")?.toIntOrNull() ?: 0), 0.0, 0.0625, 0.9375, 0.5, 0.9375))
+            id.endsWith("_bed") -> listOf(box(0.0, 0.0, 0.0, 1.0, 0.5625, 1.0))
+            id == "soul_sand" -> listOf(box(0.0, 0.0, 0.0, 1.0, 0.875, 1.0))
+            id == "dragon_egg" -> listOf(box(0.0625, 0.0, 0.0625, 0.9375, 1.0, 0.9375))
+            id == "cactus" -> listOf(box(0.0625, 0.0, 0.0625, 0.9375, 0.9375, 0.9375))
+            id == "cobweb" || id.endsWith("_sign") || id.endsWith("_banner") || id.endsWith("_pressure_plate") || id == "moving_piston" -> emptyList()
+            else -> FULL
+        }
+    }
 
     /** The look vector for a yaw and pitch in degrees (Minecraft's). */
     fun look(yaw: Float, pitch: Float): DoubleArray {
@@ -58,9 +160,9 @@ object TeleportLaw {
      *   cell and the one above it not solid, and the feet cell not on a tall block.
      * - The first bad step ends the walk; you land on the last good one at (x.5, feet, z.5). None good: refused.
      * - A landing in your own column is refused when it's your spot, under 1.5 straight up, or under 0.55 straight down.
-     * - [eye]: the eye height the server casts from when it isn't [sneaking]'s. The server reads its own pose, which takes a sneak
-     *   change a tick later: a click sent in the same tick as letting go of sneak is cast from 1.27 (101279 and 165424, 2026-11-12:
-     *   both blinks landed where 1.27's steps stop, 1 and 2 blocks short of 1.62's).
+     * - [eye]: another eye height to cast from (a test's variant); null is [sneaking]'s. A click right after letting go of sneak
+     *   still casts from 1.62: two such blinks did (2026-11-12 misses), against two that landed where 1.27's steps stop, so the
+     *   client can't tell which pose the server has and keeps alldata's.
      */
     fun blink(fx: Double, fy: Double, fz: Double, yaw: Float, pitch: Float, sneaking: Boolean, distance: Int, w: Cells, eye: Double? = null): DoubleArray? {
         val d = look(yaw, pitch)
@@ -115,11 +217,9 @@ object TeleportLaw {
      * over 3,451 BR warps.
      *
      * - From the eye along the look, every cell the line passes through in order, up to [distance]. The eye is feet + [eye]:
-     *   1.27 (the sneaking eye, #items.etherwarp-ray), but 1.62 ([STAND_EYE]) when the sneak reaches the server in the same
-     *   tick as the click (its eye isn't sneaking yet): in a 120 ms log (2026-11-12) the three etherwarps cast that way (two
-     *   sneaks sent with the click, one sent 8 ticks earlier but handled with it after a 3 s server freeze) all landed from
-     *   1.62, while 41 casts with the sneak a tick or more earlier landed where only 1.27's ray goes. One more cast (sneak
-     *   held 3 s) needed 1.54 or more and stays unexplained.
+     *   1.27 (the sneaking eye, #items.etherwarp-ray). A sneak sent the tick before the click doesn't change it: in a 120 ms
+     *   log three such etherwarps landed from 1.62, but in the 2026-11-12 misses four did from 1.27 (one of them refused, as
+     *   1.27's ray is), so whether the server has the sneak's pose yet is timing the client can't see.
      * - The first cell that stops the ray is the target: any block with a collision box (carpets and lily pads too) and
      *   signs, banners, tripwire hooks and pressure plates; never heads, ladders, flower pots, buttons or levers.
      * - A sign, wall banner or tripwire hook is no floor: refused. Else you land on top (x.5, y + 1.05, z.5), a cell

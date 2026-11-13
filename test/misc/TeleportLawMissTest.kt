@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Captured teleport misses (Legit Zpew's misses format, which ascentclient's Capture Misses also writes; these came from
@@ -17,6 +18,18 @@ import kotlin.test.assertNull
  * - 159689: the law lands where the server did; the client's refusal came from outside the law.
  * Not asserted: 151083 (a blink 0.75 straight up out of water moved, against #items.blink-refusal), 156083 (the answer was a
  * sync packet, not a landing), 184409 (no position or look near the click's reaches the server's target cell).
+ *
+ * teleport-law-misses-2.txt: twelve of eighteen Legit Zpew misses (2026-11-12), by their line in that capture (#1-#18):
+ * - #1, #2: blinks past cobblestone walls and stairs. The law moves you with the 1.8 collision shapes (TeleportLaw.shapes);
+ *   Zpew had whole-cell boxes, which end the walk beside a wall.
+ * - #3, #6, #8, #13 (etherwarps) and #7, #9 (blinks): a sneak changed the tick before the click and Zpew cast from the other
+ *   pose's eye; the server cast from the click's own sneak's (1.27 etherwarp, 1.62 standing blink), as alldata has it.
+ * - #4, #15, #17, #18: the law from where you were at the click is the server's answer; Zpew had cast from where you were at
+ *   an earlier click whose etherwarp or blink the server refused (jumping, falling, swimming in between).
+ * Not here: #5 (only a cast from your next tick's position, 0.65 lower, refuses as the server did), #10, #11 (blinks through a
+ * one-high gap in an iron bar wall: the server moved you through, which only bars that aren't solid give: against alldata's
+ * 1.8 materials), #12 (no position or look within a block reaches the server's landing), #14 (refused by the server, the law
+ * warps; 0.2 higher refuses), #16 (only from 0.42 or more lower).
  */
 class TeleportLawMissTest {
     class Miss(val kind: String, val ether: Boolean, val sneaking: Boolean, val distance: Double, val from: DoubleArray,
@@ -24,29 +37,53 @@ class TeleportLawMissTest {
 
     private fun vec(s: String) = if (s == "-") null else s.split(',').map { it.toDouble() }.toDoubleArray()
 
-    private fun parse(line: String): Miss {
-        val f = line.split('\t')
-        val ids = HashMap<Long, String>(); val tops = HashMap<Long, Double>()
+    /** The captured blocks: id, collision top and the state's properties, by cell. */
+    class World {
+        val ids = HashMap<Long, String>(); val tops = HashMap<Long, Double>(); val props = HashMap<Long, Map<String, String>>()
         fun key(x: Int, y: Int, z: Int) = (x.toLong() and 0x3FFFFFF shl 38) or (z.toLong() and 0x3FFFFFF shl 12) or (y.toLong() and 0xFFF)
-        if (f.size > 8 && f[8].isNotEmpty()) for (b in f[8].split(';')) {
-            val p = b.split(' ', limit = 6)
-            val k = key(p[0].toInt(), p[1].toInt(), p[2].toInt())
-            ids[k] = p[3]; tops[k] = p[4].toDouble()
+
+        fun add(blocks: String) {
+            if (blocks.isEmpty()) return
+            for (b in blocks.split(';')) {
+                val p = b.split(' ', limit = 6)
+                val k = key(p[0].toInt(), p[1].toInt(), p[2].toInt())
+                ids[k] = p[3]; tops[k] = p[4].toDouble()
+                props[k] = p.getOrNull(5)?.substringAfter('[', "")?.substringBefore(']')?.split(',')?.filter { '=' in it }
+                    ?.associate { it.substringBefore('=') to it.substringAfter('=') } ?: emptyMap()
+            }
         }
-        val cells = object : TeleportLaw.Cells {
+
+        /** [shapes]: the 1.8 collision shapes, as Zpew's world gives them; false: the default whole-cell boxes up to the top. */
+        fun cells(shapes: Boolean = true) = object : TeleportLaw.Cells {
             override fun id(x: Int, y: Int, z: Int) = ids[key(x, y, z)] ?: "air"
             override fun top(x: Int, y: Int, z: Int) = tops[key(x, y, z)] ?: 0.0
+            override fun boxes(x: Int, y: Int, z: Int) =
+                if (shapes) TeleportLaw.shapes(id(x, y, z)) { props[key(x, y, z)]?.get(it) } else super.boxes(x, y, z)
         }
+    }
+
+    private fun parse(line: String): Miss {
+        val f = line.split('\t')
+        val world = World().apply { add(f.getOrElse(8) { "" }) }
+        val cells = world.cells()
         val (yaw, pitch) = f[5].split(' ').map { it.toFloat() }
         return Miss(f[0], f[1] == "ether", f[2] == "true", f[3].toDouble(), vec(f[4])!!, yaw, pitch, vec(f[6]), vec(f[7]), cells)
     }
 
-    private val misses = javaClass.getResource("/teleport-law-misses.txt")!!.readText().lines().filter { it.isNotBlank() }.map(::parse)
+    private fun lines(name: String) = javaClass.getResource(name)!!.readText().lines().filter { it.isNotBlank() }
+    private val misses = lines("/teleport-law-misses.txt").map(::parse)
+    private val lines2 = lines("/teleport-law-misses-2.txt")
+    private val misses2 = lines2.map(::parse)
+    private val numbers2 = intArrayOf(1, 2, 3, 4, 6, 7, 8, 9, 13, 15, 17, 18)
+    /** The second capture's miss by its line there (#1-#18). */
+    private fun m2(n: Int) = misses2[numbers2.indexOf(n).also { check(it >= 0) }]
+    /** Its blocks, as a world to add more to. */
+    private fun world2(vararg n: Int) = World().apply { for (k in n) add(lines2[numbers2.indexOf(k)].split('\t')[8]) }
 
     /** The law for [m]'s click, from [from] (the server's position when it differs from the captured one). */
-    private fun law(m: Miss, from: DoubleArray = m.from) =
-        if (m.ether) TeleportLaw.etherwarp(from[0], from[1], from[2], m.yaw, m.pitch, m.distance, m.cells)
-        else TeleportLaw.blink(from[0], from[1], from[2], m.yaw, m.pitch, m.sneaking, m.distance.toInt(), m.cells)
+    private fun law(m: Miss, from: DoubleArray = m.from, eye: Double? = null, cells: TeleportLaw.Cells = m.cells) =
+        if (m.ether) TeleportLaw.etherwarp(from[0], from[1], from[2], m.yaw, m.pitch, m.distance, cells, eye ?: TeleportLaw.SNEAK_EYE)
+        else TeleportLaw.blink(from[0], from[1], from[2], m.yaw, m.pitch, m.sneaking, m.distance.toInt(), cells, eye)
 
     private fun assertAt(expected: DoubleArray, actual: DoubleArray?) {
         val a = assertNotNull(actual)
@@ -87,5 +124,61 @@ class TeleportLawMissTest {
         // 207492: z -184.053 by the client, -183.974 by the server's sync: the other side of z = -184
         val m = misses[6]
         assertAt(m.actual!!, law(m, doubleArrayOf(-145.503, 70.0, -183.974)))
+    }
+
+    @Test
+    fun loadsTheSecondCapture() {
+        assertEquals(12, misses2.size)
+    }
+
+    @Test
+    fun blinksPassBesideWallsAndStairs() {
+        // #1, #2: refused with whole-cell boxes (Zpew's world before), moved with the 1.8 shapes, as the server did
+        for (n in intArrayOf(1, 2)) {
+            val m = m2(n)
+            assertNull(law(m, cells = world2(n).cells(shapes = false)))
+            assertAt(m.actual!!, law(m))
+        }
+    }
+
+    @Test
+    fun aSneakChangedTheTickBeforeStillCastsFromTheClicksOwnEye() {
+        // etherwarps: 1.62 (the pose before the sneak) is what Zpew predicted, 1.27 what the server did
+        for (n in intArrayOf(6, 8, 13)) {
+            val m = m2(n)
+            assertAt(m.predicted!!, law(m, eye = TeleportLaw.STAND_EYE))
+            assertAt(m.actual!!, law(m))
+        }
+        // #3: refused by the server, and by the law from 1.27
+        m2(3).let { assertAt(it.predicted!!, law(it, eye = TeleportLaw.STAND_EYE)); assertNull(law(it)) }
+        // blinks just after letting go of sneak: 1.27 predicted, 1.62 cast
+        for (n in intArrayOf(7, 9)) {
+            val m = m2(n)
+            assertAt(m.predicted!!, law(m, eye = TeleportLaw.SNEAK_EYE))
+            assertAt(m.actual!!, law(m))
+        }
+    }
+
+    @Test
+    fun clicksInTheAirCastFromWhereYouWereAtTheClick() {
+        for (n in intArrayOf(4, 15, 17, 18)) m2(n).let { assertAt(it.actual!!, law(it)) }
+        // #17: Zpew's prediction was the cast from the ground before the jump (y 65); #18: from the tick before (y 70.177)
+        m2(17).let { assertAt(it.predicted!!, law(it, doubleArrayOf(it.from[0], 65.0, it.from[2]))) }
+        m2(18).let { assertAt(it.predicted!!, law(it, doubleArrayOf(it.from[0], 70.17676, it.from[2]))) }
+    }
+
+    @Test
+    fun aClickAfterARefusedEtherwarpIsCastFromWhereYouAre() {
+        // #3 then #4, jumping: the server refused #3 (silently), so it cast #4 from where you were for #4, not for #3
+        val a = m2(3); val b = m2(4)
+        val cells = world2(3, 4).cells()
+        val q = ZpewQueue<Miss> { from, m -> law(m, from, cells = cells) }
+        q.click(a, 0, a.from, true, wall = 0)
+        q.expire(20, 20) // #3 stops counting: dropped
+        q.click(b, 21, b.from, true, wall = 21)
+        assertAt(b.actual!!, q.camera)
+        assertTrue(q.teleport(b.actual, 24))
+        assertEquals(1, q.lastMatch)
+        assertNull(q.camera)
     }
 }
