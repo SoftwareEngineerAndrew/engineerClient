@@ -45,9 +45,9 @@ enum class Objective(private val label: String) {
 class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = HOLD) {
 
     /**
-     * Ticks a person needs between flipping lever a and lever b (walking within reach, clicking). Measured on a recorded solve
-     * (2026-10-13, 6436e9): 16 ticks between levers 11 blocks apart, 4 between two flips of one lever; the game's interaction
-     * range is 4.5 blocks and a sprint 0.28 blocks a tick.
+     * Ticks a person needs between flipping lever a and lever b (walking within reach, clicking): about 16 ticks between
+     * levers 11 blocks apart, 4 between two flips of one lever; the game's interaction range is 4.5 blocks and a sprint 0.28
+     * blocks a tick.
      */
     class Spacing(val minGap: Int = 4, val reach: Double = 4.5, val blocksPerTick: Double = 0.28) {
         private val table = Array(7) { a -> IntArray(7) { b -> gap(a, b) } }

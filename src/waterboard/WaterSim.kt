@@ -5,8 +5,6 @@ import kotlin.math.ln
 /**
  * The Water Board's water, exactly as Hypixel's server moves it: Minecraft 1.8's BlockDynamicLiquid / BlockStaticLiquid with the
  * world's scheduled ticks, on the board's vertical plane (room z=26; the glass in front and the wall behind never let water by).
- * Checked against 40 recorded runs packet by packet (95% of every block packet the server sent for the board, tick-exact, on the
- * complete recordings; 100% on ten of them) and against the hand-made one-flow table, which this solves on all 40 boards.
  *
  * Time is server ticks. One [step] is one server tick, in the order the server does it:
  *  1. a water-lever flip, which Hypixel handles after the previous tick's block packets went out (its packet comes with this
@@ -17,9 +15,8 @@ import kotlin.math.ln
  *  5. block events: the levers flipped this tick move their pistons (a pulled block leaves its cell at once; a pushed one turns
  *     the cell into a moving piston, destroying water there, and lands [LAND] ticks later).
  *
- * Rechecked 2026-11-12 on two Dungeon Recorder runs (test/waterboard/WaterBoardRecordedTest): every board packet the server
- * sent, on its tick, once the random ticks the packets show are put in ([randomTick]). Where Hypixel isn't vanilla 1.8: a block
- * that dries up leaves nothing below it. Not deterministic: flowing water gets random ticks, so from flips alone the water is
+ * Random ticks the packets show are put in with [randomTick]. Where Hypixel isn't vanilla 1.8: a block that dries up leaves
+ * nothing below it. Not deterministic: flowing water gets random ticks, so from flips alone the water is
  * exact only until the first one, and then a few ticks early at most (never late); the [Tracker] places them from the packets.
  *
  * The order 1.8 visits east/west/north/south in matters (which update reads which), and in room terms it depends on how the
@@ -257,8 +254,7 @@ class WaterSim private constructor(
             write(c, i)
         }
         // Vanilla 1.8 carries on with the new level when the block just dried up (i = -1) and drops a level-7 block into air
-        // below it. Hypixel's server doesn't: recorded 2026-10-12 (a88e9b, coal pushed over a falling column), the dried block
-        // went to air and nothing was ever written below it.
+        // below it. Hypixel's server doesn't: the dried block goes to air and nothing is written below it.
         if (i < 0) return
         val below = c - geo.w
         if (cells[below] == AIR) {

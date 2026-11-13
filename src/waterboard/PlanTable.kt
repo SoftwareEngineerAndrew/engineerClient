@@ -3,7 +3,7 @@ package com.engineerclient.waterboard
 import com.google.gson.JsonParser
 
 /**
- * The precomputed Water Board plans (assets/engineerclient/waterboard/plans.json, made by test/waterboard/PlanTableGen): for each
+ * The precomputed Water Board plans (assets/engineerclient/waterboard/plans.json): for each
  * of the four boards Hypixel builds, each way the room is turned and each set of three closed gates, the best plan from a fresh
  * board for each [Objective], with how it held up over 1000 Monte Carlo trials (random ticks, clicks a tick or two off).
  *

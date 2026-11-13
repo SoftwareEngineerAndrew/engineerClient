@@ -4,7 +4,6 @@
 #   src/coffee/   Coffee Client features   (+ src/resources/coffeeclient{,.odin}.mixins.json)
 #   src/dev/      Devgineer Client features (+ src/resources/devgineerclient.mixins.json)
 #   promote.sh    this script
-#   src/waterboard/ the dynamic Water Board solver, unfinished (+ its WaterSolverRenderMixin and install line)
 # fabric.mod.json loses their entrypoints, mixin configs and the "breaks" line. The result must
 # compile on its own before it is committed. One squashed commit lands on the public branch of the
 # same name (main, or mc/<version> for an older Minecraft; run it from that branch's worktree) and
@@ -35,7 +34,7 @@ GRADLE="$HOME/.cache/ec-build/gradle-9.8.0/bin/gradle"
 # Every Minecraft version with a release (tag release-<mc>, jar ADM-<mc>.jar), newest first.
 VERSIONS="26.3 26.2 26.1.2"
 # ADM's own version (the jar's mod version and the release notes); this dev build keeps its date+commit versions.
-export ADM_VERSION="1.0.19"
+export ADM_VERSION="1.0.20"
 
 [ -z "$(git -C "$PUB" status --porcelain)" ] || { echo "promote: $PUB has uncommitted changes" >&2; exit 1; }
 git -C "$PUB" fetch -q origin
@@ -59,14 +58,6 @@ rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
   "$PUB/src/resources/devgineerclient.odin.mixins.json" \
   "$PUB/src/resources/rotation" "$PUB/src/resources/coffeeclient" \
   "$PUB/src/resources/assets/engineerclient/dungeonpack/packs"/{layouts.json.gz,mobs.json.gz,doors.json.gz,runstate.json.gz,traps.json,secrets.json.gz}
-# Water Board isn't finished: ADM leaves it out (Odin's own Water Board solver draws as before).
-rm -rf "$PUB/src/waterboard" "$PUB/src/mixin/odin/WaterSolverRenderMixin.java" "$PUB/src/resources/assets/engineerclient/waterboard"
-sed -i '/safely("water board") {/d' "$PUB/src/EngineerClient.kt"
-ODIN_MIXINS="$PUB/src/resources/engineerclient.odin.mixins.json"
-jq --indent 2 '.client |= map(select(. != "WaterSolverRenderMixin"))' "$ODIN_MIXINS" > "$ODIN_MIXINS.tmp" && mv "$ODIN_MIXINS.tmp" "$ODIN_MIXINS"
-if grep -rnE 'waterboard|WaterBoardSolver|WaterSolverRenderMixin' "$PUB/src"; then
-  echo "promote: the lines above still reference Water Board" >&2; exit 1
-fi
 # POV Previews keeps the room pack (rooms.index.json.gz, rooms.blocks.bin), its shaders and posepov/.
 
 FMJ="$PUB/src/resources/fabric.mod.json"
