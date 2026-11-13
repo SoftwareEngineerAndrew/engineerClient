@@ -99,7 +99,9 @@
     "TimeChangerSkyMixin",
     "TimeChangerFogMixin",
     "TimeChangerSamplerMixin",
-    "BlockOverlayMixin"
+    "BlockOverlayMixin",
+    "CameraTweaksRidingMixin",
+    "CameraTweaksPortalMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -107,6 +107,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.render.DarkMode,
             com.engineerclient.render.TimeChanger,
             com.engineerclient.render.BlockOverlay,
+            com.engineerclient.render.CameraTweaks,
         )
     }
 
