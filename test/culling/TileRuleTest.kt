@@ -114,6 +114,10 @@ class TileRuleTest {
         assertFalse(m.keeps(-10, -6)); assertFalse(m.keeps(-6, -6)); assertFalse(m.keeps(-8, -8)); assertFalse(m.keeps(-8, -4))
         // nothing off the grid: the boss arena, the void around the dungeon
         assertFalse(m.keeps(0, 0)); assertFalse(m.keeps(-14, -6)); assertFalse(m.keeps(-8, 5))
+        // counting among the kept ones: all of them, and the row nearest the next tile south
+        assertEquals(9, m.count { _, _ -> true })
+        assertEquals(3, m.count { _, cz -> cz == -5 })
+        assertEquals(0, m.count { cx, _ -> cx > -7 })
     }
 
     @Test fun aChunkIsKeptExactlyWhenItTouchesATileThatMatters() {

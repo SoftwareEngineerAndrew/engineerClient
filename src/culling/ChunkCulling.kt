@@ -28,6 +28,11 @@ import net.minecraft.world.level.chunk.status.ChunkStatus
  * frame its tile starts to matter. A section left out takes its block entities with it (Sodium draws those per listed
  * section); entities are not touched.
  *
+ * A tile that matters isn't always there to draw. In a dungeon Hypixel keeps the chunks 7 either way of the player loaded
+ * and no more (a 15x15 square, in the recorded packets of runs with and without this), so the far end of a long line,
+ * a room 7 chunks off through a door, is missing whatever is kept here: the HUD counts the kept chunk columns that
+ * aren't loaded, to tell the two apart.
+ *
  * Off outside a dungeon, in the boss, and with the camera off the 6x6 grid: everything draws. Odin counts every
  * singleplayer world as a dungeon, so the rule runs there too (a simulated dungeon, a practice map): a world whose blocks
  * don't make rooms is left alone ([TileRule.MAX_ROOM]).
@@ -38,8 +43,8 @@ object ChunkCulling : Module(
     category = Category.custom("Engineer Client", 860, 10),
     description = "Experimental. In a dungeon, draws only the chunks of the room you are in and of the tiles in a straight line north, east, south and west of you, up to the first gap on the map. Needs Sodium.",
 ) {
-    private val hud by HUD("Chunk Culling", "What Chunk Culling left out the last time the game listed what to draw: sections drawn of those in view, and chunk columns kept of the dungeon's 169.", true, 10, 120, 1f) { example ->
-        val line = if (example) "Culling: 212/641 sections, 35/169 chunks" else statsLine() ?: return@HUD 0 to 0
+    private val hud by HUD("Chunk Culling", "What Chunk Culling left out the last time the game listed what to draw: sections drawn of those in view, chunk columns kept of the dungeon's 169, and how many of the kept ones aren't loaded (the server only sends the chunks near you: those are missing with or without this).", true, 10, 120, 1f) { example ->
+        val line = if (example) "Culling: 212/641 sections, 35/169 chunks (6 not loaded)" else statsLine() ?: return@HUD 0 to 0
         text(line, 0, 0, Colors.WHITE, shadow = true)
         mc.font.width(line) to mc.font.lineHeight
     }
@@ -111,7 +116,10 @@ object ChunkCulling : Module(
 
     private fun statsLine(): String? {
         val m = CullState.mask ?: return null
-        return "Culling: ${CullState.lastOffered - CullState.lastDropped}/${CullState.lastOffered} sections, ${m.kept}/${CullMask.SPAN * CullMask.SPAN} chunks"
+        // kept, but the server hasn't sent it (or has taken it back): nothing of it can be drawn
+        val missing = mc.level?.let { level -> m.count { cx, cz -> level.chunkSource.getChunk(cx, cz, ChunkStatus.FULL, false) == null } } ?: 0
+        return "Culling: ${CullState.lastOffered - CullState.lastDropped}/${CullState.lastOffered} sections, ${m.kept}/${CullMask.SPAN * CullMask.SPAN} chunks" +
+            if (missing > 0) " ($missing not loaded)" else ""
     }
 
     /** What stands in each slot of one world, read from its blocks and kept a while. Render thread. */

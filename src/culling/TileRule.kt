@@ -112,6 +112,13 @@ class CullMask(val tiles: Long) {
         return ix in 0 until SPAN && iz in 0 until SPAN && keep[iz * SPAN + ix]
     }
 
+    /** How many of the kept chunk columns [test] holds for, asked with each one's (cx, cz). */
+    fun count(test: (Int, Int) -> Boolean): Int {
+        var n = 0
+        for (i in keep.indices) if (keep[i] && test(i % SPAN + MIN, i / SPAN + MIN)) n++
+        return n
+    }
+
     companion object {
         /** The chunks tile index [t] touches along one axis: its room's blocks and the gap column either side of it. */
         fun chunks(t: Int): IntRange =
