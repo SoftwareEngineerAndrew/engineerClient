@@ -94,6 +94,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.NametagTweaks,
             com.engineerclient.skyblock.NoItemPlace,
             com.engineerclient.skyblock.ArrowFix,
+            com.engineerclient.visual.ArrowHitSound,
         )
     }
 

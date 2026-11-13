@@ -74,7 +74,8 @@
     "ZpewCameraMixin",
     "ZpewTeleportMixin",
     "ZpewEtherwarpOverlayMixin",
-    "ZpewPlayerRenderMixin"
+    "ZpewPlayerRenderMixin",
+    "SoundManagerPlayMixin"
   ],
   "injectors": {
     "defaultRequire": 1
