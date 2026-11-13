@@ -17,6 +17,7 @@
     "HudOnScreenMixin",
     "PersonalBestSimMixin",
     "SecretsCounterMixin",
+    "SecretItemChimeMixin",
     "SimonSaysBlocksMixin",
     "SimonSaysTicksMixin",
     "TickTimersGoldorMixin",

@@ -44,7 +44,7 @@ object ItemHighlight : Module(
     /** True when [item] is boxed instead of drawn. */
     fun hides(item: ItemEntity): Boolean = enabled && item in tracked
 
-    private fun wanted(item: ItemEntity): Boolean =
+    fun wanted(item: ItemEntity): Boolean =
         DungeonUtils.inClear && item.item.hoverName.string in names
 
     private fun colorFor(item: ItemEntity): Color? {
