@@ -26,10 +26,19 @@ import kotlin.test.assertTrue
  *   pose's eye; the server cast from the click's own sneak's (1.27 etherwarp, 1.62 standing blink), as alldata has it.
  * - #4, #15, #17, #18: the law from where you were at the click is the server's answer; Zpew had cast from where you were at
  *   an earlier click whose etherwarp or blink the server refused (jumping, falling, swimming in between).
- * Not here: #5 (only a cast from your next tick's position, 0.65 lower, refuses as the server did), #10, #11 (blinks through a
- * one-high gap in an iron bar wall: the server moved you through, which only bars that aren't solid give: against alldata's
- * 1.8 materials), #12 (no position or look within a block reaches the server's landing), #14 (refused by the server, the law
- * warps; 0.2 higher refuses), #16 (only from 0.42 or more lower).
+ * Not here: #5 (only a cast from your next tick's position, 0.65 lower, refuses as the server did), #12 (no position or look
+ * within a block reaches the server's landing), #14 (refused by the server, the law warps; 0.2 higher refuses), #16 (only
+ * from 0.42 or more lower). #10, #11 are in the third file.
+ *
+ * teleport-law-misses-3.txt: eighteen lines of the same capture's 119 (2026-11-12, recorded before 107b586a), by their line
+ * there:
+ * - #10, #11, #53, #88: blinks through a one-high gap in an iron bar wall (bars in the feet cell and the one over the step,
+ *   three walls). The server moved you through: a step you don't fit in is passed over, not the end of the walk. Iron bars
+ *   stay solid: #49, #52 (straight up under a column of bars) stop under them, as the server did.
+ * - #117, #50: the server cast from your next tick's position (a jump's second tick, a fall's next tick), not the click's.
+ * - #25, #110 (blinks) and #79, #80, #119 (etherwarps): the click's own sneak's eye, as in #6-#9 of the second file.
+ * - #44, #65, #102: blinks the 1.8 shapes move further than whole-cell boxes, as in #1, #2.
+ * - #29, #30: one etherwarp landing taken for the first of two clicks (refused by the law): it is the second click's.
  */
 class TeleportLawMissTest {
     class Miss(val kind: String, val ether: Boolean, val sneaking: Boolean, val distance: Double, val from: DoubleArray,
@@ -180,5 +189,72 @@ class TeleportLawMissTest {
         assertTrue(q.teleport(b.actual, 24))
         assertEquals(1, q.lastMatch)
         assertNull(q.camera)
+    }
+
+    private val misses3 = lines("/teleport-law-misses-3.txt").map(::parse)
+    private val numbers3 = intArrayOf(10, 11, 53, 88, 49, 52, 117, 50, 25, 110, 79, 80, 119, 44, 65, 102, 29, 30)
+    /** The third file's miss by its line in the capture (#1-#119). */
+    private fun m3(n: Int) = misses3[numbers3.indexOf(n).also { check(it >= 0) }]
+
+    @Test
+    fun loadsTheThirdCapture() {
+        assertEquals(numbers3.size, misses3.size)
+    }
+
+    @Test
+    fun blinksGoThroughAOneHighGapInABarWall() {
+        // the gap's step has bars under and over it: no room for you, but the walk goes on past it
+        for (n in intArrayOf(10, 11, 53, 88)) m3(n).let { assertAt(it.actual!!, law(it)) }
+    }
+
+    @Test
+    fun ironBarsStillStopABlink() {
+        // straight up a shaft under a column of bars: you land under the bars
+        for (n in intArrayOf(49, 52)) m3(n).let { assertAt(it.actual!!, law(it)) }
+    }
+
+    @Test
+    fun someClicksCastFromYourNextTick() {
+        // #117: jumping (69.42 at the click: through both bar walls' gaps); from the jump's next tick (69.753) the ray is over the
+        // second wall's gap, in its bars, and the walk ends there, as the server's did
+        m3(117).let {
+            assertAt(doubleArrayOf(-158.5, 70.0, -184.5), law(it))
+            assertAt(it.actual!!, law(it, doubleArrayOf(it.from[0], 69.7532, it.from[2])))
+        }
+        // #50: falling (68.855); straight up from there is under 1.5 and refused, from the next tick (68.407) it moves you
+        m3(50).let {
+            assertNull(law(it))
+            assertAt(it.actual!!, law(it, doubleArrayOf(it.from[0], 68.4074, it.from[2])))
+        }
+    }
+
+    @Test
+    fun moreClicksCastFromTheirOwnSneaksEye() {
+        for (n in intArrayOf(79, 80, 119)) m3(n).let {
+            assertAt(it.predicted!!, law(it, eye = TeleportLaw.STAND_EYE))
+            assertAt(it.actual!!, law(it))
+        }
+        for (n in intArrayOf(25, 110)) m3(n).let {
+            assertAt(it.predicted!!, law(it, eye = TeleportLaw.SNEAK_EYE))
+            assertAt(it.actual!!, law(it))
+        }
+    }
+
+    @Test
+    fun moreBlinksPassBesideStairsAndWalls() {
+        val worlds = mapOf(44 to 13, 65 to 14, 102 to 15)
+        for ((n, k) in worlds) {
+            val m = m3(n)
+            val whole = World().apply { add(lines("/teleport-law-misses-3.txt")[k].split('\t')[8]) }.cells(shapes = false)
+            assertAt(m.predicted!!, law(m, cells = whole))
+            assertAt(m.actual!!, law(m))
+        }
+    }
+
+    @Test
+    fun aLandingTakenForTheWrongClick() {
+        // #29's own ray finds nothing; the landing is #30's (the next click, from nearly the same spot)
+        assertNull(law(m3(29)))
+        assertAt(m3(29).actual!!, law(m3(30)))
     }
 }

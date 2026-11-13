@@ -1,0 +1,28 @@
+--- a/src/projection/movement/core/TeleportLaw.kt
++++ b/src/projection/movement/core/TeleportLaw.kt
+@@ -164,10 +164,12 @@
+      * - From the eye (feet + 1.62 standing, 1.27 sneaking) along the look, whole-block steps p_i = eye + i·look, i = 1..D.
+      * - The line from the step before (p_0 the eye) to the step must not enter a solid block's collision box: a corner the
+      *   ray grazes between two steps ends the walk.
+-     * - A step is good when its cell isn't solid (1.8 material) and doesn't sit on a block taller than a cell, and you fit:
+-     *   feet in the cell under the step's cell, or the step's cell itself when the one under is solid or tall; the feet
+-     *   cell and the one above it not solid, and the feet cell not on a tall block.
+-     * - The first bad step ends the walk; you land on the last good one at (x.5, feet, z.5). None good: refused.
++     * - A step whose cell is solid (1.8 material) or sits on a block taller than a cell ends the walk.
++     * - A step you fit in is a landing: feet in the cell under the step's cell, or the step's cell itself when the one under
++     *   is solid or tall; the feet cell and the one above it not solid, and the feet cell not on a tall block. A step you
++     *   don't fit in is passed over and the walk goes on (alldata ends the walk there): four blinks through a one-high gap in
++     *   an iron bar wall went through it (2026-11-12 misses), and none in that capture stopped at one.
++     * - You land on the last landing at (x.5, feet, z.5). None: refused.
+      * - A landing in your own column is refused when it's your spot, under 1.5 straight up, or under 0.55 straight down.
+      * - [eye]: another eye height to cast from (a test's variant); null is [sneaking]'s. A click right after letting go of sneak
+      *   still casts from 1.62: two such blinks did (2026-11-12 misses), against two that landed where 1.27's steps stop, so the
+@@ -186,7 +188,7 @@
+             val x = floor(fx + d[0] * i).toInt(); val y = floor(ey + d[1] * i).toInt(); val z = floor(fz + d[2] * i).toInt()
+             if (solid(x, y, z) || tall(x, y, z)) break
+             val f = feet(x, y, z)
+-            if (solid(x, f, z) || tall(x, f, z) || solid(x, f + 1, z)) break
++            if (solid(x, f, z) || tall(x, f, z) || solid(x, f + 1, z)) continue
+             land = doubleArrayOf(x + 0.5, f.toDouble(), z + 0.5)
+         }
+         val to = land ?: return null
