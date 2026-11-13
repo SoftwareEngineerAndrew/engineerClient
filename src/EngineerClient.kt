@@ -98,6 +98,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.visual.MonoAudio,
             com.engineerclient.visual.SoundManager,
             com.engineerclient.visual.InfoDisplay,
+            com.engineerclient.visual.BlazeDaggerHUD,
         )
     }
 
