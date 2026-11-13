@@ -77,7 +77,8 @@
     "ZpewPlayerRenderMixin",
     "SoundManagerPlayMixin",
     "MonoAudioChannelMixin",
-    "MonoAudioEngineMixin"
+    "MonoAudioEngineMixin",
+    "SoundVolumeMultiplierMixin"
   ],
   "injectors": {
     "defaultRequire": 1

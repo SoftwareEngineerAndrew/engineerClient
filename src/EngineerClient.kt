@@ -96,6 +96,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.ArrowFix,
             com.engineerclient.visual.ArrowHitSound,
             com.engineerclient.visual.MonoAudio,
+            com.engineerclient.visual.SoundManager,
         )
     }
 
