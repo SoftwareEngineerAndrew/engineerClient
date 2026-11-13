@@ -33,7 +33,7 @@ import kotlin.math.floor
  *
  * Every rule is alldata's (content/11-items): where it lands [TeleportLaw], the look it's cast with
  * (#items.teleport-look), clicks on blocks that act (#items.teleport-door-click), the rooms that refuse
- * (#items.room-refusals) and Wither Impact's 125 ms recast gate. Clicks waiting on the server are a
+ * (#items.room-refusals) and Wither Impact's 100 ms recast gate (run/server). Clicks waiting on the server are a
  * [ZpewQueue], so spam at high ping chains and corrects itself on each real landing.
  */
 object Zpew : Module(
@@ -296,7 +296,7 @@ object Zpew : Module(
             var counts = true
             if (c.witherImpact) {
                 val now = System.currentTimeMillis()
-                counts = now - lastWitherImpact >= 125
+                counts = now - lastWitherImpact >= 100
                 if (counts) lastWitherImpact = now
             }
             if (capture && counts) {
