@@ -86,7 +86,7 @@ object Zpew : Module(
     private var blockClick: Boolean? = null
 
     private val WITHER_BLADES = setOf("NECRON_BLADE", "SCYLLA", "HYPERION", "VALKYRIE", "ASTRAEA")
-    private val ACTS = Regex("^(chest|trapped_chest|ender_chest|lever)$|_button$|_sign$|_fence_gate$|(_head|_skull)$")
+    private val ACTS = Regex("^(chest|trapped_chest|ender_chest|lever|barrier)$|_button$|_sign$|_fence_gate$|(_head|_skull)$")
     private val NO_TELEPORT = setOf("Teleport Maze", "Boulder")
     /** A position packet this close to where you were is the server syncing you, not a teleport. */
     private const val NEAR = 1.0
@@ -275,7 +275,8 @@ object Zpew : Module(
             ticks++
             if (queue.expire(serverTicks.get(), ticks)) sync("expire")
             queue.oldestCounting()?.let { c ->
-                if (queue.settleBlocked(serverTicks.get()) { if (it.witherImpact) 4 else 0 }) {
+                // an AOTE/AOTV's line and its move can reach us a server tick apart
+                if (queue.settleBlocked(serverTicks.get()) { if (it.witherImpact) 4 else 1 }) {
                     // the law warped you but the server said blocks in the way: a miss to learn from
                     c.from?.let { from -> if (capture) land(from, c)?.let { miss("server-refused", c, it, null) } }
                     sync("blocked")

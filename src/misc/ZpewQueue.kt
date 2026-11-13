@@ -51,17 +51,19 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
 
     /**
      * The first waiting click that lands at [to]: cast from its own start (the ones before it dropped) or from the chain's
-     * (the ones before it moved you), or -1.
+     * (the ones before it moved you), or -1. A click still counting goes before one that stopped: two clicks from about the
+     * same spot land in the same place, and the one that stopped counting was most likely dropped.
      */
     private fun answers(to: DoubleArray): Int {
         var pos: DoubleArray? = null
+        var late = -1
         for ((i, w) in waiting.withIndex()) {
             val own = predict(w.from, w.click)
             val chained = pos?.let { predict(it, w.click) }
-            if (same(own, to) || same(chained, to)) return i
+            if (same(own, to) || same(chained, to)) { if (w.counts) return i; if (late < 0) late = i }
             if (w.counts) (if (pos == null) own else chained)?.let { pos = it }
         }
-        return -1
+        return late
     }
 
     /** The oldest click still counting: the one a teleport that matches nothing is taken for. */
