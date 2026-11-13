@@ -1,0 +1,19 @@
+package com.engineerclient.mixin;
+
+import com.engineerclient.dungeon.WorldBorderClickFix;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.border.WorldBorder;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+
+@Mixin(MultiPlayerGameMode.class)
+public class WorldBorderClickMixin {
+    @WrapOperation(method = {"useItemOn", "startDestroyBlock", "continueDestroyBlock"},
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/border/WorldBorder;isWithinBounds(Lnet/minecraft/core/BlockPos;)Z"))
+    private boolean ec$ignoreBorder(WorldBorder border, BlockPos pos, Operation<Boolean> original) {
+        return WorldBorderClickFix.ignoresBorder() || original.call(border, pos);
+    }
+}

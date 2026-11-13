@@ -103,7 +103,9 @@
     "SuperboomGhostMixin",
     "SuperboomGhostCollisionMixin",
     "MoveDisconnectMixin",
-    "DungeonBreakerTorchGuardMixin"
+    "DungeonBreakerTorchGuardMixin",
+    "WorldBorderClickMixin",
+    "WorldBorderUseMixin"
   ],
   "injectors": {
     "defaultRequire": 1
