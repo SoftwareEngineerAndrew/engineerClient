@@ -100,6 +100,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.visual.InfoDisplay,
             com.engineerclient.visual.BlazeDaggerHUD,
             com.engineerclient.visual.HubMap,
+            com.engineerclient.visual.PetMenu,
         )
     }
 
