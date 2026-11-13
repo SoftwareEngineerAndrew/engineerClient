@@ -26,6 +26,8 @@ internal class SoundOption(module: Module, default: String, pitch: Float = 1f) {
         module.registerSetting(ActionSetting("Play Sound", desc = "Plays it.") { force() }.withDependency { on.value })
     }
 
+    val enabled get() = on.value
+
     fun play() { if (on.value) force() }
 
     private fun force() = playSoundSettings(Triple(id.value, volume.value, pitch.value))
