@@ -103,6 +103,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.visual.PetMenu,
             com.engineerclient.render.ScreenTweaks,
             com.engineerclient.render.RenderCleanup,
+            com.engineerclient.render.ScrollableTooltip,
         )
     }
 

@@ -92,7 +92,9 @@
     "ScreenTweaksSlotMixin",
     "ScreenTweaksCameraMixin",
     "RenderCleanupParticleMixin",
-    "RenderCleanupArrowMixin"
+    "RenderCleanupArrowMixin",
+    "HoveredSlotAccessor",
+    "ScrollableTooltipMixin"
   ],
   "injectors": {
     "defaultRequire": 1
