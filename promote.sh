@@ -59,16 +59,23 @@ rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
   "$PUB/src/resources/rotation" "$PUB/src/resources/coffeeclient" \
   "$PUB/src/resources/assets/engineerclient/dungeonpack/packs"/{layouts.json.gz,mobs.json.gz,doors.json.gz,runstate.json.gz,traps.json,secrets.json.gz}
 # POV Previews keeps the room pack (rooms.index.json.gz, rooms.blocks.bin), its shaders and posepov/.
+# Chunk Culling isn't finished: ADM leaves it out.
+rm -rf "$PUB/src/culling" "$PUB/src/mixin/sodium"/ChunkCulling*.java "$PUB/src/resources/engineerclient.sodium.mixins.json"
+sed -i 's/, com\.engineerclient\.culling\.ChunkCulling//' "$PUB/src/EngineerClient.kt"
 
 FMJ="$PUB/src/resources/fabric.mod.json"
 sed -i -E \
   -e 's/, "(coffeeclient|devgineerclient)(\.odin)?\.mixins\.json"//g' \
+  -e 's/, "engineerclient\.sodium\.mixins\.json"//' \
   -e '/"breaks": \{ "coffeeclient"/d' \
   -e '/"preLaunch": \[/,/^    \],$/d' \
   -e '/"value": "com\.(coffeeclient|devgineerclient)\./d' \
   -e 's/("value": "com\.engineerclient\.EngineerClient" \}),$/\1/' \
   "$FMJ"
 jq -e . "$FMJ" >/dev/null || { echo "promote: fabric.mod.json is not valid JSON after stripping" >&2; exit 1; }
+if grep -rnE 'ChunkCulling|engineerclient\.culling|engineerclient\.sodium\.mixins' "$PUB/src"; then
+  echo "promote: the lines above still reference Chunk Culling" >&2; exit 1
+fi
 
 # The README is just the download table, written fresh on every promote so its links always point at the
 # release jars (newest Minecraft first, in bold).
