@@ -107,6 +107,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.render.TimeChanger,
             com.engineerclient.render.BlockOverlay,
             com.engineerclient.render.CameraTweaks,
+            com.engineerclient.dungeon.BonzoSound,
         )
     }
 
@@ -131,6 +132,7 @@ object EngineerClient : ClientModInitializer {
         safely("tick timers") { com.engineerclient.misc.OdinTickTimers.install() }
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("door outline") { com.engineerclient.misc.OdinDoorOutline.install() }
+        safely("hype explosion") { com.engineerclient.misc.OdinHypeExplosion.install() }
         safely("splits look") { OdinSplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }

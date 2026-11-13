@@ -7,6 +7,7 @@
     "BlockUpdateServerThreadMixin",
     "ClickGuiOpenMixin",
     "DoorHighlightOutlineMixin",
+    "HypeExplosionMixin",
     "HudElementMixin",
     "InvincibilityHudMixin",
     "InvincibilityPhoenixMixin",
