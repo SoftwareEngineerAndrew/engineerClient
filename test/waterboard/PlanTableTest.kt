@@ -62,6 +62,32 @@ class PlanTableTest {
         assertEquals(e.solvedAt + 40 - e.flips[0].tick, p.solvedAt)
     }
 
+    @Test fun everyPlanSolvesAsLongAfterItsFirstFlipWheneverItStarts() {
+        // the solver holds a plan until the first lever press and starts it there: exact only if a fresh board, whatever its
+        // clock reads (the tracker's tick when you walk in), solves the same ticks after the first flip however long it waited
+        fun solvedAfterFirst(board: WaterSim, flips: List<Flip>): Int {
+            val s = board.copy(); s.hold = Planner.HOLD; s.solvedAt = WaterSim.NONE
+            val bits = HashMap<Int, Int>(); for (f in flips) bits.merge(f.tick, 1 shl f.lever) { a, b -> a xor b }
+            val end = flips[0].tick + 700
+            while (s.time < end && s.solvedAt == WaterSim.NONE) s.step(bits[s.time + 1] ?: 0)
+            return if (s.solvedAt == WaterSim.NONE) WaterSim.NONE else s.solvedAt - flips[0].tick
+        }
+        var n = 0
+        for (rows in layouts()) for (rot in rotations) for (closed in combos) for (obj in Objective.entries) {
+            val e = PlanTable.lookup(rows, rot, closed, obj)!!
+            if (e.flips.isEmpty()) continue
+            val (geo, inn) = Geometry.parse(rows, rot)
+            val want = solvedAfterFirst(WaterSim.fresh(geo, inn, closed), e.flips)
+            assertEquals(if (e.solvedAt == WaterSim.NONE) WaterSim.NONE else e.solvedAt - e.flips[0].tick, want, "${e.layout} $rot $closed $obj: as the table says")
+            for (clock in intArrayOf(0, 1237)) for (wait in intArrayOf(1, 6, 163)) {
+                val got = solvedAfterFirst(WaterSim.fresh(geo, inn, closed, clock), e.at(clock + wait))
+                assertEquals(want, got, "${e.layout} $rot $closed $obj: board clock $clock, first flip $wait ticks in")
+            }
+            n++
+        }
+        assertEquals(640, n)
+    }
+
     @Test fun aLateFlipIsRecoveredFrom() {
         // follow the table plan, but one flip comes 12 ticks late: from the board as it then is, the live planner still solves
         val rows = layouts()[2]

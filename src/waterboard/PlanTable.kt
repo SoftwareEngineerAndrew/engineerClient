@@ -9,7 +9,7 @@ import com.google.gson.JsonParser
  *
  * A board is matched by its rows exactly as [Geometry.parse] reads them: a board someone has already flipped a lever on isn't in
  * the table, and the live planner takes it from there. Plan ticks count from the fresh board's tick 0 (the first flip at 1 or
- * later); [Entry.at] shifts them to start when the player can.
+ * later); [Entry.at] shifts them to start at the first lever press (a fresh board runs the same whenever it starts).
  */
 object PlanTable {
     class Entry(val layout: Int, val flips: List<Flip>, val solvedAt: Int, val solveRate: Double, val median: Int) {
