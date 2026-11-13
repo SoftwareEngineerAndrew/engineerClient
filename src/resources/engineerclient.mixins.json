@@ -94,7 +94,8 @@
     "RenderCleanupParticleMixin",
     "RenderCleanupArrowMixin",
     "HoveredSlotAccessor",
-    "ScrollableTooltipMixin"
+    "ScrollableTooltipMixin",
+    "DarkModeMixin"
   ],
   "injectors": {
     "defaultRequire": 1
