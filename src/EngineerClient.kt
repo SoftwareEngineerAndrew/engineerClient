@@ -97,6 +97,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.visual.ArrowHitSound,
             com.engineerclient.visual.MonoAudio,
             com.engineerclient.visual.SoundManager,
+            com.engineerclient.visual.InfoDisplay,
         )
     }
 

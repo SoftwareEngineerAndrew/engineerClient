@@ -78,7 +78,8 @@
     "SoundManagerPlayMixin",
     "MonoAudioChannelMixin",
     "MonoAudioEngineMixin",
-    "SoundVolumeMultiplierMixin"
+    "SoundVolumeMultiplierMixin",
+    "InfoDisplayClickMixin"
   ],
   "injectors": {
     "defaultRequire": 1
