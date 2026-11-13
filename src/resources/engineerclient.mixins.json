@@ -101,7 +101,8 @@
     "CameraTweaksRidingMixin",
     "CameraTweaksPortalMixin",
     "SuperboomGhostMixin",
-    "SuperboomGhostCollisionMixin"
+    "SuperboomGhostCollisionMixin",
+    "MoveDisconnectMixin"
   ],
   "injectors": {
     "defaultRequire": 1
