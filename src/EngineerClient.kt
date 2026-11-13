@@ -113,6 +113,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.dungeon.DungeonBreakerTorchGuard,
             com.engineerclient.dungeon.WorldBorderClickFix,
             com.engineerclient.dungeon.SoloClearQueue,
+            com.engineerclient.render.NameChanger, com.engineerclient.render.ServerIdHider,
         )
     }
 
@@ -138,6 +139,7 @@ object EngineerClient : ClientModInitializer {
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("door outline") { com.engineerclient.misc.OdinDoorOutline.install() }
         safely("hype explosion") { com.engineerclient.misc.OdinHypeExplosion.install() }
+        safely("instant sneak") { com.engineerclient.misc.OdinInstantSneak.install() }
         safely("splits look") { OdinSplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }

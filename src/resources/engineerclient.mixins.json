@@ -4,6 +4,8 @@
   "package": "com.engineerclient.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "CameraInstantSneakMixin",
+    "StreamerFontMixin",
     "EtherSoundMixin",
     "EtherSoundOdinMixin",
     "ArmorFoilMixin",
