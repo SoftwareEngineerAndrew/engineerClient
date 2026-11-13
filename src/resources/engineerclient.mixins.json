@@ -98,7 +98,8 @@
     "DarkModeMixin",
     "TimeChangerSkyMixin",
     "TimeChangerFogMixin",
-    "TimeChangerSamplerMixin"
+    "TimeChangerSamplerMixin",
+    "BlockOverlayMixin"
   ],
   "injectors": {
     "defaultRequire": 1
