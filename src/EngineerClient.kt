@@ -112,6 +112,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.MoveDisconnectButton,
             com.engineerclient.dungeon.DungeonBreakerTorchGuard,
             com.engineerclient.dungeon.WorldBorderClickFix,
+            com.engineerclient.dungeon.SoloClearQueue,
         )
     }
 
