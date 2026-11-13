@@ -99,7 +99,9 @@
     "TimeChangerSamplerMixin",
     "BlockOverlayMixin",
     "CameraTweaksRidingMixin",
-    "CameraTweaksPortalMixin"
+    "CameraTweaksPortalMixin",
+    "SuperboomGhostMixin",
+    "SuperboomGhostCollisionMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -108,6 +108,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.render.BlockOverlay,
             com.engineerclient.render.CameraTweaks,
             com.engineerclient.dungeon.BonzoSound,
+            com.engineerclient.dungeon.SuperboomGhostBlock,
         )
     }
 
