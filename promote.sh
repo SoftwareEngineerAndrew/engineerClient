@@ -35,7 +35,7 @@ GRADLE="$HOME/.cache/ec-build/gradle-9.8.0/bin/gradle"
 # Every Minecraft version with a release (tag release-<mc>, jar ADM-<mc>.jar), newest first.
 VERSIONS="26.3 26.2 26.1.2"
 # ADM's own version (the jar's mod version and the release notes); this dev build keeps its date+commit versions.
-export ADM_VERSION="1.0.18"
+export ADM_VERSION="1.0.19"
 
 [ -z "$(git -C "$PUB" status --porcelain)" ] || { echo "promote: $PUB has uncommitted changes" >&2; exit 1; }
 git -C "$PUB" fetch -q origin
@@ -60,7 +60,7 @@ rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
   "$PUB/src/resources/rotation" "$PUB/src/resources/coffeeclient" \
   "$PUB/src/resources/assets/engineerclient/dungeonpack/packs"/{layouts.json.gz,mobs.json.gz,doors.json.gz,runstate.json.gz,traps.json,secrets.json.gz}
 # Water Board isn't finished: ADM leaves it out (Odin's own Water Board solver draws as before).
-rm -rf "$PUB/src/waterboard" "$PUB/src/mixin/odin/WaterSolverRenderMixin.java"
+rm -rf "$PUB/src/waterboard" "$PUB/src/mixin/odin/WaterSolverRenderMixin.java" "$PUB/src/resources/assets/engineerclient/waterboard"
 sed -i '/safely("water board") {/d' "$PUB/src/EngineerClient.kt"
 ODIN_MIXINS="$PUB/src/resources/engineerclient.odin.mixins.json"
 jq --indent 2 '.client |= map(select(. != "WaterSolverRenderMixin"))' "$ODIN_MIXINS" > "$ODIN_MIXINS.tmp" && mv "$ODIN_MIXINS.tmp" "$ODIN_MIXINS"
