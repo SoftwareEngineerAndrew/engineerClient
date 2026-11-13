@@ -90,7 +90,9 @@
     "ScreenTweaksLightmapMixin",
     "ScreenTweaksTextShadowMixin",
     "ScreenTweaksSlotMixin",
-    "ScreenTweaksCameraMixin"
+    "ScreenTweaksCameraMixin",
+    "RenderCleanupParticleMixin",
+    "RenderCleanupArrowMixin"
   ],
   "injectors": {
     "defaultRequire": 1

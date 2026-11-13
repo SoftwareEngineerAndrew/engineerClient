@@ -102,6 +102,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.visual.HubMap,
             com.engineerclient.visual.PetMenu,
             com.engineerclient.render.ScreenTweaks,
+            com.engineerclient.render.RenderCleanup,
         )
     }
 
