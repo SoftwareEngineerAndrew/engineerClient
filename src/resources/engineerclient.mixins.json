@@ -24,6 +24,7 @@
     "BlurRadiusMixin",
     "ChatComponentMixin",
     "ChatTweaksMixin",
+    "TabTweaksMixin",
     "ClickGuiTextMixin",
     "ContainerScreenAccessor",
     "ContainerTooltipMixin",

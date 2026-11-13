@@ -87,6 +87,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.misc.OdinColors,
             com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.TicTacToeSolver, com.engineerclient.dungeon.CreeperBeamsDing, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.FreezeDisplay,
             com.engineerclient.skyblock.ChatTweaks,
+            com.engineerclient.skyblock.TabTweaks,
         )
     }
 
