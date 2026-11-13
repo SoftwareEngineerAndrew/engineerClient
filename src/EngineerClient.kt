@@ -105,6 +105,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.render.RenderCleanup,
             com.engineerclient.render.ScrollableTooltip,
             com.engineerclient.render.DarkMode,
+            com.engineerclient.render.TimeChanger,
         )
     }
 

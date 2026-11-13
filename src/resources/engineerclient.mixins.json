@@ -95,7 +95,10 @@
     "RenderCleanupArrowMixin",
     "HoveredSlotAccessor",
     "ScrollableTooltipMixin",
-    "DarkModeMixin"
+    "DarkModeMixin",
+    "TimeChangerSkyMixin",
+    "TimeChangerFogMixin",
+    "TimeChangerSamplerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
