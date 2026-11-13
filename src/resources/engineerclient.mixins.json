@@ -80,7 +80,17 @@
     "MonoAudioEngineMixin",
     "SoundVolumeMultiplierMixin",
     "InfoDisplayClickMixin",
-    "HubMapRendererMixin"
+    "HubMapRendererMixin",
+    "ScreenTweaksHudMixin",
+    "ScreenTweaksGameRendererMixin",
+    "ScreenTweaksOverlayMixin",
+    "ScreenTweaksInventoryEffectsMixin",
+    "ScreenTweaksFogMixin",
+    "ScreenTweaksBlindnessMixin",
+    "ScreenTweaksLightmapMixin",
+    "ScreenTweaksTextShadowMixin",
+    "ScreenTweaksSlotMixin",
+    "ScreenTweaksCameraMixin"
   ],
   "injectors": {
     "defaultRequire": 1
