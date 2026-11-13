@@ -23,6 +23,7 @@
     "ArcherDropSimMixin",
     "BlurRadiusMixin",
     "ChatComponentMixin",
+    "ChatTweaksMixin",
     "ClickGuiTextMixin",
     "ContainerScreenAccessor",
     "ContainerTooltipMixin",
