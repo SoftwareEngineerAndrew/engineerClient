@@ -84,6 +84,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.misc.BlockInstaclear,
             com.engineerclient.practice.TerminalHitboxes,
             com.engineerclient.misc.ItemHighlight, com.engineerclient.misc.Zpew, com.engineerclient.misc.PuzzleOverlay, com.engineerclient.culling.ChunkCulling,
+            com.engineerclient.misc.OdinColors,
         )
     }
 
