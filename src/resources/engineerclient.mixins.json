@@ -102,7 +102,8 @@
     "CameraTweaksPortalMixin",
     "SuperboomGhostMixin",
     "SuperboomGhostCollisionMixin",
-    "MoveDisconnectMixin"
+    "MoveDisconnectMixin",
+    "DungeonBreakerTorchGuardMixin"
   ],
   "injectors": {
     "defaultRequire": 1
