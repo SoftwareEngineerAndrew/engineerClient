@@ -25,6 +25,7 @@
     "ChatComponentMixin",
     "ChatTweaksMixin",
     "TabTweaksMixin",
+    "PearlCooldownMixin",
     "ClickGuiTextMixin",
     "ContainerScreenAccessor",
     "ContainerTooltipMixin",
