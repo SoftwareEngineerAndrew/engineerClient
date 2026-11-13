@@ -110,7 +110,8 @@
     "WorldBorderUseMixin",
     "ItemAnimationsRendererMixin",
     "ItemAnimationsSwingMixin",
-    "ItemAnimationsEquipMixin"
+    "ItemAnimationsEquipMixin",
+    "NoItemResetMixin"
   ],
   "injectors": {
     "defaultRequire": 1

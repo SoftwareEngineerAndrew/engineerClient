@@ -115,6 +115,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.dungeon.SoloClearQueue,
             com.engineerclient.render.NameChanger, com.engineerclient.render.ServerIdHider,
             com.engineerclient.render.ItemAnimations,
+            com.engineerclient.render.NoItemResetOnSwap,
         )
     }
 
