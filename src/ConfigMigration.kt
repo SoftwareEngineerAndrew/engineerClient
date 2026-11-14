@@ -431,6 +431,20 @@ object ConfigMigration {
             if (odinChanged) write(odinFile, odin)
         }
 
+        // Sound Tweaks is Sounds settings, each on only if the module was; Sounds turns on with it.
+        module(modules, "Sound Tweaks")?.let { st ->
+            val on = st.get("enabled")?.asBoolean != false
+            val fresh = module(modules, "Sounds") == null
+            val sounds = ensure("Sounds")
+            if (on || fresh) sounds.addProperty("enabled", on)
+            val to = settings(sounds)
+            val from = settings(st)
+            for (k in listOf("Mute Cooldown Sound", "Old Tuba Sound", "Old Ragnarock Sound"))
+                to.addProperty(k, on && (from.get(k)?.asBoolean ?: true))
+            modules.remove(st)
+            changed = true
+        }
+
         // Bonzo Sound is a Sounds setting; Sounds turns on with it.
         module(modules, "Bonzo Sound")?.let { b ->
             val on = b.get("enabled")?.asBoolean == true

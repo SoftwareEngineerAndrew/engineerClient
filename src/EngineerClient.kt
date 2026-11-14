@@ -94,7 +94,6 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.Arrows,
             com.engineerclient.skyblock.SearchBar,
             com.engineerclient.visual.Sounds,
-            com.engineerclient.visual.SoundTweaks,
             com.engineerclient.visual.Performance,
             com.engineerclient.visual.BlazeDaggerHUD,
             com.engineerclient.render.ScreenTweaks,

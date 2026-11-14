@@ -3,7 +3,6 @@ package com.engineerclient.visual
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.MapSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.MessageEvent
@@ -17,6 +16,7 @@ import net.minecraft.client.resources.sounds.SoundInstance
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvent
+import net.minecraft.world.entity.animal.wolf.WolfSoundVariants
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.phys.Vec3
@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
 object Sounds : Module(
     name = "Sounds",
     category = Category.SKYBLOCK,
-    description = "Per-sound volumes, mono audio and the old Bonzo sound.",
+    description = "Per-sound volumes, mono audio, sound tweaks and the old Bonzo sound.",
     key = null,
 ) {
     private val monoAudio by BooleanSetting("Mono Audio", false, desc = "Plays all game audio through a single centred channel.")
@@ -37,11 +37,18 @@ object Sounds : Module(
         val previous = mc.gui.screen()
         mc.schedule { mc.gui.setScreen(SoundManagerScreen(previous)) }
     }
-    private val bonzoDropdown by DropdownSetting("Bonzo", desc = "Shows settings for the Bonzo's Mask sound.")
-    private val bonzo by BooleanSetting("Bonzo Sound", false, desc = "The old ghast moan when your Bonzo's Mask saves you.").withDependency { bonzoDropdown }
-    private val bonzoMute by BooleanSetting("Bonzo Mute New Sound", true, desc = "Mutes Hypixel's eat and cure sounds for a Bonzo proc.").withDependency { bonzoDropdown && bonzo }
-    private val bonzoVolume by NumberSetting("Bonzo Volume", 1f, 0.1..1.0, 0.05f, desc = "Volume of the moan.").withDependency { bonzoDropdown && bonzo }
-    private val bonzoPitch by NumberSetting("Bonzo Pitch", 1f, 0.5..2.0, 0.01f, desc = "Pitch of the moan.").withDependency { bonzoDropdown && bonzo }
+    private val muteCooldown by BooleanSetting("Mute Cooldown Sound", true, desc = "No sound when an ability is on cooldown.")
+    private val oldTuba by BooleanSetting("Old Tuba Sound", true, desc = "The Weird Tuba plays the 1.8.9 wolf howl.")
+    private val oldRagnarock by BooleanSetting("Old Ragnarock Sound", true, desc = "Ragnarock plays the 1.8.9 wolf howl.")
+    private val bonzo by BooleanSetting("Bonzo Sound", false, desc = "The old ghast moan when your Bonzo's Mask saves you.")
+    private val bonzoMute by BooleanSetting("Bonzo Mute New Sound", true, desc = "Mutes Hypixel's eat and cure sounds for a Bonzo proc.").withDependency { bonzo }
+    private val bonzoVolume by NumberSetting("Bonzo Volume", 1f, 0.1..1.0, 0.05f, desc = "Volume of the moan.").withDependency { bonzo }
+    private val bonzoPitch by NumberSetting("Bonzo Pitch", 1f, 0.5..2.0, 0.01f, desc = "Pitch of the moan.").withDependency { bonzo }
+
+    private val wolfDeath by lazy { SoundEvents.WOLF_SOUNDS[WolfSoundVariants.SoundSet.CLASSIC]!!.adultSounds().deathSound().value() }
+    private val howl = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("engineerclient", "wolf-howl"))
+
+    private fun holding(name: String) = mc.player?.mainHandItem?.hoverName?.string?.contains(name) == true
 
     interface MonoChannel {
         fun ecRefreshMonoPosition()
@@ -56,6 +63,21 @@ object Sounds : Module(
         on<MessageEvent.Chat> {
             if (!bonzo || !message.startsWith("Your") || !message.endsWith("Bonzo's Mask saved your life!")) return@on
             mc.player?.playSound(SoundEvents.GHAST_AMBIENT, bonzoVolume, bonzoPitch)
+        }
+        onReceive<ClientboundSoundPacket> { event ->
+            val s = sound.value()
+            if (muteCooldown && s == SoundEvents.ENDERMAN_TELEPORT && pitch == 0f && volume == 8f) {
+                event.cancel()
+                return@onReceive
+            }
+            if (s != wolfDeath) return@onReceive
+            val replace = oldTuba && volume == 0.5f && holding("Tuba") ||
+                oldRagnarock && (volume == 1f || abs(pitch - 1.4920635f) < 0.001f) && holding("Ragnarock")
+            if (!replace) return@onReceive
+            event.cancel()
+            val vol = volume
+            val pit = pitch
+            mc.execute { mc.player?.playSound(howl, vol, pit) }
         }
         onReceive<ClientboundSoundPacket> { event ->
             if (!bonzo || !bonzoMute || mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.hoverName?.string?.contains("Bonzo's Mask") != true) return@onReceive
