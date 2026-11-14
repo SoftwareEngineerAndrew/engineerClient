@@ -92,7 +92,6 @@ object ClickGUIModule : Module(
 
     init {
         OdinMod.scope.launch {
-            latestVersionNumber = checkNewerVersion(OdinMod.version.toString())
             val name = mc.user.name.takeIf { !it.matches(Regex("Player\\d{2,3}")) } ?: return@launch
             postData("https://api.odtheking.com/tele/", """{"username": "$name", "version": "Fabric ${OdinMod.version}"}""")
         }
