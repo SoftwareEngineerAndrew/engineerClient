@@ -70,7 +70,7 @@ object ConfigMigration {
      *  - Engineer Client's Terminals Status goes (2026-11-06).
      *  - POV Previews' Sharing FPS is its Sharing FPS ❗ (2026-11-11).
      *  - Sound Manager and Mono Audio are Sounds.
-     *  - World Border Click Fix is Shadow Assassin Jump Hider.
+     *  - World Border Click Fix and Shadow Assassin Jump Hider are Shadow Assassin.
      *  - Arrow Fix, Arrow Swap Title, Arrow Hit Sound, Odin's Quiver Display and the arrow settings of Render Cleanup
      *    and Random Stuff are Arrows.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
@@ -98,8 +98,8 @@ object ConfigMigration {
             if (module(modules, "ADS") == null) { it.addProperty("name", "ADS"); changed = true }
         }
 
-        module(modules, "World Border Click Fix")?.let {
-            if (module(modules, "Shadow Assassin Jump Hider") == null) { it.addProperty("name", "Shadow Assassin Jump Hider"); changed = true }
+        for (old in listOf("Shadow Assassin Jump Hider", "World Border Click Fix")) module(modules, old)?.let {
+            if (module(modules, "Shadow Assassin") == null) { it.addProperty("name", "Shadow Assassin"); changed = true }
         }
 
         // Zpew -> Legit Zpew: its settings keep under the new name.
@@ -376,6 +376,19 @@ object ConfigMigration {
             if (smOn) soundManager?.let(::settings)?.get("Volumes")?.let { to.add("Volumes", it) }
             soundManager?.let(modules::remove)
             monoAudio?.let(modules::remove)
+            changed = true
+        }
+
+        // Bonzo Sound is a Sounds setting; Sounds turns on with it.
+        module(modules, "Bonzo Sound")?.let { b ->
+            val on = b.get("enabled")?.asBoolean == true
+            val fresh = module(modules, "Sounds") == null
+            val sounds = ensure("Sounds")
+            if (on || fresh) sounds.addProperty("enabled", on)
+            val to = settings(sounds)
+            to.addProperty("Bonzo Sound", on)
+            for ((k, v) in settings(b).entrySet()) if (k != "Keybind") to.add("Bonzo $k", v)
+            modules.remove(b)
             changed = true
         }
 

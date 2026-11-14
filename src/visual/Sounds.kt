@@ -1,25 +1,34 @@
 package com.engineerclient.visual
 
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.MapSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.core.on
+import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import net.minecraft.client.resources.sounds.SimpleSoundInstance
 import net.minecraft.client.resources.sounds.SoundInstance
+import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvent
+import net.minecraft.sounds.SoundEvents
+import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.phys.Vec3
 import org.lwjgl.openal.AL10
 import java.util.Collections
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 object Sounds : Module(
     name = "Sounds",
     category = Category.SKYBLOCK,
-    description = "Per-sound volumes and mono audio.",
+    description = "Per-sound volumes, mono audio and the old Bonzo sound.",
     key = null,
 ) {
     private val monoAudio by BooleanSetting("Mono Audio", false, desc = "Plays all game audio through a single centred channel.")
@@ -28,6 +37,11 @@ object Sounds : Module(
         val previous = mc.gui.screen()
         mc.schedule { mc.gui.setScreen(SoundManagerScreen(previous)) }
     }
+    private val bonzoDropdown by DropdownSetting("Bonzo", desc = "Shows settings for the Bonzo's Mask sound.")
+    private val bonzo by BooleanSetting("Bonzo Sound", false, desc = "The old ghast moan when your Bonzo's Mask saves you.").withDependency { bonzoDropdown }
+    private val bonzoMute by BooleanSetting("Bonzo Mute New Sound", true, desc = "Mutes Hypixel's eat and cure sounds for a Bonzo proc.").withDependency { bonzoDropdown && bonzo }
+    private val bonzoVolume by NumberSetting("Bonzo Volume", 1f, 0.1..1.0, 0.05f, desc = "Volume of the moan.").withDependency { bonzoDropdown && bonzo }
+    private val bonzoPitch by NumberSetting("Bonzo Pitch", 1f, 0.5..2.0, 0.01f, desc = "Pitch of the moan.").withDependency { bonzoDropdown && bonzo }
 
     interface MonoChannel {
         fun ecRefreshMonoPosition()
@@ -39,6 +53,16 @@ object Sounds : Module(
 
     init {
         on<LevelEvent.Load> { recentSounds.clear() }
+        on<MessageEvent.Chat> {
+            if (!bonzo || !message.startsWith("Your") || !message.endsWith("Bonzo's Mask saved your life!")) return@on
+            mc.player?.playSound(SoundEvents.GHAST_AMBIENT, bonzoVolume, bonzoPitch)
+        }
+        onReceive<ClientboundSoundPacket> { event ->
+            if (!bonzo || !bonzoMute || mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.hoverName?.string?.contains("Bonzo's Mask") != true) return@onReceive
+            val s = sound.value()
+            if ((s == SoundEvents.GENERIC_EAT.value() && abs(pitch - 0.59f) < 0.02f) ||
+                (s == SoundEvents.ZOMBIE_VILLAGER_CURE && abs(pitch - 2f) < 0.01f)) event.cancel()
+        }
     }
 
     @JvmStatic
