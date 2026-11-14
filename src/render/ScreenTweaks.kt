@@ -5,10 +5,13 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.events.ParticleEvent
+import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Color
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.world.effect.MobEffects
 import net.minecraft.world.level.material.FogType
@@ -26,7 +29,7 @@ object ScreenTweaks : Module(
     private val noVignette by BooleanSetting("No Vignette", false, desc = "No dark screen edges.")
     private val noWaterOverlay by BooleanSetting("No Water Overlay", false, desc = "No underwater screen texture.")
     private val noSuffocationOverlay by BooleanSetting("No Suffocation Overlay", false, desc = "No block texture when your head is inside a block.")
-    private val hidePotionHud by BooleanSetting("Hide Potion Effect HUD", false, desc = "Hides the effect icons at the top right.")
+    private val hidePotionHud by BooleanSetting("Hide Potion Effect HUD", false, desc = "Hides the effect icons at the top right and effect swirl particles.")
     private val hideInventoryEffects by BooleanSetting("Hide Inventory Effects", false, desc = "Hides the effect list beside the inventory.")
     private val noFog by BooleanSetting("No Fog", false, desc = "No world fog; lava, water, blindness and darkness fog stay.")
     private val fullbright by BooleanSetting("Fullbright", false, desc = "Everything fully lit.")
@@ -47,6 +50,12 @@ object ScreenTweaks : Module(
     private val customTime by NumberSetting("Custom Time", 6000, 0..23999, 100, desc = "World time in ticks.").withDependency { timeChanger && timeMode == Time.CUSTOM }
 
     @JvmField var extractingSky = false
+
+    init {
+        on<ParticleEvent> {
+            if (hidePotionHud && particle.type == ParticleTypes.ENTITY_EFFECT) cancel()
+        }
+    }
 
     fun noVignette() = enabled && noVignette
     fun noWaterOverlay() = enabled && noWaterOverlay
