@@ -74,6 +74,7 @@ object ConfigMigration {
      *  - Arrow Fix, Arrow Swap Title, Arrow Hit Sound, Odin's Quiver Display and the arrow settings of Render Cleanup
      *    and Random Stuff are Arrows.
      *  - Random Stuff's Party Finder Classes is Better Party Finder's Show Missing List, in Odin's config.
+     *  - Mob Highlight's Teammate Class Glow goes, in Odin's config.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -542,6 +543,9 @@ object ConfigMigration {
                 s.addProperty("Send Kick Line", false)
             }
             write(odinFile, odin)
+        if (Files.exists(odinFile)) {
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            if (module(odin, "Mob Highlight")?.let(::settings)?.remove("Teammate Class Glow") != null) write(odinFile, odin)
         }
 
         if (changed) {
