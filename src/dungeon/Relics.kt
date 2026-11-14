@@ -18,7 +18,10 @@ import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.PersonalBest
 import com.odtheking.odin.utils.equalsOneOf
 import com.odtheking.odin.utils.itemId
+import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.render.drawCustomBeacon
+import com.odtheking.odin.utils.render.drawFilledBox
+import com.odtheking.odin.utils.render.drawWireFrameBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
@@ -36,10 +39,11 @@ import kotlin.math.hypot
 object Relics : Module(
     name = "Relics",
     category = Category.BOSS,
-    description = "P5 relics: correct cauldron beacon, wrong cauldron click block, place times, PBs and a leap highlight.",
+    description = "P5 relics: correct cauldron beacon and highlight, wrong cauldron click block, place times, PBs and a leap highlight.",
     key = null,
 ) {
     private val relicBeacon by BooleanSetting("Relic Beacon", true, desc = "Draws a beacon at your relic's cauldron.")
+    private val cauldronHighlight by BooleanSetting("Cauldron Highlight", true, desc = "Boxes your relic's cauldron, seen through walls.")
     private val blockWrong by BooleanSetting("Block Wrong Cauldron", true, desc = "Right clicks on a cauldron that isn't your relic's do nothing.")
     private val allTimes by BooleanSetting("All Relic Times", true, desc = "Once all five relics are in, says in chat when each was placed.")
     private val leapHighlight by BooleanSetting("Relic Leap Highlight", true, desc = "Before P5, where the teammate below Necron's platform is in the leap menu.")
@@ -133,8 +137,14 @@ object Relics : Module(
         }
 
         on<RenderExtractEvent> {
-            if (DungeonUtils.getF7Phase() != M7Phases.P5 || !relicBeacon) return@on
-            currentRelic?.let { drawCustomBeacon("", it.cauldron, it.color, distance = false) }
+            if (DungeonUtils.getF7Phase() != M7Phases.P5) return@on
+            val relic = currentRelic ?: return@on
+            if (relicBeacon) drawCustomBeacon("", relic.cauldron, relic.color, distance = false)
+            if (cauldronHighlight) {
+                val box = AABB(relic.cauldron)
+                drawFilledBox(box, relic.color.withAlpha(0.3f), depth = false)
+                drawWireFrameBox(box, relic.color, depth = false)
+            }
         }
 
         on<TickEvent.Server> {
