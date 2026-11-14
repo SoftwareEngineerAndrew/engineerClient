@@ -10,46 +10,88 @@ import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
+import com.odtheking.odin.events.PartyEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.ModuleManager
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
+import com.odtheking.odin.utils.Colors
+import com.odtheking.odin.utils.handlers.schedule
+import com.odtheking.odin.utils.render.textDim
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.Floor
+import com.odtheking.odin.utils.toFixed
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
+import java.util.Locale
 
-object SoloClearQueue : Module(
-    name = "Solo Clear Queue",
+object DungeonQueue : Module(
+    name = "Dungeon Queue",
     category = Category.DUNGEON,
-    description = "Requeues a solo F7 or M7 run that isn't worth finishing.",
-    key = null,
+    description = "Requeuing, warp cooldowns and the kicked timer.",
+    toggled = true,
 ) {
-    private val autoSend by BooleanSetting("Auto Send", true, desc = "Sends /joininstance when a trigger fires; off only alerts.")
+    private val warpTimerHud by HUD("Warp Timer", "Displays the warp timer in the HUD.") {
+        if (warpTimer - System.currentTimeMillis() <= 0 && !it) return@HUD 0 to 0
+        textDim("§eWarp: §a${if (it) "30" else ((warpTimer - System.currentTimeMillis()) / 1000f).toFixed()}s", 0, 0, Colors.WHITE)
+    }
+    private val warpCooldownHud by HUD("Warp Cooldown", "Time left until you can warp again.", true, 420, 70, 1f) { example ->
+        val left = if (example) 21.4 else (endTime - System.currentTimeMillis()) / 1000.0
+        if (left <= 0) return@HUD 0 to 0
+        textDim("§bWarp Cooldown: §f${String.format(Locale.ROOT, "%.1f", left)}s", 0, 0)
+    }
+    private val kickedHud by HUD("Kicked Timer", "Time since the kick, for a minute.", false, 10, 10, 1f) { example ->
+        val elapsed = (System.currentTimeMillis() - kickedAt) / 1000.0
+        if (!example && (kickedAt == 0L || elapsed > 60)) return@HUD 0 to 0
+        val text = "§5Time kicked: §f${"%.2f".format(if (example) 12.34 else elapsed)}s"
+        text(mc.font, text, 0, 0, -1)
+        mc.font.width(text) to 9
+    }
+    private val announceKick by BooleanSetting("Announce Kick", false, desc = "Announce when you get kicked from skyblock.")
+
+    private val autoRequeue by BooleanSetting("Auto Requeue", false, desc = "Automatically starts a new dungeon at the end of a dungeon.")
+    private val requeueDelay by NumberSetting("Requeue Delay", 2, 0..30, 1, desc = "The delay in seconds before requeuing.", unit = "s").withDependency { autoRequeue }
+    private val disablePartyLeave by BooleanSetting("Disable on leave/kick", true, desc = "Disables the requeue on party leave message.").withDependency { autoRequeue }
+
+    private val soloClear by BooleanSetting("Solo Clear Queue", false, desc = "Requeues a solo F7 or M7 run that isn't worth finishing.")
+    private val autoSend by BooleanSetting("Auto Send", true, desc = "Sends /joininstance when a trigger fires; off only alerts.").withDependency { soloClear }
     private val requeueKey by KeybindSetting("Requeue Key", InputConstants.UNKNOWN, "Sends /joininstance for this floor.").onPress { manualRequeue() }
-    private val fivePuzzles by BooleanSetting("Five Puzzle Trigger", true, desc = "Fires on a 5 puzzle map.")
-    private val mapCycler by BooleanSetting("Map Cycler", false, desc = "At 19.5s, fires on too many secrets or a blacklisted room.")
-    private val max2 by NumberSetting("2 Puzzle Max Secrets", 0, 0..120, 1, desc = "Most total secrets on a 2 puzzle map, 0 for no limit.").withDependency { mapCycler }
-    private val max3 by NumberSetting("3 Puzzle Max Secrets", 0, 0..120, 1, desc = "Most total secrets on a 3 puzzle map, 0 for no limit.").withDependency { mapCycler }
-    private val max4 by NumberSetting("4 Puzzle Max Secrets", 0, 0..120, 1, desc = "Most total secrets on a 4 puzzle map, 0 for no limit.").withDependency { mapCycler }
-    private val max5 by NumberSetting("5 Puzzle Max Secrets", 0, 0..120, 1, desc = "Most total secrets on a 5 puzzle map, 0 for no limit.").withDependency { mapCycler }
-    private val blacklist by StringSetting("Room Blacklist", "", 256, desc = "Room names, comma separated.", placeholder = "").withDependency { mapCycler }
-    private val blacklistMin by NumberSetting("Blacklist Min Secrets", 0, 0..120, 1, desc = "Ignore the blacklist on maps with fewer secrets, 0 to always use it.").withDependency { mapCycler }
-    private val pbTrigger by BooleanSetting("PB Trigger", false, desc = "Fires when the run time passes your PB.")
-    private var pbF7 by StringSetting("F7 PB Time", "", 8, desc = "m:ss, or /scq pb.", placeholder = "5:00").withDependency { pbTrigger }
-    private var pbM7 by StringSetting("M7 PB Time", "", 8, desc = "m:ss, or /scq pb.", placeholder = "5:00").withDependency { pbTrigger }
-    private val maxRetries by NumberSetting("Max Retries", 3, 0..10, 1, desc = "Resends after a cooldown reply.")
-    private val retryDelay by NumberSetting("Retry Delay", 2, 1..15, 1, desc = "Wait before a resend.", unit = "s")
-    private val chatMessages by BooleanSetting("Chat Messages", true, desc = "A chat line for each trigger and send.")
+    private val fivePuzzles by BooleanSetting("Five Puzzle Trigger", true, desc = "Fires on a 5 puzzle map.").withDependency { soloClear }
+    private val mapCycler by BooleanSetting("Map Cycler", false, desc = "At 19.5s, fires on too many secrets or a blacklisted room.").withDependency { soloClear }
+    private val max2 by NumberSetting("2 Puzzle Max Secrets", 0, 0..120, 1, desc = "Most total secrets on a 2 puzzle map, 0 for no limit.").withDependency { soloClear && mapCycler }
+    private val max3 by NumberSetting("3 Puzzle Max Secrets", 0, 0..120, 1, desc = "Most total secrets on a 3 puzzle map, 0 for no limit.").withDependency { soloClear && mapCycler }
+    private val max4 by NumberSetting("4 Puzzle Max Secrets", 0, 0..120, 1, desc = "Most total secrets on a 4 puzzle map, 0 for no limit.").withDependency { soloClear && mapCycler }
+    private val max5 by NumberSetting("5 Puzzle Max Secrets", 0, 0..120, 1, desc = "Most total secrets on a 5 puzzle map, 0 for no limit.").withDependency { soloClear && mapCycler }
+    private val blacklist by StringSetting("Room Blacklist", "", 256, desc = "Room names, comma separated.", placeholder = "").withDependency { soloClear && mapCycler }
+    private val blacklistMin by NumberSetting("Blacklist Min Secrets", 0, 0..120, 1, desc = "Ignore the blacklist on maps with fewer secrets, 0 to always use it.").withDependency { soloClear && mapCycler }
+    private val pbTrigger by BooleanSetting("PB Trigger", false, desc = "Fires when the run time passes your PB.").withDependency { soloClear }
+    private var pbF7 by StringSetting("F7 PB Time", "", 8, desc = "m:ss, or /scq pb.", placeholder = "5:00").withDependency { soloClear && pbTrigger }
+    private var pbM7 by StringSetting("M7 PB Time", "", 8, desc = "m:ss, or /scq pb.", placeholder = "5:00").withDependency { soloClear && pbTrigger }
+    private val maxRetries by NumberSetting("Max Retries", 3, 0..10, 1, desc = "Resends after a cooldown reply.").withDependency { soloClear }
+    private val retryDelay by NumberSetting("Retry Delay", 2, 1..15, 1, desc = "Wait before a resend.", unit = "s").withDependency { soloClear }
+    private val chatMessages by BooleanSetting("Chat Messages", true, desc = "A chat line for each trigger and send.").withDependency { soloClear }
     private val sound = SoundOption(this, "block.note_block.pling")
 
     private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
     private val TIME_PART = Regex("""(\d+)([hms])""")
     private val SECONDS = Regex("""(\d{1,3})\s*s(?:ec|econds?)?\b""")
+
+    private val enterRegex = Regex("^-*\\n\\[[^]]+] (\\w+) entered (?:MM )?\\w+ Catacombs, Floor (\\w+)!\\n-*$")
+    private val timeoutExeceptionRegex = Regex("^Exception Connecting:ReadTimeoutException : null$")
+    private const val KICKED_INSTANCE = "You are no longer allowed to access this instance!"
+    private const val KICKED_JOINING = "You were kicked while joining that server!"
+    private val extraStatsRegex = Regex(" {29}> EXTRA STATS <")
+    private val instanceRegex = Regex("\\[[^]]+] \\w+ entered (?:MM )?\\w+ Catacombs, Floor \\w+!")
+    private val warpRegex = Regex("^Sending to server .+")
+
+    private var warpTimer = 0L
+    var disableRequeue = false
+    private var endTime = 0L
+    private var kickedAt = 0L
 
     private var fired = false
     private var mapChecked = false
@@ -59,14 +101,35 @@ object SoloClearQueue : Module(
     private var retryAt = 0L
 
     init {
-        on<LevelEvent.Load> { reset() }
+        on<LevelEvent.Load> { reset(); disableRequeue = false }
+
+        on<PartyEvent.Leave> {
+            if (autoRequeue && disablePartyLeave) disableRequeue = true
+        }
 
         on<MessageEvent.Chat> {
+            val kicked = message == KICKED_JOINING || message == KICKED_INSTANCE
+            if (kicked && System.currentTimeMillis() - kickedAt > 60_000) kickedAt = System.currentTimeMillis()
+            if (endTime <= System.currentTimeMillis()) when {
+                instanceRegex.containsMatchIn(message) -> endTime = System.currentTimeMillis() + 30_000L
+                warpRegex.containsMatchIn(message) -> endTime = System.currentTimeMillis() + 4_000L
+            }
+            when {
+                announceKick && (kicked || message.matches(timeoutExeceptionRegex)) -> sendCommand("pc I was kicked!")
+                message.matches(enterRegex) -> warpTimer = System.currentTimeMillis() + 30_000L
+                autoRequeue && message.matches(extraStatsRegex) -> {
+                    if (!disableRequeue.also { disableRequeue = false }) schedule(requeueDelay * 20) {
+                        if (!disableRequeue) sendCommand("instancerequeue")
+                    }
+                }
+            }
+            if (!soloClear) return@on
             if (message == MORT) startedAt = System.currentTimeMillis()
             else onReply(message.lowercase())
         }
 
         on<TickEvent.End> {
+            if (!soloClear) return@on
             retry()
             if (fired || !soloSeven() || DungeonUtils.inBoss) return@on
             if (fivePuzzles && puzzles() >= 5) return@on trigger("5 Puzzles")

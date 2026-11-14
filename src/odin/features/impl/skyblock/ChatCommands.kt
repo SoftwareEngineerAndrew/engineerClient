@@ -8,7 +8,7 @@ import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.MessageSentEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.impl.dungeon.DungeonQueue
+import com.engineerclient.dungeon.DungeonQueue
 import com.odtheking.odin.utils.*
 import com.odtheking.odin.utils.handlers.schedule
 import com.odtheking.odin.utils.skyblock.LocationUtils

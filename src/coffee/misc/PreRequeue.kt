@@ -12,7 +12,7 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.impl.dungeon.DungeonQueue
+import com.engineerclient.dungeon.DungeonQueue
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.PartyUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
