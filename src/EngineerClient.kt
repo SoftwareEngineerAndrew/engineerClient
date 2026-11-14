@@ -255,6 +255,7 @@ object EngineerClient : ClientModInitializer {
     /** /adm help: what the rest of it does. Other parts of the mod add their own lines. */
     val HELP = mutableListOf(
         "${PREFIX}§7commands:",
+        "§f /adm keybinds§7 — Command Keybinds",
         "§f /adm log§7 [mark <note>] — the session log; §f/adm memreport",
     )
 
@@ -282,6 +283,10 @@ object EngineerClient : ClientModInitializer {
             for (name in COMMANDS) dispatcher.register(
                 literal(name)
                     .executes { mc.schedule { mc.setScreenAndShow(com.engineerclient.gui.AdmClickGui) }; 1 }
+                    .then(literal("keybinds").executes {
+                        mc.schedule { com.engineerclient.gui.AdmClickGui.open(com.odtheking.odin.features.impl.skyblock.CommandKeybinds) }
+                        1
+                    })
                     .then(literal("help").executes { ctx ->
                         HELP.forEach { ctx.source.sendFeedback(Component.literal(it)) }
                         1

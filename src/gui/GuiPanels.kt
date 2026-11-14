@@ -18,6 +18,9 @@ import kotlin.math.roundToInt
 
 /** Which panel each module sits in. */
 object Placement {
+    /** Kept out of the panels; opened on their own instead. */
+    val HIDDEN = setOf("Command Keybinds")
+
     val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Crimson Isle", "Skyblock", "Render", "AscentClient", "Coffee Client", "Devgineer Client")
 
     /** Where a panel starts: five to a row. */
@@ -204,7 +207,7 @@ class Panel(val name: String, val modules: List<ModuleView>, defaultX: Int, defa
             // The panels were renamed: places saved for the old ones would pile the new ones up.
             if ("Crimson Isle" !in ClickGUIModule.panelSetting) ClickGUIModule.panelSetting.clear()
             for (name in Placement.PANELS) grouped[name] = mutableListOf()
-            for (m in ModuleManager.modules.values) grouped.getOrPut(Placement.of(m)) { mutableListOf() }.add(m)
+            for (m in ModuleManager.modules.values) if (m.name !in Placement.HIDDEN) grouped.getOrPut(Placement.of(m)) { mutableListOf() }.add(m)
             return grouped.filterValues { it.isNotEmpty() }.map { (name, list) ->
                 val (x, y) = Placement.home(name)
                 Panel(name, list.sortedByDescending { mc.font.width(it.name) }.map(views), x, y)

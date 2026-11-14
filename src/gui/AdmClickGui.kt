@@ -25,6 +25,8 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     private val search = TextField(24)
     private val moduleViews = HashMap<Module, ModuleView>()
     private var panels = mutableListOf<Panel>()
+    private var full = mutableListOf<Panel>()
+    private var solo: Module? = null
     private var builtFor = -1
     private var hits = ArrayList<Hit>()
 
@@ -63,12 +65,23 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
         tipY = y
     }
 
+    /** Opens the menu showing only [module], expanded. */
+    fun open(module: Module) {
+        solo = module
+        mc.setScreenAndShow(this)
+    }
+
+    private fun view(module: Module) = moduleViews.getOrPut(module) { ModuleView(module) }
+
     override fun init() {
         scale = ClickGUIModule.clickGuiScale / mc.window.guiScale
         if (builtFor != ModuleManager.modules.size) {
-            panels = Panel.build { moduleViews.getOrPut(it) { ModuleView(it) } }.toMutableList()
+            full = Panel.build(::view).toMutableList()
             builtFor = ModuleManager.modules.size
         }
+        val one = solo
+        panels = if (one == null) full
+        else mutableListOf(Panel(one.name, listOf(view(one).also { it.expanded = true }), (vw - Theme.WIDTH) / 2, 20))
         focus = search
         runCatching { OdinSplitsLook.refreshPlaceholders() }
     }
@@ -174,6 +187,7 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     }
 
     override fun removed() {
+        solo = null
         unfocus()
         dragMove = null
         dragEnd = null
