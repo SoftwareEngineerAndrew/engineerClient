@@ -81,6 +81,9 @@ object TermInfo {
     /** The section being done (1-4), or null outside P3 (Coffee Client's Role Times). */
     fun sectionNumber(): Int? = current()?.number
 
+    /** The section's tasks done and needed (terms, levers and device), or null outside P3. */
+    fun sectionProgress(): Pair<Int, Int>? = current()?.let { it.termsDone + it.leversDone + (if (it.deviceDone) 1 else 0) to it.terms + 3 }
+
     /** Section [n]'s device (1 is Simon Says, 4 is i4) counted done, as Devonian counts it - early ones too (Role Times). */
     fun deviceDone(n: Int): Boolean = sections.getOrNull(n - 1)?.deviceDone == true
 
