@@ -80,8 +80,6 @@ object ModuleManager {
             // nether
             SupplyHelper, BuildHelper, RemovePerks, NoPre, PearlWaypoints, FreshTools, KuudraInfo, Misc, Vesuvius,
             KuudraTracker,
-
-            RenderTest,
         )
 
         // hashmap, but would need to keep track when setting values change
