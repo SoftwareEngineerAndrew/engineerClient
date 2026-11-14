@@ -68,7 +68,7 @@ object ModuleManager {
 
             // boss
             TerminalSimulator, TerminalSolver, TerminalTimes, TerminalSounds, TickTimers, ArrowAlign,
-            TerminalsStatus, MelodyMessage, WitherDragons, SimonSays, KingRelics, ArrowsDevice, TerminalTitles,
+            TerminalsStatus, MelodyMessage, WitherDragons, SimonSays, ArrowsDevice, TerminalTitles,
 
             // render
             ClickGUIModule, Camera, Etherwarp, PlayerSize, PerformanceHUD, RenderOptimizer,

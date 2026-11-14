@@ -139,8 +139,7 @@ object OdinInternals {
             "lightningTickTime", "pyTriggered", "pyTickTime", "stormTick", "secretsCounter", "fireFreezeTime")),
         Probe("odin.priv", "TerminalTimes", BOSS + "TerminalTimes", fields(BOSS + "TerminalTimes", "completed", "times", "gateBlown", "sectionTimer", "phaseTimer") +
             f(BOSS + "TerminalTimes", "currentTick", ticking = true)),
-        Probe("odin.priv", "KingRelics", BOSS + "KingRelics", fields(BOSS + "KingRelics", "currentRelic", "relicPlaceTick", "relicTicksToSpawn", "hasAnnouncedSpawn") +
-            f(BOSS + "KingRelics", "serverTickCounter", ticking = true)),
+        Probe("odin.priv", "Relics", "com.engineerclient.dungeon.Relics", fields("com.engineerclient.dungeon.Relics", "currentRelic", "relicPlaceTick", "p5Ticks")),
         Probe("odin.priv", "LividSolver", BOSS + "LividSolver", listOf(
             M("currentLivid") { (Reflect.field(BOSS + "LividSolver", "currentLivid") as? Enum<*>)?.name },
             M("lividEntity") { Reflect.field(BOSS + "LividSolver", "currentLivid")?.let { Reflect.field(it, "entity") } },
@@ -373,7 +372,6 @@ object OdinInternals {
         fun r(read: () -> Any?): String = try { value(read()) } catch (t: Throwable) { "null" }
         Rec.emit("odin.clocks", "\"splits\":${r { Reflect.field("com.odtheking.odin.utils.skyblock.SplitsManager", "tickCounter") }}" +
             ",\"terminalTimes\":${r { Reflect.field(BOSS + "TerminalTimes", "currentTick") }}" +
-            ",\"kingRelics\":${r { Reflect.field(BOSS + "KingRelics", "serverTickCounter") }}" +
             ",\"witherDragons\":${r { WitherDragons.currentTick }}" +
             ",\"waterSolver\":${r { Reflect.field(PUZZLE + "WaterSolver", "tickCounter") }}" +
             ",\"bloodCamp\":${r { Reflect.field(DUNGEON + "BloodCamp", "currentTickTime") }}")
