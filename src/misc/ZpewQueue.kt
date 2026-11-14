@@ -12,8 +12,8 @@ package com.engineerclient.misc
  *
  * A dropped click can't be told from the others, so a click waiting longer than the round trip plus its spread
  * (measured from answered clicks, like TCP) stops counting. It can still be matched for a while, in case it was late.
- * Ticks are the server's as they reach us, so a lag spike (no ticks arriving) doesn't run the clock out; [HARD] client
- * ticks ([wall]) is the cap if the server never answers.
+ * Ticks are the server's as they reach us, so a lag spike (no ticks arriving) doesn't run the clock out, and the burst
+ * after one doesn't either: as many client ticks ([wall]) must pass too. [HARD] client ticks is the cap if the server never answers.
  */
 class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleArray?) {
     /** [from]: where the server has you for this click when no earlier waiting click moves you. */
@@ -131,7 +131,7 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     fun expire(tick: Long, wall: Long = tick): Boolean {
         val limit = if (roundTrip.isNaN()) FIRST.toDouble() else minOf(MAX.toDouble(), roundTrip + maxOf(GRACE.toDouble(), 4 * spread))
         var changed = false
-        for (w in waiting) if (w.counts && (tick - w.tick >= limit || wall - w.wall >= HARD)) { w.counts = false; changed = true; onDrop?.invoke(w.click) }
+        for (w in waiting) if (w.counts && ((tick - w.tick >= limit && wall - w.wall >= limit) || wall - w.wall >= HARD)) { w.counts = false; changed = true; onDrop?.invoke(w.click) }
         while (waiting.isNotEmpty() && (tick - waiting.first().tick >= KEEP || wall - waiting.first().wall >= HARD + KEEP)) waiting.removeFirst()
         if (!changed) return false
         rechain()
