@@ -23,6 +23,7 @@ import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket
+import net.minecraft.world.entity.Pose
 import net.minecraft.world.phys.Vec3
 import kotlin.math.floor
 
@@ -63,7 +64,8 @@ object Zpew {
     private fun fmt(p: Vec3?) = p?.let { fmt(doubleArrayOf(it.x, it.y, it.z)) } ?: "-"
 
     /** [from]: where the chain had you when you clicked (the camera); [cells]: the blocks around the ray then, when Capture Misses is on. */
-    private class Click(val ether: Boolean, val yaw: Float, val pitch: Float, val sneaking: Boolean, val distance: Double, val witherImpact: Boolean = false) {
+    private class Click(val ether: Boolean, val yaw: Float, val pitch: Float, val sneaking: Boolean, val distance: Double, val witherImpact: Boolean = false, val swimming: Boolean = false) {
+        val eye get() = if (swimming) TeleportLaw.SWIM_EYE else if (ether || sneaking) TeleportLaw.SNEAK_EYE else TeleportLaw.STAND_EYE
         var from: DoubleArray? = null
         var cells: String? = null
     }
@@ -159,7 +161,7 @@ object Zpew {
     private fun snapshot(from: DoubleArray, c: Click): String? {
         val level = mc.level ?: return null
         val look = TeleportLaw.look(c.yaw, c.pitch)
-        val ey = from[1] + if (c.ether || c.sneaking) TeleportLaw.SNEAK_EYE else TeleportLaw.STAND_EYE
+        val ey = from[1] + c.eye
         val seen = LinkedHashSet<Long>()
         val out = StringBuilder()
         val pos = BlockPos.MutableBlockPos()
@@ -219,8 +221,8 @@ object Zpew {
     private fun land(from: DoubleArray, c: Click): DoubleArray? {
         val cells = LevelCells(mc.level ?: return null)
         if (nearRoom(from) { it.type == RoomType.TRAP || it.data?.name in NO_TELEPORT }) return null
-        val to = if (c.ether) TeleportLaw.etherwarp(from[0], from[1], from[2], c.yaw, c.pitch, c.distance, cells)
-        else TeleportLaw.blink(from[0], from[1], from[2], c.yaw, c.pitch, c.sneaking, c.distance.toInt(), cells)
+        val to = if (c.ether) TeleportLaw.etherwarp(from[0], from[1], from[2], c.yaw, c.pitch, c.distance, cells, c.eye)
+        else TeleportLaw.blink(from[0], from[1], from[2], c.yaw, c.pitch, c.sneaking, c.distance.toInt(), cells, c.eye)
         return to?.takeUnless { nearRoom(it) { r -> r.data?.name in NO_TELEPORT } }
     }
 
@@ -238,16 +240,17 @@ object Zpew {
         if (blockClick == true || (DungeonUtils.inBoss && DungeonUtils.isFloor(7)) || DungeonUtils.currentRoomName == "Ice Fill") return null
         val stack = p.getItemInHand(packet.hand)
         val sneaking = p.lastSentInput.shift()
+        val swimming = p.pose == Pose.SWIMMING
         val (yaw, pitch) = if (blockClick == false && !moveYaw.isNaN()) moveYaw to movePitch else packet.yRot to packet.xRot
         // the eye is the click's own sneak's (alldata), even right after a sneak change: the server's pose then is a coin flip
-        if (sneaking) stack.isEtherwarpItem()?.let { return if (etherwarp) Click(true, yaw, pitch, true, Etherwarp.getEtherwarpDistance(it)) else null }
+        if (sneaking) stack.isEtherwarpItem()?.let { return if (etherwarp) Click(true, yaw, pitch, true, Etherwarp.getEtherwarpDistance(it), swimming = swimming) else null }
         val id = stack.itemId
         val distance = when {
             id == "ASPECT_OF_THE_END" || id == "ASPECT_OF_THE_VOID" -> if (aotv) 8 + stack.customData.getInt("tuned_transmission").orElse(0) else return null
             id in WITHER_BLADES && stack.customData.getListOrEmpty("ability_scroll").size == 3 -> if (hyperion) 10 else return null
             else -> return null
         }
-        return Click(false, yaw, pitch, sneaking, distance.toDouble(), id in WITHER_BLADES)
+        return Click(false, yaw, pitch, sneaking, distance.toDouble(), id in WITHER_BLADES, swimming)
     }
 
     fun register() {
@@ -315,7 +318,7 @@ object Zpew {
                 if (land(from, c) != null) EtherSound.played()
             }
             queue.click(c, serverTicks.get(), doubleArrayOf(p.x, p.y, p.z), counts, ticks)
-            log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.odtheking.odin.utils.ServerUtils.currentPing}")
+            log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking}${if (c.swimming) " swim" else ""} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.odtheking.odin.utils.ServerUtils.currentPing}")
             sync("click")
         }
         EventBus.subscribe(this)

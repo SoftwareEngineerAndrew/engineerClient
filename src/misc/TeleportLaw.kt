@@ -16,6 +16,8 @@ import kotlin.math.sin
 object TeleportLaw {
     const val STAND_EYE = 1.62
     const val SNEAK_EYE = 1.27
+    /** Swimming (or crawling): the server casts from this eye whatever the sneak key. */
+    const val SWIM_EYE = 0.4
 
     /** One cell of the world: its block id (no "minecraft:") and the top of its collision shape (0 when it has none). */
     interface Cells {
