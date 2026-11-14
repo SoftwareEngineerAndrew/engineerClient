@@ -11,7 +11,7 @@ import net.minecraft.world.entity.player.Player
 
 object Highlight : Module(
     name = "Mob Highlight",
-    description = "Blade's mob highlight: starred mobs, tanks, minibosses, Fels, Shadow Assassins, bats, withers and Mimics."
+    description = "Blade's mob highlight: starred mobs, tanks, minibosses, Fels, Shadow Assassins, bats and withers."
 ) {
     private val hideNonNames by BooleanSetting("Hide non-starred names", true, desc = "Hides names of entities that are not starred.")
 

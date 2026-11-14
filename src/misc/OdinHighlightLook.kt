@@ -12,9 +12,7 @@ import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.impl.dungeon.Highlight
 import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.render.BoxStyle
 import com.odtheking.odin.utils.render.drawFilledBox
-import com.odtheking.odin.utils.render.drawStyledBox
 import com.odtheking.odin.utils.render.drawWireFrameBox
 import com.odtheking.odin.utils.renderBoundingBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -29,13 +27,11 @@ import net.minecraft.world.entity.monster.Enderman
 import net.minecraft.world.entity.monster.zombie.Zombie
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.Items
-import net.minecraft.world.level.block.entity.TrappedChestBlockEntity
 import net.minecraft.world.phys.AABB
-import net.minecraft.core.BlockPos
 
 /**
  * Blade Addons' Mob Highlight, as the only mob highlight: it lives in Odin's Highlight module, saved with it. Each kind
- * in its own colour, filled, outlined or both: starred mobs, tanks, minibosses, Fels, Shadow Assassins, Mimics, secret
+ * in its own colour, filled, outlined or both: starred mobs, tanks, minibosses, Fels, Shadow Assassins, secret
  * bats and boss withers. A mob is found from its name tag by entity id - the mob is spawned just before its tag, so it
  * is the tag's id less one (three for a Withermancer) - so a mob in a crowd is never mixed up with its neighbour.
  * Shadow Assassins have no tag: they are the fake players holding "Silent Death" in leather boots.
@@ -43,7 +39,7 @@ import net.minecraft.core.BlockPos
 object OdinHighlightLook {
 
     private enum class Style { OUTLINE, FILLED, BOTH }
-    private enum class Kind { STAR, TANK, MINI, FEL, ASSASSIN, MIMIC, BAT, WITHER }
+    private enum class Kind { STAR, TANK, MINI, FEL, ASSASSIN, BAT, WITHER }
 
     private val mobHighlight = BooleanSetting("Mob Highlight", true, desc = "Boxes dungeon mobs by kind.")
     private val style = SelectorSetting("Highlight Style", Style.OUTLINE, desc = "Outline, filled or both.").withDependency { mobHighlight.value }
@@ -63,13 +59,9 @@ object OdinHighlightLook {
         Kind.MINI to Colours("Miniboss", 0xFFFFFF00.toInt(), 0xFFFFFF00.toInt()),
         Kind.FEL to Colours("Fel", 0xFF00FFFF.toInt(), 0xFF00FFFF.toInt()),
         Kind.ASSASSIN to Colours("Shadow Assassin", 0xFF800080.toInt(), 0xFF800080.toInt()),
-        Kind.MIMIC to Colours("Mimic", -404288757, 6968661),
         Kind.BAT to Colours("Bat", -14531329, -14531329),
         Kind.WITHER to Colours("Wither", -2011028958, -2011028958),
     )
-
-    private val mimicChests = BooleanSetting("Mimic Chests", true, desc = "Boxes trapped chests (Mimics) in dungeons.")
-    private val mimicChestColor = ColorSetting("Mimic Chest Color", Color(231, 11, 11, 0.9f), true, desc = "Mimic chest box.").withDependency { mimicChests.value }
 
     private val BAT_HEALTHS = setOf(100f, 200f, 400f, 800f)
 
@@ -84,7 +76,6 @@ object OdinHighlightLook {
 
     private fun kindOf(name: String): Kind? = when {
         "King Midas" in name -> Kind.MINI
-        "Mimic" in name -> Kind.MIMIC
         "✯ " !in name -> null
         "Fel" in name -> Kind.FEL
         MINIS.any { it in name } -> Kind.MINI
@@ -129,38 +120,16 @@ object OdinHighlightLook {
         found.values.removeIf { (e, _) -> !e.isAlive || e.isRemoved }
     }
 
-    private val CHEST_BOX = AABB(0.0625, 0.0, 0.0625, 0.9375, 0.875, 0.9375)
-    private var chests: List<BlockPos> = emptyList()
-    private var chestScanTick = 0
-
-    private fun mimicChestsOn(): Boolean = Highlight.enabled && mimicChests.value && DungeonUtils.inClear
-
-    private fun scanChests() {
-        val level = mc.level ?: return
-        val me = mc.player ?: return
-        val cx = me.blockPosition().x shr 4
-        val cz = me.blockPosition().z shr 4
-        val r = mc.options.renderDistance().get()
-        val out = ArrayList<BlockPos>()
-        for (x in cx - r..cx + r) for (z in cz - r..cz + r) {
-            if (!level.hasChunk(x, z)) continue
-            for (be in level.getChunk(x, z).blockEntities.values) if (be is TrappedChestBlockEntity) out += be.blockPos
-        }
-        chests = out
-    }
-
     /** Adds the settings to Odin's Highlight; before OdinSplitsLook.install, which re-reads Odin's config. */
     fun install() {
-        val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth) + colours.values.flatMap { listOf(it.fill, it.outline) } + listOf(mimicChests, mimicChestColor)
+        val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth) + colours.values.flatMap { listOf(it.fill, it.outline) }
         for (s in all) Highlight.registerSetting(s)
 
         on<TickEvent.End> {
             if (active()) scan()
-            if (mimicChestsOn() && ++chestScanTick % 20 == 0) scanChests()
         }
 
         on<RenderExtractEvent> {
-            if (mimicChestsOn()) for (pos in chests) drawStyledBox(CHEST_BOX.move(pos), mimicChestColor.value, BoxStyle.OUTLINE, true)
             if (!active()) return@on
             if (notWhileBlind.value && mc.player?.hasEffect(MobEffects.BLINDNESS) == true) return@on
             val filled = style.value != Style.OUTLINE
@@ -175,7 +144,7 @@ object OdinHighlightLook {
             }
         }
 
-        on<LevelEvent.Load> { found.clear(); seenTags.clear(); chests = emptyList() }
+        on<LevelEvent.Load> { found.clear(); seenTags.clear() }
         EventBus.subscribe(this)
     }
 }
