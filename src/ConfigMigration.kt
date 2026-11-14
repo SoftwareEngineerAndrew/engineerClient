@@ -543,6 +543,9 @@ object ConfigMigration {
                 s.addProperty("Send Kick Line", false)
             }
             write(odinFile, odin)
+        }
+
+        // Mob Highlight's Teammate Class Glow goes.
         if (Files.exists(odinFile)) {
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
             if (module(odin, "Mob Highlight")?.let(::settings)?.remove("Teammate Class Glow") != null) write(odinFile, odin)
