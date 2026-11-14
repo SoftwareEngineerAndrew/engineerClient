@@ -1,7 +1,6 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.PacketEvent
@@ -23,7 +22,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
  * engineerClient's Simon Says solver, in Odin's Simon Says: Odin keeps drawing the boxes, blocking
  * wrong clicks, announcing and playing its sounds, but the answer it does that from is
  * [SimonSaysSolver]'s. Odin's own working-out (its block and tick listeners) is switched off by
- * `SimonSaysMixin` while this is on, and the answer written into its fields here.
+ * `SimonSaysMixin`, and the answer written into its fields here.
  *
  * Fixes over Odin's: a re-skip after a fail (Odin keeps the stray light, as it only looks for one
  * after a world load - the start button never shows as pressed), a 2-light skip (Odin reverses
@@ -32,12 +31,9 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
  */
 object OdinSimonSays {
 
-    private val better = BooleanSetting("Better Solver", true,
-        desc = "engineerClient's solver: handles skips after a fail, 2-light skips, flashes before the show and lag. Odin still draws, blocks and announces from it.")
-
-    /** On, and Odin's Simon Says with it: Odin's own working-out is off. Read by SimonSaysMixin. */
+    /** Odin's Simon Says is on: Odin's own working-out is off. Read by SimonSaysMixin. */
     @JvmStatic
-    fun active(): Boolean = SimonSays.enabled && better.value
+    fun active(): Boolean = SimonSays.enabled
 
     private val solver = SimonSaysSolver<BlockPos>()
 
@@ -62,7 +58,6 @@ object OdinSimonSays {
 
     /** Adds the setting to Odin's module; before OdinSplitsLook.install, which re-reads Odin's config. */
     fun install() {
-        SimonSays.registerSetting(better)
         on<TickEvent.Server> { tick++ }
         on<LevelEvent.Load> { solver.reset(); lampLit.clear(); buttonTick.clear() }
         // Lamps come from their block packets, re-sends included: a lamp sent lit while lit (cleared and
