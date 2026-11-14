@@ -87,6 +87,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.ChatTweaks,
             com.engineerclient.skyblock.TabTweaks,
             com.engineerclient.skyblock.ItemTweaks,
+            com.engineerclient.skyblock.EnchantColors,
             com.engineerclient.skyblock.ItemProtection,
             com.engineerclient.skyblock.CloseChestOnKey,
             com.engineerclient.skyblock.RunsLogger,
