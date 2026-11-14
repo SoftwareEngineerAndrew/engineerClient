@@ -28,6 +28,8 @@
     "BlurRadiusMixin",
     "ChatComponentMixin",
     "ChatTweaksMixin",
+    "ChatCopyAccessor",
+    "ChatCopyMixin",
     "TabTweaksMixin",
     "PearlCooldownMixin",
     "HotbarScrollMixin",
