@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.visual.MonoAudio;
+import com.engineerclient.visual.Sounds;
 import net.minecraft.client.Camera;
 import net.minecraft.client.sounds.ChannelAccess;
 import net.minecraft.client.sounds.SoundEngine;
@@ -17,7 +17,7 @@ public abstract class MonoAudioEngineMixin {
 
     @Inject(method = "updateSource", at = @At("TAIL"))
     private void ec$refreshMono(Camera camera, CallbackInfo ci) {
-        if (!MonoAudio.active()) return;
-        channelAccess.executeOnChannels(stream -> stream.forEach(channel -> ((MonoAudio.MonoChannel) channel).ecRefreshMonoPosition()));
+        if (!Sounds.monoActive()) return;
+        channelAccess.executeOnChannels(stream -> stream.forEach(channel -> ((Sounds.MonoChannel) channel).ecRefreshMonoPosition()));
     }
 }

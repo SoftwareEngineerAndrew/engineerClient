@@ -1,6 +1,7 @@
 package com.engineerclient.visual
 
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.MapSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.core.on
@@ -10,19 +11,26 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance
 import net.minecraft.client.resources.sounds.SoundInstance
 import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvent
+import net.minecraft.world.phys.Vec3
+import org.lwjgl.openal.AL10
 import java.util.Collections
 import kotlin.math.roundToInt
 
-object SoundManager : Module(
-    name = "Sound Manager",
+object Sounds : Module(
+    name = "Sounds",
     category = Category.SKYBLOCK,
-    description = "Adjust the volume of every sound in the game.",
+    description = "Per-sound volumes and mono audio.",
     key = null,
 ) {
+    private val monoAudio by BooleanSetting("Mono Audio", false, desc = "Plays all game audio through a single centred channel.")
     private val volumes by MapSetting("Volumes", mutableMapOf<String, Float>())
     private val open by ActionSetting("Open Sound Manager", desc = "Opens the per-sound volume list.") {
         val previous = mc.gui.screen()
         mc.schedule { mc.gui.setScreen(SoundManagerScreen(previous)) }
+    }
+
+    interface MonoChannel {
+        fun ecRefreshMonoPosition()
     }
 
     private val recentSounds = Collections.synchronizedSet(LinkedHashSet<Identifier>())
@@ -31,6 +39,17 @@ object SoundManager : Module(
 
     init {
         on<LevelEvent.Load> { recentSounds.clear() }
+    }
+
+    @JvmStatic
+    fun monoActive(): Boolean = enabled && monoAudio
+
+    @JvmStatic
+    fun distanceToListener(pos: Vec3): Double = pos.distanceTo(mc.soundManager.listenerTransform.position())
+
+    @JvmStatic
+    fun applyCenteredPosition(source: Int, distance: Double) {
+        AL10.alSourcefv(source, AL10.AL_POSITION, floatArrayOf(0f, 0f, -distance.toFloat()))
     }
 
     @JvmStatic

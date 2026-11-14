@@ -69,6 +69,7 @@ object ConfigMigration {
      *  - ADR's Private Runs is its Unlisted Runs (2026-10-30, ADM 1.0.10).
      *  - Engineer Client's Terminals Status goes (2026-11-06).
      *  - POV Previews' Sharing FPS is its Sharing FPS ❗ (2026-11-11).
+     *  - Sound Manager and Mono Audio are Sounds.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -356,6 +357,20 @@ object ConfigMigration {
         // Engineer Client's Terminals Status is gone (2026-11-06; Odin's own, in odin-config.json, is another module).
         val gone = module(modules, "Terminals Status")
         if (gone != null) { modules.remove(gone); changed = true }
+
+        // Sound Manager and Mono Audio are Sounds: on if either was, volumes only from an enabled Sound Manager.
+        val soundManager = module(modules, "Sound Manager")
+        val monoAudio = module(modules, "Mono Audio")
+        if ((soundManager != null || monoAudio != null) && module(modules, "Sounds") == null) {
+            val smOn = soundManager?.get("enabled")?.asBoolean == true
+            val monoOn = monoAudio?.get("enabled")?.asBoolean == true
+            val to = settings(ensure("Sounds").also { it.addProperty("enabled", smOn || monoOn) })
+            to.addProperty("Mono Audio", monoOn)
+            if (smOn) soundManager?.let(::settings)?.get("Volumes")?.let { to.add("Volumes", it) }
+            soundManager?.let(modules::remove)
+            monoAudio?.let(modules::remove)
+            changed = true
+        }
 
         if (changed) {
             Files.createDirectories(file.parent)

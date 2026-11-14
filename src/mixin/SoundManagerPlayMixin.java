@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class SoundManagerPlayMixin {
     @Inject(method = "play", at = @At("HEAD"), cancellable = true)
     private void ec$onPlay(SoundInstance instance, CallbackInfoReturnable<SoundEngine.PlayResult> cir) {
-        com.engineerclient.visual.SoundManager.recordPlayedSound(instance);
+        com.engineerclient.visual.Sounds.recordPlayedSound(instance);
         if (ArrowHitSound.onSoundPlay(instance)) cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
     }
 }

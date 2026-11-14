@@ -57,7 +57,7 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
     }
 
     override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, a: Float) {
-        if (selected == Group.Recent && recentVersion != SoundManager.recentSoundsVersion) updateFilter(resetScroll = false)
+        if (selected == Group.Recent && recentVersion != Sounds.recentSoundsVersion) updateFilter(resetScroll = false)
 
         graphics.fill(winX, winY, winX + winW, winY + winH, 0xF0141414.toInt())
         graphics.fill(winX, winY, winX + SIDEBAR, winY + winH, 0xC80F0F0F.toInt())
@@ -105,7 +105,7 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
         val sliderX = playX - SLIDER_W - 8
         if (draggingId == sound.id) setVolume(sound.id, mouseX, sliderX)
 
-        val volume = SoundManager.getVolumePercent(sound.id)
+        val volume = Sounds.getVolumePercent(sound.id)
         val filled = SLIDER_W * volume / 200
         val playHovered = mouseX in playX..playX + PLAY_W && mouseY in y + 6..y + 21
         if (mouseX in viewX..viewX + viewW && mouseY in y..y + ROW_H) graphics.fill(viewX, y, viewX + viewW, y + ROW_H, 0x0FFFFFFF)
@@ -125,7 +125,7 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
     private fun updateFilter(resetScroll: Boolean = true) {
         val query = if (::search.isInitialized) search.value.lowercase() else ""
         val sounds = when (selected) {
-            Group.Recent -> SoundManager.getRecentSoundIds().mapNotNull(soundsById::get)
+            Group.Recent -> Sounds.getRecentSoundIds().mapNotNull(soundsById::get)
             else -> allSounds.filter { selected == Group.All || it.group == selected }
         }.filter { query.isEmpty() || it.searchText.contains(query) }
 
@@ -133,7 +133,7 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
         if (selected == Group.Recent) {
             if (sounds.isNotEmpty()) rows.add(Header(Group.Recent.label))
             rows.addAll(sounds)
-            recentVersion = SoundManager.recentSoundsVersion
+            recentVersion = Sounds.recentSoundsVersion
         } else sounds.groupBy(Sound::group).toSortedMap().forEach { (group, list) ->
             rows.add(Header(group.label))
             rows.addAll(list)
@@ -147,7 +147,7 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
 
     private fun setVolume(id: String, mouseX: Int, sliderX: Int) {
         val progress = ((mouseX - sliderX).toFloat() / SLIDER_W).coerceIn(0f, 1f)
-        SoundManager.setVolumePercent(id, (progress * 200).toInt())
+        Sounds.setVolumePercent(id, (progress * 200).toInt())
     }
 
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
@@ -161,7 +161,7 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
                 if (selected != group) {
                     selected = group
                     updateFilter()
-                    SoundManager.playPreview(SoundEvents.UI_BUTTON_CLICK.value())
+                    Sounds.playPreview(SoundEvents.UI_BUTTON_CLICK.value())
                 }
                 return true
             }
@@ -175,7 +175,7 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
                 val playX = viewX + viewW - PLAY_W - 8
                 val sliderX = playX - SLIDER_W - 8
                 if (mx in playX..playX + PLAY_W && my in y + 6..y + 21) {
-                    SoundManager.playPreview(row.sound)
+                    Sounds.playPreview(row.sound)
                     return true
                 }
                 if (mx in sliderX - 5..sliderX + SLIDER_W + 5) {
