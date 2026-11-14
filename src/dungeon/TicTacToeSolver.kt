@@ -4,18 +4,20 @@ import com.engineerclient.EngineerClient
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.render.drawFilledBox
 import com.odtheking.odin.utils.render.drawText
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.client.Minecraft
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.core.component.DataComponents
@@ -25,23 +27,30 @@ import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 
-object TicTacToeSolver : Module(
-    name = "Tic Tac Toe Solver",
-    category = Category.DUNGEON,
-    description = "Highlights the best button to press in Tic Tac Toe.",
-    key = null,
-) {
+/** Puzzle Solvers' Tic Tac Toe: highlights the best button to press. */
+object TicTacToeSolver {
     enum class Target(private val label: String) {
         PARTY("Party"), SELF("Self");
         override fun toString() = label
     }
 
-    private val bestColor by ColorSetting("Best Color", Color(0, 255, 0, 0.6f), true, desc = "The move to make.")
-    private val showNext by BooleanSetting("Show Next", true, desc = "Shows your next move while the room thinks.")
-    private val nextColor by ColorSetting("Next Color", Color(255, 255, 0, 0.6f), true, desc = "Used when your next move depends on the room's.").withDependency { showNext }
-    private val countdown by BooleanSetting("Countdown", false, desc = "Shows the time until the room answers.")
-    private val sendMessage by BooleanSetting("Send Message", false, desc = "Says \"Tic Tac Toe done\" once the game can't be lost.")
-    private val messageTo by SelectorSetting("Message To", Target.PARTY, desc = "Party chat or only you.").withDependency { sendMessage }
+    private val dropdown = DropdownSetting("Tic Tac Toe", desc = "Shows settings for the Tic Tac Toe puzzle solver.")
+    private val solver = BooleanSetting("Tic Tac Toe Solver", true, desc = "Highlights the best button to press.").withDependency { dropdown.value }
+    private val bestColorSetting = ColorSetting("Tic Tac Toe Best Color", Color(0, 255, 0, 0.6f), true, desc = "The move to make.").withDependency { dropdown.value && solver.value }
+    private val showNextSetting = BooleanSetting("Tic Tac Toe Show Next", true, desc = "Shows your next move while the room thinks.").withDependency { dropdown.value && solver.value }
+    private val nextColorSetting = ColorSetting("Tic Tac Toe Next Color", Color(255, 255, 0, 0.6f), true, desc = "Used when your next move depends on the room's.").withDependency { dropdown.value && solver.value && showNextSetting.value }
+    private val countdownSetting = BooleanSetting("Tic Tac Toe Countdown", false, desc = "Shows the time until the room answers.").withDependency { dropdown.value && solver.value }
+    private val sendMessageSetting = BooleanSetting("Tic Tac Toe Send Message", false, desc = "Says \"Tic Tac Toe done\" once the game can't be lost.").withDependency { dropdown.value && solver.value }
+    private val messageToSetting = SelectorSetting("Tic Tac Toe Message To", Target.PARTY, desc = "Party chat or only you.").withDependency { dropdown.value && solver.value && sendMessageSetting.value }
+
+    private val bestColor get() = bestColorSetting.value
+    private val showNext get() = showNextSetting.value
+    private val nextColor get() = nextColorSetting.value
+    private val countdown get() = countdownSetting.value
+    private val sendMessage get() = sendMessageSetting.value
+    private val messageTo get() = messageToSetting.value
+
+    private val mc: Minecraft get() = Minecraft.getInstance()
 
     private const val ROOM = "Tic Tac Toe"
     private const val EMPTY = ' '
@@ -65,19 +74,23 @@ object TicTacToeSolver : Module(
     private val chances = HashMap<String, Double>()
     private val plans = HashMap<String, Pair<Double, Int>>()
 
-    init {
+    fun install() {
+        for (s in listOf(dropdown, solver, bestColorSetting, showNextSetting, nextColorSetting, countdownSetting, sendMessageSetting, messageToSetting))
+            PuzzleSolvers.registerSetting(s)
         on<LevelEvent.Load> { reset(); sent = false }
         on<TickEvent.End> {
-            if (!DungeonUtils.inClear || DungeonUtils.currentRoomName != ROOM) { reset(); return@on }
+            if (!PuzzleSolvers.enabled || !solver.value || !DungeonUtils.inClear || DungeonUtils.currentRoomName != ROOM) { reset(); return@on }
             EngineerClient.safely("tic tac toe") { scan() }
         }
         on<TickEvent.Server> { serverTicks++ }
         on<RenderExtractEvent> {
+            if (!PuzzleSolvers.enabled || !solver.value) return@on
             if (showNext) for (pos in next) buttonBox(pos)?.let { drawFilledBox(it, if (next.size == 1) bestColor else nextColor, depth = true) }
             for (pos in best) buttonBox(pos)?.let { drawFilledBox(it, bestColor, depth = true) }
             val left = replyAt - serverTicks
             if (countdown && left > 0) above?.let { drawText("%.1f".format(left / 20.0), it, 1.5f, false) }
         }
+        EventBus.subscribe(this)
     }
 
     private fun reset() { clear(); planned = emptyMap(); lastBoard = "" }

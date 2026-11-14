@@ -113,8 +113,6 @@ object OdinInternals {
     private val probes: List<Probe> = listOf(
         // ---- puzzle solvers (all run under the PuzzleSolvers module)
         Probe("odin.solver", "QuizSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "QuizSolver", "timer", "triviaAnswers", "triviaOptions")),
-        Probe("odin.solver", "WaterSolver", PUZZLE + "PuzzleSolvers",
-            fields(PUZZLE + "WaterSolver", "patternIdentifier", "openedWaterTicks", "solutions") + f(PUZZLE + "WaterSolver", "tickCounter", ticking = true)),
         Probe("odin.solver", "BlazeSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "BlazeSolver", "blazes", "inBlazeRoom")),
         Probe("odin.solver", "BoulderSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "BoulderSolver", "currentPositions")),
         Probe("odin.solver", "IceFillSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "IceFillSolver", "currentPatterns")),
@@ -373,7 +371,6 @@ object OdinInternals {
         Rec.emit("odin.clocks", "\"splits\":${r { Reflect.field("com.odtheking.odin.utils.skyblock.SplitsManager", "tickCounter") }}" +
             ",\"terminalTimes\":${r { Reflect.field(BOSS + "TerminalTimes", "currentTick") }}" +
             ",\"witherDragons\":${r { WitherDragons.currentTick }}" +
-            ",\"waterSolver\":${r { Reflect.field(PUZZLE + "WaterSolver", "tickCounter") }}" +
             ",\"bloodCamp\":${r { Reflect.field(DUNGEON + "BloodCamp", "currentTickTime") }}")
     }
 

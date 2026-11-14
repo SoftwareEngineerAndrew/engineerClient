@@ -23,7 +23,6 @@
     "MapIconsMixin",
     "MapSizeMixin",
     "TpMazeRenderMixin",
-    "WaterSolverRenderMixin",
     "TerminalClickLimitMixin",
     "NumberSettingNoneMixin",
     "HudEditorCategoryMixin"

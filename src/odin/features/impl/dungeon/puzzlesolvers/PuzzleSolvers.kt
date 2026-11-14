@@ -28,17 +28,9 @@ import net.minecraft.world.level.block.Blocks
 
 object PuzzleSolvers : Module(
     name = "Puzzle Solvers",
-    description = "Displays solutions for Water Board, TP Maze, Ice Fill, Blaze, Creeper Beams, Three Weirdos, Quiz and Boulder dungeon puzzles.",
+    description = "Displays solutions for Water Board, TP Maze, Ice Fill, Blaze, Creeper Beams, Three Weirdos, Quiz, Boulder and Tic Tac Toe dungeon puzzles.",
     key = null
 ) {
-    private val waterDropDown by DropdownSetting("Water Board", desc = "Shows settings for the water board puzzle solver.")
-    private val waterSolver by BooleanSetting("Water Board Solver", true, desc = "Shows you the solution to the water puzzle.").withDependency { waterDropDown }
-    private val optimizedSolutions by BooleanSetting("Optimized Solutions", false, desc = "Use optimized solutions for the water puzzle.").withDependency { waterSolver && waterDropDown }
-    private val showTracer by BooleanSetting("Water Tracer", true, desc = "Shows a tracer to the next lever.").withDependency { waterSolver && waterDropDown }
-    private val tracerColorFirst by ColorSetting("Tracer Color First", Colors.MINECRAFT_GREEN, true, desc = "Color for the first tracer.").withDependency { showTracer && waterDropDown }
-    private val tracerColorSecond by ColorSetting("Tracer Color Second", Colors.MINECRAFT_GOLD, true, desc = "Color for the second tracer.").withDependency { showTracer && waterDropDown }
-    private val waterReset by ActionSetting("Reset Water", desc = "Resets the solver.") { WaterSolver.reset() }.withDependency { waterSolver && waterDropDown }
-
     private val mazeDropDown by DropdownSetting("TP Maze", desc = "Shows settings for the TP maze puzzle solver.")
     private val tpMaze by BooleanSetting("TP Maze Solver", true, desc = "Shows you the solution for the TP maze puzzle.").withDependency { mazeDropDown }
     private val mazeColorOne by ColorSetting("Color for one", Colors.MINECRAFT_GREEN.withAlpha(.5f), true, desc = "Color for when there is a single solution.").withDependency { tpMaze && mazeDropDown }
@@ -110,10 +102,6 @@ object PuzzleSolvers : Module(
     init {
         on<TickEvent.Server> {
             if (!DungeonUtils.inClear) return@on
-            if (waterSolver) {
-                WaterSolver.scan(optimizedSolutions)
-                WaterSolver.onServerTick()
-            }
             QuizSolver.onServerTick()
         }
 
@@ -123,7 +111,6 @@ object PuzzleSolvers : Module(
             WeirdosSolver.reset()
             BoulderSolver.reset()
             TPMazeSolver.reset()
-            WaterSolver.reset()
             BlazeSolver.reset()
             BeamsSolver.reset()
             QuizSolver.reset()
@@ -193,7 +180,6 @@ object PuzzleSolvers : Module(
 
         on<UseItemOnPostEvent> {
             if (!DungeonUtils.inClear || this.hand == InteractionHand.OFF_HAND) return@on
-            if (waterSolver) WaterSolver.waterInteract(this)
             if (boulderSolver) BoulderSolver.playerInteract(this)
         }
 
@@ -204,7 +190,6 @@ object PuzzleSolvers : Module(
             if (boulderSolver) BoulderSolver.onRenderWorld(this, showAllBoulderClicks, boulderStyle, boulderColor)
             if (blazeSolver)   BlazeSolver.onRenderWorld(this, blazeLineNext, blazeLineAmount, blazeStyle, blazeFirstColor, blazeSecondColor, blazeThirdColor, blazeAllColor, blazeLineWidth)
             if (beamsSolver)   BeamsSolver.onRenderWorld(this, beamStyle, beamsTracer, beamsAlpha)
-            if (waterSolver)   WaterSolver.onRenderWorld(this, showTracer, tracerColorFirst, tracerColorSecond)
             if (quizSolver)    QuizSolver.onRenderWorld(this, quizColor, quizDepth)
             if (tpMaze)        TPMazeSolver.onRenderWorld(this, mazeColorOne, mazeColorMultiple, mazeColorVisited, mazeShowTracer, mazeTracerColor)
         }

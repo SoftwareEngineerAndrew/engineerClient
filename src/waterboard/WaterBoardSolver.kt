@@ -51,9 +51,8 @@ import kotlin.random.Random
  * the server, tick for tick ([Tracker], on [WaterSim], Hypixel's 1.8 water); a planner ([Planner]) searches lever flips on
  * that simulation for the soonest all-gates-open, spaced so a person can do them, in the background, again whenever what
  * happened isn't what the plan said. A solve counts once every gate stays open [Planner.HOLD] ticks (the chest needs them
- * open a while). Drawn as Odin's own Water Board solver draws (each lever's coming flips over it, "CLICK ME!" when due, its
- * tracer to the next lever and on to the one after, with its own tracer settings), instead of it
- * (WaterSolverRenderMixin) once this has a plan or a lever has been flipped.
+ * open a while). Each lever's coming flips are drawn over it, "CLICK ME!" when due, with a tracer to the next lever and on
+ * to the one after.
  *
  * The plan's clock starts at the first lever press, not when you walk in: until a lever moves nothing on a dry board can
  * change (the simulation runs the same whenever it starts), so a plan made before then is only each flip's offset from the
@@ -61,15 +60,14 @@ import kotlin.random.Random
  * on the tick that press comes back on; from there it counts down, and re-plans when something goes differently.
  */
 object WaterBoardSolver {
-    private val dropdown = DropdownSetting("Dynamic Water Board", desc = "Settings for the dynamic Water Board solver. Added by engineerClient.")
-    // a new name so the off default reaches anyone who has the old one saved
-    private val on = BooleanSetting("Dynamic Water Board Solver", false,
-        desc = "Works the lever timings out from the board as it is, and again whenever a flip goes differently (late, early, wrong, missed) or the server lags. Draws instead of Odin's Water Board solver, the same way. Added by engineerClient.").withDependency { dropdown.value }
+    private val dropdown = DropdownSetting("Water Board", desc = "Shows settings for the water board puzzle solver.")
+    private val on = BooleanSetting("Water Board Solver", true,
+        desc = "Works the lever timings out from the board, and again whenever a flip goes differently or the server lags.").withDependency { dropdown.value }
     private val lead = NumberSetting("Reaction Time", 400, 150..1000, 50, desc = "How long you need from seeing a time to clicking: nothing is planned sooner than this.", unit = "ms").withDependency { dropdown.value && on.value }
-    private val tracer = BooleanSetting("Dynamic Water Tracer", true, desc = "A line to the next lever, and on from it to the one after.").withDependency { dropdown.value && on.value }
-    private val firstColor = ColorSetting("Dynamic Next Lever Color", Colors.MINECRAFT_GREEN, true,
+    private val tracer = BooleanSetting("Water Tracer", true, desc = "A line to the next lever, and on from it to the one after.").withDependency { dropdown.value && on.value }
+    private val firstColor = ColorSetting("Tracer Color First", Colors.MINECRAFT_GREEN, true,
         desc = "The line to the next lever.").withDependency { dropdown.value && on.value && tracer.value }
-    private val secondColor = ColorSetting("Dynamic Lever After Color", Colors.MINECRAFT_GOLD, true,
+    private val secondColor = ColorSetting("Tracer Color Second", Colors.MINECRAFT_GOLD, true,
         desc = "The line from the next lever to the one after.").withDependency { dropdown.value && on.value && tracer.value }
     private val showSim = BooleanSetting("Show Simulated Water", false, desc = "Draws the water the solver thinks is on the board, and where the server disagreed lately. For checking it.").withDependency { dropdown.value && on.value }
     private val objective = SelectorSetting("Water Board Plan", Objective.SAFEST,
@@ -138,7 +136,6 @@ object WaterBoardSolver {
      * Odin's Water Board solver stays quiet while this draws: once it has a plan, and from the first flip on (Odin's table no
      * longer fits the board then, and would show its leftover flips once this has none left).
      */
-    @JvmStatic fun drawsInstead(): Boolean = active() && tracker.let { it != null && (todo.isNotEmpty() || it.arrivals.isNotEmpty()) }
 
 
     private fun active(): Boolean = on.value && PuzzleSolvers.enabled && DungeonUtils.inDungeons && Puzzle.WATER_BOARD.status != PuzzleStatus.Completed
