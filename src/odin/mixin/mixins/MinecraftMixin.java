@@ -4,7 +4,7 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.odtheking.odin.events.BlockClickEvent;
 import com.odtheking.odin.events.BlockInteractEvent;
 import com.odtheking.odin.events.EntityInteractEvent;
-import com.odtheking.odin.features.impl.boss.TerminalSolver;
+import com.engineerclient.terminals.TermSolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -47,6 +47,6 @@ public abstract class MinecraftMixin {
 
     @ModifyExpressionValue(method = "resizeGui", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/OptionInstance;get()Ljava/lang/Object;"))
     private Object modifyGuiScaleValue(Object original) {
-        return TerminalSolver.getOverridesGuiScale() ? TerminalSolver.getTermSize() : original;
+        return TermSolver.getOverridesGuiScale() ? TermSolver.getTermSize() : original;
     }
 }

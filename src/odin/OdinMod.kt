@@ -13,7 +13,6 @@ import com.odtheking.odin.utils.render.NoDepthFeatureRenderer
 import com.odtheking.odin.utils.skyblock.*
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonListener
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
 import com.odtheking.odin.utils.ui.widget.CustomGUIImpl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -62,7 +61,7 @@ object OdinMod : ClientModInitializer {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             arrayOf(
                 mainCommand, devCommand,
-                soopyCommand, termSimCommand,
+                soopyCommand,
                 dungeonWaypointsCommand, cataCommand
             ).forEach { commodore -> commodore.register(dispatcher) }
         }
@@ -70,7 +69,7 @@ object OdinMod : ClientModInitializer {
         listOf(
             this, LocationUtils, TickTasks, KuudraUtils,
             ActionBarListener, ServerUtils, EventDispatcher,
-            DungeonListener, PartyUtils, TerminalUtils,
+            DungeonListener, PartyUtils,
             DungeonUtils, SplitsManager, DungeonScan,
             IrisCompatability,
             ModuleManager, CustomGUIImpl,

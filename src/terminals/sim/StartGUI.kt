@@ -1,10 +1,10 @@
-package com.odtheking.odin.features.impl.boss.termsim
+package com.engineerclient.terminals.sim
 
-import com.odtheking.odin.features.impl.boss.TerminalSimulator
-import com.odtheking.odin.features.impl.boss.TerminalSimulator.openRandomTerminal
+import com.engineerclient.terminals.Terminals
+import com.engineerclient.terminals.TermSimulator.openRandomTerminal
 import com.odtheking.odin.utils.handlers.schedule
 import com.odtheking.odin.utils.modMessage
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
+import com.engineerclient.terminals.TerminalTypes
 import com.odtheking.odin.utils.toFixed
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
@@ -36,7 +36,7 @@ object StartGUI : TermSimGUI(
     private val randomButton = ItemStack(Items.DYE.pick(DyeColor.WHITE)).apply { set(DataComponents.CUSTOM_NAME, Component.literal("§7Random")) }
 
     fun getTermPB(type: TerminalTypes): List<Component> {
-        val pb = TerminalSimulator.termSimPBs.get(type.name) ?: return listOf(Component.literal("§7No PB set!"))
+        val pb = Terminals.termSimPBs.get(type.name) ?: return listOf(Component.literal("§7No PB set!"))
         return listOf(Component.literal("§7Personal Best: §d${pb.toFixed()}s"),)
     }
 
@@ -68,7 +68,7 @@ object StartGUI : TermSimGUI(
                     }
                     return
                 }
-                TerminalSimulator.termSimPBs.reset()
+                Terminals.termSimPBs.reset()
                 create()
                 modMessage("§aPBs reset!")
                 areYouSure = false

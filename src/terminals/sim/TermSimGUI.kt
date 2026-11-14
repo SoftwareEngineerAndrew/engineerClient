@@ -1,13 +1,13 @@
-package com.odtheking.odin.features.impl.boss.termsim
+package com.engineerclient.terminals.sim
 
 import com.odtheking.odin.OdinMod.mc
 import com.odtheking.odin.events.GuiEvent
 import com.odtheking.odin.events.ScreenCloseEvent
-import com.odtheking.odin.events.TerminalEvent
-import com.odtheking.odin.features.impl.boss.TerminalSounds
+import com.engineerclient.terminals.TerminalEvent
+import com.engineerclient.terminals.TermSounds
 import com.odtheking.odin.utils.handlers.schedule
 import com.odtheking.odin.utils.playSoundAtPlayer
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.terminalhandler.TerminalHandler
+import com.engineerclient.terminals.TerminalHandler
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
@@ -97,7 +97,7 @@ open class TermSimGUI(
     }
 
     protected fun playTermSimSound() {
-        if (!TerminalSounds.enabled || !TerminalSounds.clickSounds) playSoundAtPlayer(
+        if (!TermSounds.replacesClicks) playSoundAtPlayer(
             SoundEvents.EXPERIENCE_ORB_PICKUP,
             1f, 1f
         )

@@ -6,7 +6,6 @@ import com.odtheking.odin.events.core.Event
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
 import com.odtheking.odin.utils.skyblock.dungeon.Floor
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.terminalhandler.TerminalHandler
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
@@ -56,13 +55,6 @@ interface SecretPickupEvent : Event { // all are currently packet based but can 
     class Interact(val blockPos: BlockPos, val blockState: BlockState) : SecretPickupEvent
     class Item(val entity: ItemEntity) : SecretPickupEvent
     class Bat(val packet: ClientboundSoundPacket) : SecretPickupEvent
-}
-
-abstract class TerminalEvent(val terminal: TerminalHandler) : Event {
-    class Open(terminal: TerminalHandler) : TerminalEvent(terminal)
-    class Close(terminal: TerminalHandler) : TerminalEvent(terminal)
-    class Solve(terminal: TerminalHandler) : TerminalEvent(terminal)
-    class Click(terminal: TerminalHandler, val slotIndex: Int, val button: Int, val solution: ArrayList<Int>) : TerminalEvent(terminal)
 }
 
 interface TickEvent : Event {

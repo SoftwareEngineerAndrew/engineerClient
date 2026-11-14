@@ -15,14 +15,14 @@ import com.odtheking.odin.events.ScreenEvent
 import com.odtheking.odin.events.SecretPickupEvent
 import com.odtheking.odin.events.SecretsUpdateEvent
 import com.odtheking.odin.events.SetSlotEvent
-import com.odtheking.odin.events.TerminalEvent
+import com.engineerclient.terminals.TerminalEvent
 import com.odtheking.odin.events.UseItemOnPostEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.impl.dungeon.map.WorldScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.terminalhandler.TerminalHandler
+import com.engineerclient.terminals.TerminalHandler
 import net.minecraft.core.registries.BuiltInRegistries
 
 /**

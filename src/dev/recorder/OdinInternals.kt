@@ -135,8 +135,8 @@ object OdinInternals {
         )),
         Probe("odin.priv", "TickTimers", "com.engineerclient.dungeon.TickTimers", fields("com.engineerclient.dungeon.TickTimers", "phase", "maxorTicks", "stormTicks",
             "goldorTicks", "termStartLeft", "lightningAt", "gigaAt", "necronDpsAt", "fireFreezeTime")),
-        Probe("odin.priv", "TerminalTimes", BOSS + "TerminalTimes", fields(BOSS + "TerminalTimes", "completed", "times", "gateBlown", "sectionTimer", "phaseTimer") +
-            f(BOSS + "TerminalTimes", "currentTick", ticking = true)),
+        Probe("odin.priv", "TerminalTimes", "com.engineerclient.terminals.TermTimes", fields("com.engineerclient.terminals.TermTimes", "completed", "times", "gateBlown", "sectionTimer", "phaseTimer") +
+            f("com.engineerclient.terminals.TermTimes", "currentTick", ticking = true)),
         Probe("odin.priv", "Relics", "com.engineerclient.dungeon.Relics", fields("com.engineerclient.dungeon.Relics", "currentRelic", "relicPlaceTick", "p5Ticks")),
         Probe("odin.priv", "LividSolver", BOSS + "LividSolver", listOf(
             M("currentLivid") { (Reflect.field(BOSS + "LividSolver", "currentLivid") as? Enum<*>)?.name },
@@ -159,8 +159,8 @@ object OdinInternals {
         // ---- P3 device helpers
         Probe("odin.p3", "ArrowAlign", BOSS + "ArrowAlign", fields(BOSS + "ArrowAlign", "recentClickTimestamps", "clicksRemaining", "currentFrameRotations", "targetSolution")),
         Probe("odin.p3", "ArrowsDevice", BOSS + "ArrowsDevice", fields(BOSS + "ArrowsDevice", "markedPositions", "targetPosition", "isDeviceComplete", "optimalAimPositions")),
-        // Odin 0.3.6+ keeps this state in TerminalsStatus (which has no inactiveList); the line keeps the "InactiveWaypoints" name.
-        Probe("odin.p3", "InactiveWaypoints", BOSS + "TerminalsStatus", fields(BOSS + "TerminalsStatus", "inactiveList", "section", "terminals", "levers", "device",
+        // Terminals' Status keeps this state; the line keeps the "InactiveWaypoints" name.
+        Probe("odin.p3", "InactiveWaypoints", "com.engineerclient.terminals.TermStatus", fields("com.engineerclient.terminals.TermStatus", "inactive", "section", "terminals", "levers", "device",
             "gate", "isComplete", "firstInSection", "lastCompleted")),
         Probe("odin.p3", "SimonSays", BOSS + "SimonSays", fields(BOSS + "SimonSays", "clickInOrder", "clickNeeded", "firstPhase", "startClickCounter", "lastLanternTick")),
         Probe("odin.p3", "BreakerDisplay", "com.engineerclient.dungeon.Dungeonbreaker", fields("com.engineerclient.dungeon.Dungeonbreaker", "charges", "maxCharges")),
@@ -369,7 +369,7 @@ object OdinInternals {
     private fun clocks() {
         fun r(read: () -> Any?): String = try { value(read()) } catch (t: Throwable) { "null" }
         Rec.emit("odin.clocks", "\"splits\":${r { Reflect.field("com.odtheking.odin.utils.skyblock.SplitsManager", "tickCounter") }}" +
-            ",\"terminalTimes\":${r { Reflect.field(BOSS + "TerminalTimes", "currentTick") }}" +
+            ",\"terminalTimes\":${r { Reflect.field("com.engineerclient.terminals.TermTimes", "currentTick") }}" +
             ",\"witherDragons\":${r { WitherDragons.currentTick }}" +
             ",\"bloodCamp\":${r { Reflect.field(DUNGEON + "BloodCamp", "currentTickTime") }}")
     }

@@ -70,8 +70,7 @@ object ModuleManager {
             DungeonMap,
 
             // boss
-            TerminalSimulator, TerminalSolver, TerminalTimes, TerminalSounds, ArrowAlign,
-            TerminalsStatus, MelodyMessage, WitherDragons, SimonSays, ArrowsDevice, TerminalTitles,
+            ArrowAlign, MelodyMessage, WitherDragons, SimonSays, ArrowsDevice,
 
             // render
             ClickGUIModule, Camera, Etherwarp, PlayerSize,

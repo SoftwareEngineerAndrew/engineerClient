@@ -9,7 +9,6 @@
     "HudElementMixin",
     "InvincibilityHudMixin",
     "InvincibilityPhoenixMixin",
-    "OdinTermTimesMixin",
     "HudOnScreenMixin",
     "PersonalBestSimMixin",
     "SecretItemChimeMixin",
@@ -22,7 +21,6 @@
     "MapIconsMixin",
     "MapSizeMixin",
     "TpMazeRenderMixin",
-    "TerminalClickLimitMixin",
     "NumberSettingNoneMixin",
     "HudEditorCategoryMixin"
   ],

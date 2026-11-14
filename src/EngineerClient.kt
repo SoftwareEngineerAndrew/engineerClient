@@ -75,11 +75,10 @@ object EngineerClient : ClientModInitializer {
     /** Every module. */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PosePov, com.engineerclient.party.TermProgress, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
+            PosePov, com.engineerclient.terminals.Terminals, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
             com.engineerclient.clearbreakdown.ClearBreakdown,
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.LcmMeleeWarning, com.engineerclient.misc.CommandAliases,
             com.engineerclient.misc.BlockInstaclear,
-            com.engineerclient.practice.TerminalHitboxes,
             com.engineerclient.misc.ItemHighlight, com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,
             com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.LagWarning, com.engineerclient.dungeon.ExplosiveShot,
@@ -134,7 +133,6 @@ object EngineerClient : ClientModInitializer {
         safely("splits look") { OdinSplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }
-        safely("terminal hitboxes settings") { com.engineerclient.practice.TerminalHitboxes.adoptTermInfoSettings() }
         // Room Prediction and LCM Style (with LCM Colors): settings on Odin's own Dungeon Map, and Map Info's LCM Style
         // (from Ascent Client, same names, so saved values carry over); Odin's configs are read again so they apply
         // (reading never writes the file).
@@ -149,14 +147,12 @@ object EngineerClient : ClientModInitializer {
         safely("water board") { com.engineerclient.waterboard.WaterBoardSolver.install() }
         safely("tic tac toe") { com.engineerclient.dungeon.TicTacToeSolver.install() }
         safely("terminal huds") { com.engineerclient.dungeon.TerminalHuds.install() }
+        safely("terminals") { com.engineerclient.terminals.Terminals.install() }
         safely("item worth") { com.engineerclient.skyblock.ItemWorth.install() }
         safely("pov in leap menu") { com.engineerclient.pov.PovInLeapMenu.install() }
         safely("creeper beams ding") { com.engineerclient.dungeon.CreeperBeamsDing.install() }
         safely("puzzle overlay") { com.engineerclient.misc.PuzzleOverlay.install() }
         safely("map configs") { ModuleManager.loadConfigurations() }
-        safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
-        safely("click limit") { com.engineerclient.misc.OdinClickLimit.install() }
-        safely("odin term times") { com.engineerclient.practice.OdinTermTimes.install() }
         runCatching { com.engineerclient.misc.LaunchStats.install() }
         runCatching { com.engineerclient.misc.UpdateCheck.install() }
         safely("leap order") { com.engineerclient.misc.LeapOrder.install() }
@@ -271,8 +267,16 @@ object EngineerClient : ClientModInitializer {
                 .then(literal("online").executes { com.engineerclient.adr.OnlineLink.openPage(); 1 }))
             // /edt: #EndDungeonsToxicity in party chat.
             dispatcher.register(literal("edt").executes { mc.schedule { com.odtheking.odin.utils.sendCommand("pc #EndDungeonsToxicity") }; 1 })
-            // /termsim inf: next to Odin's /termsim (Brigadier merges the trees; the literal wins over its arguments).
-            dispatcher.register(literal("termsim").then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 }))
+            // /termsim [ping], /termsim <terminal> [ping], /termsim inf.
+            fun sim(open: (Long) -> Unit) = argument("ping", com.mojang.brigadier.arguments.LongArgumentType.longArg(0, 2000))
+                .executes { ctx -> val p = com.mojang.brigadier.arguments.LongArgumentType.getLong(ctx, "ping"); mc.schedule { open(p) }; 1 }
+            var termsim = literal("termsim").executes { mc.schedule { com.engineerclient.terminals.sim.StartGUI.open(com.engineerclient.terminals.Terminals.simPing.toLong()) }; 1 }
+                .then(sim { com.engineerclient.terminals.sim.StartGUI.open(it) })
+                .then(literal("inf").executes { mc.schedule { com.engineerclient.practice.InfNumbersSim.open(0L) }; 1 })
+            for (type in com.engineerclient.terminals.TerminalTypes.entries) termsim = termsim.then(literal(type.name.lowercase())
+                .executes { mc.schedule { type.simulator().open(com.engineerclient.terminals.Terminals.simPing.toLong()) }; 1 }
+                .then(sim { type.simulator().open(it) }))
+            dispatcher.register(termsim)
             // /adm on its own: Odin's settings menu, as its /od opens it; /adm help lists the rest.
             // Same tree under every alias (Brigadier literals are case-sensitive). Built fresh per
             // name — a bare redirect would not run the root executes on the alias itself.

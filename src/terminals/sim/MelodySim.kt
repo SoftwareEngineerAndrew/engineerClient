@@ -1,7 +1,7 @@
-package com.odtheking.odin.features.impl.boss.termsim
+package com.engineerclient.terminals.sim
 
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
+import com.engineerclient.terminals.TerminalTypes
+import com.engineerclient.terminals.TerminalUtils
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.inventory.Slot

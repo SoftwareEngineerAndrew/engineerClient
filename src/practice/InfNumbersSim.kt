@@ -1,8 +1,8 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
+import com.engineerclient.terminals.sim.TermSimGUI
+import com.engineerclient.terminals.TerminalTypes
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.inventory.Slot
@@ -11,19 +11,19 @@ import net.minecraft.world.item.Items
 import java.util.Locale
 
 /**
- * /termsim inf: a numbers terminal that never ends and has no numbers. Odin's solver shows the
+ * /termsim inf: a numbers terminal that never ends and has no numbers. The solver shows the
  * next four cells (its four order colours, no text). The order comes in bags, like Tetris: each bag
  * is all 10 cells shuffled, so every cell comes up once before any comes up again; the next bag
  * starts with [FRESH] cells that aren't highlighted when it's drawn, so the path never doubles back. Escape to stop: chat gets the
  * average time between clicks, and what a numbers would take at that pace.
  *
- * It's titled as a numbers terminal so Odin's solver takes it; the order comes from [queue]
- * (see NumbersHandlerMixin), not from stack sizes.
+ * It's titled as a numbers terminal so the solver takes it; the order comes from [queue]
+ * (NumbersHandler.orderOverride), not from stack sizes.
  */
 object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.NUMBERS.windowSize) {
     /** The 10 cells: rows 1-2, columns 2-6, as in a numbers since the update cut its sides. */
     private val CELLS = (1..2).flatMap { r -> (2..6).map { c -> r * 9 + c } }
-    /** How many cells are lit: Odin colours the next 4. */
+    /** How many cells are lit: the solver colours the next 4. */
     private const val SHOWN = 4
     private const val FRESH = 6
 
@@ -37,7 +37,11 @@ object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.
     private var firstMs = 0L
     private val gaps = ArrayList<Long>()
 
-    /** This simulator is on screen (Odin's numbers solver orders it by [queue], no numbers). */
+    init {
+        com.engineerclient.terminals.NumbersHandler.orderOverride = { if (active()) queue else null }
+    }
+
+    /** This simulator is on screen (the numbers solver orders it by [queue], no numbers). */
     @JvmStatic
     fun active(): Boolean = EngineerClient.mc.gui.screen() === this
 

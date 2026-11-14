@@ -13,11 +13,11 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
+import com.engineerclient.terminals.sim.TermSimGUI
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
+import com.engineerclient.terminals.TerminalTypes
+import com.engineerclient.terminals.TerminalUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.minecraft.client.gui.screens.ConnectScreen

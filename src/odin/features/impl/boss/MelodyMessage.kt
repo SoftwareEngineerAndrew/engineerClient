@@ -6,10 +6,10 @@ import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.SetSlotEvent
-import com.odtheking.odin.events.TerminalEvent
+import com.engineerclient.terminals.TerminalEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.impl.boss.termsim.TermSimGUI
+import com.engineerclient.terminals.sim.TermSimGUI
 import com.odtheking.odin.features.impl.render.ClickGUIModule
 import com.odtheking.odin.utils.equalsOneOf
 import com.odtheking.odin.utils.network.WebUtils.gson
@@ -21,8 +21,8 @@ import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
+import com.engineerclient.terminals.TerminalTypes
+import com.engineerclient.terminals.TerminalUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.world.item.DyeColor
 import net.minecraft.world.item.Items

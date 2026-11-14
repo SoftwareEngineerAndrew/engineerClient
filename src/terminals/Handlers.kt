@@ -1,0 +1,189 @@
+package com.engineerclient.terminals
+
+import com.engineerclient.misc.RandomStuff
+import com.odtheking.odin.utils.hasGlint
+import net.minecraft.core.component.DataComponents
+import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.world.item.BlockItem
+import net.minecraft.world.item.DyeColor
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
+import net.minecraft.world.level.block.StainedGlassPaneBlock
+import kotlin.math.abs
+
+private val RED_PANE = Items.STAINED_GLASS_PANE.pick(DyeColor.RED)
+private val LIME_PANE = Items.STAINED_GLASS_PANE.pick(DyeColor.LIME)
+
+class PanesHandler : TerminalHandler(TerminalTypes.PANES) {
+    override fun key(item: ItemStack) = when {
+        item.`is`(RED_PANE) -> 1
+        item.`is`(LIME_PANE) -> 0
+        else -> NONE
+    }
+    override fun next(key: Int, button: Int) = when (key) { 1 -> 0; 0 -> 1; else -> key }
+    override fun canClickShown(slot: Int, button: Int) = shown[slot] == 1
+    override fun buildSolution(out: ArrayList<Int>) { for (i in 0 until area) if (shown[i] == 1) out += i }
+    override fun look(slot: Int) = if (shown.getOrNull(slot) == 1) Look(PANE) else null
+}
+
+class NumbersHandler : TerminalHandler(TerminalTypes.NUMBERS) {
+    private val order = ArrayList<Int>()
+
+    override fun key(item: ItemStack) = when {
+        item.`is`(RED_PANE) -> item.count
+        item.`is`(LIME_PANE) -> 0
+        else -> NONE
+    }
+    override fun next(key: Int, button: Int) = if (key > 0) 0 else key
+    override fun canClickShown(slot: Int, button: Int) = order.firstOrNull() == slot
+
+    override fun buildSolution(out: ArrayList<Int>) {
+        order.clear()
+        val forced = orderOverride?.invoke()
+        if (forced != null) order += forced.filter { (shown.getOrNull(it) ?: 0) > 0 }
+        else (0 until area).filter { shown[it] > 0 }.sortedBy { shown[it] }.let(order::addAll)
+        out += order
+    }
+
+    override fun look(slot: Int): Look? {
+        val at = order.indexOf(slot)
+        if (at < 0) return null
+        val text = if (!Terminals.numberText || orderOverride?.invoke() != null || (RandomStuff.hidesTerminalNumbers() && !RandomStuff.showsTerminalNumber(slot, order))) null
+            else shown[slot].toString()
+        return Look(if (at < 4) NUMBER_1 + at else NONE, text)
+    }
+
+    companion object {
+        /** /termsim inf: its own endless order instead of the panes'. */
+        @JvmStatic var orderOverride: (() -> List<Int>?)? = null
+    }
+}
+
+class RubixHandler(private val leftOnly: () -> Boolean = { Terminals.rubixMode == Terminals.RubixMode.LEFT_CLICKS_ONLY }) : TerminalHandler(TerminalTypes.RUBIX) {
+    private var target = -1
+
+    override fun key(item: ItemStack): Int {
+        val color = ((item.item as? BlockItem)?.block as? StainedGlassPaneBlock)?.color ?: return NONE
+        return ORDER.indexOf(color)
+    }
+
+    override fun next(key: Int, button: Int) = if (key < 0) key else (key + (if (button == RIGHT) -1 else 1) + ORDER.size) % ORDER.size
+
+    private fun clicks(from: Int, to: Int): Int {
+        val forward = (to - from + ORDER.size) % ORDER.size
+        return if (forward > 2 && !leftOnly()) forward - ORDER.size else forward
+    }
+
+    /** Fewest clicks; then fewest right clicks; then fewest panes touched. */
+    override fun onReady() {
+        val panes = (0 until area).filter { keys[it] >= 0 }
+        if (panes.isEmpty()) return
+        target = ORDER.indices.minBy { t ->
+            val c = panes.map { clicks(keys[it], t) }
+            c.sumOf { abs(it) } * 10_000 + c.filter { it < 0 }.sumOf { -it } * 100 + c.count { it != 0 }
+        }
+    }
+
+    private fun need(slot: Int) = if (target < 0 || shown[slot] < 0) 0 else clicks(shown[slot], target)
+
+    override fun canClickShown(slot: Int, button: Int): Boolean {
+        val n = need(slot)
+        return if (button == RIGHT) n < 0 else n > 0
+    }
+
+    override fun buildSolution(out: ArrayList<Int>) {
+        for (i in 0 until area) repeat(abs(need(i))) { out += i }
+    }
+
+    override fun look(slot: Int): Look? {
+        val n = need(slot)
+        if (n == 0) return null
+        return Look(when (n) { 1 -> RUBIX_1; 2 -> RUBIX_2; -1 -> RUBIX_M1; -2 -> RUBIX_M2; else -> if (n > 0) RUBIX_2 else RUBIX_M2 }, n.toString())
+    }
+
+    private companion object {
+        val ORDER = listOf(DyeColor.RED, DyeColor.ORANGE, DyeColor.YELLOW, DyeColor.GREEN, DyeColor.BLUE)
+    }
+}
+
+class SelectHandler(color: DyeColor) : TerminalHandler(TerminalTypes.SELECT) {
+    private val prefixes = when (color) {
+        DyeColor.BLACK -> setOf("black", "ink")
+        DyeColor.BLUE -> setOf("blue", "lapis")
+        DyeColor.BROWN -> setOf("brown", "cocoa")
+        DyeColor.WHITE -> setOf("white", "bone", "wool")
+        DyeColor.GREEN -> setOf("green", "cactus")
+        DyeColor.RED -> setOf("red", "rose")
+        DyeColor.YELLOW -> setOf("yellow", "dandelion")
+        DyeColor.LIGHT_GRAY -> setOf("silver", "light gray")
+        else -> setOf(color.name.lowercase().replace('_', ' '))
+    }
+
+    override val anyUpdateAnswers = true
+    override fun key(item: ItemStack): Int {
+        if (item.isEmpty || item.`is`(BLACK_PANE) || item.hasGlint()) return 0
+        val name = item.hoverName.string.lowercase()
+        return if (prefixes.any(name::startsWith)) 1 else 0
+    }
+    override fun next(key: Int, button: Int) = 0
+    override fun canClickShown(slot: Int, button: Int) = shown[slot] == 1
+    override fun buildSolution(out: ArrayList<Int>) { for (i in 0 until area) if (shown[i] == 1) out += i }
+    override fun look(slot: Int) = if (shown.getOrNull(slot) == 1) Look(SELECT) else null
+}
+
+class StartsWithHandler(private val letter: String) : TerminalHandler(TerminalTypes.STARTS_WITH) {
+    override val anyUpdateAnswers = true
+    override fun key(item: ItemStack): Int {
+        if (item.isEmpty || !item.hoverName.string.startsWith(letter, true)) return 0
+        return if (!item.hasGlint() || item.item in GLINT_ANYWAY) 1 else 0
+    }
+    override fun next(key: Int, button: Int) = 0
+    override fun canClickShown(slot: Int, button: Int) = shown[slot] == 1
+    override fun buildSolution(out: ArrayList<Int>) { for (i in 0 until area) if (shown[i] == 1) out += i }
+    override fun look(slot: Int) = if (shown.getOrNull(slot) == 1) Look(STARTS_WITH) else null
+
+    private companion object {
+        val GLINT_ANYWAY by lazy { BuiltInRegistries.ITEM.filter { it.components().has(DataComponents.ENCHANTMENT_GLINT_OVERRIDE) }.toSet() + Items.GOLDEN_APPLE }
+    }
+}
+
+/** Melody: lanes in rows 1-3 (columns 1-5), a button at column 7 of each, the column to hit marked in rows 0 and 4. */
+class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
+    private var column = -1
+    private var pointer = -1
+    private var button = -1
+
+    override fun key(item: ItemStack) = 0
+    override fun canClickShown(slot: Int, button: Int) = slot == activeButton()
+
+    private fun activeButton() = if (button >= 0) button else -1
+
+    override fun buildSolution(out: ArrayList<Int>) {
+        column = (0 until 9).firstOrNull { items[it].`is`(MAGENTA_PANE) } ?: -1
+        pointer = (9 until 36).lastOrNull { items[it].`is`(LIME_PANE) } ?: -1
+        button = BUTTONS.firstOrNull { items[it].`is`(LIME_CLAY) } ?: -1
+        if (pointer >= 0) out += pointer
+        if (column >= 0) { out += column; out += column + 36 }
+        if (aligned()) out += button
+    }
+
+    private fun aligned() = pointer >= 0 && column >= 0 && button >= 0 && pointer % 9 == column % 9
+
+    override fun look(slot: Int): Look? {
+        val row = slot / 9
+        val col = slot % 9
+        return when {
+            (row == 0 || row == 4) && col == column -> Look(MELODY_COLUMN)
+            slot == pointer -> Look(MELODY_POINTER)
+            slot == button -> Look(if (aligned()) MELODY_POINTER else MELODY_LANE)
+            row in 1..3 && col in 1..5 -> Look(if (column >= 0 && col == column) MELODY_COLUMN else MELODY_LANE)
+            else -> null
+        }
+    }
+
+    private companion object {
+        val BUTTONS = listOf(16, 25, 34)
+        val MAGENTA_PANE = Items.STAINED_GLASS_PANE.pick(DyeColor.MAGENTA)
+        val LIME_CLAY = Items.DYED_TERRACOTTA.pick(DyeColor.LIME)
+    }
+}

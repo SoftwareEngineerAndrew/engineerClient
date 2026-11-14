@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.OdinClickLimit;
+import com.engineerclient.terminals.ClickLimit;
 import com.engineerclient.practice.TermInfo;
 import io.netty.channel.ChannelHandlerContext;
 import net.minecraft.network.Connection;
@@ -28,6 +28,6 @@ public class TerminalTapMixin {
     )
     private void ec$terminalTap(ChannelHandlerContext ctx, Packet<?> packet, CallbackInfo ci) {
         TermInfo.tap(packet);
-        OdinClickLimit.tap(packet);
+        ClickLimit.tap(packet);
     }
 }

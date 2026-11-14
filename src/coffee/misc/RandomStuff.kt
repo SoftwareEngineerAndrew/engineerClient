@@ -8,9 +8,9 @@ import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.features.impl.boss.TerminalSounds
+import com.engineerclient.terminals.TermSounds
 import com.odtheking.odin.utils.playSoundAtPlayer
-import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
+import com.engineerclient.terminals.TerminalUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
@@ -154,8 +154,8 @@ object RandomStuff : Module(
             if (overlay || !muteDing || !keepGateDing || DungeonUtils.getF7Phase() != M7Phases.P3) return@onReceive
             if (content.string.replace(CODES, "").trim() !in CompletionDing.KEPT) return@onReceive
             val replay = ding.keptMessage(System.currentTimeMillis()) ?: return@onReceive
-            // Odin's Terminal Sounds already plays its own for these while you're in a terminal.
-            if (TerminalSounds.enabled && TerminalSounds.clickSounds && TerminalUtils.currentTerm != null) return@onReceive
+            // Terminals' Sounds already plays its own for these while you're in a terminal.
+            if (TermSounds.replacesClicks && TerminalUtils.currentTerm != null) return@onReceive
             playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), replay.volume, replay.pitch)
         }
         // Party chat ping in boss (see PartyPing): the ping comes just before its line.

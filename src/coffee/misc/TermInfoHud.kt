@@ -7,8 +7,8 @@ import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.impl.boss.TerminalTitles
-import com.odtheking.odin.features.impl.boss.TerminalsStatus
+import com.engineerclient.terminals.TermTitles
+import com.engineerclient.terminals.Terminals
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket
 import net.minecraft.world.phys.Vec3
@@ -60,13 +60,13 @@ object TermInfoHud : Module(
     }
 
     /**
-     * Above Odin's Terminal Titles (priority 0, which runs even on a cancelled packet and would show its own copy):
+     * Above Terminals' Titles (priority 0, which runs even on a cancelled packet and would show its own copy):
      * with it on, whatever it put up is cleared again once its own game-thread call has run.
      */
     private fun hide(text: String, cancel: () -> Unit) {
         if (!hidesTitle(text)) return
         cancel()
-        if (TerminalTitles.enabled) com.engineerclient.EngineerClient.mc.let { mc -> mc.execute { mc.execute { mc.gui.hud.clearTitles() } } }
+        if (TermTitles.on) com.engineerclient.EngineerClient.mc.let { mc -> mc.execute { mc.execute { mc.gui.hud.clearTitles() } } }
     }
 
     init {
@@ -92,14 +92,14 @@ object TermInfoHud : Module(
             .firstOrNull { it.asJsonObject.get("name")?.asString == "Terminals Status" }?.asJsonObject else null
         val from = ts?.getAsJsonObject("settings")
         if (from?.get("Look")?.asString == "ADM") {
-            val odinHud = (TerminalsStatus.settings["Term Info"] as? HUDSetting)?.value
+            val odinHud = (Terminals.settings["Term Info"] as? HUDSetting)?.value
             if (odinHud != null) {
                 hud.x = odinHud.x; hud.y = odinHud.y; hud.scale = odinHud.scale
                 hud.enabled = odinHud.enabled
                 odinHud.enabled = false
             }
             simple = from.get("Simple Mode")?.asBoolean ?: false
-            if (TerminalsStatus.enabled && !enabled) toggle()
+            if (Terminals.statusOn && !enabled) toggle()
         }
         com.odtheking.odin.features.ModuleManager.saveConfigurations()
     }

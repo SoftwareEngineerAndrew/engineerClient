@@ -1,13 +1,10 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Color
+import com.engineerclient.terminals.Terminals
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.utils.Color.Companion.withAlpha
 import com.odtheking.odin.utils.render.drawFilledBox
 import com.odtheking.odin.utils.render.drawWireFrameBox
@@ -29,25 +26,8 @@ import net.minecraft.world.entity.player.Player
  *
  * The live section is [TermInfo]'s count (chat read off the wire, so blade-addons' Terminal Timestamps can't hide it),
  * backed by the world: a terminal is only ever done in the live section, and the section doors open as sections end.
- * Was part of Term Info; its settings came over once ([adoptTermInfoSettings]).
  */
-object TerminalHitboxes : Module(
-    name = "Terminal Hitboxes",
-    key = null,
-    category = Category.custom("Engineer Client", 860, 10),
-    description = "Outlines each P3 terminal's clickable box (both its stands) while terminals run, in F7/M7 and the P3 Sim: by whether it's this section's, and whether you're aiming at it, it's in your reach or it's out of it. Done ones aren't drawn.",
-    toggled = true,
-) {
-    private val aimColor by ColorSetting("Section Aiming", Color(0, 255, 0, 1f), true, desc = "This section's, your crosshair on it: a click opens it.")
-    private val readyColor by ColorSetting("Section In Range", Color(0, 140, 0, 1f), true, desc = "This section's and in your reach (part of the box under 3 blocks from your eyes with nothing in front of it), crosshair elsewhere.")
-    private val farColor by ColorSetting("Section Out Of Range", Color(255, 255, 0, 1f), true, desc = "This section's but out of your reach: a click there never gets sent.")
-    private val idleAimColor by ColorSetting("Other Section Aiming", Color(255, 0, 0, 1f), true, desc = "Another section's, your crosshair on it: a click gets \"This Terminal doesn't seem to be responsive at the moment.\".")
-    private val idleNearColor by ColorSetting("Other Section In Range", Color(140, 0, 0, 1f), true, desc = "Another section's, in your reach, crosshair elsewhere.")
-    private val idleColor by ColorSetting("Other Section Out Of Range", Color(255, 128, 0, 1f), true, desc = "Another section's, out of your reach.")
-    private val fill by BooleanSetting("Terminal Fill", false, desc = "Fills the boxes too, faintly.")
-    private val walls by BooleanSetting("Terminals Through Walls", true, desc = "Drawn over blocks in the way.")
-    private var adopted by BooleanSetting("Adopted Term Info Settings", false, desc = "").hide()
-
+object TerminalHitboxes {
     /** A block in the bottom row of each section door's barrier wall: S1→S2, S2→S3, S3→S4. */
     private val DOOR_PROBES = listOf(BlockPos(100, 115, 122), BlockPos(18, 115, 132), BlockPos(8, 115, 50))
 
@@ -146,10 +126,10 @@ object TerminalHitboxes : Module(
             // Aiming: the game's own pick (what a click goes to) is one of its stands.
             val aimed = aimedAt == i
             val near = aimed || inReach(level, player, eye, box, reach)
-            val color = if (t.section == live) { if (aimed) aimColor else if (near) readyColor else farColor }
-                else { if (aimed) idleAimColor else if (near) idleNearColor else idleColor }
-            if (fill) drawFilledBox(box, color.withAlpha(color.alphaFloat * 0.2f), depth = !walls)
-            drawWireFrameBox(box, color, depth = !walls)
+            val color = if (t.section == live) { if (aimed) Terminals.aimColor else if (near) Terminals.readyColor else Terminals.farColor }
+                else { if (aimed) Terminals.idleAimColor else if (near) Terminals.idleNearColor else Terminals.idleColor }
+            if (Terminals.hitboxFill) drawFilledBox(box, color.withAlpha(color.alphaFloat * 0.2f), depth = !Terminals.hitboxWalls)
+            drawWireFrameBox(box, color, depth = !Terminals.hitboxWalls)
         }
     }
 
@@ -177,36 +157,8 @@ object TerminalHitboxes : Module(
         return false
     }
 
-    /**
-     * Once: these settings were Term Info's (Engineer Client) until Term Info became Coffee Client's HUD. Its saved
-     * values (in engineerclient.json, still there until Odin next saves it) are taken over: the colours, fill, walls,
-     * and its Terminal Hitboxes toggle as this module's on/off.
-     */
-    fun adoptTermInfoSettings() {
-        if (adopted) return
-        adopted = true
-        val file = mc.gameDirectory.toPath().resolve("config/odin/addons/engineerclient.json")
-        val old = if (java.nio.file.Files.exists(file)) com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(file)).asJsonArray
-            .firstOrNull { it.asJsonObject.get("name")?.asString == "Term Info" }?.asJsonObject?.getAsJsonObject("settings") else null
-        if (old != null) {
-            for ((name, element) in old.entrySet()) {
-                if (!element.isJsonPrimitive) continue
-                runCatching {
-                    when (val setting = settings[name]) {
-                        is ColorSetting -> setting.value = Color(element.asString.removePrefix("#"))
-                        is BooleanSetting -> if (name != "Adopted Term Info Settings") setting.value = element.asBoolean
-                        else -> {}
-                    }
-                }
-            }
-            if (old.get("Terminal Hitboxes")?.asBoolean == false && enabled) toggle()
-        }
-        // Not saved here: client init is still adding settings to Odin's modules, and a save now would drop the saved
-        // values of the ones still to come. Odin's next save keeps these (until then this simply runs again).
-    }
-
-    init {
-        on<RenderExtractEvent> { com.engineerclient.EngineerClient.safely("terminal hitboxes") { drawTerminals() } }
+    fun install() {
+        on<RenderExtractEvent> { if (Terminals.hitboxesOn) com.engineerclient.EngineerClient.safely("terminal hitboxes") { drawTerminals() } }
         // The terminal your clicks go to, so your own "activated a terminal!" marks it done at once.
         net.fabricmc.fabric.api.event.player.UseEntityCallback.EVENT.register { _, level, _, entity, _ ->
             if (level.isClientSide) terminalOf(entity).let { if (it >= 0) lastClicked = it }
@@ -216,5 +168,6 @@ object TerminalHitboxes : Module(
             if (level.isClientSide) terminalOf(entity).let { if (it >= 0) lastClicked = it }
             net.minecraft.world.InteractionResult.PASS
         }
+        EventBus.subscribe(this)
     }
 }

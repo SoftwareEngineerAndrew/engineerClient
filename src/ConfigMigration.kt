@@ -77,6 +77,7 @@ object ConfigMigration {
      *  - Mob Highlight's Teammate Class Glow goes, in Odin's config.
      *  - Screen Tweaks, Render Cleanup, Chat Tweaks and Tab Tweaks are Visibility.
      *  - Phase Timers, Timers and Odin's Tick Timers (its Fire Freeze Hud and look) are Tick Timers.
+     *  - Odin's terminal modules, Term Progress and Terminal Hitboxes are Terminals.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -624,12 +625,64 @@ object ConfigMigration {
             changed = true
         }
 
+        // Odin's terminal modules, Term Progress and Terminal Hitboxes are Terminals' sections, each on if its module was.
+        run {
+            if (module(modules, "Terminals") != null) return@run
+            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else null
+            val olds = TERMINAL_SECTIONS.mapNotNull { (name, switch, inOdin) -> (if (inOdin) odin?.let { module(it, name) } else module(modules, name))?.let { Triple(it, switch, inOdin) } }
+            if (olds.isEmpty()) return@run
+            val to = settings(ensure("Terminals"))
+            for ((m, switch, _) in olds) {
+                if (switch != null) to.addProperty(switch, m["enabled"]?.asBoolean ?: false)
+                for ((k, v) in settings(m).entrySet()) {
+                    if (k in TERMINAL_DROPPED) continue
+                    when (k) {
+                        "Render type" -> to.addProperty("Solver Style", if (v.isJsonPrimitive && v.asString == "CUSTOM_GUI") "CUSTOM" else "VANILLA")
+                        "Stop Melody Solver" -> to.addProperty("Melody Solver", !(v.isJsonPrimitive && v.asBoolean))
+                        else -> { val name = TERMINAL_RENAMES[k] ?: k; if (!to.has(name)) to.add(name, v) }
+                    }
+                }
+            }
+            fun relink(list: JsonArray) = list.filterIsInstance<JsonObject>().flatMap { it.getAsJsonObject("settings")?.entrySet()?.map { e -> e.value }.orEmpty() }.filterIsInstance<JsonObject>().forEach { hud ->
+                val link = hud["link"]?.takeIf { it.isJsonPrimitive }?.asString ?: return@forEach
+                for ((old, _, _) in TERMINAL_SECTIONS) if (link.startsWith("$old/")) hud.addProperty("link", "Terminals/" + link.removePrefix("$old/"))
+            }
+            for ((m, _, inOdin) in olds) if (!inOdin) modules.remove(m)
+            relink(modules)
+            if (odin != null) {
+                for ((m, _, inOdin) in olds) if (inOdin) odin.remove(m)
+                relink(odin)
+                write(odinFile, odin)
+            }
+            changed = true
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)
         }
         return changed
     }
+
+    /** Old module, its on/off switch in Terminals (none: always on), and whether it lived in Odin's config. */
+    private val TERMINAL_SECTIONS = listOf<Triple<String, String?, Boolean>>(
+        Triple("Terminal Solver", "Enable Solver", true), Triple("Terminal Times", "Enable Times", true),
+        Triple("Term Progress", "Enable Progress", false), Triple("Terminal Sounds", "Enable Sounds", true),
+        Triple("Terminals Status", "Enable Status", true), Triple("Terminal Titles", "Enable Titles", true),
+        Triple("Terminal Hitboxes", "Enable Hitboxes", false), Triple("Terminal Simulator", null, true),
+    )
+
+    private val TERMINAL_RENAMES = mapOf(
+        "Normal Term Size" to "Vanilla Scale", "Term Size" to "Custom Size", "Slot gap" to "Slot Gap",
+        "Terminal Times" to "Chat Times", "Terminal Splits" to "Section Splits", "Use Real Time" to "Real Time",
+        "Show" to "Waypoints For", "Style" to "Waypoint Style", "Waypoint color" to "Waypoint Color",
+        "Through Walls" to "Waypoints Through Walls", "Hide Default" to "Hide Default Names", "Ping" to "Simulator Ping",
+    )
+
+    private val TERMINAL_DROPPED = setOf(
+        "Solver Functionality", "Client Prediction", "Resolve timeout", "Click Prot Dropdown", "First Click Prot", "Server Lag",
+        "Lag Protection Ticks", "Color Settings", "Debug", "Adopted Term Info Settings", "Look", "Simple Mode",
+    )
 
     /** A Core Leap setting's name in Recore: "Core Style" is "Style" there; Core Leap Highlight keeps its name. */
     private fun recoreKey(key: String) = if (key == "Core Leap Highlight" || !key.startsWith("Core ")) key else key.removePrefix("Core ")
