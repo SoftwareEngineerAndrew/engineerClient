@@ -84,7 +84,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.misc.OdinColors,
             com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.TicTacToeSolver, com.engineerclient.dungeon.CreeperBeamsDing, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.FreezeDisplay, com.engineerclient.dungeon.WarpCooldown, com.engineerclient.dungeon.ExplosiveShot,
             com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.TicTacToeSolver, com.engineerclient.dungeon.CreeperBeamsDing, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.FreezeDisplay,
-            com.engineerclient.dungeon.PhaseTimers, com.engineerclient.dungeon.StormHelper, com.engineerclient.dungeon.GoldorHelper, com.engineerclient.dungeon.RelicHelper,
+            com.engineerclient.dungeon.PhaseTimers, com.engineerclient.dungeon.StormHelper, com.engineerclient.dungeon.GoldorHelper, com.engineerclient.dungeon.RelicHelper, com.engineerclient.dungeon.BossWaypoints,
             com.engineerclient.skyblock.ChatTweaks,
             com.engineerclient.skyblock.TabTweaks,
             com.engineerclient.skyblock.ItemTweaks,
