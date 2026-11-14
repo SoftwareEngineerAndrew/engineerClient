@@ -131,7 +131,7 @@ object DoorHighlight : Module(
         for ((door, past) in mine) {
             if (hideDone && !leadsSomewhere(past, links, Collections.newSetFromMap(IdentityHashMap<DungeonRoom, Boolean>()).apply { add(here); add(past) })) continue
             val box = AABB(door.worldX - 1.0, 69.0, door.worldZ - 1.0, door.worldX + 2.0, 73.0, door.worldZ + 2.0)
-            drawStyledBox(box, normalColor, BoxStyle.OUTLINE, true)
+            drawStyledBox(box, normalColor, BoxStyle.OUTLINE, false)
         }
     }
 
