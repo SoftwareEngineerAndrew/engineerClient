@@ -80,7 +80,7 @@ object EngineerClient : ClientModInitializer {
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning, com.engineerclient.misc.CommandAliases,
             com.engineerclient.misc.BlockInstaclear,
             com.engineerclient.practice.TerminalHitboxes,
-            com.engineerclient.misc.ItemHighlight, com.engineerclient.misc.Zpew, com.engineerclient.misc.PuzzleOverlay, com.engineerclient.culling.ChunkCulling,
+            com.engineerclient.misc.ItemHighlight,com.engineerclient.misc.PuzzleOverlay, com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,
             com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.TicTacToeSolver, com.engineerclient.dungeon.CreeperBeamsDing, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.FreezeDisplay, com.engineerclient.dungeon.ExplosiveShot,
             com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.TicTacToeSolver, com.engineerclient.dungeon.CreeperBeamsDing, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.FreezeDisplay,
@@ -188,6 +188,7 @@ object EngineerClient : ClientModInitializer {
 
         DeadPlayers.register()
         com.engineerclient.misc.Witherborn.register()
+        com.engineerclient.misc.Zpew.register()
         com.engineerclient.misc.I4Complete.register()
         EcLog.open(mc.gameDirectory.toPath(), listOf(
             "engineerclient ${FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")}" +

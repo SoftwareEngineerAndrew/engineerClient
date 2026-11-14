@@ -62,6 +62,7 @@ object ConfigMigration {
      *    wasn't showing; Look ADM is left for Coffee Client's Term Info to take over), Section Time a Timers HUD, the Core* settings Recore's (without "Core ");
      *  - Sub Splits' Core* settings and Paste Last In Core are Recore's (on if they were in use).
      *  - BR Roles' Doorer Kills is its Door Kills: on is Always, off Never.
+     *  - Legit Zpew is Etherwarp's Legit Zpew setting, in Odin's config.
      *  - Timers' Necron Drop HUD is its Necron DPS (where it was, on or off as it was).
      *  - ADS's Shortbow Cooldown is its Shortbow Shot Cooldown (the wrong default 2 dropped, so it reads 5).
      *  - ADR's Private Runs is its Unlisted Runs (2026-10-30, ADM 1.0.10).
@@ -101,6 +102,23 @@ object ConfigMigration {
             val s = settings(it)
             val old = s.remove("Teleport") ?: return@let
             for (k in listOf("AOTE / AOTV", "Hyperion")) if (!s.has(k)) s.add(k, old)
+            changed = true
+        }
+
+        // Legit Zpew is Etherwarp's Legit Zpew setting; Etherwarp is switched on where it wasn't, with its guess box off.
+        module(modules, "Legit Zpew")?.let { lz ->
+            if (!Files.exists(odinFile)) return@let
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val ew = module(odin, "Etherwarp") ?: JsonObject().apply { addProperty("name", "Etherwarp"); addProperty("enabled", false) }.also { odin.add(it) }
+            val es = settings(ew)
+            if (!es.has("Legit Zpew")) {
+                val on = lz["enabled"]?.asBoolean ?: false
+                es.addProperty("Legit Zpew", on)
+                for ((k, v) in settings(lz).entrySet()) if (!es.has(k)) es.add(k, v)
+                if (on && ew["enabled"]?.asBoolean != true) { ew.addProperty("enabled", true); es.addProperty("Show Guess", false) }
+                write(odinFile, odin)
+            }
+            modules.remove(lz)
             changed = true
         }
 

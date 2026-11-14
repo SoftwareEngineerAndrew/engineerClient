@@ -1,13 +1,12 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onSend
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.odtheking.odin.OdinMod.mc
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
@@ -36,18 +35,15 @@ import kotlin.math.floor
  * (#items.room-refusals) and Wither Impact's 100 ms recast gate (run/server). Clicks waiting on the server are a
  * [ZpewQueue], so spam at high ping chains and corrects itself on each real landing.
  */
-object Zpew : Module(
-    name = "Legit Zpew",
-    category = Category.custom("Engineer Client", 860, 10),
-    description = "Zero ping camera: your view jumps to where an etherwarp or AOTE/AOTV/Hyperion teleport lands as you click, before the server moves you.",
-    key = null,
-) {
-    private val etherwarp by BooleanSetting("Etherwarp", true, desc = "Sneaking etherwarps.")
-    private val aotv by BooleanSetting("AOTE / AOTV", true, desc = "Aspect of the End and Aspect of the Void teleports (unsneaked).")
-    private val hyperion by BooleanSetting("Hyperion", true, desc = "Wither Impact teleports: Hyperion, Valkyrie, Astraea, Scylla, Necron's Blade with all three scrolls.")
-    private val debug by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera jump to config/engineerclient/zpew-debug.log, for checking the predictions.")
-    private val zeroPingSound by BooleanSetting("0 Ping Etherwarp Sound", true, desc = "Plays the etherwarp sound (Odin's Etherwarp sound when that is on) the moment your camera etherwarps, and not when the server's etherwarp arrives.")
-    private val capture by BooleanSetting("Capture Misses", false, desc = "When a prediction is wrong (warps where the server refuses, lands elsewhere, or refuses where the server warps), saves the click and the blocks around it to config/engineerclient/zpew-misses.txt, to fix the law from.")
+object Zpew {
+    private val enabled get() = Etherwarp.enabled && Etherwarp.legitZpew
+    private val etherwarp get() = Etherwarp.zpewEtherwarp
+    private val aotv get() = Etherwarp.zpewAotv
+    private val hyperion get() = Etherwarp.zpewHyperion
+    private val debug get() = Etherwarp.zpewDebug
+    private val zeroPingSound get() = Etherwarp.zpewSound
+    private val capture get() = Etherwarp.zpewCapture
+    private var wasEnabled = false
 
     private var logOut: java.io.Writer? = null
     private val startMs = System.currentTimeMillis()
@@ -189,9 +185,12 @@ object Zpew : Module(
         camera = null
     }
 
-    override fun onDisable() {
-        reset()
-        super.onDisable()
+    /** Off: the waiting clicks are dropped, as when the module was switched off. */
+    private fun live(): Boolean {
+        val on = enabled
+        if (wasEnabled && !on) reset()
+        wasEnabled = on
+        return on
     }
 
     private class LevelCells(val level: ClientLevel) : TeleportLaw.Cells {
@@ -251,16 +250,17 @@ object Zpew : Module(
         return Click(false, yaw, pitch, sneaking, distance.toDouble(), id in WITHER_BLADES)
     }
 
-    init {
+    fun register() {
         queue.onDrop = { c ->
             // the law warped you but the server never did: the screenshot case
             val from = c.from
             if (capture && from != null) land(from, c)?.let { miss("server-refused", c, it, null) }
         }
 
-        on<LevelEvent.Load> { reset(); EtherSound.clear() }
+        on<LevelEvent.Load> { if (live()) { reset(); EtherSound.clear() } }
 
         on<MessageEvent> {
+            if (!enabled) return@on
             if (!queue.isEmpty && REFUSALS.any { message.contains(it) }) { log("REFUSED $message"); queue.refuse(); sync("refuse") }
             if (!queue.isEmpty && message.contains("There are blocks in the way!")) {
                 val mark = { log("BLOCKED"); queue.blocked(serverTicks.get()) }
@@ -268,9 +268,10 @@ object Zpew : Module(
             }
         }
 
-        on<TickEvent.Server> { serverTicks.incrementAndGet() }
+        on<TickEvent.Server> { if (enabled) serverTicks.incrementAndGet() }
 
         on<TickEvent.End> {
+            if (!live()) return@on
             blockClick = null
             ticks++
             if (queue.expire(serverTicks.get(), ticks)) sync("expire")
@@ -285,15 +286,17 @@ object Zpew : Module(
         }
 
         onSend<ServerboundMovePlayerPacket> {
-            if (hasRotation()) { moveYaw = getYRot(0f); movePitch = getXRot(0f) }
+            if (enabled && hasRotation()) { moveYaw = getYRot(0f); movePitch = getXRot(0f) }
         }
 
         onSend<ServerboundUseItemOnPacket> {
+            if (!enabled) return@onSend
             val level = mc.level ?: return@onSend
             blockClick = ACTS.containsMatchIn(BuiltInRegistries.BLOCK.getKey(level.getBlockState(hitResult.blockPos).block).path)
         }
 
         onSend<ServerboundUseItemPacket> {
+            if (!enabled) return@onSend
             val c = click(this) ?: return@onSend
             val p = mc.player ?: return@onSend
             var counts = true
@@ -315,5 +318,6 @@ object Zpew : Module(
             log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.odtheking.odin.utils.ServerUtils.currentPing}")
             sync("click")
         }
+        EventBus.subscribe(this)
     }
 }

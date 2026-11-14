@@ -50,6 +50,15 @@ object Etherwarp : Module(
     private val dropdown by DropdownSetting("Sounds", desc = "Shows settings for playing a custom sound when you etherwarp.")
     private val sounds by BooleanSetting("Custom Sounds", false, desc = "Plays the selected custom sound when you etherwarp.").withDependency { dropdown }
     private val soundSettings = createSoundSettings("Etherwarp Sound", "entity.experience_orb.pickup") { sounds && dropdown }
+
+    val legitZpew by BooleanSetting("Legit Zpew", false, desc = "Zero ping camera: your view jumps to where a teleport lands as you click.")
+    val zpewEtherwarp by BooleanSetting("Etherwarp", true, desc = "Sneaking etherwarps.").withDependency { legitZpew }
+    val zpewAotv by BooleanSetting("AOTE / AOTV", true, desc = "Aspect of the End and Aspect of the Void teleports (unsneaked).").withDependency { legitZpew }
+    val zpewHyperion by BooleanSetting("Hyperion", true, desc = "Wither Impact teleports: Hyperion, Valkyrie, Astraea, Scylla, Necron's Blade with all three scrolls.").withDependency { legitZpew }
+    val zpewDebug by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera jump to config/engineerclient/zpew-debug.log, for checking the predictions.").withDependency { legitZpew }
+    val zpewSound by BooleanSetting("0 Ping Etherwarp Sound", true, desc = "Plays the etherwarp sound (Odin's Etherwarp sound when that is on) the moment your camera etherwarps, and not when the server's etherwarp arrives.").withDependency { legitZpew }
+    val zpewCapture by BooleanSetting("Capture Misses", false, desc = "When a prediction is wrong (warps where the server refuses, lands elsewhere, or refuses where the server warps), saves the click and the blocks around it to config/engineerclient/zpew-misses.txt, to fix the law from.").withDependency { legitZpew }
+
     private var etherPos: EtherPos? = null
 
     private var cachedMainHandItem: ItemStack? = null
