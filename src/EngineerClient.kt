@@ -286,7 +286,7 @@ object EngineerClient : ClientModInitializer {
             // name — a bare redirect would not run the root executes on the alias itself.
             for (name in COMMANDS) dispatcher.register(
                 literal(name)
-                    .executes { mc.schedule { mc.setScreenAndShow(com.odtheking.odin.clickgui.ClickGUI) }; 1 }
+                    .executes { mc.schedule { mc.setScreenAndShow(com.engineerclient.gui.AdmClickGui) }; 1 }
                     .then(literal("help").executes { ctx ->
                         HELP.forEach { ctx.source.sendFeedback(Component.literal(it)) }
                         1

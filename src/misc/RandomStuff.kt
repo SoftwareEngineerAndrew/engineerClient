@@ -184,7 +184,7 @@ object RandomStuff : Module(
      * Odin's menu, and only where a font pixel doesn't land on a whole number of screen pixels.
      */
     fun smoothsGuiText(scale: Float): Boolean {
-        if (mc.gui.screen() !is com.odtheking.odin.clickgui.ClickGUI) return false
+        if (mc.gui.screen() !== com.engineerclient.gui.AdmClickGui) return false
         val px = scale * mc.window.guiScale
         return kotlin.math.abs(px - kotlin.math.round(px)) > 0.01f
     }

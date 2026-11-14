@@ -4,6 +4,7 @@
   "package": "com.engineerclient.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "ClickGuiSwapMixin",
     "CameraInstantSneakMixin",
     "HudEditorOpenMixin",
     "StreamerFontMixin",
