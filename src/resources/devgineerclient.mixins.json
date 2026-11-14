@@ -32,6 +32,7 @@
     "LookTapMixin",
     "MapAppliedMixin",
     "MinecraftActionTapMixin",
+    "MixinParticleFastMove",
     "MouseTapMixin",
     "MoveEntityPacketAccessor",
     "PacketApplyTapMixin",
