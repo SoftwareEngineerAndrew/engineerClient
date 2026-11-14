@@ -83,28 +83,37 @@ object BrRoles {
     fun playing(late: Boolean): Int? =
         if (youDropped(late)) null else mine ?: planCount(late).takeIf { doorerKills(late) && youOnDoor && it > 0 }
 
-    /** In master mode: the site's M7 roles, where each is a class. */
+    /** In master mode: the site's M7 roles. */
     val master: Boolean get() = DungeonUtils.floor?.isMM == true
 
+    enum class ClassRoles { MASTER_MODE, ALWAYS, OFF }
+
+    /** From the settings: when your class picks your role. */
+    @Volatile var classRoles = ClassRoles.MASTER_MODE
+
     /**
-     * Your role before party chat: in master mode your class's (the site's M7 roles: 1 Archer,
-     * 2 Mage, 3 Berserk, 4 Tank, the Healer on the door) once the tab list has it, else the
-     * setting. All Boxes keeps roles off either way.
+     * Your class's role (1 Archer, 2 Mage, 3 Berserk, 4 Tank, 0 the Healer on the door) when
+     * [classRoles] allows it. None when someone else in the party plays your class too: the setting decides then.
      */
-    private val baseRole: Int?
+    private val classRole: Int?
         get() {
-            val s = settingRole ?: return null
-            if (!master) return s
-            val cls = DungeonUtils.dungeonTeammates.firstOrNull { it.name.equals(me, ignoreCase = true) }?.clazz
+            if (classRoles == ClassRoles.OFF || (classRoles == ClassRoles.MASTER_MODE && !master)) return null
+            val team = DungeonUtils.dungeonTeammates
+            val cls = team.firstOrNull { it.name.equals(me, ignoreCase = true) }?.clazz ?: return null
+            if (team.count { it.clazz == cls } > 1) return null
             return when (cls) {
                 DungeonClass.ARCHER -> 1
                 DungeonClass.MAGE -> 2
                 DungeonClass.BERSERK -> 3
                 DungeonClass.TANK -> 4
                 DungeonClass.HEALER -> 0
-                else -> s
+                else -> null
             }
         }
+
+    /** Your role before party chat: your class's, else the setting. All Boxes keeps roles off either way. */
+    private val baseRole: Int?
+        get() = settingRole?.let { classRole ?: it }
 
     /** What party chat said this run, over the settings. */
     private var chatCount: Int? = null
@@ -216,7 +225,7 @@ object BrRoles {
 
     /** Your role as it stands and where it came from, for debug: "role 2 of 3 (settings)". [late]: past fairy. */
     fun describe(late: Boolean = false): String {
-        val from = (if (chatCount != null || doorClaim != null) "party chat" else if (master) "class" else "settings") + if (master) ", M7 roles" else ""
+        val from = (if (chatCount != null || doorClaim != null) "party chat" else if (classRole != null) "class" else "settings") + if (master) ", M7 roles" else ""
         return when {
             count == 0 -> "roles off"
             youOnDoor -> (if (doorerKills(late)) "door (kills, role ${planCount(late)})" else "door") + ", $count killing ($from)"

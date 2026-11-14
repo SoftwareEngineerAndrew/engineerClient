@@ -108,7 +108,8 @@ object BrWaypoints2 : Module(
     private enum class Killers { DUO, TRIO, QUAD }
     private enum class MyRole { ALL_BOXES, DOOR, ROLE_1, ROLE_2, ROLE_3, ROLE_4 }
 
-    private val myRole by SelectorSetting("My Role", MyRole.ROLE_2, desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. In master mode the site's M7 roles are used and your class picks the role (Archer 1, Mage 2, Berserk 3, Tank 4, Healer the door). Party chat (!br 2, !br d) overrides it for a run.")
+    private val myRole by SelectorSetting("My Role", MyRole.ROLE_2, desc = "Your blood rush role from undonecoffee.com/brroles: only your boxes show, numbered in kill order, the next one filled in; your stack once yours are dead. Door shows none. All Boxes (or a role past the number of killers) turns roles off. Class Roles can pick it from your class instead. Party chat (!br 2, !br d) overrides both for a run.")
+    private val classRoles by SelectorSetting("Class Roles", BrRoles.ClassRoles.MASTER_MODE, desc = "Your class picks your role (Archer 1, Mage 2, Berserk 3, Tank 4, Healer the door) over My Role, unless a teammate plays the same class.")
 
     private val killers by SelectorSetting("Killers", Killers.DUO, desc = "How many kill on blood rush, not counting the door runner. Party chat (!3br 2) overrides it for a run.")
 
@@ -220,6 +221,7 @@ object BrWaypoints2 : Module(
         on<TickEvent.End> {
             BrRoles.settingKilling = killers.ordinal + 2
             BrRoles.settingRole = when (myRole.ordinal) { 0 -> null; 1 -> 0; else -> myRole.ordinal - 1 }
+            BrRoles.classRoles = classRoles
             BrRoles.doorKills = doorKills
             BrRoles.dropBottom = dropBottom
             wandUser?.tick()
