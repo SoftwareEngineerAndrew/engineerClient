@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.skyblock.ArrowFix;
+import com.engineerclient.skyblock.Arrows;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -20,7 +20,7 @@ public abstract class ArrowFixMixin extends LivingEntity {
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void ec$noShortbowPullback(CallbackInfo ci) {
-        if ((Object) this != Minecraft.getInstance().player || !ArrowFix.INSTANCE.clears(useItem)) return;
+        if ((Object) this != Minecraft.getInstance().player || !Arrows.INSTANCE.clears(useItem)) return;
         useItem = ItemStack.EMPTY;
         useItemRemaining = 0;
     }

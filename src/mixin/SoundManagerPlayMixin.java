@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.visual.ArrowHitSound;
+import com.engineerclient.skyblock.Arrows;
 import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.client.sounds.SoundEngine;
 import net.minecraft.client.sounds.SoundManager;
@@ -14,6 +14,6 @@ public abstract class SoundManagerPlayMixin {
     @Inject(method = "play", at = @At("HEAD"), cancellable = true)
     private void ec$onPlay(SoundInstance instance, CallbackInfoReturnable<SoundEngine.PlayResult> cir) {
         com.engineerclient.visual.Sounds.recordPlayedSound(instance);
-        if (ArrowHitSound.onSoundPlay(instance)) cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
+        if (Arrows.onSoundPlay(instance)) cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
     }
 }

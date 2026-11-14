@@ -102,14 +102,6 @@ object RandomStuff : Module(
     // and at worn-equipment rendering (see ArmorFoilMixin).
     private val noGlint by BooleanSetting("No Enchant Glint", true, desc = "Removes the enchantment glint from items, so colours and textures stay readable.")
 
-    // --- Own arrows ----------------------------------------------------------------------------
-    //
-    // Arrows you fire yourself (any bow) are not drawn while still within 5 blocks of you, so a
-    // shortbow spam does not cover the screen. Only arrows in flight: one stuck in a block draws as
-    // usual, and an arrow in an item frame is an item, not an arrow entity, so it is never touched.
-    // Hooked at EntityRenderDispatcher.shouldRender (see OwnArrowsHideMixin).
-    private val hideOwnArrows by BooleanSetting("Hide Own Arrows Nearby", true, desc = "Arrows you shoot are not drawn while they fly within 5 blocks of you.")
-
     // --- Startup and restart -------------------------------------------------------------------
 
     private val autoJoinSkyblock by BooleanSetting("Auto Join Skyblock", false, desc = "Each time you connect to Hypixel (Prism's join on launch, the server list...), /skyblock goes out right after you land, and again until you're on Skyblock.")
@@ -242,13 +234,6 @@ object RandomStuff : Module(
     /** True while the numbers terminal's 1-10 should not be drawn at all. */
     @JvmStatic
     fun hidesTerminalNumbers(): Boolean = enabled && hideTermNumbers
-
-    /** [arrow] is one the local player shot, still in flight ([inGround] false), within 5 blocks of them. */
-    fun hidesOwnArrow(arrow: net.minecraft.world.entity.projectile.arrow.AbstractArrow, inGround: Boolean): Boolean {
-        if (!enabled || !hideOwnArrows || inGround) return false
-        val me = mc.player ?: return false
-        return arrow.owner === me && arrow.distanceToSqr(me) < 25.0
-    }
 
     /**
      * The same question for one slot of the open screen, so the vanilla count is only ever dropped
