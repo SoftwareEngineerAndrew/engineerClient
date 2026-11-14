@@ -8,6 +8,7 @@ import com.odtheking.odin.clickgui.settings.impl.ListSetting
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.ModuleManager
+import com.odtheking.odin.utils.customData
 import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.itemUUID
 import com.odtheking.odin.utils.lore
@@ -15,6 +16,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.client.player.LocalPlayer
 import net.minecraft.network.chat.Component
+import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ContainerInput
 import net.minecraft.world.inventory.Slot
@@ -30,12 +32,29 @@ object ItemProtection : Module(
     private val protectKey by KeybindSetting("Protect Key", InputConstants.UNKNOWN, "Protects or unprotects the held item.").onPress { toggleHeld() }
     private val dropHeldInRun by BooleanSetting("Don't Protect Held Item In Run", true, desc = "In a dungeon, the drop key still works on the held item.")
     private val protectedItems by ListSetting("Protected Items", mutableSetOf<String>())
+    private val protectStarred by BooleanSetting("Protect Starred Items", false, desc = "Protects every starred dungeon item.")
+    private val protectRecombed by BooleanSetting("Protect Recombed Items", false, desc = "Protects every recombobulated item.")
+    private val protectArmor by BooleanSetting("Protect Current Armor", false, desc = "Protects the armor you are wearing.")
+
+    private val ARMOR = listOf(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET)
 
     private fun key(stack: ItemStack): String? =
         stack.itemUUID.ifEmpty { stack.itemId }.ifEmpty { null }
 
-    private fun isProtected(stack: ItemStack): Boolean =
-        enabled && !stack.isEmpty && key(stack)?.let { it in protectedItems } == true
+    private fun isProtected(stack: ItemStack): Boolean {
+        if (!enabled || stack.isEmpty) return false
+        val key = key(stack)
+        if (key != null && key in protectedItems) return true
+        val data = stack.customData
+        if (protectStarred && (data.getInt("upgrade_level").orElse(0) > 0 || data.getInt("dungeon_item_level").orElse(0) > 0)) return true
+        if (protectRecombed && data.getInt("rarity_upgrades").orElse(0) > 0) return true
+        if (protectArmor) {
+            val uuid = stack.itemUUID.ifEmpty { return false }
+            val player = mc.player ?: return false
+            if (ARMOR.any { player.getItemBySlot(it).itemUUID == uuid }) return true
+        }
+        return false
+    }
 
     private fun toggleHeld() {
         val stack = mc.player?.mainHandItem ?: return
