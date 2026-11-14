@@ -1,6 +1,5 @@
 package com.engineerclient.skyblock
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -15,13 +14,11 @@ object CloseChestOnKey : Module(
     description = "Closes a secret chest when you press a movement or sneak key.",
     key = null,
 ) {
-    private val inBoss by BooleanSetting("In Boss", false, desc = "Also closes chests during the boss fight.")
-
     init {
         ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
             if (screen !is AbstractContainerScreen<*>) return@register
             ScreenKeyboardEvents.allowKeyPress(screen).register { s, key ->
-                if (!enabled || !DungeonUtils.inDungeons || (DungeonUtils.inBoss && !inBoss)) return@register true
+                if (!enabled || !DungeonUtils.inDungeons) return@register true
                 val title = s.title.string
                 if (title != "Chest" && title != "Large Chest") return@register true
                 val o = Minecraft.getInstance().options
