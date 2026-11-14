@@ -73,6 +73,7 @@ object ConfigMigration {
      *  - World Border Click Fix and Shadow Assassin Jump Hider are Shadow Assassin.
      *  - Arrow Fix, Arrow Swap Title, Arrow Hit Sound, Odin's Quiver Display and the arrow settings of Render Cleanup
      *    and Random Stuff are Arrows.
+     *  - Random Stuff's Party Finder Classes is Better Party Finder's Show Missing List, in Odin's config.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -521,6 +522,26 @@ object ConfigMigration {
             listOfNotNull(fix, swap, hit).forEach(modules::remove)
             if (odin != null && quiver != null) { odin.remove(quiver); write(odinFile, odin) }
             changed = true
+        }
+
+        // Random Stuff's Party Finder Classes is Better Party Finder's Show Missing List; where it was showing and Better Party
+        // Finder was off, that module is switched on without its join messages. The old key goes, so this runs once.
+        module(modules, "Random Stuff")?.let { rs ->
+            val old = settings(rs).remove("Party Finder Classes") ?: return@let
+            changed = true
+            if (!Files.exists(odinFile)) return@let
+            val on = (rs["enabled"]?.asBoolean ?: true) && old.isJsonPrimitive && old.asBoolean
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val bpf = module(odin, "Better Party Finder") ?: JsonObject().apply { addProperty("name", "Better Party Finder"); addProperty("enabled", false) }.also { odin.add(it) }
+            val s = settings(bpf)
+            if (s.has("Show Missing List")) return@let
+            s.addProperty("Show Missing List", on)
+            if (on && bpf["enabled"]?.asBoolean != true) {
+                bpf.addProperty("enabled", true)
+                s.addProperty("Stats display", false)
+                s.addProperty("Send Kick Line", false)
+            }
+            write(odinFile, odin)
         }
 
         if (changed) {
