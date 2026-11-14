@@ -30,6 +30,8 @@
     "ChatTweaksMixin",
     "TabTweaksMixin",
     "PearlCooldownMixin",
+    "HotbarScrollMixin",
+    "PlayerHeadSizeMixin",
     "NametagAvatarMixin",
     "NametagEntityMixin",
     "NametagLivingMixin",
