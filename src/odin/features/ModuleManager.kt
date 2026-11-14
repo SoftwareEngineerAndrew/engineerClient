@@ -74,8 +74,8 @@ object ModuleManager {
             PlayerDisplay, TemporaryWaypoints, Highlight, GyroWand,
 
             //skyblock
-            ChatCommands, NoCursorReset, Ragnarock, SpringBoots, WardrobeKeybinds, PetKeybinds, AutoSprint,
-            CommandKeybinds, SlotBinds, Splits, LoadoutKeybinds, QuiverDisplay,
+            ChatCommands, NoCursorReset, Ragnarock, SpringBoots, MenuKeybinds, AutoSprint,
+            CommandKeybinds, SlotBinds, Splits, QuiverDisplay,
 
             // nether
             SupplyHelper, BuildHelper, RemovePerks, NoPre, PearlWaypoints, FreshTools, KuudraInfo, Misc, Vesuvius,
