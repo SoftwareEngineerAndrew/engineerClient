@@ -133,7 +133,7 @@ object OdinSplitsLook {
      * read again now to pick up what was saved for them; reading is idempotent (a module is only
      * toggled if its saved state differs), so nothing else changes.
      *
-     * Also rearranges Splits' settings: Look first, Current Split HUD last, and no Keybind (taken
+     * Also rearranges Splits' settings: Look first and no Keybind (taken
      * out of the cache Odin fires keybinds from as well, so a saved key can't toggle Splits).
      */
     fun install() {
@@ -152,16 +152,12 @@ object OdinSplitsLook {
         // The Show switches replace Odin's own Boss Entry toggle.
         Splits.settings.remove("Boss Entry Split")
         val all = LinkedHashMap(Splits.settings)
-        val last = all.remove(CURRENT_SPLIT_HUD)
         Splits.settings.clear()
         all.remove(colourByTime.name)?.let { Splits.settings[colourByTime.name] = it }
         all.remove(showPb.name)?.let { Splits.settings[showPb.name] = it }
         Splits.settings.putAll(all)
-        last?.let { Splits.settings[CURRENT_SPLIT_HUD] = it }
         ModuleManager.loadConfigurations()
     }
-
-    private const val CURRENT_SPLIT_HUD = "Current Split HUD"
 
     // --- Necron's end ----------------------------------------------------------------------------
 
@@ -203,10 +199,9 @@ object OdinSplitsLook {
     fun render(hud: HudElement, g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int>? {
         if (failed) return null
         val display = (Splits.settings["Splits Display HUD"] as? HUDSetting)?.value
-        val current = (Splits.settings[CURRENT_SPLIT_HUD] as? HUDSetting)?.value
-        if (hud !== display && hud !== current) return null
+        if (hud !== display) return null
         return try {
-            if (hud === display) drawDisplay(g, example) else drawCurrent(g, example)
+            drawDisplay(g, example)
         } catch (t: Throwable) {
             failed = true
             EngineerClient.logger.error("[ec] Splits look failed - back to Odin's look for this session", t)
@@ -404,13 +399,4 @@ object OdinSplitsLook {
 
     private const val GAP = 8
 
-    /** Odin's Current Split HUD: the running split, centred on the HUD's position as Odin centres its own. */
-    private fun drawCurrent(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
-        val (place, master) = if (example) EngineerLook.Place.FLOOR7 to false else place()
-        val line = EngineerLook.currentLine(if (example) exampleRows() else rows(), options(), place, master) ?: return 0 to 0
-        val s = EngineerLook.text(line)
-        val w = EngineerClient.mc.font.width(s) + 2
-        g.text(s, -w / 2, 0, Colors.WHITE)
-        return w to LINE
-    }
 }

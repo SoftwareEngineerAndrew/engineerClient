@@ -140,12 +140,6 @@ object EngineerLook {
             (if (opts.bossEntry && rows.size > 3) listOf(label(BOSS_ENTRY, place, master)) else emptyList())
     }
 
-    /** The running split as one line, for the Current Split HUD; null between splits or outside a run. */
-    fun currentLine(rows: List<Row>, opts: Options, place: Place, master: Boolean): Line? {
-        val s = segments(rows, place, master).firstOrNull { it.current } ?: return null
-        return line(label(s.name, place, master), s.ms, s.ticks, opts, SplitFormat::seconds)
-    }
-
     /**
      * The rows that are splits (Odin's last row is the run's end), less F7's "Cleared": since
      * Hypixel's boss update of 5 Oct 2026 there is no end animation, and Necron runs to the end.
@@ -159,9 +153,6 @@ object EngineerLook {
         ms <= 3000 -> "§e"
         else -> "§c"
     }
-
-    /** A line as text: `Name > time (ticks)`, the arrow aqua. */
-    fun text(l: Line): String = "${l.label} §b> ${l.colour}${l.time}" + (l.ticks?.let { " §8(§7$it§8)" } ?: "")
 
     private fun line(label: String, ms: Long, ticks: Long, opts: Options, format: (Long) -> String) =
         Line(label, colourOf(label), format(ms), if (opts.showTicks) format(ticks * 50L) else null)
