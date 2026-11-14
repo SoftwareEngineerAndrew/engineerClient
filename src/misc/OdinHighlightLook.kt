@@ -39,7 +39,7 @@ import net.minecraft.world.phys.AABB
 object OdinHighlightLook {
 
     private enum class Style { OUTLINE, FILLED, BOTH }
-    private enum class Kind { STAR, TANK, MINI, FEL, ASSASSIN, BAT, WITHER, MIMIC }
+    private enum class Kind { STAR, TANK, MINI, FEL, ASSASSIN, BAT, WITHER }
 
     private val mobHighlight = BooleanSetting("Mob Highlight", true, desc = "Boxes dungeon mobs by kind.")
     private val style = SelectorSetting("Highlight Style", Style.OUTLINE, desc = "Outline, filled or both.").withDependency { mobHighlight.value }
@@ -61,7 +61,6 @@ object OdinHighlightLook {
         Kind.ASSASSIN to Colours("Shadow Assassin", 0xFF800080.toInt(), 0xFF800080.toInt()),
         Kind.BAT to Colours("Bat", -14531329, -14531329),
         Kind.WITHER to Colours("Wither", -2011028958, -2011028958),
-        Kind.MIMIC to Colours("Mimic", 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt()),
     )
 
     private val BAT_HEALTHS = setOf(100f, 200f, 400f, 800f)
@@ -76,7 +75,6 @@ object OdinHighlightLook {
 
     private fun kindOf(name: String): Kind? = when {
         "King Midas" in name -> Kind.MINI
-        "Mimic" in name -> Kind.MIMIC
         "✯ " !in name -> null
         "Fel" in name -> Kind.FEL
         MINIS.any { it in name } -> Kind.MINI
