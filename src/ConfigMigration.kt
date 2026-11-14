@@ -75,6 +75,7 @@ object ConfigMigration {
      *    and Random Stuff are Arrows.
      *  - Random Stuff's Party Finder Classes is Better Party Finder's Show Missing List, in Odin's config.
      *  - Mob Highlight's Teammate Class Glow goes, in Odin's config.
+     *  - Screen Tweaks, Render Cleanup, Chat Tweaks and Tab Tweaks are Visibility.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -545,6 +546,24 @@ object ConfigMigration {
             changed = true
         }
 
+        // Screen Tweaks, Render Cleanup, Chat Tweaks and Tab Tweaks are Visibility, on if any of them was. With it on, the switches of
+        // a module that was off go off, so nothing shows up that wasn't. The old entries go, so this runs once.
+        run {
+            val folded = VISIBILITY_SWITCHES.keys.mapNotNull { module(modules, it) }
+            if (folded.isEmpty()) return@run
+            fun on(m: JsonObject) = m["enabled"]?.asBoolean == true
+            val existing = module(modules, "Visibility")
+            val anyOn = existing?.let(::on) == true || folded.any(::on)
+            val to = settings((existing ?: ensure("Visibility")).also { it.addProperty("enabled", anyOn) })
+            for (m in folded) {
+                val name = m["name"].asString
+                for ((k, v) in settings(m).entrySet()) if ((k != "Keybind" || name == "Screen Tweaks") && !to.has(k)) to.add(k, v)
+                if (anyOn && !on(m)) for (k in VISIBILITY_SWITCHES.getValue(name)) to.addProperty(k, false)
+            }
+            folded.forEach(modules::remove)
+            changed = true
+        }
+
         // Random Stuff's Party Finder Classes is Better Party Finder's Show Missing List; where it was showing and Better Party
         // Finder was off, that module is switched on without its join messages. The old key goes, so this runs once.
         module(modules, "Random Stuff")?.let { rs ->
@@ -585,6 +604,20 @@ object ConfigMigration {
 
     private val STORM_HITBOX_KEYS = listOf("Hitbox Seconds", "Hitbox Margins", "Pillar Outline", "Inside Color", "Outside Color")
 
+
+    private val VISIBILITY_SWITCHES = mapOf(
+        "Screen Tweaks" to listOf(
+            "No Vignette", "No Water Overlay", "No Suffocation Overlay", "Hide Potion Effect HUD", "Hide Inventory Effects", "No Fog",
+            "Fullbright", "No Text Shadow", "No Glass Pane Highlight", "Hide Offhand Slot Background", "Sidebar Colors", "Dark Mode", "Time Changer",
+        ),
+        "Render Cleanup" to listOf(
+            "Hide Block Break Particles", "Hide Smoke Particles", "Hide Explosion Particles", "Hide Entity Fire", "Hide Fire Overlay",
+            "Disable Glowing", "Hide Falling Blocks", "Hide Lightning", "Hide Experience Orbs", "Hide Death Animation", "Hide Dying Armor Stands",
+            "Hide Archer Passive", "Hide Healer Fairy", "Hide Soul Weaver", "Hide Tentacle Head", "Hide Players",
+        ),
+        "Chat Tweaks" to listOf("Remove Chat Limit", "Compact Chat", "Hide Empty Messages", "Compact Hoppity Messages", "Copy On Right Click"),
+        "Tab Tweaks" to listOf("Remove Tab Ping", "Remove Useless Tab Heads"),
+    )
 
     private val TIMERS_KEYS = mapOf("Boss Enter Timer" to "Clear Countdown", "Portal Text" to "Portal Text", "Portal Chime" to "Portal Chime")
 
