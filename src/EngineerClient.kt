@@ -72,10 +72,7 @@ object EngineerClient : ClientModInitializer {
         windowKept = true
     }
 
-    /**
-     * Every module, in the order the ClickGUI panel lists them (PanelOrderMixin: Odin itself sorts
-     * a panel by name width).
-     */
+    /** Every module. */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
             PosePov, com.engineerclient.party.TermProgress, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
