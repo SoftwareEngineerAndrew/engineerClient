@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.skyblock.ChatTweaks;
+import com.engineerclient.render.ScreenTweaks;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
@@ -26,7 +26,7 @@ public class ChatTweaksMixin {
 
     @ModifyConstant(method = {"addMessageToQueue", "addMessageToDisplayQueue"}, constant = @Constant(intValue = 100))
     private int ec$chatLimit(int vanilla) {
-        return ChatTweaks.INSTANCE.chatLimit(vanilla);
+        return ScreenTweaks.INSTANCE.chatLimit(vanilla);
     }
 
     @Inject(
@@ -35,7 +35,7 @@ public class ChatTweaksMixin {
         cancellable = true
     )
     private void ec$hideEmpty(Component contents, MessageSignature signature, GuiMessageSource source, GuiMessageTag tag, CallbackInfo ci) {
-        if (contents != null && ChatTweaks.INSTANCE.hides(contents)) ci.cancel();
+        if (contents != null && ScreenTweaks.INSTANCE.hides(contents)) ci.cancel();
     }
 
     @ModifyVariable(
@@ -45,9 +45,9 @@ public class ChatTweaksMixin {
         ordinal = 0
     )
     private Component ec$compact(Component contents) {
-        if (contents == null || !ChatTweaks.INSTANCE.compactOn()) return contents;
+        if (contents == null || !ScreenTweaks.INSTANCE.compactOn()) return contents;
         GuiMessage top = allMessages.isEmpty() ? null : allMessages.get(0);
-        Component out = ChatTweaks.INSTANCE.compact(contents, top == null ? null : top.content());
+        Component out = ScreenTweaks.INSTANCE.compact(contents, top == null ? null : top.content());
         if (out != contents && top != null) {
             allMessages.remove(0);
             while (!trimmedMessages.isEmpty() && trimmedMessages.get(0).parent() == top) trimmedMessages.remove(0);

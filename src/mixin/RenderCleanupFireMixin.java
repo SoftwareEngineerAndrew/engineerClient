@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.RenderCleanup;
+import com.engineerclient.render.ScreenTweaks;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.world.entity.Entity;
@@ -13,6 +13,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class RenderCleanupFireMixin<T extends Entity, S extends EntityRenderState> {
     @Inject(method = "extractRenderState", at = @At("TAIL"))
     private void ec$hideEntityFire(T entity, S state, float partialTicks, CallbackInfo ci) {
-        if (RenderCleanup.INSTANCE.hidesEntityFire()) state.displayFireAnimation = false;
+        if (ScreenTweaks.INSTANCE.hidesEntityFire()) state.displayFireAnimation = false;
     }
 }

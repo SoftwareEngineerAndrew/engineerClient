@@ -1,6 +1,6 @@
 package com.odtheking.mixin.mixins;
 
-import com.engineerclient.render.RenderCleanup;
+import com.engineerclient.render.ScreenTweaks;
 import com.odtheking.odin.features.impl.dungeon.Highlight;
 import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers;
 import net.minecraft.client.renderer.culling.Frustum;
@@ -24,19 +24,19 @@ public abstract class EntityRendererMixin<T extends Entity> {
         if (shouldHideDeadEntity(entity) ||
                 PuzzleSolvers.shouldHideBlaze(entity) ||
                 Highlight.hidesTag(entity) ||
-                !RenderCleanup.INSTANCE.shouldRenderPlayer(entity) ||
+                !ScreenTweaks.INSTANCE.shouldRenderPlayer(entity) ||
                 shouldHideDyingArmorStand(entity)
         ) cir.setReturnValue(false);
     }
 
     @Unique
     private static boolean shouldHideDeadEntity(Entity entity) {
-        return RenderCleanup.INSTANCE.hidesDeathAnimation() && entity instanceof LivingEntity living && living.isDeadOrDying();
+        return ScreenTweaks.INSTANCE.hidesDeathAnimation() && entity instanceof LivingEntity living && living.isDeadOrDying();
     }
 
     @Unique
     private static boolean shouldHideDyingArmorStand(Entity entity) {
-        if (!RenderCleanup.INSTANCE.hidesDyingArmorStands() || !(entity instanceof ArmorStand armorStand)) return false;
+        if (!ScreenTweaks.INSTANCE.hidesDyingArmorStands() || !(entity instanceof ArmorStand armorStand)) return false;
         return armorStand.level().getEntity(armorStand.getId() - 1) instanceof LivingEntity living && living.isDeadOrDying();
     }
 }

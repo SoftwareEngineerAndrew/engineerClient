@@ -187,15 +187,15 @@ object P3Sim : Module(
     val debugBots: Boolean get() = debugBotsS.value
     val record: Boolean get() = recordS.value
 
-    /** Render Cleanup's Hide Players (with its Hide All / Distance settings); in the sim its rule hides the bots too. */
-    val hidePlayers: Boolean get() = com.engineerclient.render.RenderCleanup.hidesPlayers()
-    fun toggleHidePlayers() = com.engineerclient.render.RenderCleanup.toggleHidePlayers()
+    /** Screen Tweaks' Hide Players (with its Hide All / Distance settings); in the sim its rule hides the bots too. */
+    val hidePlayers: Boolean get() = com.engineerclient.render.ScreenTweaks.hidesPlayers()
+    fun toggleHidePlayers() = com.engineerclient.render.ScreenTweaks.toggleHidePlayers()
 
     /** A bot (a mannequin in the sim) Hide Players would hide if it were a player. Client thread. */
     @JvmStatic
     fun hideBot(e: net.minecraft.world.entity.Entity): Boolean {
         if (!hidePlayers || !inSim || e !is net.minecraft.world.entity.decoration.Mannequin) return false
-        return com.engineerclient.render.RenderCleanup.withinHideRange(e)
+        return com.engineerclient.render.ScreenTweaks.withinHideRange(e)
     }
     val breakerRefill: Int get() = breakerRefillS.value.toInt()
     val breakerRegen: Double get() = breakerRegenS.value.toDouble()

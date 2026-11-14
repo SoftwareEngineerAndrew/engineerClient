@@ -1,59 +1,185 @@
 package com.engineerclient.render
 
+import com.engineerclient.EngineerClient
+import com.engineerclient.mixin.ChatCopyAccessor
+import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.events.EntityEvent
+import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.ParticleEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Color
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.texture
+import net.minecraft.ChatFormatting
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.input.MouseButtonEvent
+import net.minecraft.client.particle.Particle
+import net.minecraft.client.particle.SmokeParticle
+import net.minecraft.client.particle.TerrainParticle
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.network.chat.Component
+import net.minecraft.resources.Identifier
+import net.minecraft.util.FormattedCharSequence
+import net.minecraft.util.Mth
 import net.minecraft.world.effect.MobEffects
-import net.minecraft.world.level.material.FogType
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.InventoryMenu
 import net.minecraft.world.inventory.Slot
-import net.minecraft.resources.Identifier
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
+import net.minecraft.world.level.material.FogType
 import java.time.LocalTime
 
 object ScreenTweaks : Module(
     name = "Screen Tweaks",
     category = Category.RENDER,
-    description = "Removes vanilla screen effects and overlays, darkens the screen, changes the sky time.",
+    description = "Screen effects, clutter, chat and tab list tweaks.",
     key = null,
 ) {
-    private val noVignette by BooleanSetting("No Vignette", false, desc = "No dark screen edges.")
-    private val noWaterOverlay by BooleanSetting("No Water Overlay", false, desc = "No underwater screen texture.")
-    private val noSuffocationOverlay by BooleanSetting("No Suffocation Overlay", false, desc = "No block texture when your head is inside a block.")
-    private val hidePotionHud by BooleanSetting("Hide Potion Effect HUD", false, desc = "Hides the effect icons at the top right and effect swirl particles.")
-    private val hideInventoryEffects by BooleanSetting("Hide Inventory Effects", false, desc = "Hides the effect list beside the inventory.")
-    private val noFog by BooleanSetting("No Fog", false, desc = "No world fog; lava, water, blindness and darkness fog stay.")
-    private val fullbright by BooleanSetting("Fullbright", false, desc = "Everything fully lit.")
-    private val noTextShadow by BooleanSetting("No Text Shadow", false, desc = "Text is drawn without its shadow.")
-    private val noPaneHighlight by BooleanSetting("No Glass Pane Highlight", false, desc = "No hover highlight on unnamed glass panes in menus.")
-    private val hideOffhandBackground by BooleanSetting("Hide Offhand Slot Background", false, desc = "No shield outline in the empty offhand slot.")
-    private val sidebarColors by BooleanSetting("Sidebar Colors", false, desc = "Custom scoreboard background colors.")
-    private val sidebarTitleColor by ColorSetting("Sidebar Title Color", Color(0, 0, 0, 0.4f), true, desc = "Behind the scoreboard title.").withDependency { sidebarColors }
-    private val sidebarBodyColor by ColorSetting("Sidebar Body Color", Color(0, 0, 0, 0.3f), true, desc = "Behind the scoreboard lines.").withDependency { sidebarColors }
-    private val darkMode by BooleanSetting("Dark Mode", false, desc = "Darkens the screen.")
-    private val darkOpacity by NumberSetting("Dark Mode Opacity", 25, 1..80, 1, desc = "Strength of the dark tint.", unit = "%").withDependency { darkMode }
-    private val darkTintHud by BooleanSetting("Dark Mode Tint HUD", false, desc = "The tint covers the HUD too.").withDependency { darkMode }
+    private val screenDropdown by DropdownSetting("Screen", desc = "Overlays, fog, light, dark mode and sky time.")
+    private val noVignette by BooleanSetting("No Vignette", false, desc = "No dark screen edges.").withDependency { screenDropdown }
+    private val noWaterOverlay by BooleanSetting("No Water Overlay", false, desc = "No underwater screen texture.").withDependency { screenDropdown }
+    private val noSuffocationOverlay by BooleanSetting("No Suffocation Overlay", false, desc = "No block texture when your head is inside a block.").withDependency { screenDropdown }
+    private val hidePotionHud by BooleanSetting("Hide Potion Effect HUD", false, desc = "Hides the effect icons at the top right and effect swirl particles.").withDependency { screenDropdown }
+    private val hideInventoryEffects by BooleanSetting("Hide Inventory Effects", false, desc = "Hides the effect list beside the inventory.").withDependency { screenDropdown }
+    private val noFog by BooleanSetting("No Fog", false, desc = "No world fog; lava, water, blindness and darkness fog stay.").withDependency { screenDropdown }
+    private val fullbright by BooleanSetting("Fullbright", false, desc = "Everything fully lit.").withDependency { screenDropdown }
+    private val noTextShadow by BooleanSetting("No Text Shadow", false, desc = "Text is drawn without its shadow.").withDependency { screenDropdown }
+    private val noPaneHighlight by BooleanSetting("No Glass Pane Highlight", false, desc = "No hover highlight on unnamed glass panes in menus.").withDependency { screenDropdown }
+    private val hideOffhandBackground by BooleanSetting("Hide Offhand Slot Background", false, desc = "No shield outline in the empty offhand slot.").withDependency { screenDropdown }
+    private val sidebarColors by BooleanSetting("Sidebar Colors", false, desc = "Custom scoreboard background colors.").withDependency { screenDropdown }
+    private val sidebarTitleColor by ColorSetting("Sidebar Title Color", Color(0, 0, 0, 0.4f), true, desc = "Behind the scoreboard title.").withDependency { screenDropdown && sidebarColors }
+    private val sidebarBodyColor by ColorSetting("Sidebar Body Color", Color(0, 0, 0, 0.3f), true, desc = "Behind the scoreboard lines.").withDependency { screenDropdown && sidebarColors }
+    private val darkMode by BooleanSetting("Dark Mode", false, desc = "Darkens the screen.").withDependency { screenDropdown }
+    private val darkOpacity by NumberSetting("Dark Mode Opacity", 25, 1..80, 1, desc = "Strength of the dark tint.", unit = "%").withDependency { screenDropdown && darkMode }
+    private val darkTintHud by BooleanSetting("Dark Mode Tint HUD", false, desc = "The tint covers the HUD too.").withDependency { screenDropdown && darkMode }
 
     private enum class Time(val ticks: Long) { DAY(1000), NOON(6000), SUNSET(12000), NIGHT(13000), MIDNIGHT(18000), SUNRISE(23000), REAL_TIME(-1), CUSTOM(-1) }
 
-    private val timeChanger by BooleanSetting("Time Changer", false, desc = "Changes the time of day the sky shows.")
-    private val timeMode by SelectorSetting("Time", Time.NOON, desc = "Time of day to show.").withDependency { timeChanger }
-    private val customTime by NumberSetting("Custom Time", 6000, 0..23999, 100, desc = "World time in ticks.").withDependency { timeChanger && timeMode == Time.CUSTOM }
+    private val timeChanger by BooleanSetting("Time Changer", false, desc = "Changes the time of day the sky shows.").withDependency { screenDropdown }
+    private val timeMode by SelectorSetting("Time", Time.NOON, desc = "Time of day to show.").withDependency { screenDropdown && timeChanger }
+    private val customTime by NumberSetting("Custom Time", 6000, 0..23999, 100, desc = "World time in ticks.").withDependency { screenDropdown && timeChanger && timeMode == Time.CUSTOM }
+
+    private val cleanupDropdown by DropdownSetting("Cleanup", desc = "Particles, entities and players that clutter the screen.")
+    private val hideBlockBreak by BooleanSetting("Hide Block Break Particles", false, desc = "No block crack and break particles.").withDependency { cleanupDropdown }
+    private val hideSmoke by BooleanSetting("Hide Smoke Particles", false, desc = "No smoke particles.").withDependency { cleanupDropdown }
+    private val disableExplosion by BooleanSetting("Hide Explosion Particles", false, desc = "No explosion particles.").withDependency { cleanupDropdown }
+    private val hypeOnly by BooleanSetting("Only Hyperion Explosions", false, desc = "Only Hyperion's Implosion is hidden.").withDependency { cleanupDropdown && disableExplosion }
+    private val hideEntityFire by BooleanSetting("Hide Entity Fire", true, desc = "No fire drawn on burning entities.").withDependency { cleanupDropdown }
+    private val disableFireOverlay by BooleanSetting("Hide Fire Overlay", true, desc = "No fire on your screen while burning.").withDependency { cleanupDropdown }
+    private val disableGlowing by BooleanSetting("Disable Glowing", true, desc = "No glowing outline on entities.").withDependency { cleanupDropdown }
+    private val hideFallingBlocks by BooleanSetting("Hide Falling Blocks", true, desc = "No falling blocks.").withDependency { cleanupDropdown }
+    private val hideLightning by BooleanSetting("Hide Lightning", true, desc = "No lightning bolts.").withDependency { cleanupDropdown }
+    private val hideExperienceOrbs by BooleanSetting("Hide Experience Orbs", true, desc = "No experience orbs.").withDependency { cleanupDropdown }
+    private val hideDeathAnimation by BooleanSetting("Hide Death Animation", true, desc = "Hides mobs that are dying.").withDependency { cleanupDropdown }
+    private val hideDyingMobsArmorStand by BooleanSetting("Hide Dying Armor Stands", false, desc = "Hides armor stands of mobs that are dying.").withDependency { cleanupDropdown && hideDeathAnimation }
+    private val hideArcherBoneMeal by BooleanSetting("Hide Archer Passive", true, desc = "Hides the archer passive's floating bone meal.").withDependency { cleanupDropdown }
+    private val hideFairy by BooleanSetting("Hide Healer Fairy", true, desc = "Hides the healer fairy held by some mobs.").withDependency { cleanupDropdown }
+    private val hideWeaver by BooleanSetting("Hide Soul Weaver", true, desc = "Hides the soul weaver helmet worn by some mobs.").withDependency { cleanupDropdown }
+    private val hideTentacle by BooleanSetting("Hide Tentacle Head", true, desc = "Hides the tentacle head worn by some mobs.").withDependency { cleanupDropdown }
+    private var hidePlayers by BooleanSetting("Hide Players", false, desc = "Hides players near you.").withDependency { cleanupDropdown }
+    private val playersOnlyInDungeons by BooleanSetting("Hide Players Only In Dungeons", false, desc = "Players are only hidden in dungeons.").withDependency { cleanupDropdown && hidePlayers }
+    private val hideAllPlayers by BooleanSetting("Hide All Players", false, desc = "Hides players at any distance.").withDependency { cleanupDropdown && hidePlayers }
+    private val playerDistance by NumberSetting("Hide Players Distance", 3f, 0..32, .5, "Players this close are hidden.", unit = " blocks").withDependency { cleanupDropdown && hidePlayers && !hideAllPlayers }
+
+    private val chatDropdown by DropdownSetting("Chat", desc = "Chat history, stacking and copying.")
+    private val removeLimit by BooleanSetting("Remove Chat Limit", false, desc = "Keeps more than vanilla's 100 chat lines.").withDependency { chatDropdown }
+    private val maxMessages by NumberSetting("Max Messages", 10000, 100..100000, 100, desc = "How many lines the chat keeps.").withDependency { chatDropdown && removeLimit }
+    private val compactChat by BooleanSetting("Compact Chat", false, desc = "Stacks a repeated message onto the last one with (xN).").withDependency { chatDropdown }
+    private val hideEmpty by BooleanSetting("Hide Empty Messages", false, desc = "Drops chat lines with nothing but spaces.").withDependency { chatDropdown }
+    private val compactHoppity by BooleanSetting("Compact Hoppity Messages", true, desc = "Joins the two lines of a Hoppity rabbit find into one.").withDependency { chatDropdown }
+    private val copyChat by BooleanSetting("Copy On Right Click", true, desc = "Right click a chat message to copy it, shift for one line.").withDependency { chatDropdown }
+    private val copyLineOnly by BooleanSetting("Copy Line Only", false, desc = "Always copies just the clicked line.").withDependency { chatDropdown && copyChat }
+
+    private val tabDropdown by DropdownSetting("Tab", desc = "Tab list cleanup.")
+    private val removePing by BooleanSetting("Remove Tab Ping", false, desc = "Hides the ping bars next to each name.").withDependency { tabDropdown }
+    private val removeHeads by BooleanSetting("Remove Useless Tab Heads", false, desc = "Hides the gray heads Hypixel puts on its info lines.").withDependency { tabDropdown }
 
     @JvmField var extractingSky = false
+
+    private const val TENTACLE_TEXTURE = "ewogICJ0aW1lc3RhbXAiIDogMTcxOTg1NzI3NzI0OSwKICAicHJvZmlsZUlkIiA6ICIxODA1Y2E2MmM0ZDI0M2NiOWQxYmY4YmM5N2E1YjgyNCIsCiAgInByb2ZpbGVOYW1lIiA6ICJSdWxsZWQiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzdkODM2NzQ5MjZiODk3MTRlNmI1YTU1NDcwNTAxYzA0YjA2NmRkODdiZjZjMzM1Y2RkYzZlNjBhMWExYTVmNSIKICAgIH0KICB9Cn0="
+    private const val HEALER_FAIRY_TEXTURE = "ewogICJ0aW1lc3RhbXAiIDogMTcxOTQ2MzA5MTA0NywKICAicHJvZmlsZUlkIiA6ICIyNjRkYzBlYjVlZGI0ZmI3OTgxNWIyZGY1NGY0OTgyNCIsCiAgInByb2ZpbGVOYW1lIiA6ICJxdWludHVwbGV0IiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzJlZWRjZmZjNmExMWEzODM0YTI4ODQ5Y2MzMTZhZjdhMjc1MmEzNzZkNTM2Y2Y4NDAzOWNmNzkxMDhiMTY3YWUiCiAgICB9CiAgfQp9"
+    private const val SOUL_WEAVER_TEXTURE = "eyJ0aW1lc3RhbXAiOjE1NTk1ODAzNjI1NTMsInByb2ZpbGVJZCI6ImU3NmYwZDlhZjc4MjQyYzM5NDY2ZDY3MjE3MzBmNDUzIiwicHJvZmlsZU5hbWUiOiJLbGxscmFoIiwic2lnbmF0dXJlUmVxdWlyZWQiOnRydWUsInRleHR1cmVzIjp7IlNLSU4iOnsidXJsIjoiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS8yZjI0ZWQ2ODc1MzA0ZmE0YTFmMGM3ODViMmNiNmE2YTcyNTYzZTlmM2UyNGVhNTVlMTgxNzg0NTIxMTlhYTY2In19fQ=="
+
+    // The gray placeholder skin Hypixel gives every non-player tab entry.
+    private const val GRAY_SKIN = "skins/f712b3a0a04da402d569cc02f3fcbc9228b2303a"
+
+    private var lastKey: String? = null
+    private var lastShown: Component? = null
+    private var count = 1
+
+    private val hoppityName = Regex("^§D§LHOPPITY'S HUNT §7You found (.+) §.\\(.+\\)!$", RegexOption.IGNORE_CASE)
+    private val hoppityInfo = Regex("^(§.§.)(DUPLICATE|NEW) RABBIT! (.+)")
+    private var hoppityRabbit = ""
 
     init {
         on<ParticleEvent> {
             if (hidePotionHud && particle.type == ParticleTypes.ENTITY_EFFECT) cancel()
+        }
+
+        on<EntityEvent.Add> {
+            when (entity.type) {
+                EntityTypes.EXPERIENCE_ORB if hideExperienceOrbs -> entity.remove(Entity.RemovalReason.DISCARDED)
+                EntityTypes.FALLING_BLOCK if hideFallingBlocks -> entity.remove(Entity.RemovalReason.DISCARDED)
+                EntityTypes.LIGHTNING_BOLT if hideLightning -> entity.remove(Entity.RemovalReason.DISCARDED)
+            }
+        }
+
+        on<EntityEvent.SetData> {
+            if (hideArcherBoneMeal && DungeonUtils.inDungeons) {
+                val item = synchedDataValues.find { it.id == 8 }?.value as? ItemStack ?: return@on
+                if (!item.isEmpty && item.item == Items.BONE_MEAL) entity.remove(Entity.RemovalReason.DISCARDED)
+            }
+        }
+
+        // Implosion is the only explosion Hypixel sends with both override limiter and always show set.
+        on<ParticleEvent> {
+            if (!disableExplosion || (particle != ParticleTypes.EXPLOSION && particle != ParticleTypes.EXPLOSION_EMITTER)) return@on
+            if (!hypeOnly || particle == ParticleTypes.EXPLOSION && overrideLimiter && alwaysShowParticles) cancel()
+        }
+
+        on<EntityEvent.SetItemSlot> {
+            if (!DungeonUtils.inDungeons || stack.isEmpty) return@on
+            val texture = stack.texture ?: return@on
+
+            if (
+                (hideFairy && slot == EquipmentSlot.MAINHAND && texture == HEALER_FAIRY_TEXTURE) ||
+                (hideWeaver && slot == EquipmentSlot.HEAD && texture == SOUL_WEAVER_TEXTURE) ||
+                (hideTentacle && slot == EquipmentSlot.HEAD && texture == TENTACLE_TEXTURE)
+            ) entity.remove(Entity.RemovalReason.DISCARDED)
+        }
+
+        on<MessageEvent.Chat> {
+            if (!compactHoppity) return@on
+            val text = component.string
+            if (message == "HOPPITY'S HUNT You found a Hitman Egg!") {
+                cancel()
+                return@on
+            }
+            hoppityName.find(text)?.let {
+                hoppityRabbit = it.groupValues[1]
+                cancel()
+                return@on
+            }
+            hoppityInfo.find(text)?.let {
+                val (style, status, chocolate) = it.destructured
+                val line = Component.literal("$style$status $hoppityRabbit $chocolate")
+                mc.execute { mc.gui.hud.chat.addClientSystemMessage(line) }
+                hoppityRabbit = ""
+                cancel()
+            }
         }
     }
 
@@ -98,4 +224,87 @@ object ScreenTweaks : Module(
         if (!enabled || !sidebarColors) return original
         return if (title) sidebarTitleColor.rgba else sidebarBodyColor.rgba
     }
+
+    fun hidesParticle(particle: Particle): Boolean = enabled &&
+        (hideBlockBreak && particle is TerrainParticle || hideSmoke && particle is SmokeParticle)
+
+    fun hidesEntityFire() = enabled && hideEntityFire
+
+    fun disablesGlowing() = enabled && disableGlowing
+
+    fun hidesFireOverlay() = enabled && disableFireOverlay
+
+    fun hidesDeathAnimation() = enabled && hideDeathAnimation
+
+    fun hidesDyingArmorStands() = enabled && hideDyingMobsArmorStand
+
+    fun hidesPlayers() = enabled && hidePlayers
+
+    fun toggleHidePlayers() {
+        if (hidesPlayers()) hidePlayers = false
+        else {
+            hidePlayers = true
+            if (!enabled) toggle()
+        }
+    }
+
+    fun withinHideRange(entity: Entity): Boolean {
+        if (hideAllPlayers) return true
+        return entity.distanceToSqr(mc.player ?: return false) <= playerDistance * playerDistance
+    }
+
+    fun shouldRenderPlayer(entity: Entity): Boolean =
+        !hidesPlayers() || entity !is Player || entity.uuid.version() != 4 || entity == mc.player ||
+            playersOnlyInDungeons && !DungeonUtils.inDungeons || !withinHideRange(entity)
+
+    fun chatLimit(vanilla: Int): Int = if (enabled && removeLimit) maxMessages else vanilla
+
+    fun hides(contents: Component): Boolean = enabled && hideEmpty && contents.string.isBlank()
+
+    fun compactOn(): Boolean = enabled && compactChat
+
+    fun compact(contents: Component, top: Component?): Component {
+        val key = ChatFormatting.stripFormatting(contents.string) ?: ""
+        if (key.isBlank()) {
+            lastKey = null
+            return contents
+        }
+        if (top != null && top === lastShown && key == lastKey) {
+            count++
+            val out = contents.copy().append(Component.literal(" (x$count)").withStyle(ChatFormatting.GRAY))
+            lastShown = out
+            return out
+        }
+        lastKey = key
+        lastShown = contents
+        count = 1
+        return contents
+    }
+
+    fun copyChat(event: MouseButtonEvent) {
+        if (!enabled || !copyChat || event.button() != InputConstants.MOUSE_BUTTON_RIGHT) return
+        val chat = mc.gui.hud.chat as ChatCopyAccessor
+        if (chat.`ec$width`() + 4 < event.x()) return
+        val lineHeight = (9 * (mc.options.chatLineSpacing().get() + 1.0) * chat.`ec$scale`()).toInt()
+        if (lineHeight <= 0) return
+        val index = ((Mth.floor(mc.window.guiScaledHeight - 40.0) - event.y()) / lineHeight).toInt() + chat.`ec$scroll`()
+        val lines = chat.`ec$lines`()
+        if (index !in lines.indices) return
+
+        val clicked = lines[index]
+        val sb = StringBuilder()
+        if (copyLineOnly || event.hasShiftDown()) appendPlain(sb, clicked.content())
+        else for (i in lines.indices.reversed()) if (lines[i].parent() === clicked.parent()) appendPlain(sb, lines[i].content())
+
+        mc.keyboardHandler.clipboard = sb.toString().replace(Regex("§."), "")
+        EngineerClient.msg("§7Copied chat message.")
+    }
+
+    private fun appendPlain(sb: StringBuilder, text: FormattedCharSequence) {
+        text.accept { _, _, codePoint -> sb.appendCodePoint(codePoint); true }
+    }
+
+    fun hidesPing(): Boolean = enabled && removePing
+
+    fun hidesHead(texture: Identifier): Boolean = enabled && removeHeads && texture.path == GRAY_SKIN
 }

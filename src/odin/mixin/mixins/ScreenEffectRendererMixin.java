@@ -1,6 +1,6 @@
 package com.odtheking.mixin.mixins;
 
-import com.engineerclient.render.RenderCleanup;
+import com.engineerclient.render.ScreenTweaks;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.ScreenEffectRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -15,6 +15,6 @@ public class ScreenEffectRendererMixin {
 
     @Inject(method = "submitFire", at = @At("HEAD"), cancellable = true)
     private static void onRenderFireOverlay(PoseStack poseStack, SubmitNodeCollector submitNodeCollector, TextureAtlasSprite sprite, CallbackInfo ci) {
-        if (RenderCleanup.INSTANCE.hidesFireOverlay()) ci.cancel();
+        if (ScreenTweaks.INSTANCE.hidesFireOverlay()) ci.cancel();
     }
 }
