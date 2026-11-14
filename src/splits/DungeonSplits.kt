@@ -150,6 +150,21 @@ object DungeonSplits : Module(
         }
     )
 
+    /** The terminal sections (S1-S4), each timed from the one before. */
+    private val termHud = registerSetting(
+        HUD("Terminal Sub Split", "How long each terminal section took.", true, 750, 80, 1f) { example ->
+            val times = if (example) listOf(8_700L to 174L, 7_700L to 154L, 9_100L to 182L, 10_350L to 207L) else termSections()
+            draw(this, times.mapIndexedNotNull { i, (ms, ticks) ->
+                if (!termShown.getOrElse(i) { true }) return@mapIndexedNotNull null
+                "§6S${i + 1} §a${SplitFormat.seconds(ms)}" + if (com.odtheking.odin.features.impl.skyblock.Splits.showTickTime) " §8(§7${SplitFormat.seconds(ticks * 50)}§8)" else ""
+            })
+        }
+    )
+    private val termShownSettings: List<BooleanSetting> = (1..4).map { n ->
+        registerSetting(BooleanSetting("Show S$n", true, desc = "Terminal section $n.")).withDependency { termHud.value.enabled }
+    }
+    private val termShown: List<Boolean> get() = termShownSettings.map { it.value }
+
     /** Goldor, where the server last put him and on which tick, for his setting off after the core opens. */
     private var coreGoldor: Triple<Int, net.minecraft.world.phys.Vec3, Int>? = null
 

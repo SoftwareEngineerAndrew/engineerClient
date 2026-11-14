@@ -10,6 +10,9 @@ import com.odtheking.odin.clickgui.settings.impl.HudElement
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
+import com.odtheking.odin.events.TickEvent
+import com.odtheking.odin.events.core.EventBus
+import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.ModuleManager
 import com.odtheking.odin.features.impl.skyblock.Splits
 import com.odtheking.odin.utils.Colors
@@ -50,8 +53,17 @@ object OdinSplitsLook {
     private val showPace = toggle("Pace", "The projected finish.")
 
     /** One switch per split: the clear and floor 7 by ADM's names, F1-F6 bosses and Kuudra by Odin's. */
-    private val runToggles = listOf("Open", "Blood", "Portal", "Enter", "Maxor", "Storm", "Terms", "S1", "S2", "S3", "S4", "Goldor", "Necron", "Dragons")
-        .associateWith { toggle(it, if (it.startsWith("S") && it.length == 2) "Terminal section ${it[1]}; needs Sub Splits on." else "The $it split.") }
+    private val runToggles = listOf("Open", "Blood", "Portal", "Enter", "Maxor", "Storm", "Terms", "Goldor", "Necron", "Dragons")
+        .associateWith { toggle(it, "The $it split.") }
+
+    private val separate = BooleanSetting("Separate Splits", false, desc = "Each split is its own HUD, placed and linked in the HUD editor.")
+
+    /** With Separate Splits, a HUD per split; any line without one (other floors) stays in Splits Display. */
+    private val SEPARATE = listOf("Lag", "Pace", "Open", "Blood", "Portal", "Enter", "Maxor", "Storm", "Terms", "Goldor", "Necron", "Dragons", "Total")
+    private val separateHuds = SEPARATE.mapIndexed { i, name ->
+        name to Splits.HUD("$name Split", "The $name split on its own.", false, 10, 10 + i * 10, 1f) { example -> drawOne(this, name, example) }
+            .withDependency { separate.value && shownSplits.value }
+    }.toMap()
     private val bossToggles by lazy {
         dungeonSplits.subList(1, 7).flatten().map { strip(it.name) }.distinct()
             .associateWith { toggle(if (it == "Cleared") "Boss Cleared" else it, "F1-F6: the $it split.") }
@@ -62,6 +74,26 @@ object OdinSplitsLook {
     }
 
     private fun strip(s: String) = s.replace(Regex("§."), "").trim()
+
+    private fun shownName(name: String): Boolean = when (name) {
+        "Pace" -> showPace.value
+        "Lag" -> showLag.value
+        else -> runToggles[name]?.value ?: true
+    }
+
+    /** First time on: each split's HUD under the last, linked to it, where Splits Display is. */
+    private fun stackSeparate() {
+        if (separateHuds.values.any { it.value.link != null }) return
+        val display = (Splits.settings["Splits Display HUD"] as? HUDSetting)?.value ?: return
+        var above: HudElement? = null
+        for (hud in separateHuds.values.map { it.value }) {
+            hud.scale = display.scale
+            hud.x = display.x
+            hud.y = above?.let { it.y + (LINE * it.scale).toInt() } ?: display.y
+            above?.let { hud.linkTo(it) }
+            above = hud
+        }
+    }
 
     private fun shown(label: String, place: EngineerLook.Place): Boolean {
         val name = strip(label)
@@ -109,7 +141,13 @@ object OdinSplitsLook {
         SubSplitGrades.byTime = { colourByTime.value }
         SubSplitGrades.showBest = { showPb.value }
         val toggles = listOf(showPace, showLag) + runToggles.values + bossToggles.values + kuudraToggles.values
-        for (s in listOf(colourByTime, showPb, shownSplits) + toggles + listOf(enterAfterEntry, pace, paceFrom, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
+        for (s in listOf(colourByTime, showPb, shownSplits, separate) + separateHuds.values + toggles + listOf(enterAfterEntry, pace, paceFrom, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
+        on<TickEvent.End> {
+            val wasOff = separateHuds.values.none { it.value.enabled }
+            for ((name, hud) in separateHuds) hud.value.enabled = separate.value && shownName(name)
+            if (wasOff && separate.value) stackSeparate()
+        }
+        EventBus.subscribe(this)
         (Splits.settings.remove("Keybind") as? KeybindSetting)?.let { ModuleManager.keybindSettingsCache.remove(it) }
         // The Show switches replace Odin's own Boss Entry toggle.
         Splits.settings.remove("Boss Entry Split")
@@ -298,18 +336,22 @@ object OdinSplitsLook {
 
     private const val LINE = 9
 
-    /** The terminal sections as lines, for after Terms: live from Sub Splits, or examples for the HUD editor. */
-    private fun sectionLines(example: Boolean, opts: EngineerLook.Options): List<EngineerLook.Line> {
-        val times = if (example) listOf(8_700L to 174L, 7_700L to 154L) else DungeonSplits.termSections()
-        return times.mapIndexedNotNull { i, (ms, ticks) ->
-            val label = "§6S${i + 1}"
-            if (!shown(label, EngineerLook.Place.FLOOR7)) return@mapIndexedNotNull null
-            EngineerLook.Line(label, "§6", SplitFormat.seconds(ms), if (opts.showTicks) SplitFormat.seconds(ticks * 50) else null)
-        }
+    private class Layout(val lines: List<EngineerLook.Line>, val nameW: Int, val timeW: Int)
+
+    private var cached: Pair<Long, Layout?>? = null
+
+    private fun time(l: EngineerLook.Line) = (if (l.graded) l.colour else "§a") + l.time + (l.ticks?.let { " §8(§7$it§8)" } ?: "")
+
+    /** The lines to draw and their column widths, worked out once a frame for every split HUD. */
+    private fun layout(example: Boolean): Layout? {
+        val key = System.nanoTime() / 5_000_000 * 2 + if (example) 1 else 0
+        cached?.let { (k, v) -> if (k == key) return v }
+        val v = computeLayout(example)
+        cached = key to v
+        return v
     }
 
-    /** Blade's look: the name in its colour on the left, real time in green and server time in gray on the right. */
-    private fun drawDisplay(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
+    private fun computeLayout(example: Boolean): Layout? {
         val (place, master) = if (example) EngineerLook.Place.FLOOR7 to (paceFloor.value == PaceFloor.M7) else place()
         val rows = if (example) exampleRows() else rows()
         val opts = options()
@@ -317,15 +359,9 @@ object OdinSplitsLook {
             if (example || place != EngineerLook.Place.FLOOR7) null else { n, ms, t, over -> grade(n, ms, t, over, master) },
             if (example || place != EngineerLook.Place.FLOOR7 || master) null else DungeonSplits.pace()?.let { it.ms to it.ticks },
             if (example || place != EngineerLook.Place.FLOOR7) null else DungeonSplits.lag())
-        val lines = ArrayList<EngineerLook.Line>()
-        for (l in all) {
-            if (shown(l.label, place)) lines += l
-            if (place == EngineerLook.Place.FLOOR7 && strip(l.label) == "Terms") lines += sectionLines(example, opts)
-        }
-        if (lines.isEmpty()) return 0 to 0
+        val lines = all.filter { shown(it.label, place) }
+        if (lines.isEmpty()) return null
         val font = EngineerClient.mc.font
-
-        fun time(l: EngineerLook.Line) = (if (l.graded) l.colour else "§a") + l.time + (l.ticks?.let { " §8(§7$it§8)" } ?: "")
 
         // Fixed Width sizes both columns for the longest the run can get, so the HUD never changes width mid-run.
         val fixed = bool("Fixed Width", true)
@@ -333,14 +369,37 @@ object OdinSplitsLook {
         val nameW = labels.maxOf { font.width(it) }
         val widest = if (opts.showTicks) "§a59m 59.9s §8(§759m 59.9s§8)" else "§a59m 59.9s"
         val timeW = maxOf(if (fixed) font.width(widest) else 0, lines.maxOf { font.width(time(it)) })
-        val width = nameW + GAP + timeW
-        lines.forEachIndexed { i, l ->
-            val y = i * LINE
-            g.text(l.label, 0, y, Colors.WHITE)
-            val s = time(l)
-            g.text(s, width - font.width(s), y, Colors.WHITE)
-        }
+        return Layout(lines, nameW, timeW)
+    }
+
+    private fun drawLine(g: GuiGraphicsExtractor, l: EngineerLook.Line, y: Int, width: Int) {
+        g.text(l.label, 0, y, Colors.WHITE)
+        val s = time(l)
+        g.text(s, width - EngineerClient.mc.font.width(s), y, Colors.WHITE)
+    }
+
+    /** Blade's look: the name in its colour on the left, real time in green and server time in gray on the right. */
+    private fun drawDisplay(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
+        val layout = layout(example) ?: return 0 to 0
+        val lines = if (separate.value) layout.lines.filter { strip(it.label) !in separateHuds } else layout.lines
+        if (lines.isEmpty()) return 0 to 0
+        val width = layout.nameW + GAP + layout.timeW
+        lines.forEachIndexed { i, l -> drawLine(g, l, i * LINE, width) }
         return width to lines.size * LINE
+    }
+
+    private fun drawOne(g: GuiGraphicsExtractor, name: String, example: Boolean): Pair<Int, Int> {
+        if (!separate.value) return 0 to 0
+        val layout = layout(example) ?: return 0 to 0
+        val l = layout.lines.firstOrNull { strip(it.label) == name }
+        val width = layout.nameW + GAP + layout.timeW
+        if (l == null) {
+            if (!example) return 0 to 0
+            g.text("§7$name", 0, 0, Colors.WHITE)
+            return width to LINE
+        }
+        drawLine(g, l, 0, width)
+        return width to LINE
     }
 
     private const val GAP = 8
