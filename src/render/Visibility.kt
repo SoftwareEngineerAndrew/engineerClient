@@ -53,7 +53,7 @@ object Visibility : Module(
     private val noWaterOverlay by BooleanSetting("No Water Overlay", false, desc = "No underwater screen texture.").withDependency { screenDropdown }
     private val noSuffocationOverlay by BooleanSetting("No Suffocation Overlay", false, desc = "No block texture when your head is inside a block.").withDependency { screenDropdown }
     private val hidePotionHud by BooleanSetting("Hide Potion Effect HUD", false, desc = "Hides the effect icons at the top right and effect swirl particles.").withDependency { screenDropdown }
-    private val hideInventoryEffects by BooleanSetting("Hide Inventory Effects", false, desc = "Hides the effect list beside the inventory.").withDependency { screenDropdown }
+    private val hideInventoryEffects by BooleanSetting("Hide Inventory Effects", false, desc = "Hides the potion effects in your inventory screen.").withDependency { screenDropdown }
     private val noFog by BooleanSetting("No Fog", false, desc = "No world fog; lava, water, blindness and darkness fog stay.").withDependency { screenDropdown }
     private val fullbright by BooleanSetting("Fullbright", false, desc = "Everything fully lit.").withDependency { screenDropdown }
     private val noTextShadow by BooleanSetting("No Text Shadow", false, desc = "Text is drawn without its shadow.").withDependency { screenDropdown }
