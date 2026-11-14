@@ -70,6 +70,7 @@ object ConfigMigration {
      *  - Engineer Client's Terminals Status goes (2026-11-06).
      *  - POV Previews' Sharing FPS is its Sharing FPS ❗ (2026-11-11).
      *  - Sound Manager and Mono Audio are Sounds.
+     *  - World Border Click Fix is Shadow Assassin Jump Hider.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -93,6 +94,10 @@ object ConfigMigration {
         // P3 Sim -> P3 Sim Beta -> ADS (Advanced Dungeon Simulator): its settings keep under the new name.
         for (old in listOf("P3 Sim Beta", "P3 Sim")) module(modules, old)?.let {
             if (module(modules, "ADS") == null) { it.addProperty("name", "ADS"); changed = true }
+        }
+
+        module(modules, "World Border Click Fix")?.let {
+            if (module(modules, "Shadow Assassin Jump Hider") == null) { it.addProperty("name", "Shadow Assassin Jump Hider"); changed = true }
         }
 
         // Zpew -> Legit Zpew: its settings keep under the new name.
