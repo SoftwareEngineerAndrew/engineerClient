@@ -24,7 +24,7 @@ object FreezeDisplay : Module(
 
     @Volatile private var lastTick = System.currentTimeMillis()
 
-    private val hud by HUD("Freeze Display", "Time since the last server tick.", true, 400, 200, 2f) { example ->
+    private val hud by HUD("Freeze Display", "Time since the last server tick.", false, 400, 200, 2f) { example ->
         val since = System.currentTimeMillis() - lastTick
         val shown = example || (since > threshold && !mc.isLocalServer && (!dungeonsOnly || DungeonUtils.inDungeons))
         if (!shown) return@HUD 0 to 0
