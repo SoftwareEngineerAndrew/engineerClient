@@ -51,7 +51,7 @@ import net.minecraft.world.level.block.Blocks
 object DungeonSplits : Module(
     name = "Sub Splits",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "The blood rush sub splits, room by room; Storm's: his steps with the lightning, every pad read and how late each crush came (and his crush hitbox with Show Crush Info); and Goldor's: each leap into the core after S4 and Goldor starting to move. The splits themselves are Odin's Splits (Look: ADM); every other section's sub splits and the Scorecard are in Devgineer Client.",
+    description = "The blood rush sub splits, room by room; Storm's: his steps with the lightning, every pad read and how late each crush came (and his crush hitbox with Show Crush Info); and Goldor's: each leap into the core after S4 and Goldor starting to move. The splits themselves are in Splits; every other section's sub splits and the Scorecard are in Devgineer Client.",
     key = null,
 ) {
 
@@ -736,6 +736,15 @@ object DungeonSplits : Module(
      * now - between ticks it climbed by up to 50 ms and fell back on each, flickering on and off -
      * and the lowest of the last second's, since a tick arriving late over the network isn't lag.
      */
+    /** The terminal sections so far (Sub Splits' S1-S4), each as ms and ticks; empty unless Sub Splits is on. */
+    fun termSections(): List<Pair<Long, Long>> {
+        val n = now()
+        return subs.forSplit(SplitTracker.TERMS).map { s ->
+            val end = s.stop ?: n
+            (end.realMs - s.start.realMs) to (end.tick - s.start.tick).toLong()
+        }
+    }
+
     fun lag(): Long? = synchronized(lagSamples) { lagSamples.minOrNull()?.takeIf { lagShown } }
 
     private fun sampleLag() {

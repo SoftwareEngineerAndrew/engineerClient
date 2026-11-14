@@ -211,7 +211,7 @@ val floor7SplitGroup = mutableListOf(
     Split(Regex("^\\[BOSS] Wither King: You\\.\\.\\. again\\?$"), "§4Cleared"),
 )
 
-private val dungeonSplits = listOf(
+val dungeonSplits = listOf(
     entranceSplitGroup,
     floor1SplitGroup,
     floor2SplitGroup,

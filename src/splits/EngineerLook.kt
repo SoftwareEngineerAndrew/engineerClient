@@ -34,7 +34,7 @@ object EngineerLook {
                        val showPace: Boolean = true, val showLag: Boolean = true)
 
     /** A line: its label (colour codes included), the colour its time is drawn in, the time, and the tick time if shown. */
-    data class Line(val label: String, val colour: String, val time: String, val ticks: String?)
+    data class Line(val label: String, val colour: String, val time: String, val ticks: String?, val graded: Boolean = false)
 
     /** Odin's floor 7 splits, in order: what the pace targets are for. */
     val TARGET_SPLITS = listOf("Blood Open", "Blood Clear", "Portal Entry", "Maxor", "Storm", "Terminals", "Goldor", "Necron", "Cleared")
@@ -66,7 +66,7 @@ object EngineerLook {
     }
 
     /** The colour code a label starts with, which its time is drawn in too. */
-    private fun colourOf(label: String) = if (label.length >= 2 && label[0] == '§') label.take(2) else "§f"
+    fun colourOf(label: String) = if (label.length >= 2 && label[0] == '§') label.take(2) else "§f"
 
     /**
      * The lines, top to bottom. [targets] are the expected times in seconds for [TARGET_SPLITS]
@@ -95,7 +95,7 @@ object EngineerLook {
         val current = segments.indexOfFirst { it.current }
         val started = current >= 0 || rows.any { it.ms > 0 }
         // Once lag has cost a tick (DungeonSplits.lag, which then keeps it up), coloured by how much: gray, yellow, red.
-        if (opts.showLag && lagMs != null && started) out += Line(LAG, lagColour(lagMs), SplitFormat.seconds(lagMs), null)
+        if (opts.showLag && lagMs != null && started) out += Line(LAG, lagColour(lagMs), SplitFormat.seconds(lagMs), null, graded = true)
         // Pace from load-in where there are targets (the PBs added up), else once the run starts.
         if (opts.showPace && (started || opts.show0 || targets != null)) {
             var ms = 0L; var ticks = 0L
@@ -115,7 +115,7 @@ object EngineerLook {
             if (s.ms != 0L || opts.show0) {
                 val l = line(label(s.name, place, master), s.ms, s.ticks, opts, SplitFormat::seconds)
                 val over = current < 0 || i < current
-                out += grade?.invoke(s.name, s.ms, s.ticks, over && s.ms != 0L)?.let { l.copy(colour = it) } ?: l
+                out += grade?.invoke(s.name, s.ms, s.ticks, over && s.ms != 0L)?.let { l.copy(colour = it, graded = true) } ?: l
             }
             // Odin's Boss Entry: after the third split, the first three together - with Enter
             // After Entry, only once they are all over.
@@ -126,7 +126,7 @@ object EngineerLook {
                 if (ms != 0L || opts.show0) {
                     val l = line(label(BOSS_ENTRY, place, master), ms, ticks, opts, SplitFormat::minutes)
                     // Graded like a split (SubSplitGrades' split.enter), finished once all three are over.
-                    out += grade?.invoke(BOSS_ENTRY, ms, ticks, entered && ms != 0L)?.let { l.copy(colour = it) } ?: l
+                    out += grade?.invoke(BOSS_ENTRY, ms, ticks, entered && ms != 0L)?.let { l.copy(colour = it, graded = true) } ?: l
                 }
             }
         }
