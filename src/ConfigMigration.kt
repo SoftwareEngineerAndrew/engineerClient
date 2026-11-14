@@ -71,6 +71,8 @@ object ConfigMigration {
      *  - POV Previews' Sharing FPS is its Sharing FPS ❗ (2026-11-11).
      *  - Sound Manager and Mono Audio are Sounds.
      *  - World Border Click Fix is Shadow Assassin Jump Hider.
+     *  - Arrow Fix, Arrow Swap Title, Arrow Hit Sound, Odin's Quiver Display and the arrow settings of Render Cleanup
+     *    and Random Stuff are Arrows.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -374,6 +376,39 @@ object ConfigMigration {
             if (smOn) soundManager?.let(::settings)?.get("Volumes")?.let { to.add("Volumes", it) }
             soundManager?.let(modules::remove)
             monoAudio?.let(modules::remove)
+            changed = true
+        }
+
+        // Arrow Fix, Arrow Swap Title, Arrow Hit Sound and Odin's Quiver Display are Arrows settings, on if the module was; Render Cleanup's
+        // and Random Stuff's arrow settings too, on only if their module was.
+        run {
+            if (module(modules, "Arrows") != null) return@run
+            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else null
+            val quiver = odin?.let { module(it, "Quiver Display") }
+            val fix = module(modules, "Arrow Fix")
+            val swap = module(modules, "Arrow Swap Title")
+            val hit = module(modules, "Arrow Hit Sound")
+            val rc = module(modules, "Render Cleanup")
+            val rs = module(modules, "Random Stuff")
+            if (listOf(quiver, fix, swap, hit, rc, rs).all { it == null }) return@run
+            fun on(m: JsonObject?, fallback: Boolean = false) = m?.get("enabled")?.asBoolean ?: fallback
+            val to = settings(ensure("Arrows"))
+            to.addProperty("No Shortbow Pullback", on(fix))
+            to.addProperty("Quiver Display", on(quiver))
+            quiver?.let(::settings)?.entrySet()?.forEach { (k, v) -> to.add(k, v) }
+            if (swap != null) {
+                val hud = settings(swap)["Arrow Swap Title"]?.takeIf { it.isJsonObject }?.asJsonObject?.deepCopy() ?: JsonObject()
+                hud.addProperty("enabled", on(swap, true))
+                to.add("Arrow Swap Title", hud)
+            }
+            to.addProperty("Arrow Hit Sound", on(hit))
+            hit?.let(::settings)?.let { s -> for (k in listOf("Sound", "Sound Pitch", "Sound Volume")) s[k]?.let { to.add("Hit $k", it) } }
+            for ((m, keys) in listOf(rc to listOf("Hide Grounded Arrows", "Hide Stuck Arrows"), rs to listOf("Hide Own Arrows Nearby"))) {
+                val from = m?.let(::settings) ?: continue
+                for (k in keys) from.remove(k)?.takeIf { it.isJsonPrimitive }?.let { to.addProperty(k, on(m) && it.asBoolean) }
+            }
+            listOfNotNull(fix, swap, hit).forEach(modules::remove)
+            if (odin != null && quiver != null) { odin.remove(quiver); write(odinFile, odin) }
             changed = true
         }
 
