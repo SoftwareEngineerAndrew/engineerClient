@@ -18,7 +18,7 @@ import kotlin.math.roundToInt
 
 /** Which panel each module sits in. */
 object Placement {
-    val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Dragons", "Simulators", "Kuudra", "Skyblock", "Render", "AscentClient", "Coffee Client", "Devgineer Client")
+    val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Crimson Isle", "Skyblock", "Render", "AscentClient", "Coffee Client", "Devgineer Client")
 
     /** Where a panel starts: five to a row. */
     fun home(name: String): Pair<Int, Int> {
@@ -27,14 +27,12 @@ object Placement {
     }
 
     private val byName: Map<String, String> = mapOf(
-        "Dungeons" to listOf("ADR", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers", "Timers2", "Score Time", "Dungeon Map", "Map Info", "Leap Menu", "POV Previews", "Highlight", "Extra Stats", "Blessing Display", "Breaker Display", "Dungeon Queue", "Pre-Requeue", "Freeze Display", "Croesus", "Invincibility Timer", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam"),
-        "Clear" to listOf("Block Instaclear", "Blood Camp", "BR Roles", "Clear Breakdown", "Close Chest On Key", "Creeper Beams Ding", "Door Highlight", "Dungeon Breaker Torch Guard", "Dungeon Waypoints", "Item Highlight", "Mimic", "Puzzle Overlay", "Puzzle Solvers", "Room Alerts", "Room Clear", "Secret Clicked", "Superboom Ghost Block", "Tic Tac Toe Solver"),
-        "Boss" to listOf("Agro Sphere", "Boss Waypoints", "Explosive Shot", "LCM Melee Warning", "Livid Solver", "Maxor Crystals", "Phase Timers", "Spirit Bear", "Storm Helper", "Terracotta Timer", "Tick Timers", "World Border Click Fix"),
-        "Terminals" to listOf("Arrow Align", "Arrows Device", "Bonzo Sound", "EE Highlight", "Goldor Helper", "Highlight Levers", "i4 Aim", "Melody Message", "Recore", "Simon Says", "Term Info", "Term Progress", "Terminal Hitboxes", "Terminal Solver", "Terminal Sounds", "Terminal Times", "Terminal Titles", "Terminals Status"),
-        "Dragons" to listOf("Wither Dragons", "Relics"),
-        "Simulators" to listOf("ADS", "SS Practice", "Terminal Simulator", "Termsim"),
-        "Kuudra" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius"),
-        "Skyblock" to listOf("Arrow Fix", "Arrow Hit Sound", "Arrow Swap Title", "Blaze Dagger HUD", "Chat Commands", "Chat Tweaks", "Coffee Random Stuff", "Command Aliases", "Command Keybinds", "Etherwarp", "Fast Launch", "Gyro Wand", "Health & Mana", "Item Protection", "Item Tweaks", "Legit Zpew", "Loadout Keybinds", "Mono Audio", "Move Disconnect Button", "Name Changer", "No Cursor Reset", "No Item Place", "Pet Keybinds", "Pet Menu", "Player Display", "Quiver Display", "Ragnarock", "Random Stuff", "Salvage Overlay", "Search Bar", "Server ID Hider", "Slot Binds", "Sound Collector", "Sound Editor", "Sound Manager", "Sound Tweaks", "Spring Boots", "Tab Tweaks", "Temporary Waypoints", "Wardrobe Keybinds"),
+        "Dungeons" to listOf("ADR", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers", "Timers2", "Score Time", "Dungeon Map", "Leap Menu", "POV Previews", "Highlight", "Extra Stats", "Blessing Display", "Dungeon Queue", "Pre-Requeue", "Freeze Display", "Croesus", "Invincibility Timer", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam", "Dungeonbreaker"),
+        "Clear" to listOf("Block Instaclear", "Blood Camp", "BR Roles", "Clear Breakdown", "Close Chest On Key", "Creeper Beams Ding", "Door Highlight", "Dungeon Waypoints", "Item Highlight", "Mimic", "Puzzle Overlay", "Puzzle Solvers", "Room Alerts", "Room Clear", "Secret Clicked", "Superboom Ghost Block", "Tic Tac Toe Solver", "Map Info", "Shadow Assassin Jump Hider"),
+        "Boss" to listOf("Agro Sphere", "Boss Waypoints", "Explosive Shot", "LCM Melee Warning", "Livid Solver", "Maxor Crystals", "Phase Timers", "Spirit Bear", "Terracotta Timer", "Tick Timers", "Wither Dragons", "Relics"),
+        "Terminals" to listOf("Arrow Align", "Arrows Device", "Bonzo Sound", "EE Highlight", "Goldor Helper", "Highlight Levers", "i4 Aim", "Melody Message", "Recore", "Simon Says", "Term Info", "Term Progress", "Terminal Hitboxes", "Terminal Solver", "Terminal Sounds", "Terminal Times", "Terminal Titles", "Terminals Status", "ADS", "SS Practice", "Terminal Simulator", "Termsim"),
+        "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
+        "Skyblock" to listOf("Arrow Fix", "Arrow Hit Sound", "Arrow Swap Title", "Chat Commands", "Chat Tweaks", "Coffee Random Stuff", "Command Aliases", "Etherwarp", "Fast Launch", "Gyro Wand", "Health & Mana", "Item Protection", "Item Tweaks", "Name Changer", "No Cursor Reset", "No Item Place", "Player Display", "Quiver Display", "Ragnarock", "Random Stuff", "Salvage Overlay", "Search Bar", "Server ID Hider", "Slot Binds", "Sound Collector", "Sound Editor", "Sound Tweaks", "Spring Boots", "Tab Tweaks", "Temporary Waypoints", "Menu Keybinds", "Sounds"),
         "Render" to listOf("Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Nametag Tweaks", "Performance", "Player Size", "Render Cleanup", "Render Tweaks", "Screen Tweaks", "Scrollable Tooltip"),
     ).flatMap { (panel, names) -> names.map { it to panel } }.toMap()
 
@@ -48,7 +46,7 @@ object Placement {
         return when (module.category) {
             Category.DUNGEON -> "Clear"
             Category.BOSS -> "Boss"
-            Category.NETHER -> "Kuudra"
+            Category.NETHER -> "Crimson Isle"
             Category.RENDER -> "Render"
             else -> "Skyblock"
         }
@@ -204,7 +202,7 @@ class Panel(val name: String, val modules: List<ModuleView>, defaultX: Int, defa
         fun build(views: (Module) -> ModuleView): List<Panel> {
             val grouped = LinkedHashMap<String, MutableList<Module>>()
             // The panels were renamed: places saved for the old ones would pile the new ones up.
-            if ("Dungeons" !in ClickGUIModule.panelSetting) ClickGUIModule.panelSetting.clear()
+            if ("Crimson Isle" !in ClickGUIModule.panelSetting) ClickGUIModule.panelSetting.clear()
             for (name in Placement.PANELS) grouped[name] = mutableListOf()
             for (m in ModuleManager.modules.values) grouped.getOrPut(Placement.of(m)) { mutableListOf() }.add(m)
             return grouped.filterValues { it.isNotEmpty() }.map { (name, list) ->
