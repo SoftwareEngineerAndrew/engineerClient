@@ -33,6 +33,8 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
     private var grabX = 0
     private var grabY = 0
     private var linking = false
+    /** HUDs right clicked off here: kept in the editor, in red, so a right click turns them back on. */
+    private val offHere = LinkedHashSet<HUDSetting>()
     private var categoryIndex = 0
     private var swappedTime = System.currentTimeMillis()
 
@@ -49,7 +51,7 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
     }
 
     private fun updateHuds() {
-        huds = ModuleManager.hudSettingsCache.filter { shown(it) && (filter == null || it.module.category == filter) }
+        huds = ModuleManager.hudSettingsCache.filter { (shown(it) || it in offHere) && (filter == null || it.module.category == filter) }
         selected = null
         swappedTime = System.currentTimeMillis()
     }
@@ -67,7 +69,11 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
         val x = event.x().toInt()
         val y = event.y().toInt()
-        val hit = huds.lastOrNull { val h = it.hud; x in h.x..h.x + h.scaledWidth && y in h.y..h.y + h.scaledHeight }
+        val hit = huds.lastOrNull { val h = it.hud; x in h.x..h.x + boxW(it) && y in h.y..h.y + boxH(it) }
+        if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
+            hit?.let(::toggle)
+            return true
+        }
         val from = selected
         if (linking && from != null) {
             linking = false
@@ -170,6 +176,16 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         return true
     }
 
+    private fun boxW(s: HUDSetting) = maxOf(s.hud.scaledWidth, if (shown(s)) 0 else MIN_OFF_W)
+    private fun boxH(s: HUDSetting) = maxOf(s.hud.scaledHeight, if (shown(s)) 0 else MIN_OFF_H)
+
+    /** On or off in the config: the HUD's own switch, or its module's for a HUD without one. */
+    private fun toggle(s: HUDSetting) {
+        val toggleable = runCatching { HUDSetting::class.java.getDeclaredField("toggleable").apply { isAccessible = true }.getBoolean(s) }.getOrDefault(true)
+        if (toggleable) s.hud.enabled = !s.hud.enabled else s.module.toggle()
+        offHere += huds.filter { !shown(it) }
+    }
+
     // Blade's grid runs out from the screen's centre.
     private fun snap(pos: Int, center: Int) = center + ((pos - center).toFloat() / GRID).roundToInt() * GRID
 
@@ -199,6 +215,13 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
             val y = height - (font.lineHeight + 1) * (INFO.size - i)
             graphics.text(font, INFO[i], 1, y, WHITE, true)
             graphics.text(font, KEYS[i], 7 + longest, y, WHITE, true)
+        }
+
+        for (s in huds) {
+            if (shown(s)) continue
+            val h = s.hud
+            graphics.fill(h.x, h.y, h.x + boxW(s), h.y + boxH(s), OFF_COLOR)
+            graphics.text(font, s.name, h.x + 2, h.y + 2, WHITE, true)
         }
 
         selected?.let {
@@ -279,6 +302,9 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         private const val GRID_COLOR = 0xFF004444.toInt()
         private const val HIGHLIGHT = 0x99FFFFFF.toInt()
         private const val LINK_COLOR = 0xFF55FFFF.toInt()
+        private const val OFF_COLOR = 0x99FF2020.toInt()
+        private const val MIN_OFF_W = 40
+        private const val MIN_OFF_H = 12
         private const val WHITE = -1
         private const val MARGIN = 2
         private const val MOVE_STEP = 2
@@ -286,11 +312,11 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         private const val KEY_SCALE_STEP = 0.1f
         private const val DISPLAY_TIME = 1250
 
-        private val KEYS = arrayOf("t + ctrl", "r", "r + ctrl + shift", "g + ctrl", "s", "h + ctrl", "v + ctrl", "tab", "l", "scroll / + -")
+        private val KEYS = arrayOf("t + ctrl", "r", "r + ctrl + shift", "g + ctrl", "s", "h + ctrl", "v + ctrl", "tab", "l", "right click", "scroll / + -")
         private val INFO = arrayOf(
             "toggle category", "reset component", "reset all editable components", "toggle grid",
             "snap to closest grid", "center selected horizontally", "center selected vertically",
-            "cycle selected component", "link / unlink selected", "scale selected component",
+            "cycle selected component", "link / unlink selected", "turn component on / off", "scale selected component",
         )
     }
 }
