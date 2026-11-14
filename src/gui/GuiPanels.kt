@@ -27,22 +27,23 @@ object Placement {
     }
 
     private val byName: Map<String, String> = mapOf(
-        "Dungeons" to listOf("ADR", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers", "Timers2", "Score Time", "Dungeon Map", "Map Info", "Leap Menu", "POV Previews", "Highlight", "Extra Stats", "Blessing Display", "Breaker Display", "Dungeon Queue", "Pre-Requeue", "Solo Clear Queue", "Warp Cooldown", "Freeze Display", "Croesus", "Invincibility Timer", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam"),
-        "Clear" to listOf("Block Instaclear", "Blood Camp", "BR Roles", "Clear Breakdown", "Close Chest On Key", "Creeper Beams Ding", "Door Highlight", "Dungeon Breaker Torch Guard", "Dungeon Waypoints", "Item Highlight", "Mimic", "Puzzle HUD", "Puzzle Overlay", "Puzzle Solvers", "Room Alerts", "Room Clear", "Secret Clicked", "Secrets Counter", "Superboom Ghost Block", "Tic Tac Toe Solver"),
+        "Dungeons" to listOf("ADR", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers", "Timers2", "Score Time", "Dungeon Map", "Map Info", "Leap Menu", "POV Previews", "Highlight", "Extra Stats", "Blessing Display", "Breaker Display", "Dungeon Queue", "Pre-Requeue", "Freeze Display", "Croesus", "Invincibility Timer", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam"),
+        "Clear" to listOf("Block Instaclear", "Blood Camp", "BR Roles", "Clear Breakdown", "Close Chest On Key", "Creeper Beams Ding", "Door Highlight", "Dungeon Breaker Torch Guard", "Dungeon Waypoints", "Item Highlight", "Mimic", "Puzzle Overlay", "Puzzle Solvers", "Room Alerts", "Room Clear", "Secret Clicked", "Superboom Ghost Block", "Tic Tac Toe Solver"),
         "Boss" to listOf("Agro Sphere", "Boss Waypoints", "Explosive Shot", "LCM Melee Warning", "Livid Solver", "Maxor Crystals", "Phase Timers", "Spirit Bear", "Storm Helper", "Terracotta Timer", "Tick Timers", "World Border Click Fix"),
-        "Terminals" to listOf("Arrow Align", "Arrows Device", "Bonzo Sound", "EE Highlight", "Goldor Helper", "Highlight Levers", "i4 Aim", "Leap Count", "Melody Message", "Recore", "Simon Says", "Term Info", "Term Progress", "Terminal Hitboxes", "Terminal Solver", "Terminal Sounds", "Terminal Times", "Terminal Titles", "Terminals Status"),
-        "Dragons" to listOf("Wither Dragons", "King Relic", "Relic Helper"),
+        "Terminals" to listOf("Arrow Align", "Arrows Device", "Bonzo Sound", "EE Highlight", "Goldor Helper", "Highlight Levers", "i4 Aim", "Melody Message", "Recore", "Simon Says", "Term Info", "Term Progress", "Terminal Hitboxes", "Terminal Solver", "Terminal Sounds", "Terminal Times", "Terminal Titles", "Terminals Status"),
+        "Dragons" to listOf("Wither Dragons", "Relics"),
         "Simulators" to listOf("ADS", "SS Practice", "Terminal Simulator", "Termsim"),
         "Kuudra" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius"),
-        "Skyblock" to listOf("Arrow Fix", "Arrow Hit Sound", "Arrow Swap Title", "Blaze Dagger HUD", "Chat Commands", "Chat Tweaks", "Coffee Random Stuff", "Command Aliases", "Command Keybinds", "Etherwarp", "Fast Launch", "Gyro Wand", "Health & Mana", "Item Protection", "Item Tweaks", "Kicked Timer", "Legit Zpew", "Loadout Keybinds", "Mono Audio", "Move Disconnect Button", "Name Changer", "No Cursor Reset", "No Item Place", "Pet Keybinds", "Pet Menu", "Player Display", "Quiver Display", "Ragnarock", "Random Stuff", "Salvage Overlay", "Search Bar", "Server ID Hider", "Slot Binds", "Sound Collector", "Sound Editor", "Sound Manager", "Sound Tweaks", "Spring Boots", "Tab Tweaks", "Temporary Waypoints", "Wardrobe Keybinds", "Waypoints"),
-        "Render" to listOf("Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Info Display", "Item Animations", "Nametag Tweaks", "No Item Reset On Swap", "Old Blocking", "Performance HUD", "Performance Monitor", "Player Size", "Render Cleanup", "Render Tweaks", "Screen Tweaks", "Scrollable Tooltip"),
+        "Skyblock" to listOf("Arrow Fix", "Arrow Hit Sound", "Arrow Swap Title", "Blaze Dagger HUD", "Chat Commands", "Chat Tweaks", "Coffee Random Stuff", "Command Aliases", "Command Keybinds", "Etherwarp", "Fast Launch", "Gyro Wand", "Health & Mana", "Item Protection", "Item Tweaks", "Legit Zpew", "Loadout Keybinds", "Mono Audio", "Move Disconnect Button", "Name Changer", "No Cursor Reset", "No Item Place", "Pet Keybinds", "Pet Menu", "Player Display", "Quiver Display", "Ragnarock", "Random Stuff", "Salvage Overlay", "Search Bar", "Server ID Hider", "Slot Binds", "Sound Collector", "Sound Editor", "Sound Manager", "Sound Tweaks", "Spring Boots", "Tab Tweaks", "Temporary Waypoints", "Wardrobe Keybinds"),
+        "Render" to listOf("Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Nametag Tweaks", "Performance", "Player Size", "Render Cleanup", "Render Tweaks", "Screen Tweaks", "Scrollable Tooltip"),
     ).flatMap { (panel, names) -> names.map { it to panel } }.toMap()
 
     fun of(module: Module): String {
-        val pkg = module.javaClass.packageName
-        if (pkg.startsWith("com.ascentclient")) return "AscentClient"
-        if (pkg.startsWith("com.coffeeclient")) return "Coffee Client"
-        if (pkg.startsWith("com.devgineerclient")) return "Devgineer Client"
+        // The addons' modules keep their own panel, named by the category each gives them.
+        when (module.category.name) {
+            "Ascent Client" -> return "AscentClient"
+            "Coffee Client", "Devgineer Client" -> return module.category.name
+        }
         byName[module.name]?.let { return it }
         return when (module.category) {
             Category.DUNGEON -> "Clear"
