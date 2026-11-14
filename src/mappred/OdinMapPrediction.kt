@@ -272,6 +272,20 @@ object OdinMapPrediction {
 
     /** True while ADM's prediction replaces Odin's "?" tiles (MapPathHintsMixin). */
     @JvmStatic
+    /** Wither and blood doors the prediction is sure of between tiles the map hasn't shown; none while it's catching up. */
+    fun certainDoors(): List<com.odtheking.odin.features.impl.dungeon.map.tile.DungeonDoor> {
+        val p = shown ?: return emptyList()
+        if (shownKey != lastKey) return emptyList()
+        return p.doors.filter { it.wither >= SURE || it.blood >= SURE }.map {
+            com.odtheking.odin.features.impl.dungeon.map.tile.DungeonDoor(
+                com.odtheking.odin.utils.IVec2(it.a % W, it.a / W),
+                if (it.b == it.a + 1) com.odtheking.odin.features.impl.dungeon.map.tile.DoorRotation.Horizontal else com.odtheking.odin.features.impl.dungeon.map.tile.DoorRotation.Vertical,
+                if (it.blood >= SURE) DoorType.Blood else DoorType.Wither,
+                com.odtheking.odin.utils.Colors.WHITE,
+            )
+        }
+    }
+
     fun replacesOdin(): Boolean = on && DungeonMap.enabled && supported() && shown != null
 
     /** Unknown tiles behind a blood door the map shows: certain to be the blood room, nothing to predict. */

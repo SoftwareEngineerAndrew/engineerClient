@@ -38,6 +38,7 @@ object DoorHighlight : Module(
     private val openableColor by ColorSetting("Openable Door Color", Colors.MINECRAFT_GREEN.withAlpha(0.8f), true, desc = "Color for doors that can be opened with a held key.")
     private val witherColor by ColorSetting("Wither Color", Colors.BLACK.withAlpha(0.8f), true, desc = "The color of the box.")
     private val bloodColor by ColorSetting("Blood Color", Colors.MINECRAFT_RED.withAlpha(0.8f), true, desc = "The color of the box.")
+    private val predictedDoors by BooleanSetting("Predicted Doors", true, desc = "Also boxes wither and blood doors Map Prediction is sure of.")
     private val normalDoors by BooleanSetting("Highlight Normal Doors", false, desc = "Also boxes the normal doors of the room you're in.")
     private val hideDone by BooleanSetting("Hide Done Doors", true, desc = "No box on a door when every room past it is green.").withDependency { normalDoors }
     private val normalColor by ColorSetting("Normal Door Color", Color(0, 128, 128, 0.8f), true, desc = "Color for normal doors.").withDependency { normalDoors }
@@ -78,7 +79,9 @@ object DoorHighlight : Module(
         on<RenderExtractEvent> {
             if (!DungeonUtils.inClear) return@on
 
-            DungeonScan.doors.forEach { (_, door) ->
+            val known = DungeonScan.doors.values.map { it.worldX to it.worldZ }.toSet()
+            val predicted = if (predictedDoors) com.engineerclient.mappred.OdinMapPrediction.certainDoors().filter { (it.worldX to it.worldZ) !in known } else emptyList()
+            (DungeonScan.doors.values + predicted).forEach { door ->
                 if (!door.type.equalsOneOf(DoorType.Wither, DoorType.Blood)) return@forEach
                 if (door.type == DoorType.Blood && bloodOpened) return@forEach
 
