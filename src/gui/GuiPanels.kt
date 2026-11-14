@@ -23,10 +23,10 @@ object Placement {
 
     val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Crimson Isle", "Skyblock", "Render", "AscentClient", "Coffee Client", "Devgineer Client")
 
-    /** Where a panel starts: five to a row. */
+    /** Where a panel starts: six to a row. */
     fun home(name: String): Pair<Int, Int> {
         val i = PANELS.indexOf(name).coerceAtLeast(0)
-        return 10 + (i % 5) * (Theme.WIDTH + 10) to 10 + (i / 5) * 220
+        return 10 + (i % 6) * (Theme.WIDTH + 10) to 10 + (i / 6) * 220
     }
 
     private val byName: Map<String, String> = mapOf(
@@ -204,8 +204,8 @@ class Panel(val name: String, val modules: List<ModuleView>, defaultX: Int, defa
 
         fun build(views: (Module) -> ModuleView): List<Panel> {
             val grouped = LinkedHashMap<String, MutableList<Module>>()
-            // The panels were renamed: places saved for the old ones would pile the new ones up.
-            if ("Crimson Isle" !in ClickGUIModule.panelSetting) ClickGUIModule.panelSetting.clear()
+            // Places saved before the panels were renamed or narrowed would pile them up.
+            if ("Six Wide" !in ClickGUIModule.panelSetting) { ClickGUIModule.panelSetting.clear(); ClickGUIModule.panelSetting["Six Wide"] = ClickGUIModule.PanelData(0, 0) }
             for (name in Placement.PANELS) grouped[name] = mutableListOf()
             for (m in ModuleManager.modules.values) if (m.name !in Placement.HIDDEN) grouped.getOrPut(Placement.of(m)) { mutableListOf() }.add(m)
             return grouped.filterValues { it.isNotEmpty() }.map { (name, list) ->
