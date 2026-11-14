@@ -12,8 +12,8 @@ import net.minecraft.world.level.GameType
 object TabPuzzles {
     enum class Status { INCOMPLETE, COMPLETED, FAILED }
 
-    /** One puzzle line: its name (null for "???") and status. */
-    data class Slot(val name: String?, val status: Status)
+    /** One puzzle line: its name (null for "???"), status and who solved or failed it. */
+    data class Slot(val name: String?, val status: Status, val player: String? = null)
 
     /** The section: the header's count (null when there's no header) and the lines in order. */
     data class Section(val count: Int?, val slots: List<Slot>)
@@ -32,7 +32,7 @@ object TabPuzzles {
             COUNT_LINE.find(line)?.let { count = it.groupValues[1].toIntOrNull() ?: count; continue }
             val m = PUZZLE_LINE.find(line) ?: continue
             val status = when (m.groupValues[2]) { "✔" -> Status.COMPLETED; "✖" -> Status.FAILED; else -> Status.INCOMPLETE }
-            slots += Slot(m.groupValues[1].takeUnless { it == "???" }, status)
+            slots += Slot(m.groupValues[1].takeUnless { it == "???" }, status, m.groupValues[3].ifEmpty { null })
         }
         return Section(count, slots)
     }
