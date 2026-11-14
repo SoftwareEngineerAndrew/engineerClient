@@ -12,9 +12,6 @@
   "accessWidener": "odin.accesswidener",
   "mixins": ["odin.mixins.json", "engineerclient.mixins.json", "engineerclient.odin.mixins.json", "engineerclient.sodium.mixins.json", "coffeeclient.mixins.json", "coffeeclient.odin.mixins.json", "devgineerclient.mixins.json", "devgineerclient.odin.mixins.json"],
   "entrypoints": {
-    "preLaunch": [
-      { "adapter": "kotlin", "value": "com.devgineerclient.misc.ClassWarmup" }
-    ],
     "modmenu": ["com.odtheking.odin.clickgui.ModMenuIntegration"],
     "client": [
       { "adapter": "kotlin", "value": "com.odtheking.odin.OdinMod" },

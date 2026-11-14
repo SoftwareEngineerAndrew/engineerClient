@@ -104,7 +104,6 @@ object LaunchTimeline {
 
     private fun write() {
         written = true
-        ClassWarmup.finish()
         var prev = 0L
         var line = marks.entries.joinToString("  ") { (k, v) -> "$k ${v}ms (+${v - prev})".also { prev = v } }
         DevgineerClient.logger.info("[dc] launch timeline: {}", line)

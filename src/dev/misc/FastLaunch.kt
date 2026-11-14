@@ -18,7 +18,6 @@ object FastLaunch : Module(
     private val fastExitSetting by BooleanSetting("Fast Exit", true, desc = "End dtmap's image watcher on quit, so the game closes at once instead of after ~16 s.")
     private val timelineSetting by BooleanSetting("Launch Timeline", true, desc = "Write each launch's timings to logs/launch-timeline.log.")
     private val buildChatSetting by BooleanSetting("Build In Chat", true, desc = "On reaching Skyblock, a chat line with the build you're on and how long the launch took.")
-    private val classWarmupSetting by BooleanSetting("Class Warmup", true, desc = "Loads the classes the last launch needed on a background thread, so the game doesn't stall loading them on landing. From the next launch.")
 
     /** Whether the module has had its one-time switch-on (on by default, existing installs too). */
     private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
@@ -27,7 +26,6 @@ object FastLaunch : Module(
     val fastExit get() = enabled && fastExitSetting
     val timeline get() = enabled && timelineSetting
     val buildChat get() = enabled && buildChatSetting
-    val classWarmup get() = enabled && classWarmupSetting
 
     fun enableByDefault() {
         if (switchedOn) return
