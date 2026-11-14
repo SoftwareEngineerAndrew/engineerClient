@@ -35,6 +35,7 @@ object Dungeonbreaker : Module(
 ) {
     private val torchGuard by BooleanSetting("Torch Guard", true, desc = "Stops the Dungeon Breaker from hitting torches and the blocks they hang on.")
     private val secretGuard by BooleanSetting("Stop Breaking Secrets", true, desc = "Stops the Dungeon Breaker from hitting chests, levers, skulls and the blocks levers hang on.")
+    private val instant by BooleanSetting("Instant Break", false, desc = "No wait between blocks while you hold left click.")
     private val chargesDisplay by BooleanSetting("Charges Display", true, desc = "Shows the charges left in your Dungeon Breaker.")
 
     private val chargesRegex = Regex("Charges: (\\d+)/(\\d+)⸕")
@@ -56,6 +57,9 @@ object Dungeonbreaker : Module(
             }
         }
     }
+
+    @JvmStatic
+    fun instantBreak(): Boolean = enabled && instant && DungeonUtils.inDungeons && mc.player?.mainHandItem?.itemId == "DUNGEONBREAKER"
 
     @JvmStatic
     fun blocksAttack(): Boolean {

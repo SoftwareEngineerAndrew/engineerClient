@@ -117,6 +117,7 @@
     "SuperboomGhostMixin",
     "SuperboomGhostCollisionMixin",
     "DungeonbreakerMixin",
+    "DungeonbreakerDelayMixin",
     "WorldBorderClickMixin",
     "WorldBorderUseMixin",
     "ItemAnimationsRendererMixin",
