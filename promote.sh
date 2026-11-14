@@ -110,9 +110,9 @@ const rules = [
   // Mod metadata, jar and releases.
   ['"id": "engineerclient",', '"id": "adm",', true],
   ['"name": "Engineer Client",', '"name": "ADM",', true],
-  ['"description": "An Odin addon for Hypixel SkyBlock dungeons:', '"description": "Advanced Dungeons Mod, an Odin addon for Hypixel SkyBlock dungeons:', true],
+  ['"description": "A Hypixel SkyBlock dungeons mod with Odin built in:', '"description": "Advanced Dungeons Mod, a Hypixel SkyBlock dungeons mod with Odin built in:', true],
   // An old Engineer Client jar left in mods is then a duplicate (an error naming both), not a second copy.
-  ['  "license": "All-Rights-Reserved",\n', '  "license": "All-Rights-Reserved",\n  "provides": ["engineerclient"],\n', true],
+  ['"provides": ["odin"],', '"provides": ["odin", "engineerclient"],', true],
   ['archivesName.set("engineerclient")', 'archivesName.set("adm")', true],
   ['# releases/download/release-<channel>/EngineerClient-<mc>.jar', '# releases/download/release-<channel>/ADM-<mc>.jar', false],
   ['jar="EngineerClient-$MC.jar"', 'jar="ADM-$MC.jar"', true],

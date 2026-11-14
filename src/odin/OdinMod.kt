@@ -1,0 +1,82 @@
+package com.odtheking.odin
+
+import com.odtheking.odin.commands.*
+import com.odtheking.odin.events.EventDispatcher
+import com.odtheking.odin.events.core.EventBus
+import com.odtheking.odin.features.ModuleManager
+import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
+import com.odtheking.odin.features.impl.render.Shenanigans
+import com.odtheking.odin.utils.IrisCompatability
+import com.odtheking.odin.utils.ServerUtils
+import com.odtheking.odin.utils.handlers.TickTasks
+import com.odtheking.odin.utils.render.ItemStateRenderer
+import com.odtheking.odin.utils.render.NoDepthFeatureRenderer
+import com.odtheking.odin.utils.skyblock.*
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonListener
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
+import com.odtheking.odin.utils.ui.widget.CustomGUIImpl
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import net.fabricmc.api.ClientModInitializer
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
+import net.fabricmc.fabric.api.client.rendering.v1.FeatureRendererRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.PictureInPictureRendererRegistry
+import net.fabricmc.loader.api.FabricLoader
+import net.fabricmc.loader.api.Version
+import net.minecraft.client.Minecraft
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
+import java.io.File
+import kotlin.coroutines.EmptyCoroutineContext
+
+object OdinMod : ClientModInitializer {
+
+    val logger: Logger = LogManager.getLogger("Odin")
+
+    @JvmStatic
+    val mc: Minecraft = Minecraft.getInstance()
+
+    /**
+     * Main config file location.
+     * @see com.odtheking.odin.config.ModuleConfig
+     * @see com.odtheking.odin.config.DungeonWaypointConfig
+     */
+    val configFile: File = File(mc.gameDirectory, "config/odin/").apply {
+        try {
+            if (isFile) delete() // Delete old bugged files that prevent creating the directory
+            if (!exists()) mkdirs()
+        } catch (e: Exception) {
+            println("Error initializing module config\n${e.message}")
+            logger.error("Error initializing module config", e)
+        }
+    }
+
+    const val MOD_ID = "odin"
+
+    val version: Version by lazy { FabricLoader.getInstance().getModContainer(MOD_ID).orElseThrow().metadata.version }
+    val scope = CoroutineScope(SupervisorJob() + EmptyCoroutineContext)
+
+    override fun onInitializeClient() {
+        FeatureRendererRegistry.register(NoDepthFeatureRenderer.TYPE) { NoDepthFeatureRenderer() }
+
+        ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
+            arrayOf(
+                mainCommand, devCommand, waypointCommand,
+                soopyCommand, termSimCommand,
+                dungeonWaypointsCommand, cataCommand
+            ).forEach { commodore -> commodore.register(dispatcher) }
+        }
+
+        listOf(
+            this, LocationUtils, TickTasks, KuudraUtils,
+            ActionBarListener, ServerUtils, EventDispatcher,
+            DungeonListener, PartyUtils, TerminalUtils,
+            DungeonUtils, SplitsManager, DungeonScan,
+            IrisCompatability,
+            ModuleManager, CustomGUIImpl, Shenanigans,
+        ).forEach { EventBus.subscribe(it) }
+
+        PictureInPictureRendererRegistry.register { ItemStateRenderer() }
+    }
+}

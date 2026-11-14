@@ -1,0 +1,173 @@
+package com.odtheking.odin.features.impl.dungeon
+
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
+import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.events.GuiEvent
+import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.MessageEvent
+import com.odtheking.odin.events.TickEvent
+import com.odtheking.odin.events.core.on
+import com.odtheking.odin.features.Module
+import com.odtheking.odin.utils.*
+import com.odtheking.odin.utils.render.ItemStateRenderer.Companion.drawItemStack
+import com.odtheking.odin.utils.render.textDim
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.world.entity.EquipmentSlot
+
+object InvincibilityTimer : Module(
+    name = "Invincibility Timer",
+    description = "Provides visual information about your invincibility items."
+) {
+    private val invincibilityAlert by BooleanSetting("Invincibility Alert", true, desc = "Plays a sound when you get invincibility.")
+    private val invincibilityAnnounce by BooleanSetting("Announce Invincibility", true, desc = "Announces when you get invincibility.")
+    private val onlyInDungeons by BooleanSetting("Only In Dungeons", true, "Only proc invincibility timers while in a dungeon")
+
+    private val maskCat by DropdownSetting("Displayed Items", desc = "Which invincibility items are shown in the HUD.")
+    private val showSpirit by BooleanSetting("Show Spirit Mask", true, desc = "Shows the Spirit Mask in the HUD.").withDependency { maskCat }
+    private val showBonzo by BooleanSetting("Show Bonzo Mask", true, desc = "Shows the Bonzo Mask in the HUD.").withDependency { maskCat }
+    private val showPhoenix by BooleanSetting("Show Phoenix Pet", true, desc = "Shows the Phoenix Pet in the HUD.").withDependency { maskCat }
+
+    private val hud by HUD(name, "Shows the invincibility time in the HUD.") { example ->
+        if (!example && ((onlyInDungeons && !DungeonUtils.inDungeons) || (showOnlyInBoss && !DungeonUtils.inBoss))) return@HUD 0 to 0
+
+        val visibleTypes = if (example) InvincibilityType.entries else InvincibilityType.entries.filter { type ->
+            when (type) {
+                InvincibilityType.SPIRIT -> showSpirit
+                InvincibilityType.BONZO -> showBonzo
+                InvincibilityType.PHOENIX -> showPhoenix
+            } && when (showWhen) {
+                ShowWhen.ALWAYS -> true
+                ShowWhen.ANY -> type.activeTime > 0 || type.currentCooldown > 0
+                ShowWhen.WHEN_ACTIVE -> type.activeTime > 0
+                ShowWhen.ON_COOLDOWN -> type.currentCooldown > 0
+            }
+        }.ifEmpty { return@HUD 0 to 0 }
+
+        var width = 0
+
+        visibleTypes.forEachIndexed { index, type ->
+            drawItemStack(type.itemStack, 0, -1 + index * 14)
+            val y = index * 14 + 3
+
+            if (type == InvincibilityType.BONZO && mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.itemId?.equalsOneOf("BONZO_MASK", "STARRED_BONZO_MASK") == true ||
+                type == InvincibilityType.SPIRIT && mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.itemId?.equalsOneOf("SPIRIT_MASK", "STARRED_SPIRIT_MASK") == true) {
+                fill(14, y, 15, y + 9, equippedMaskColor.rgba)
+            }
+            textDim(
+                text = when {
+                    type.activeTime > 0 -> "${(type.activeTime / 20f).toFixed()}s"
+                    type.currentCooldown > 0 -> "${(type.currentCooldown / 20f).toFixed()}s"
+                    else -> "✔"
+                },
+                16, y,
+                if (type.activeTime == 0 && type.currentCooldown == 0) Colors.MINECRAFT_GREEN
+                else if (type.activeTime > 0) Colors.MINECRAFT_GOLD else Colors.MINECRAFT_RED
+            ).first.let { if (it > width) width = it }
+        }
+
+        width + 20 to visibleTypes.size * 14
+    }
+    private val showOnlyInBoss by BooleanSetting("Show In Boss", false, desc = "Only shows invincibility timers during dungeon boss fights.")
+    private val showWhen by SelectorSetting("Show", ShowWhen.ALWAYS, "Controls when invincibility items are shown.")
+    private val equippedMaskColor by ColorSetting("Equipped Mask", Colors.MINECRAFT_DARK_PURPLE, desc = "Color of the equipped mask in the HUD. (Bonzo/Spirit)")
+    private val cooldownRegex = Regex("^Cooldown: (\\d+)s$")
+
+    private val itemCat by DropdownSetting("Cooldown On Item", desc = "Options to show cooldown on the item slot itself.")
+    private val showOnItem by BooleanSetting("Show on Item", false, "Renders the cooldown on the spirit mask and bonzo mask items").withDependency { itemCat }
+    private val durability by BooleanSetting("Display As Durability", false, "True: durability, False: colored vertical slide").withDependency { itemCat }
+    private val cdColor by ColorSetting("Cooldown Color", Colors.gray38, false, "Color of the cooldown").withDependency { itemCat }
+
+    init {
+        on<TickEvent.Server> {
+            InvincibilityType.entries.forEach { it.tick() }
+        }
+
+        on<MessageEvent.Chat> {
+            if (onlyInDungeons && !DungeonUtils.inDungeons) return@on
+            InvincibilityType.entries.firstOrNull { type -> message.matches(type.regex) }?.let { type ->
+                val seconds = if (type == InvincibilityType.BONZO) {
+                    mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.loreString?.reversed()
+                        ?.firstNotNullOfOrNull { cooldownRegex.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
+                } else null
+                type.proc(seconds)
+                val usedMasks = InvincibilityType.entries.count { it.currentCooldown > 0 }
+                if (invincibilityAnnounce) sendCommand("pc ${type.name.lowercase().capitalizeFirst()} Procced! ($usedMasks/${InvincibilityType.entries.size})")
+                if (invincibilityAlert) alert(type.name.lowercase().capitalizeFirst())
+            }
+        }
+
+        on<LevelEvent.Load> {
+            InvincibilityType.entries.forEach { it.reset() }
+        }
+
+        on<GuiEvent.RenderSlot> {
+            if (!showOnItem) return@on
+            val percent = when(slot.item.itemId) {
+                "BONZO_MASK","STARRED_BONZO_MASK" -> InvincibilityType.BONZO.currentCooldown.toDouble() / (InvincibilityType.BONZO.maxCooldownTime * 20)
+                "SPIRIT_MASK","STARRED_SPIRIT_MASK" -> InvincibilityType.SPIRIT.currentCooldown.toDouble() / (InvincibilityType.SPIRIT.maxCooldownTime * 20)
+                else -> return@on
+            }
+            if (percent <= 0) return@on
+            if (durability) {
+                guiGraphics.fakeItem(slot.item, slot.x, slot.y)
+                guiGraphics.fill(slot.x + 2, slot.y + 13, slot.x + 14, slot.y + 15, Colors.BLACK.rgba)
+                guiGraphics.fill(slot.x + 2, slot.y + 13, slot.x + 14 - ((1 - percent) * 12).toInt(), slot.y + 14,cdColor.rgba)
+                cancel()
+            } else {
+                guiGraphics.fakeItem(slot.item, slot.x, slot.y)
+                guiGraphics.fill(slot.x, slot.y + ((1 - percent) * 16).toInt(), slot.x + 16, slot.y + 16, cdColor.rgba)
+                cancel()
+            }
+        }
+    }
+
+    private enum class InvincibilityType(
+        val regex: Regex,
+        private val maxInvincibilityTime: Int,
+        val maxCooldownTime: Int,
+        private val textureHash: String
+    ) {
+        SPIRIT(
+            Regex("^Second Wind Activated! Your Spirit Mask saved your life!$"),
+            60, 30,
+            "9bbe721d7ad8ab965f08cbec0b834f779b5197f79da4aea3d13d253ece9dec2"
+        ),
+        BONZO(
+            Regex("^Your (?:. )?Bonzo's Mask saved your life!$"),
+            60, 180,
+            "12716ecbf5b8da00b05f316ec6af61e8bd02805b21eb8e440151468dc656549c"
+        ),
+        PHOENIX(
+            Regex("^Your Phoenix Pet saved you from certain death!$"),
+            80, 60,
+            "66b1b59bc890c9c97527787dde20600c8b86f6b9912d51a6bfcdb0e4c2aa3c97"
+        );
+
+        val itemStack by lazy { createSkullStack(textureHash) }
+
+        var activeTime: Int = 0
+            private set
+        var currentCooldown: Int = 0
+            private set
+
+        fun proc(cooldownTime: Int?) {
+            activeTime = maxInvincibilityTime
+            currentCooldown = (cooldownTime ?: maxCooldownTime) * 20
+        }
+
+        fun tick() {
+            if (currentCooldown > 0) currentCooldown--
+            if (activeTime > 0) activeTime--
+        }
+
+        fun reset() {
+            currentCooldown = 0
+            activeTime = 0
+        }
+    }
+
+    private enum class ShowWhen { ALWAYS, ANY, WHEN_ACTIVE, ON_COOLDOWN }
+}

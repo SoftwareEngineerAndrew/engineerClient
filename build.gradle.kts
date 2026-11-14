@@ -8,6 +8,7 @@ buildscript {
 
 plugins {
     kotlin("jvm") version "2.4.20"
+    kotlin("plugin.compose") version "2.4.20"
 }
 
 apply(plugin = "net.fabricmc.fabric-loom")
@@ -37,8 +38,14 @@ sourceSets.test {
 
 repositories {
     mavenCentral()
+    google()
+    maven("https://jitpack.io") { content { includeGroup("com.github.stivais") } }
+    maven("https://maven.terraformersmc.com/") { content { includeGroup("com.terraformersmc") } }
     maven("https://api.modrinth.com/maven") { content { includeGroup("maven.modrinth") } }
 }
+
+val bundled: Configuration by configurations.creating
+configurations.implementation { extendsFrom(bundled) }
 
 dependencies {
     "minecraft"("com.mojang:minecraft:26.3")
@@ -51,12 +58,29 @@ dependencies {
     implementation("org.tukaani:xz:1.10")
     "include"("org.tukaani:xz:1.10")
 
-    // Odin is a required runtime mod (declared in fabric.mod.json, >=0.4.0). Compiled against the
-    // Odin 0.4.0 release jar unpacked into libs/odin, which the release workflow downloads; kept out of git.
-    compileOnly(files("libs/odin"))
+    // Odin's code lives in src/odin (BSD 3-Clause); these are its own dependencies.
+    implementation("com.github.stivais:Commodore:1.0.1")
+    "include"("com.github.stivais:Commodore:1.0.1")
+    bundled("androidx.compose.runtime:runtime-desktop:1.10.0") {
+        exclude("org.jetbrains.kotlin")
+        exclude("org.jetbrains.kotlinx", "kotlinx-coroutines-core")
+        exclude("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm")
+    }
+    compileOnly("com.terraformersmc:modmenu:21.0.0-beta.1")
+    compileOnly("maven.modrinth:iris:1.11.5+26.3-fabric")
 
     testImplementation(kotlin("test"))
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+configurations.named("include") {
+    dependencies.addAllLater(provider {
+        bundled.resolvedConfiguration.resolvedArtifacts.map { project.dependencies.create(it.moduleVersion.id.toString()) }
+    })
+}
+
+extensions.configure<net.fabricmc.loom.api.LoomGradleExtensionAPI>("loom") {
+    accessWidenerPath.set(file("src/resources/odin.accesswidener"))
 }
 
 tasks {
@@ -73,6 +97,8 @@ tasks {
     compileKotlin {
         compilerOptions {
             jvmTarget = JvmTarget.JVM_25
+            // Commodore reads command lambdas as classes.
+            freeCompilerArgs.add("-Xlambdas=class")
         }
     }
 

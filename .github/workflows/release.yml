@@ -26,11 +26,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: 9.8.0
-      - name: Odin 0.4.0
-        if: github.ref_name == 'main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && mkdir -p libs && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
       - name: Version
         run: |
           echo "EC_VERSION=$(date -u +%Y.%-m.%-d)+${GITHUB_SHA::7}" >> "$GITHUB_ENV"
@@ -56,7 +51,7 @@ jobs:
           jar="EngineerClient-$MC.jar"
           cp build/libs/*.jar "$jar"
           url="https://github.com/$GITHUB_REPOSITORY/releases/download/release-$MC/$jar"
-          notes="$(printf '**[Download EngineerClient for Minecraft %s](%s)** · %s\n\nPut the jar in your `mods` folder. Needs Fabric, Fabric API, Fabric Language Kotlin and Odin.' "$MC" "$url" "$EC_VERSION")"
+          notes="$(printf '**[Download EngineerClient for Minecraft %s](%s)** · %s\n\nPut the jar in your `mods` folder. Needs Fabric, Fabric API and Fabric Language Kotlin. Remove Odin, it is built in.' "$MC" "$url" "$EC_VERSION")"
           extra=; [ -f .github/update.json ] && extra=.github/update.json
           gh release create "release-$MC" "$jar" $extra --target "$GITHUB_SHA" \
             --title "EngineerClient" \
@@ -75,9 +70,4 @@ jobs:
         with:
           gradle-version: 9.8.0
           cache-read-only: true
-      - name: Odin 0.4.0
-        if: github.ref_name == 'main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release download 0.4.0 -R odtheking/Odin -p Odin-0.4.0.jar -D /tmp/odin && mkdir -p libs && unzip -q /tmp/odin/Odin-0.4.0.jar -d libs/odin
       - run: gradle test --console=plain -Dorg.gradle.jvmargs=-Xmx6G -Pkotlin.daemon.jvmargs=-Xmx6G

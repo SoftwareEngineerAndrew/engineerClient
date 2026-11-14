@@ -1,0 +1,41 @@
+package com.odtheking.odin.utils
+
+import com.odtheking.odin.OdinMod.mc
+import net.minecraft.client.resources.sounds.SimpleSoundInstance
+import net.minecraft.core.BlockPos
+import net.minecraft.network.chat.Component
+import net.minecraft.resources.Identifier
+import net.minecraft.sounds.SoundEvent
+import net.minecraft.sounds.SoundEvents
+import net.minecraft.util.StringUtil
+
+fun playSoundSettings(soundSettings: Triple<String, Float, Float>) {
+    val (soundName, volume, pitch) = soundSettings
+    val identifier = Identifier.tryParse(StringUtil.filterText(soundName.lowercase())) ?: return
+    playSoundAtPlayer(SoundEvent.createVariableRangeEvent(identifier), volume, pitch)
+}
+
+fun playSoundAtPlayer(event: SoundEvent, volume: Float = 1f, pitch: Float = 1f) = mc.execute {
+    mc.soundManager.playDelayed(SimpleSoundInstance.forUI(event, pitch, volume), 0)
+}
+
+fun setTitle(title: String) {
+    mc.gui.hud.setTimes(0, 20, 5)
+    mc.gui.hud.setTitle(Component.literal(title))
+}
+
+fun setSubtitle(subtitle: String) {
+    mc.gui.hud.setTimes(0, 20, 5)
+    mc.gui.hud.setSubtitle(Component.literal(subtitle))
+}
+
+fun alert(title: String, playSound: Boolean = true) {
+    setTitle(title)
+    if (playSound) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value())
+}
+
+fun getPositionString(): String {
+    with(mc.player?.blockPosition() ?: BlockPos(0, 0, 0)) {
+        return "x: $x, y: $y, z: $z"
+    }
+}

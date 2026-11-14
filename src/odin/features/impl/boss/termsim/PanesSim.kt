@@ -1,0 +1,33 @@
+package com.odtheking.odin.features.impl.boss.termsim
+
+import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalTypes
+import com.odtheking.odin.utils.skyblock.dungeon.terminals.TerminalUtils
+import net.minecraft.core.component.DataComponents
+import net.minecraft.network.chat.Component
+import net.minecraft.world.inventory.Slot
+import net.minecraft.world.item.DyeColor
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
+import kotlin.math.floor
+
+object PanesSim : TermSimGUI(
+    TerminalTypes.PANES.termName, TerminalTypes.PANES.windowSize
+) {
+    private val greenPane get() = ItemStack(Items.STAINED_GLASS_PANE.pick(DyeColor.LIME)).apply { set(DataComponents.CUSTOM_NAME, Component.literal("")) }
+    private val redPane   get() = ItemStack(Items.STAINED_GLASS_PANE.pick(DyeColor.RED)).apply { set(DataComponents.CUSTOM_NAME, Component.literal("")) }
+
+    override fun create() {
+        setSlots {
+            if (floor(it.index / 9f) in 1f..3f && it.index % 9 in 2..6) if (Math.random() > 0.75) greenPane else redPane else blackPane
+        }
+    }
+
+    override fun slotClick(slot: Slot, button: Int) {
+        slot.setSlot(if (slot.item.item == Items.STAINED_GLASS_PANE.pick(DyeColor.RED)) greenPane else redPane)
+
+        if (guiInventorySlots.none { it?.item?.item == Items.STAINED_GLASS_PANE.pick(DyeColor.RED) })
+            TerminalUtils.lastTermOpened?.onComplete()
+
+        super.slotClick(slot, button)
+    }
+}

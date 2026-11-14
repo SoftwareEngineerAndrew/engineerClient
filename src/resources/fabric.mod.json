@@ -3,17 +3,21 @@
   "id": "engineerclient",
   "version": "${version}",
   "name": "Engineer Client",
-  "description": "An Odin addon for Hypixel SkyBlock dungeons: M7 phase-3 role rotation, leap-menu POV previews, ADS (Advanced Dungeon Simulator) and Party Finder stats.",
+  "description": "A Hypixel SkyBlock dungeons mod with Odin built in: M7 phase-3 role rotation, leap-menu POV previews, ADS (Advanced Dungeon Simulator) and Party Finder stats.",
   "authors": ["engineerandrew"],
   "license": "All-Rights-Reserved",
   "environment": "client",
   "breaks": { "coffeeclient": "*", "devgineerclient": "*" },
-  "mixins": ["engineerclient.mixins.json", "engineerclient.odin.mixins.json", "engineerclient.sodium.mixins.json", "coffeeclient.mixins.json", "coffeeclient.odin.mixins.json", "devgineerclient.mixins.json", "devgineerclient.odin.mixins.json"],
+  "provides": ["odin"],
+  "accessWidener": "odin.accesswidener",
+  "mixins": ["odin.mixins.json", "engineerclient.mixins.json", "engineerclient.odin.mixins.json", "engineerclient.sodium.mixins.json", "coffeeclient.mixins.json", "coffeeclient.odin.mixins.json", "devgineerclient.mixins.json", "devgineerclient.odin.mixins.json"],
   "entrypoints": {
     "preLaunch": [
       { "adapter": "kotlin", "value": "com.devgineerclient.misc.ClassWarmup" }
     ],
+    "modmenu": ["com.odtheking.odin.clickgui.ModMenuIntegration"],
     "client": [
+      { "adapter": "kotlin", "value": "com.odtheking.odin.OdinMod" },
       { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" },
       { "adapter": "kotlin", "value": "com.coffeeclient.CoffeeClient" },
       { "adapter": "kotlin", "value": "com.devgineerclient.DevgineerClient" }
@@ -23,7 +27,6 @@
     "fabricloader": ">=0.19.5",
     "fabric-api": ">=0.161.0",
     "fabric-language-kotlin": ">=1.14.1+kotlin.2.4.20",
-    "minecraft": "~26.3",
-    "odin": ">=0.4.0"
+    "minecraft": "~26.3"
   }
 }

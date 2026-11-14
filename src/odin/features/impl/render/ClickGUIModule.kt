@@ -1,0 +1,193 @@
+package com.odtheking.odin.features.impl.render
+
+import com.google.gson.annotations.SerializedName
+import com.mojang.blaze3d.platform.InputConstants
+import com.odtheking.odin.OdinMod
+import com.odtheking.odin.clickgui.ClickGUI
+import com.odtheking.odin.clickgui.HudManager
+import com.odtheking.odin.clickgui.settings.AlwaysActive
+import com.odtheking.odin.clickgui.settings.impl.*
+import com.odtheking.odin.events.*
+import com.odtheking.odin.events.core.on
+import com.odtheking.odin.features.Category
+import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.ModuleManager
+import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
+import com.odtheking.odin.utils.*
+import com.odtheking.odin.utils.network.WebUtils.fetchJson
+import com.odtheking.odin.utils.network.WebUtils.postData
+import com.odtheking.odin.utils.skyblock.LocationUtils
+import kotlinx.coroutines.launch
+import net.minecraft.network.chat.ClickEvent
+import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.HoverEvent
+import java.net.URI
+
+@AlwaysActive
+object ClickGUIModule : Module(
+    name = "Click GUI",
+    description = "Allows you to customize the UI.",
+    key = InputConstants.KEY_RSHIFT
+) {
+    val clickGuiScale by NumberSetting("Click GUI Size", 2f, 1.0..4.0, 0.25, desc = "GUI scale the Click GUI is drawn at, whatever the video setting says.")
+    val enableNotification by BooleanSetting("Chat notifications", true, desc = "Sends a message when you toggle a module with a keybind")
+    val clickGUIColor by ColorSetting("Color", Color(50, 150, 220), desc = "The color of the Click GUI.")
+    private val action by ActionSetting("Open HUD Editor", desc = "Opens the HUD editor when clicked.") { mc.setScreenAndShow(HudManager) }
+
+    val hypixelApiUrl by StringSetting("API url", "https://hypixel.odtheking.com/", 128, "The Hypixel API server to connect to.", placeholder = "https://hypixel.odtheking.com/").hide()
+    val webSocketUrl by StringSetting("Socket URL", "wss://ws.odtheking.com/", 128, "The Websocket server to connect to.", placeholder = "wss://ws.odtheking.com/").hide()
+
+    val devMessage by BooleanSetting("Developer Message", false, desc = "Sends development related messages to the chat.")
+
+    init {
+        on<SecretsUpdateEvent> { DungeonMap.sendSync(room) }
+
+        on<FloorEnterEvent> {
+            LocationUtils.lobbyId?.let { DungeonMap.syncSocket.connect("${webSocketUrl}$it") } ?: devMessage("Failed to connect to dungeon websocket, lobbyId is null.")
+        }
+
+        on<RoomEnterEvent> {
+            if (room == null) DungeonMap.syncSocket.shutdown()
+            else DungeonMap.sendSync(room)
+        }
+
+        on<LevelEvent.Load> {
+            DungeonMap.syncSocket.shutdown()
+        }
+    }
+
+    val dungeonCoresLogging by BooleanSetting("Core loggings", false, desc = "")
+
+    private var firstJoin by BooleanSetting("First join", true, "").hide()
+    val favoriteColors by MapSetting("Favorite Colors", mutableMapOf<Int, Color>())
+
+    override fun onKeybind() {
+        mc.setScreenAndShow(ClickGUI)
+    }
+
+    override fun onEnable() {
+        mc.setScreenAndShow(ClickGUI)
+        super.onEnable()
+        toggle()
+    }
+
+    val panelSetting by MapSetting("Panel Data", mutableMapOf<String, PanelData>())
+    data class PanelData(var x: Int, var y: Int, var extended: Boolean = true)
+
+    fun resetPositions() {
+        Category.categories.forEach { (categoryName, category) ->
+            panelSetting.getOrPut(categoryName) { PanelData(0, 0) }.apply {
+                x = category.x
+                y = category.y
+                extended = true
+            }
+        }
+    }
+
+    private const val RELEASE_LINK = "https://github.com/odtheking/Odin/releases/latest"
+    private const val MODRINTH_LINK = "https://modrinth.com/mod/odin/versions"
+    private val profileRegex = Regex("Profile ID:\\s*(.{36})")
+    private var latestVersionNumber: String? = null
+    private var hasSentUpdateMessage = false
+
+    init {
+        OdinMod.scope.launch {
+            latestVersionNumber = checkNewerVersion(OdinMod.version.toString())
+            val name = mc.user.name.takeIf { !it.matches(Regex("Player\\d{2,3}")) } ?: return@launch
+            postData("https://api.odtheking.com/tele/", """{"username": "$name", "version": "Fabric ${OdinMod.version}"}""")
+        }
+
+        on<MessageEvent.Chat> {
+            if (!profileRegex.matches(message)) return@on
+
+            if (firstJoin) {
+                firstJoin = false
+                ModuleManager.saveConfigurations()
+                modMessage(
+                    Component.literal(getChatBreak()).append(Component.literal("""
+                        §7Thanks for installing §3Odin ${OdinMod.version}§7!
+                
+                        §7Use §d§l/od §r§7to access GUI settings.
+                             
+                        §7Join the discord for support and suggestions.
+                    """.trimIndent()))
+                        .append(Component.literal("\n"))
+                        .append(
+                            Component.literal("§9https://discord.gg/2nCbC9hkxT").withStyle {
+                                it.withClickEvent(ClickEvent.OpenUrl(URI("https://discord.gg/2nCbC9hkxT"))).withHoverEvent(
+                                    HoverEvent.ShowText(Component.literal("https://discord.gg/2nCbC9hkxT"))
+                                )
+                            }
+                        )
+                        .append(Component.literal("\n"))
+                        .append(Component.literal(getChatBreak())),
+                    "")
+            }
+
+            if (hasSentUpdateMessage || latestVersionNumber == null) return@on
+            hasSentUpdateMessage = true
+
+            modMessage(
+                Component.literal(getChatBreak())
+                    .append("\n")
+                    .append(Component.literal("§3Odin update available: §f$latestVersionNumber\n"))
+                    .append(Component.literal("§7Click the links below to download the latest version.\n\n"))
+                    .append(
+                        Component.literal("    §a§nModrinth Link").withStyle {
+                            it.withClickEvent(ClickEvent.OpenUrl(URI(MODRINTH_LINK))).withHoverEvent(
+                                HoverEvent.ShowText(Component.literal(MODRINTH_LINK))
+                            )
+                        }
+                    )
+                    .append(Component.literal("        "))
+                    .append(
+                        Component.literal("§b§nGitHub link").withStyle {
+                            it.withClickEvent(ClickEvent.OpenUrl(URI(RELEASE_LINK))).withHoverEvent(
+                                HoverEvent.ShowText(Component.literal(RELEASE_LINK))
+                            )
+                        }
+                    )
+                    .append(Component.literal("        "))
+                    .append(
+                        Component.literal("§9§nDiscord link").withStyle {
+                            it.withClickEvent(ClickEvent.OpenUrl(URI("https://discord.gg/2nCbC9hkxT"))).withHoverEvent(
+                                HoverEvent.ShowText(Component.literal("https://discord.gg/2nCbC9hkxT"))
+                            )
+                        }
+                    )
+                    .append(Component.literal("\n${getChatBreak()}§r")),
+                ""
+            )
+
+            alert("Odin Update Available")
+        }
+    }
+
+    private suspend fun checkNewerVersion(currentVersion: String): String? {
+        val newest = fetchJson<Release>("https://api.github.com/repos/odtheking/Odin/releases/latest").getOrElse { return null }
+
+        return if (isSecondNewer(currentVersion, newest.tagName)) newest.tagName else null
+    }
+
+    private fun isSecondNewer(currentVersion: String, previousVersion: String?): Boolean {
+        if (currentVersion.isEmpty() || previousVersion.isNullOrEmpty()) return false
+
+        val (major, minor, patch) = currentVersion.split(".").mapNotNull { it.toIntOrNull() }
+        val (major2, minor2, patch2) = previousVersion.split(".").mapNotNull { it.toIntOrNull() }
+
+        return when {
+            major > major2 -> false
+            major < major2 -> true
+            minor > minor2 -> false
+            minor < minor2 -> true
+            patch > patch2 -> false
+            patch < patch2 -> true
+            else -> false // equal, or something went wrong, either way it's best to assume it's false.
+        }
+    }
+
+    private data class Release(
+        @SerializedName("tag_name")
+        val tagName: String
+    )
+}

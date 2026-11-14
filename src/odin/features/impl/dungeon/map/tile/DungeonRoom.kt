@@ -1,0 +1,203 @@
+package com.odtheking.odin.features.impl.dungeon.map.tile
+
+import com.odtheking.odin.OdinMod.mc
+import com.odtheking.odin.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
+import com.odtheking.odin.utils.*
+import net.minecraft.core.BlockPos
+import net.minecraft.world.item.DyeColor
+import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.phys.AABB
+
+class DungeonRoom(var type: RoomType, initialPosition: IVec2, var data: RoomData? = null) {
+    val tiles: ArrayList<IVec2> = ArrayList(4)
+    var topLeft: IVec2 = initialPosition
+    var rotation: RoomRotation? = null
+        set(value) {
+            field = value
+            recalculateCenter()
+        }
+
+    var shape: RoomShape = RoomShape.OneByOne
+
+    var walkedInto: Boolean = false
+    var clayPos: BlockPos? = null
+    var highestBlock: Int? = null
+    @Transient var waypoints: MutableSet<DungeonWaypoints.DungeonWaypoint> = mutableSetOf()
+
+    var checkmark: MapCheckmark = MapCheckmark.UNDISCOVERED
+
+    var isKnown1x1: Boolean = false
+    var mapSeen: Boolean = false
+
+    var center: IVec2? = null
+        private set
+
+    var foundSecrets: Int? = null
+    var playerWalkedInto = false
+
+    val isViewable: Boolean get() = walkedInto || checkmark != MapCheckmark.UNDISCOVERED
+    val shouldShowName get() = walkedInto || playerWalkedInto
+    val name: String? get() = data?.name
+
+    fun addSegment(segment: DungeonTile) {
+        if (!tiles.contains(segment.position)) {
+            tiles.add(segment.position)
+            topLeft = IVec2(tiles.minOf { it.x }, tiles.minOf { it.z })
+            highestBlock?.let { if (tiles.size == data?.shape?.tileAmount) inferLayout(it) }
+            recalculateCenter()
+        }
+    }
+
+    private fun recalculateCenter() {
+        rotation?.let { rot ->
+            val (offX, offZ) = when (shape) {
+                RoomShape.OneByOne -> 0 to 0
+                RoomShape.TwoByTwo -> 10 to 10
+                RoomShape.L -> if (rot == RoomRotation.NORTH || rot == RoomRotation.WEST) 10 to 0 else 10 to 20
+                else -> {
+                    val span = (shape.tileAmount - 1) * 10
+                    if (rot == RoomRotation.SOUTH) span to 0 else 0 to span
+                }
+            }
+            center = IVec2(topLeft.x * 20 + 8 + offX, topLeft.z * 20 + 8 + offZ)
+        } ?: run {
+            val anchor = tiles.minByOrNull { it.sortKey } ?: return
+            center = IVec2(anchor.x * 20 + 8, anchor.z * 20 + 8)
+        }
+    }
+
+    fun inferLayoutFromMap() {
+        val minX = tiles.minOf { it.x }
+        val minZ = tiles.minOf { it.z }
+        val maxX = tiles.maxOf { it.x }
+        val maxZ = tiles.maxOf { it.z }
+
+        shape = when (tiles.size) {
+            1    -> RoomShape.OneByOne
+            2    -> RoomShape.TwoByOne
+            3    -> if ((maxX - minX) == 1 && (maxZ - minZ) == 1) RoomShape.L else RoomShape.ThreeByOne
+            4    -> if ((maxX - minX) == 1 && (maxZ - minZ) == 1) RoomShape.TwoByTwo else RoomShape.FourByOne
+            else -> RoomShape.OneByOne
+        }
+
+        resolveGeometryRotation()?.let { rotation = it }
+    }
+
+    fun inferLayout(highestBlock: Int) {
+        val roomData = data ?: return
+
+        if (applyFairyFallback(highestBlock)) return
+
+        shape = roomData.shape
+
+        if (shape == RoomShape.OneByOne) {
+            get1x1Rotation()
+            return
+        }
+
+        val rot = resolveGeometryRotation()
+        val pos = rot?.let { resolveClayPos(it, highestBlock) }
+
+        if (rot == null || pos == null) {
+            modMessage("Failed to resolve geometry for ${data?.name ?: type} at $topLeft with tiles $tiles")
+            return
+        }
+
+        rotation = rot
+        clayPos = pos
+    }
+
+    private fun resolveGeometryRotation(): RoomRotation? {
+        val bottomRight = tiles.maxByOrNull { it.sortKey } ?: return null
+
+        return if (shape == RoomShape.L) {
+            val other = tiles.find { it != topLeft && it != bottomRight } ?: return null
+            when {
+                topLeft.x == bottomRight.x -> RoomRotation.EAST
+                topLeft.z == bottomRight.z -> RoomRotation.WEST
+                other.x == topLeft.x -> RoomRotation.SOUTH
+                else -> RoomRotation.NORTH
+            }
+        } else {
+            if (topLeft.x == bottomRight.x) RoomRotation.WEST else RoomRotation.SOUTH
+        }
+    }
+
+    private fun resolveClayPos(rotation: RoomRotation, height: Int): BlockPos? {
+        val bottomRight = tiles.maxByOrNull { it.sortKey } ?: return null
+
+        val (tlX, tlZ) = getRealPosition(topLeft.x, topLeft.z)
+        val (brX, brZ) = getRealPosition(bottomRight.x, bottomRight.z)
+
+        return if (shape == RoomShape.L) {
+            val other = tiles.find { it != topLeft && it != bottomRight } ?: return null
+            val (otX, _) = getRealPosition(other.x, other.z)
+
+            when (rotation) {
+                RoomRotation.EAST  -> BlockPos(otX - 15, height, tlZ + 15)
+                RoomRotation.WEST  -> BlockPos(brX + 15, height, brZ - 15)
+                RoomRotation.SOUTH -> BlockPos(tlX - 15, height, tlZ - 15)
+                RoomRotation.NORTH -> BlockPos(brX + 15, height, brZ + 15)
+            }
+        } else {
+            if (rotation == RoomRotation.WEST) BlockPos(tlX + 15, height, tlZ - 15)
+            else BlockPos(tlX - 15, height, tlZ - 15)
+        }
+    }
+
+    fun get1x1Rotation(): Boolean {
+        if (shape != RoomShape.OneByOne) return false
+        val y = highestBlock ?: return false
+        if (applyFairyFallback(y)) return true
+
+        for (rot in RoomRotation.entries) {
+            val pos = clayProbePos(rot, y)
+            if (mc.level?.getBlockState(pos)?.block == Blocks.DYED_TERRACOTTA.pick(DyeColor.BLUE)) {
+                rotation = rot
+                clayPos = pos
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun applyFairyFallback(highestBlock: Int): Boolean {
+        if (data?.name != "Fairy") return false
+        clayPos = clayProbePos(RoomRotation.SOUTH, highestBlock)
+        rotation = RoomRotation.SOUTH
+        return true
+    }
+
+    private fun clayProbePos(rotation: RoomRotation, y: Int): BlockPos {
+        val (x, z) = getRealPosition()
+        return BlockPos(x + rotation.dx, y, z + rotation.dz)
+    }
+
+    fun getRealPosition(x: Int = topLeft.x, z: Int = topLeft.z) = x * 32 - 185 to z * 32 - 185
+
+    fun getRelativeCoords(pos: BlockPos): BlockPos {
+        val clay = clayPos ?: return BlockPos.ZERO
+        val rot = rotation ?: return BlockPos.ZERO
+        return pos.subtract(clay.atY(0)).rotateToNorth(rot)
+    }
+
+    fun getRealCoords(pos: BlockPos): BlockPos {
+        val clay = clayPos ?: return BlockPos.ZERO
+        val rot = rotation ?: return BlockPos.ZERO
+        return pos.rotateAroundNorth(rot).offset(clay.x, 0, clay.z)
+    }
+
+    fun getRelativeAABB(aabb: AABB): AABB {
+        val rot = rotation ?: return aabb
+        val minPos = aabb.minPosition.add(-0.5, -0.5, -0.5).rotateToNorth(rot).add(0.5, 0.5, 0.5)
+        val maxPos = aabb.maxPosition.add(-0.5, -0.5, -0.5).rotateToNorth(rot).add(0.5, 0.5, 0.5)
+        return AABB(minPos, maxPos)
+    }
+
+    fun getRealAABB(aabb: AABB): AABB {
+        val rot = rotation ?: return aabb
+        val minPos = aabb.maxPosition.add(-0.5, -0.5, -0.5).rotateAroundNorth(rot).add(0.5, 0.5, 0.5)
+        val maxPos = aabb.minPosition.add(-0.5, -0.5, -0.5).rotateAroundNorth(rot).add(0.5, 0.5, 0.5)
+        return AABB(minPos, maxPos)
+    }
+}

@@ -1,0 +1,148 @@
+package com.odtheking.odin.features.impl.boss
+
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
+import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.events.*
+import com.odtheking.odin.events.core.on
+import com.odtheking.odin.events.core.onReceive
+import com.odtheking.odin.features.Module
+import com.odtheking.odin.utils.*
+import com.odtheking.odin.utils.render.drawText
+import com.odtheking.odin.utils.render.drawTracer
+import com.odtheking.odin.utils.render.drawWireFrameBox
+import com.odtheking.odin.utils.render.textDim
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
+import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket
+import net.minecraft.world.entity.EntityTypes
+
+object WitherDragons : Module(
+    name = "Wither Dragons",
+    description = "Tools for managing M7 dragons timers, boxes, priority, health and alerts."
+) {
+    private val dragonTimerDropDown by DropdownSetting("Dragon Timer Dropdown", desc = "Shows settings for the M7 dragon spawn timer.")
+    private val dragonTimer by BooleanSetting("Dragon Timer", true, desc = "Displays a timer for when M7 dragons spawn.").withDependency { dragonTimerDropDown }
+    private val dragonTimerStyle by SelectorSetting("Timer Style", TimerStyle.MILLISECONDS, desc = "The style of the dragon timer.").withDependency { dragonTimer && dragonTimerDropDown }
+    private val showSymbol by BooleanSetting("Timer Symbol", true, desc = "Displays a symbol for the timer.").withDependency { dragonTimer && dragonTimerDropDown }
+    private val hud by HUD("Dragon Timer HUD", "Displays the dragon timer in the HUD.") { example ->
+        if (example) textDim("§5P §a4.5s", 0, 0, Colors.WHITE)
+        else {
+            priorityDragon?.let { dragon ->
+                if (dragon.timeToSpawn <= 0) return@HUD 0 to 0
+                textDim("§${dragon.colorCode}${dragon.name.first()}: ${getDragonTimer(dragon.timeToSpawn)}", 0, 0, Colors.WHITE)
+            } ?: (0 to 0)
+        }
+    }.withDependency { dragonTimerDropDown }
+
+    private val dragonBoxes by BooleanSetting("Dragon Boxes", true, desc = "Displays boxes for where M7 dragons spawn.")
+    private val dragonTracers by BooleanSetting("Target Tracer", true, desc = "Draws a line to priority spawning dragon.")
+
+    private val dragonAlerts by DropdownSetting("Dragon Alerts Dropdown", desc = "Shows chat alert settings for dragon deaths and spawns.")
+    val dragonTitle by BooleanSetting("Dragon Title", true, desc = "Displays a title for spawning dragons.").withDependency { dragonAlerts }
+    val sendTime by BooleanSetting("Send Dragon Time Alive", true, desc = "Sends a message when a dragon dies with the time it was alive.").withDependency { dragonAlerts }
+    val sendSpawned by BooleanSetting("Send Dragon Spawned", true, desc = "Sends a message when a dragon has spawned.").withDependency { dragonAlerts }
+    val sendSpray by BooleanSetting("Send Ice Sprayed", true, desc = "Sends a message when a dragon has been ice sprayed.").withDependency { dragonAlerts }
+
+    private val dragonHealth by BooleanSetting("Dragon Health", true, desc = "Displays the health of M7 dragons.")
+
+    val spawnOrder = mutableListOf<WitherDragonsEnum>()
+    val priorityDragon: WitherDragonsEnum? get() = spawnOrder.firstOrNull()
+    var currentTick = 0L
+
+    val dragonPBs = PersonalBest(this, "DragonPBs")
+
+    init {
+        onReceive<ClientboundLevelParticlesPacket> {
+            if (DungeonUtils.getF7Phase() == M7Phases.P5) handleSpawnPacket(this)
+        }
+
+        on<EntityEvent.SetItemSlot> {
+            if (DungeonUtils.getF7Phase() == M7Phases.P5) DragonCheck.dragonSprayed(this)
+        }
+
+        on<EntityEvent.Add> {
+            if (DungeonUtils.getF7Phase() == M7Phases.P5 && entity.type == EntityTypes.ENDER_DRAGON) DragonCheck.dragonSpawn(this)
+        }
+
+        on<EntityEvent.SetData> {
+            if (DungeonUtils.getF7Phase() == M7Phases.P5) DragonCheck.dragonUpdate(this)
+        }
+
+        on<BlockUpdateEvent> {
+            if (DungeonUtils.getF7Phase() == M7Phases.P5 && updated.isAir)
+                WitherDragonsEnum.entries.find { it.statuePos == pos }?.setDead(false)
+        }
+
+        on<TickEvent.Server> {
+            WitherDragonsEnum.entries.forEach {
+                if (it.timeToSpawn > 0) it.timeToSpawn--
+                else if (it.state == WitherDragonState.SPAWNING) it.setAlive(null)
+            }
+            currentTick++
+        }
+
+        on<RenderExtractEvent> {
+            if (DungeonUtils.getF7Phase() != M7Phases.P5) return@on
+
+            WitherDragonsEnum.entries.forEach { dragon ->
+                if (dragonHealth) {
+                    DragonCheck.dragonHealthMap.toList().forEach { (_, data) ->
+                        if (data.second > 0) drawText(colorHealth(data.second), data.first.renderPos, 5f, false)
+                    }
+                }
+
+                if (dragonTimer && dragon.timeToSpawn > 0) {
+                    drawText(
+                        "§${dragon.colorCode}${dragon.name.first()}: ${getDragonTimer(dragon.timeToSpawn)}",
+                        dragon.spawnPos.center, 5f, false
+                    )
+                }
+
+                if (dragonBoxes && dragon.state != WitherDragonState.DEAD)
+                    drawWireFrameBox(dragon.aabbDimensions, dragon.color, depth = true)
+            }
+
+            priorityDragon?.let { dragon ->
+                if (dragonTracers && dragon.state == WitherDragonState.SPAWNING)
+                    mc.player?.let { drawTracer(dragon.spawnPos.center, dragon.color, true) }
+            }
+        }
+
+        on<LevelEvent.Load> {
+            DragonCheck.dragonHealthMap.clear()
+            WitherDragonsEnum.reset()
+        }
+    }
+
+    private fun getDragonTimer(spawnTime: Int): String = when {
+        spawnTime <= 20 -> "§c"
+        spawnTime <= 60 -> "§e"
+        else -> "§a"
+    } + when (dragonTimerStyle) {
+        TimerStyle.MILLISECONDS -> "${spawnTime * 50}${if (showSymbol) "ms" else ""}"
+        TimerStyle.SECONDS -> "${(spawnTime / 20f).toFixed(1)}${if (showSymbol) "s" else ""}"
+        TimerStyle.TICKS -> "${spawnTime}${if (showSymbol) "t" else ""}"
+    }
+
+    enum class TimerStyle { MILLISECONDS, SECONDS, TICKS }
+
+    private fun colorHealth(health: Float): String {
+        return when {
+            health >= 750_000_000 -> "§a${formatHealth(health)}"
+            health >= 500_000_000 -> "§e${formatHealth(health)}"
+            health >= 250_000_000 -> "§6${formatHealth(health)}"
+            else -> "§c${formatHealth(health)}"
+        }
+    }
+
+    private fun formatHealth(health: Float): String {
+        return when {
+            health >= 1_000_000_000 -> "${(health / 1_000_000_000).toFixed(1)}b"
+            health >= 1_000_000 -> "${(health / 1_000_000).toFixed(1)}m"
+            health >= 1_000 -> "${(health / 1_000).toFixed(1)}k"
+            else -> "${health.toInt()}"
+        }
+    }
+}

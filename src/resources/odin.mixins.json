@@ -1,0 +1,38 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.odtheking.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "mixins.AbstractContainerScreenMixin",
+    "mixins.AvatarRendererMixin",
+    "mixins.BossBarHealthOverlayMixin",
+    "mixins.ChatScreenMixin",
+    "mixins.ClientLevelMixin",
+    "mixins.ClientPacketListenerMixin",
+    "mixins.EntityRendererMixin",
+    "mixins.ExperienceBarRendererMixin",
+    "mixins.FontMixin",
+    "mixins.GUIMixin",
+    "mixins.HUDMixin",
+    "mixins.KeyBindingMixin",
+    "mixins.LocalPlayerMixin",
+    "mixins.MinecraftMixin",
+    "mixins.MouseHandlerMixin",
+    "mixins.MultiPlayerGameModeMixin",
+    "mixins.ScreenEffectRendererMixin",
+    "mixins.ScreenMixin"
+  ],
+  "mixins": [
+    "mixins.AbstractContainerMenuMixin",
+    "mixins.ConnectionMixin",
+    "mixins.EntityMixin",
+    "mixins.LevelChunkMixin",
+    "mixins.LivingEntityMixin",
+    "mixins.SynchedEntityDataMixin",
+    "mixins.YggdrasilSignatureIgnoreMixin"
+  ]
+}

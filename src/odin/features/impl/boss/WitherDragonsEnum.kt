@@ -1,0 +1,114 @@
+package com.odtheking.odin.features.impl.boss
+
+import com.odtheking.odin.features.impl.boss.WitherDragons.currentTick
+import com.odtheking.odin.utils.Color
+import com.odtheking.odin.utils.Colors
+import com.odtheking.odin.utils.alert
+import com.odtheking.odin.utils.modMessage
+import net.minecraft.core.BlockPos
+import net.minecraft.core.particles.ParticleTypes
+import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket
+import net.minecraft.world.phys.AABB
+import java.util.*
+
+enum class WitherDragonsEnum(
+    val spawnPos: BlockPos,
+    val statuePos: BlockPos,
+    val aabbDimensions: AABB,
+    val colorCode: Char,
+    val color: Color,
+    val xRange: ClosedFloatingPointRange<Double>,
+    val zRange: ClosedFloatingPointRange<Double>,
+    var timeToSpawn: Int = 100,
+    var state: WitherDragonState = WitherDragonState.DEAD,
+    var timesSpawned: Int = 0,
+    var entityUUID: UUID? = null,
+    var isSprayed: Boolean = false,
+    var spawnedTime: Long = 0
+) {
+    Red(BlockPos(27, 14, 59), BlockPos(32, 22, 59), AABB(14.5, 13.0, 45.5, 39.5, 28.0, 70.5), 'c', Colors.MINECRAFT_RED, 24.0..30.0, 56.0..62.0),
+    Orange(BlockPos(85, 14, 56), BlockPos(80, 23, 56), AABB(72.0, 8.0, 47.0, 102.0, 28.0, 77.0), '6', Colors.MINECRAFT_GOLD, 82.0..88.0, 53.0..59.0),
+    Green(BlockPos(27, 14, 94), BlockPos(32, 23, 94), AABB(7.0, 8.0, 80.0, 37.0, 28.0, 110.0), 'a', Colors.MINECRAFT_GREEN, 23.0..29.0, 91.0..97.0),
+    Blue(BlockPos(84, 14, 94), BlockPos(79, 23, 94), AABB(71.5, 13.0, 82.5, 96.5, 26.0, 107.5), 'b', Colors.MINECRAFT_AQUA, 82.0..88.0, 91.0..97.0),
+    Purple(BlockPos(56, 14, 125), BlockPos(56, 22, 120), AABB(45.5, 13.0, 113.5, 68.5, 23.0, 136.5), '5', Colors.MINECRAFT_DARK_PURPLE, 53.0..59.0, 122.0..128.0);
+
+    fun setAlive(entityUUID: UUID?) {
+        if (entityUUID != null) this.entityUUID = entityUUID
+
+        if (state != WitherDragonState.SPAWNING) return
+        state = WitherDragonState.ALIVE
+
+        timesSpawned++
+        spawnedTime = currentTick
+        isSprayed = false
+
+        if (WitherDragons.enabled && WitherDragons.sendSpawned)
+            modMessage("§${colorCode}${name} §fdragon spawned §8(§7${timesSpawned}§8)")
+    }
+
+    fun setDead(realTime: Boolean) {
+        state = WitherDragonState.DEAD
+        entityUUID = null
+
+        WitherDragons.spawnOrder.remove(this)
+
+        if (WitherDragons.enabled && WitherDragons.sendTime &&  realTime)
+            WitherDragons.dragonPBs.time(name, (currentTick - spawnedTime) / 20f, "s§7!", "§${colorCode}${name} §7was alive for §6")
+    }
+
+    companion object {
+        fun reset(soft: Boolean = false) {
+            if (soft) {
+                WitherDragonsEnum.entries.forEach {
+                    it.state = WitherDragonState.DEAD
+                    it.timesSpawned++
+                }
+                WitherDragons.spawnOrder.clear()
+                return
+            }
+
+            WitherDragonsEnum.entries.forEach {
+                it.timeToSpawn = 0
+                it.timesSpawned = 0
+                it.state = WitherDragonState.DEAD
+                it.entityUUID = null
+                it.isSprayed = false
+                it.spawnedTime = 0
+            }
+            WitherDragons.spawnOrder.clear()
+        }
+    }
+}
+
+enum class WitherDragonState {
+    SPAWNING,
+    ALIVE,
+    DEAD
+}
+
+fun handleSpawnPacket(particle: ClientboundLevelParticlesPacket) {
+    if (
+        particle.count != 20 ||
+        particle.y != 19.0 ||
+        particle.particle.type != ParticleTypes.FLAME ||
+        particle.xDist != 2f ||
+        particle.yDist != 3f ||
+        particle.zDist != 2f ||
+        particle.xMaxSpeed != 0f ||
+        particle.yMaxSpeed != 0f ||
+        particle.zMaxSpeed != 0f ||
+        particle.x % 1 != 0.0 ||
+        particle.z % 1 != 0.0
+    ) return
+
+    val dragon = WitherDragonsEnum.entries.find {
+        it.state == WitherDragonState.DEAD && particle.x in it.xRange && particle.z in it.zRange
+    } ?: return
+
+    dragon.state = WitherDragonState.SPAWNING
+    dragon.timeToSpawn = 100
+    WitherDragons.spawnOrder.add(dragon)
+
+    if (WitherDragons.enabled && WitherDragons.dragonTitle) alert("§${dragon.colorCode}${dragon.name} is spawning!", true)
+}
+
