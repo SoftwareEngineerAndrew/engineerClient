@@ -149,6 +149,7 @@ object EngineerClient : ClientModInitializer {
         safely("water board") { com.engineerclient.waterboard.WaterBoardSolver.install() }
         safely("tic tac toe") { com.engineerclient.dungeon.TicTacToeSolver.install() }
         safely("terminal huds") { com.engineerclient.dungeon.TerminalHuds.install() }
+        safely("item worth") { com.engineerclient.skyblock.ItemWorth.install() }
         safely("pov in leap menu") { com.engineerclient.pov.PovInLeapMenu.install() }
         safely("creeper beams ding") { com.engineerclient.dungeon.CreeperBeamsDing.install() }
         safely("puzzle overlay") { com.engineerclient.misc.PuzzleOverlay.install() }
@@ -250,6 +251,7 @@ object EngineerClient : ClientModInitializer {
     val HELP = mutableListOf(
         "${PREFIX}§7commands:",
         "§f /adm keybinds§7 — Command Keybinds",
+        "§f /adm worth§7 — what the held item is worth, part by part",
         "§f /adm log§7 [mark <note>] — the session log; §f/adm memreport",
     )
 
@@ -279,6 +281,16 @@ object EngineerClient : ClientModInitializer {
                     .executes { mc.schedule { mc.setScreenAndShow(com.engineerclient.gui.AdmClickGui) }; 1 }
                     .then(literal("keybinds").executes {
                         mc.schedule { com.engineerclient.gui.AdmClickGui.open(com.odtheking.odin.features.impl.skyblock.CommandKeybinds) }
+                        1
+                    })
+                    .then(literal("worth").executes { ctx ->
+                        val stack = mc.player?.mainHandItem
+                        val w = stack?.let(com.engineerclient.skyblock.ItemWorth::worth)
+                        if (w == null) ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7No price for the held item."))
+                        else {
+                            ctx.source.sendFeedback(Component.literal("${EngineerClient.PREFIX}§7").append(stack.hoverName).append("§7: §6${com.engineerclient.skyblock.ItemWorth.coins(w.first)}"))
+                            for ((name, v) in w.second.sortedByDescending { it.second }) ctx.source.sendFeedback(Component.literal("§7 $name: §6${com.engineerclient.skyblock.ItemWorth.coins(v)}"))
+                        }
                         1
                     })
                     .then(literal("help").executes { ctx ->
