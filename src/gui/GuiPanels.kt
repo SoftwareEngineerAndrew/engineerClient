@@ -18,12 +18,12 @@ import kotlin.math.roundToInt
 
 /** Which panel each module sits in. */
 object Placement {
-    val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Dragons", "Simulators", "Kuudra", "Skyblock", "Render")
+    val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Dragons", "Simulators", "Kuudra", "Skyblock", "Render", "AscentClient", "Coffee Client")
 
-    /** Where a panel starts: five to a row, two rows. */
+    /** Where a panel starts: five to a row. */
     fun home(name: String): Pair<Int, Int> {
         val i = PANELS.indexOf(name).coerceAtLeast(0)
-        return 10 + (i % 5) * (Theme.WIDTH + 10) to if (i < 5) 10 else 230
+        return 10 + (i % 5) * (Theme.WIDTH + 10) to 10 + (i / 5) * 220
     }
 
     private val byName: Map<String, String> = mapOf(
@@ -39,6 +39,9 @@ object Placement {
     ).flatMap { (panel, names) -> names.map { it to panel } }.toMap()
 
     fun of(module: Module): String {
+        val pkg = module.javaClass.packageName
+        if (pkg.startsWith("com.ascentclient")) return "AscentClient"
+        if (pkg.startsWith("com.coffeeclient")) return "Coffee Client"
         byName[module.name]?.let { return it }
         return when (module.category) {
             Category.DUNGEON -> "Clear"
