@@ -37,8 +37,8 @@ object TicTacToeSolver : Module(
     }
 
     private val bestColor by ColorSetting("Best Color", Color(0, 255, 0, 0.6f), true, desc = "The move to make.")
-    private val prefire by BooleanSetting("Pre-fire", true, desc = "Shows a button that is safe to spam while the room thinks.")
-    private val prefireColor by ColorSetting("Pre-fire Color", Color(255, 165, 0, 0.6f), true, desc = "The button to spam.").withDependency { prefire }
+    private val showNext by BooleanSetting("Show Next", true, desc = "Shows your next move while the room thinks.")
+    private val nextColor by ColorSetting("Next Color", Color(255, 255, 0, 0.6f), true, desc = "Used when your next move depends on the room's.").withDependency { showNext }
     private val countdown by BooleanSetting("Countdown", false, desc = "Shows the time until the room answers.")
     private val sendMessage by BooleanSetting("Send Message", false, desc = "Says \"Tic Tac Toe done\" once the game can't be lost.")
     private val messageTo by SelectorSetting("Message To", Target.PARTY, desc = "Party chat or only you.").withDependency { sendMessage }
@@ -53,8 +53,8 @@ object TicTacToeSolver : Module(
     )
 
     private var best: List<BlockPos> = emptyList()
-    private var spam: BlockPos? = null
-    private var spamCell = -1
+    private var next: List<BlockPos> = emptyList()
+    private var planned: Map<String, Int> = emptyMap()
     private var above: Vec3? = null
     private var lastBoard = ""
     private var sent = false
@@ -73,16 +73,16 @@ object TicTacToeSolver : Module(
         }
         on<TickEvent.Server> { serverTicks++ }
         on<RenderExtractEvent> {
-            if (prefire) spam?.let { pos -> buttonBox(pos)?.let { drawFilledBox(it, prefireColor, depth = true) } }
+            if (showNext) for (pos in next) buttonBox(pos)?.let { drawFilledBox(it, if (next.size == 1) bestColor else nextColor, depth = true) }
             for (pos in best) buttonBox(pos)?.let { drawFilledBox(it, bestColor, depth = true) }
             val left = replyAt - serverTicks
             if (countdown && left > 0) above?.let { drawText("%.1f".format(left / 20.0), it, 1.5f, false) }
         }
     }
 
-    private fun reset() { clear(); spamCell = -1; lastBoard = "" }
+    private fun reset() { clear(); planned = emptyMap(); lastBoard = "" }
 
-    private fun clear() { best = emptyList(); spam = null; above = null; replyAt = 0 }
+    private fun clear() { best = emptyList(); next = emptyList(); above = null; replyAt = 0 }
 
     private fun buttonBox(pos: BlockPos): AABB? {
         val level = mc.level ?: return null
@@ -143,16 +143,15 @@ object TicTacToeSolver : Module(
         )
 
         if (frames.size % 2 == 0) {
-            spamCell = plan(now).second
+            planned = answers(now)
             best = emptyList()
-            spam = if (spamCell >= 0) toPos(spamCell) else null
+            next = planned.values.distinct().map(::toPos)
             above = toPos(1).let { Vec3(it.x + 0.5, it.y + 1.5, it.z + 0.5) }
             replyAt = serverTicks + REPLY_TICKS
             return
         }
-        // A button being spammed stays the one to press, so the highlight doesn't jump away from it.
-        best = (if (spamCell in holds(now)) listOf(spamCell) else moves(now)).map(::toPos)
-        spam = null
+        best = (planned[now]?.let(::listOf) ?: moves(now)).map(::toPos)
+        next = emptyList()
         replyAt = 0
     }
 
@@ -197,6 +196,22 @@ object TicTacToeSolver : Module(
         val scores = holds(b).associateWith { plan(put(b, it, 'O')).first }
         val top = scores.values.maxOrNull() ?: return emptyList()
         return scores.filterValues { it >= top - 1e-9 }.keys.toList()
+    }
+
+    // The player's move after each reply the room can make, reusing a button wherever one works for several replies.
+    private fun answers(b: String): Map<String, Int> {
+        val spam = plan(b).second
+        val picked = LinkedHashMap<String, Int>()
+        for (reply in replies(b)) {
+            val after = put(b, reply, 'X')
+            if (won(after, 'X')) continue
+            val options = moves(after)
+            picked[after] = when {
+                spam != reply && spam in holds(after) -> spam
+                else -> options.firstOrNull { it in picked.values } ?: options.firstOrNull() ?: continue
+            }
+        }
+        return picked
     }
 
     // How many of the player's remaining moves can be spammed ahead, on average, with the player to move.
