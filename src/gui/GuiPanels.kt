@@ -70,12 +70,18 @@ class ModuleView(val module: Module) {
     private var settingsHeight = 0
 
     /** Updates the animations for this frame and returns the height to lay it out at. */
-    fun measure(query: String): Int {
-        val nameMatch = query.isEmpty() || module.name.contains(query, true)
-        val settingMatch = if (query.isEmpty() || nameMatch) emptySet()
+    /** The settings [query] matches, unless the module's own name does. */
+    fun settingMatches(query: String): Set<SettingView> =
+        if (query.isEmpty() || module.name.contains(query, true)) emptySet()
         else views.filter { it.setting !is com.odtheking.odin.clickgui.settings.impl.DropdownSetting && it.setting.name.contains(query, true) }.toSet()
+
+    fun matches(query: String) = query.isEmpty() || module.name.contains(query, true) || settingMatches(query).isNotEmpty()
+
+    fun measure(query: String, openMatches: Boolean): Int {
+        val nameMatch = query.isEmpty() || module.name.contains(query, true)
+        val settingMatch = settingMatches(query)
         shownP = shown.update(nameMatch || settingMatch.isNotEmpty())
-        expandP = expand.update(views.isNotEmpty() && (expanded || settingMatch.isNotEmpty()))
+        expandP = expand.update(views.isNotEmpty() && (expanded || (openMatches && settingMatch.isNotEmpty())))
         settingsHeight = 0
         views.forEachIndexed { i, v ->
             settingP[i] = v.shown.update(if (settingMatch.isEmpty()) v.setting.isVisible else v in settingMatch)
@@ -136,10 +142,10 @@ class Panel(val name: String, val modules: List<ModuleView>, defaultX: Int, defa
         scroll = (scroll - amount.toFloat() * 24f).coerceIn(0f, maxScroll.toFloat())
     }
 
-    fun draw(ui: Ui, vw: Int, vh: Int, query: String) {
+    fun draw(ui: Ui, vw: Int, vh: Int, query: String, openMatches: Boolean) {
         val x = data.x.coerceIn(0, maxX(vw))
         val y = data.y.coerceIn(0, maxY(vh))
-        val heights = IntArray(modules.size) { modules[it].measure(query) }
+        val heights = IntArray(modules.size) { modules[it].measure(query, openMatches) }
         val total = heights.sum()
         val ext = extend.update(data.extended)
         val room = max(MIN_LIST, vh - y - Theme.ROW - Theme.CAP - 4)
