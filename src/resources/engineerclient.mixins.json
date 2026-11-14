@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "CameraInstantSneakMixin",
+    "HudEditorOpenMixin",
     "StreamerFontMixin",
     "EtherSoundMixin",
     "EtherSoundOdinMixin",

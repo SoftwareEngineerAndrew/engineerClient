@@ -31,7 +31,8 @@
     "TpMazeRenderMixin",
     "WaterSolverRenderMixin",
     "TerminalClickLimitMixin",
-    "NumberSettingNoneMixin"
+    "NumberSettingNoneMixin",
+    "HudEditorCategoryMixin"
   ],
   "injectors": {
     "defaultRequire": 0

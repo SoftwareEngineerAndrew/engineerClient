@@ -1,5 +1,6 @@
 package com.engineerclient.mixin.odin;
 
+import com.engineerclient.hud.HudEditor;
 import com.engineerclient.misc.OdinOnScreen;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -20,6 +21,7 @@ public class HudOnScreenMixin {
             original.call(graphics, example, mouseX, mouseY);
             return;
         }
+        if (HudEditor.isOpen()) return;
         OdinOnScreen.hudsOnScreen(() -> original.call(graphics, example, mouseX, mouseY));
     }
 }

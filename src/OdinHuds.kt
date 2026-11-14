@@ -38,6 +38,7 @@ object OdinHuds {
     private val PRACTICE_HIDDEN = setOf("Term Info", "Goldor Hud")
 
     private val draws = HashMap<HUDSetting, Draw>()
+    private val defaults = HashMap<HUDSetting, Triple<Int, Int, Float>>()
     private var pending: Draw? = null
 
     /** `Module.HUD` is making a HUD from [block]: what it is given instead. */
@@ -48,11 +49,19 @@ object OdinHuds {
     /** ...and the setting it made from it. */
     @JvmStatic
     fun made(setting: HUDSetting) {
+        defaults[setting] = Triple(setting.value.x, setting.value.y, setting.value.scale)
         val draw = pending ?: return
         pending = null
         draw.hud = setting.value
         draw.name = setting.name
         draws[setting] = draw
+    }
+
+    fun reset(setting: HUDSetting) {
+        val (x, y, scale) = defaults[setting] ?: Triple(10, 10, 1f)
+        setting.value.x = x
+        setting.value.y = y
+        setting.value.scale = scale
     }
 
     /** Draws [setting]'s HUD again where Odin puts it (not the editor's example). */

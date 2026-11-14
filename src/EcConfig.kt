@@ -18,6 +18,7 @@ object EcConfig {
         var myStartingRole: String? = null,
         /** Legacy whole-team role map, kept only so an old file's own-role entry can be migrated. */
         var roleBindings: MutableMap<String, String>? = null,
+        var hudGrid: Boolean = true,
     )
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
