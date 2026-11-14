@@ -1,9 +1,10 @@
 package com.engineerclient.waterboard
 
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.hypot
+import kotlin.math.ln
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.random.Random
 
 /** One lever flip, at the server tick its packet should come back with. [lever]: [Geometry.LEVERS] index. */
@@ -69,9 +70,11 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
     /**
      * Best plan found within [budgetMs] from [base] (flips can't be before [base].time + 1). [first]: the earliest tick each
      * lever can first be flipped (from where the player is), or null for no limit. [horizon]: ticks simulated at most.
+     * [iterations]: candidates each annealer tries at most; the search is done at that many or when the time is up.
      */
     fun plan(base: WaterSim, seeds: List<List<Flip>>, budgetMs: Long, rnd: Random = Random.Default, first: IntArray? = null,
-             horizon: Int = 700, threads: Int = THREADS, objective: Objective = Objective.FASTEST, trials: Int = LIVE_TRIALS): Plan {
+             horizon: Int = 700, threads: Int = THREADS, objective: Objective = Objective.FASTEST, trials: Int = LIVE_TRIALS,
+             iterations: Int = Int.MAX_VALUE): Plan {
         val t0 = base.time + 1
         val levers = base.geo.slotLever.distinct().sorted().toIntArray()
         val starts = (seeds.map { normalize(it, t0) } + listOf(emptyList())).distinct()
@@ -79,15 +82,24 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
         val seedsRnd = LongArray(threads) { rnd.nextLong() }
         // independent annealers from the same starts, each its own scratch board; the best wins
         fun ev() = Evaluator(base, t0, horizon, spacing, first, hold, objective, trials)
-        val runs = if (threads <= 1) listOf(anneal(ev(), starts, budgetNs, Random(seedsRnd[0]), levers))
-            else (0 until threads).map { k -> pool.submit<List<Pair<List<Flip>, Double>>> { anneal(ev(), starts, budgetNs, Random(seedsRnd[k]), levers) } }.map { it.get() }
+        val runs = if (threads <= 1) listOf(anneal(ev(), starts, budgetNs, iterations, Xorwow(seedsRnd[0]), levers))
+            else (0 until threads).map { k -> pool.submit<List<Pair<List<Flip>, Double>>> { anneal(ev(), starts, budgetNs, iterations, Xorwow(seedsRnd[k]), levers) } }.map { it.get() }
         val eval = ev()
         val pick = if (!objective.trials) runs.flatten().minByOrNull { it.second }!!.first
             else {
                 // the trials' seeds are the same for every candidate, so the search can fit them: choose among the best it found
                 // on trials it never saw
-                val check = Evaluator(base, t0, horizon, spacing, first, hold, objective, if (trials >= Planner.TABLE_TRIALS) TABLE_CHECK else LIVE_CHECK, seedBase = 0x0c4ec4L)
-                (starts + runs.flatten().map { it.first }).distinct().minByOrNull { check.cost(it) }!!
+                fun check() = Evaluator(base, t0, horizon, spacing, first, hold, objective, if (trials >= Planner.TABLE_TRIALS) TABLE_CHECK else LIVE_CHECK, seedBase = 0x0c4ec4L)
+                val cands = (starts + runs.flatten().map { it.first }).distinct()
+                // each worker's cheapest of its share (the first of equals), costs that can't beat it cut short
+                fun cheapest(k: Int, step: Int): Pair<Int, Double> {
+                    val c = check()
+                    var at = -1; var low = Double.POSITIVE_INFINITY
+                    for (i in k until cands.size step step) { val v = c.cost(cands[i], low); if (v < low) { low = v; at = i } }
+                    return at to low
+                }
+                val found = if (threads <= 1) listOf(cheapest(0, 1)) else (0 until threads).map { k -> pool.submit<Pair<Int, Double>> { cheapest(k, threads) } }.map { it.get() }
+                cands[found.filter { it.first >= 0 }.minWith(compareBy({ it.second }, { it.first })).first]
             }
         val flips = polish(eval, pick)
         val solved = eval.solvedAt(flips)
@@ -95,7 +107,7 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
     }
 
     /** The best plans one annealer found ([KEEP] of them, distinct, best first). */
-    private fun anneal(eval: Evaluator, starts: List<List<Flip>>, budgetNs: Long, rnd: Random, levers: IntArray): List<Pair<List<Flip>, Double>> {
+    private fun anneal(eval: Evaluator, starts: List<List<Flip>>, budgetNs: Long, iterations: Int, rnd: Xorwow, levers: IntArray): List<Pair<List<Flip>, Double>> {
         val begin = System.nanoTime()
         var best: Pair<List<Flip>, Double>? = null
         val top = java.util.TreeMap<Double, List<Flip>>()
@@ -112,12 +124,17 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
         val temp0 = 60.0; val temp1 = 0.5
         while (true) {
             val el = System.nanoTime() - begin
-            if (el >= budgetNs) break
+            if (el >= budgetNs || iter >= iterations) break
             iter++
-            val temp = temp0 * Math.pow(temp1 / temp0, el.toDouble() / budgetNs)
+            val temp = temp0 * Math.pow(temp1 / temp0, max(el.toDouble() / budgetNs, iter.toDouble() / iterations))
             val cand = mutate(cur, eval.t0, rnd, levers)
-            val c = eval.cost(cand)
-            if (c < curCost || rnd.nextDouble() < exp((curCost - c) / temp)) {
+            // the draw a worse candidate is accepted on, taken first: it says how bad one may be, and a candidate is only
+            // simulated until it is known to be worse than that. A better one is taken without it, so it is put back.
+            rnd.mark()
+            val u = rnd.nextDouble()
+            val c = eval.cost(cand, refusedFrom(curCost, u, temp))
+            if (c < curCost) rnd.reset()
+            if (c < curCost || u < exp((curCost - c) / temp)) {
                 cur = cand; curCost = c
                 keep(cand, c)
                 if (c < best!!.second) best = cand to c
@@ -126,6 +143,17 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
             if (iter % 400 == 0 && curCost > best!!.second + 30) { cur = best.first; curCost = best.second }
         }
         return top.entries.map { it.value to it.key }
+    }
+
+    /** A cost every candidate at or above which is turned down, for the acceptance draw [u]. */
+    private fun refusedFrom(curCost: Double, u: Double, temp: Double): Double {
+        fun refused(c: Double) = c >= curCost && !(u < exp((curCost - c) / temp))
+        var b = curCost - temp * ln(u)
+        if (b.isNaN() || b == Double.POSITIVE_INFINITY) return Double.POSITIVE_INFINITY
+        b += abs(b) * 1e-9 + 1e-6
+        var n = 0
+        while (!refused(b)) { if (++n > 8) return Double.POSITIVE_INFINITY; b += max(1.0, abs(b) * 1e-6) }
+        return b
     }
 
     /**
@@ -140,20 +168,20 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
             for (i in cur.indices.reversed()) {
                 if (i >= cur.size) continue
                 val t = cur.toMutableList().also { it.removeAt(i) }
-                val tc = eval.cost(t)
+                val tc = eval.cost(t, Math.nextUp(c))
                 if (tc <= c) { cur = t; c = tc; changed = true }
             }
             loop@ for (i in cur.indices) for (j in i + 1 until cur.size) {
                 if (cur[i].lever != cur[j].lever) continue
                 val t = cur.filterIndexed { k, _ -> k != i && k != j }
-                val tc = eval.cost(t)
+                val tc = eval.cost(t, Math.nextUp(c))
                 if (tc <= c) { cur = t; c = tc; changed = true; break@loop }
             }
             for (i in cur.indices) for (d in intArrayOf(-2, -1, 1, 2)) {
                 val tick = cur[i].tick + d
                 if (tick < eval.t0) continue
                 val t = cur.toMutableList().also { it[i] = Flip(tick, cur[i].lever) }.sortedBy { it.tick }
-                val tc = eval.cost(t)
+                val tc = eval.cost(t, c)
                 if (tc < c) { cur = t; c = tc; changed = true }
             }
         }
@@ -175,8 +203,7 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
             val t = flips[i].tick + d
             if (t < eval.t0) return false
             val moved = flips.toMutableList().also { it[i] = Flip(t, flips[i].lever) }.sortedBy { it.tick }
-            val s = eval.solvedAt(moved)
-            return s != WaterSim.NONE && s <= solved + SLACK && eval.wrongs(moved) == 0
+            return eval.solvesCleanlyBy(moved, solved + SLACK)
         }
         var lo = 0; while (lo > -WINDOW_PROBE && ok(lo - 1)) lo--
         var hi = 0; while (hi < WINDOW_PROBE && ok(hi + 1)) hi++
@@ -216,32 +243,94 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
     private class Evaluator(val base: WaterSim, val t0: Int, val horizon: Int, val spacing: Spacing, val first: IntArray?, val hold: Int,
                             val objective: Objective = Objective.FASTEST, val trials: Int = LIVE_TRIALS, seedBase: Long = 0x5eed_0000L) {
         private val sim = base.copy()
-        private var lastWrongs = 0
+        /** Gate toggles on already open gates in the last run. */
+        var wrongs = 0; private set
         /** Common random numbers: the same trials for every candidate, so they are compared on the same luck. */
         private val seeds = LongArray(trials) { seedBase + 7919L * it }
+        private val rng = Lcg()
+        /** The flips being run, in tick order. */
+        private var ticks = IntArray(16)
+        private var levers = IntArray(16)
+        private var n = 0
+
+        /** A run is cut short once it can't solve by [deadline], has toggled an open gate ([clean]) or can't cost under [bound]. */
+        private var deadline = Int.MAX_VALUE
+        private var clean = false
+        private var bound = Double.POSITIVE_INFINITY
+        private var cut = false
+        /** The trials' outcomes so far, and the candidate's costs that don't come from simulating it. */
+        private var partial = 0.0
+        private var flipCost = 0.0
+        private var effortCost = 0.0
+        private var feasCost = 0.0
 
         fun solvedAt(f: List<Flip>): Int { run(f); return sim.solvedAt }
-        fun wrongs(f: List<Flip>): Int { run(f); return lastWrongs }
 
-        private fun run(f: List<Flip>, rng: java.util.Random? = null) {
+        /** [f] solves at [by] or sooner without closing a gate that was open. */
+        fun solvesCleanlyBy(f: List<Flip>, by: Int): Boolean {
+            deadline = by; clean = true
+            run(f)
+            deadline = Int.MAX_VALUE; clean = false
+            return !cut && sim.solvedAt != WaterSim.NONE && sim.solvedAt <= by && wrongs == 0
+        }
+
+        private fun run(f: List<Flip>) {
+            n = 0
+            for (fl in f) add(fl.tick, fl.lever)
+            run(null)
+        }
+
+        /** [f] with each click [JITTER] ticks either way, drawn from [rng]. */
+        private fun jittered(f: List<Flip>) {
+            n = 0
+            for (fl in f) add(max(t0, fl.tick + rng.nextInt(2 * JITTER + 1) - JITTER), fl.lever)
+        }
+
+        /** Keeps tick order, a flip after those already on its tick. */
+        private fun add(tick: Int, lever: Int) {
+            if (n == ticks.size) { ticks = ticks.copyOf(2 * n); levers = levers.copyOf(2 * n) }
+            var j = n++
+            while (j > 0 && ticks[j - 1] > tick) { ticks[j] = ticks[j - 1]; levers[j] = levers[j - 1]; j-- }
+            ticks[j] = tick; levers[j] = lever
+        }
+
+        private fun run(rng: Lcg?) {
             sim.setFrom(base)
             sim.rng = rng; sim.randomRate = if (rng != null) RANDOM_RATE else 0.0
             // solved from here on: a solve before this state is history (a gate closed since, or the puzzle would be done)
             sim.hold = hold; sim.solvedAt = WaterSim.NONE
+            cut = false
+            val cutting = clean || deadline != Int.MAX_VALUE || bound != Double.POSITIVE_INFINITY
             val wrong0 = base.wrongHits
             var i = 0
             val end = t0 + horizon
             while (sim.time < end) {
                 var bits = 0
-                while (i < f.size && f[i].tick == sim.time + 1) { bits = bits xor (1 shl f[i].lever); i++ }
+                while (i < n && ticks[i] == sim.time + 1) { bits = bits xor (1 shl levers[i]); i++ }
                 sim.step(bits)
                 if (sim.solvedAt != WaterSim.NONE) break
                 // nothing left to happen: stop early (every gate open then stays open)
-                if (i >= f.size && !sim.moving()) { if (sim.closed == 0) sim.solvedAt = sim.openSince; break }
+                if (i >= n && !sim.moving()) { if (sim.closed == 0) sim.solvedAt = sim.openSince; break }
+                if (!cutting) continue
+                // the soonest it can still solve: the open run it is in, or the next tick
+                val soonest = if (sim.closed == 0) sim.openSince else sim.time + 1
+                val w = sim.wrongHits - wrong0
+                if (soonest > deadline || (clean && w > 0) ||
+                    (bound != Double.POSITIVE_INFINITY && total(over(max(0, soonest - t0) + 15.0 * w)) >= bound)) { cut = true; break }
             }
             sim.rng = null
-            lastWrongs = sim.wrongHits - wrong0
+            wrongs = sim.wrongHits - wrong0
         }
+
+        /** The simulated part of the cost when the run in hand comes to [x]: [x], or the trials' mean with it in. */
+        private fun over(x: Double): Double = if (objective.trials) (partial + x) / trials else x
+
+        /** The cost before the flips after the solve are counted, [x] its simulated part. */
+        private fun total(x: Double): Double = when (objective) {
+            Objective.FASTEST, Objective.SAFEST -> x + flipCost
+            Objective.EASIEST -> x + flipCost + effortCost
+            Objective.BALANCED -> x + 0.5 * (flipCost + effortCost)
+        } + feasCost
 
         /** Ticks to solve, or what failing costs (a fail is far worse than any solve; gates left closed make it worse). */
         private fun outcome(): Double =
@@ -272,26 +361,36 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
             return c
         }
 
-        /** Monte Carlo: the mean outcome over [trials] runs with random ticks and each click [JITTER] ticks either way. */
+        /**
+         * Monte Carlo: the mean outcome over [trials] runs with random ticks and each click [JITTER] ticks either way. Cut short
+         * ([cut]) once the trials so far put the cost at [bound] or over.
+         */
         private fun trialsMean(f: List<Flip>): Double {
-            var sum = 0.0
+            partial = 0.0
             for (k in 0 until trials) {
-                val r = java.util.Random(seeds[k])
-                val moved = f.map { Flip(max(t0, it.tick + r.nextInt(2 * JITTER + 1) - JITTER), it.lever) }.sortedBy { it.tick }
-                run(moved, r)
-                sum += outcome() + 15.0 * lastWrongs
+                rng.seed(seeds[k])
+                jittered(f)
+                run(rng)
+                if (cut) return 0.0
+                partial += outcome() + 15.0 * wrongs
+                if (total(partial / trials) >= bound) { cut = true; return 0.0 }
             }
-            return sum / trials
+            return partial / trials
         }
 
-        fun cost(f: List<Flip>): Double {
-            var c = when (objective) {
-                Objective.FASTEST -> { run(f); outcome() + 15.0 * lastWrongs + FASTEST_FLIP_COST * f.size }
-                Objective.EASIEST -> { run(f); outcome() + 15.0 * lastWrongs + EASY_FLIP_COST * f.size + effort(f) }
-                Objective.SAFEST -> trialsMean(f) + SAFE_FLIP_COST * f.size
-                Objective.BALANCED -> trialsMean(f) + 0.5 * (EASY_FLIP_COST * f.size + effort(f))
+        /** [f]'s cost; when that is [refuse] or more, maybe only that it is (infinity), from as little simulating as shows it. */
+        fun cost(f: List<Flip>, refuse: Double = Double.POSITIVE_INFINITY): Double {
+            flipCost = f.size * when (objective) {
+                Objective.FASTEST -> FASTEST_FLIP_COST; Objective.SAFEST -> SAFE_FLIP_COST; else -> EASY_FLIP_COST
             }
-            c += feasibility(f)
+            effortCost = if (objective == Objective.EASIEST || objective == Objective.BALANCED) effort(f) else 0.0
+            feasCost = feasibility(f)
+            bound = refuse
+            val x = if (objective.trials) trialsMean(f) else { run(f); outcome() + 15.0 * wrongs }
+            bound = Double.POSITIVE_INFINITY
+            if (cut) return Double.POSITIVE_INFINITY
+            var c = total(x)
+            if (c >= refuse) return Double.POSITIVE_INFINITY
             // flips after it's solved are pointless (on the board as simulated: the trials left their last run in [sim])
             if (objective.trials) run(f)
             if (sim.solvedAt != WaterSim.NONE) c += 5.0 * f.count { it.tick > sim.solvedAt }
@@ -302,9 +401,9 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
         fun robustness(f: List<Flip>, n: Int, seed: Long): Robustness {
             val times = ArrayList<Int>(); var solved = 0
             for (k in 0 until n) {
-                val r = java.util.Random(seed + k)
-                val moved = f.map { Flip(max(t0, it.tick + r.nextInt(2 * JITTER + 1) - JITTER), it.lever) }.sortedBy { it.tick }
-                run(moved, r)
+                rng.seed(seed + k)
+                jittered(f)
+                run(rng)
                 if (sim.solvedAt != WaterSim.NONE) { solved++; times += sim.solvedAt - t0 }
             }
             times.sort()
@@ -350,7 +449,42 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
         const val TABLE_CHECK = 400
         /** Candidates each annealer keeps for that check. */
         const val KEEP = 16
+        /** Candidates an annealer gets through for each millisecond a search is given, on one run and on trials. */
+        const val RUN_RATE = 60
+        const val TRIAL_RATE = 6
+        /** The candidates a search of [budgetMs] is worth: a search that has tried them is done before its time is up. */
+        fun iterations(budgetMs: Long, objective: Objective): Int = (budgetMs * if (objective.trials) TRIAL_RATE else RUN_RATE).toInt()
         val THREADS = maxOf(1, minOf(4, Runtime.getRuntime().availableProcessors() - 2))
         private val pool = java.util.concurrent.Executors.newFixedThreadPool(THREADS) { r -> Thread(r, "ec-waterboard-planner").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
     }
+}
+
+/** kotlin.random.Random(seed)'s generator, number for number, that can go back to a [mark]. */
+class Xorwow(seed: Long) : Random() {
+    private var x = seed.toInt()
+    private var y = (seed shr 32).toInt()
+    private var z = 0
+    private var w = 0
+    private var v = x.inv()
+    private var addend = (x shl 10) xor (y ushr 4)
+    private val saved = IntArray(6)
+
+    init { repeat(64) { nextInt() } }
+
+    override fun nextInt(): Int {
+        var t = x
+        t = t xor (t ushr 2)
+        x = y; y = z; z = w
+        val v0 = v
+        w = v0
+        t = (t xor (t shl 1)) xor v0 xor (v0 shl 4)
+        v = t
+        addend += 362437
+        return t + addend
+    }
+
+    override fun nextBits(bitCount: Int): Int = nextInt().ushr(32 - bitCount) and (-bitCount).shr(31)
+
+    fun mark() { saved[0] = x; saved[1] = y; saved[2] = z; saved[3] = w; saved[4] = v; saved[5] = addend }
+    fun reset() { x = saved[0]; y = saved[1]; z = saved[2]; w = saved[3]; v = saved[4]; addend = saved[5] }
 }

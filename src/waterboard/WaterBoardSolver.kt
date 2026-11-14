@@ -102,13 +102,13 @@ object WaterBoardSolver {
     private var jobUntouched = false
     private var lastGates = -1
     private var seenFlips = 0
-    private var job: Future<Plan>? = null
+    private var job: Future<Planned>? = null
     private var jobBase: WaterSim? = null
     private var jobCommitted: List<Flip> = emptyList()
     private var dirty = true
     private var lastPlanMs = 0.0
-    /** The board's rows as read (to find it in [PlanTable]), and the objective the plan is for. */
-    private var boardRows: List<String>? = null
+    /** Which of [PlanTable]'s boards this is (-1: none), and the objective the plan is for. */
+    private var layout = -1
     private var planFor: Objective? = null
     /** The flip the click sound last played for. */
     private var dinged: Flip? = null
@@ -119,8 +119,12 @@ object WaterBoardSolver {
     private val planner = Planner(spacing)
     private val coordinator = Executors.newSingleThreadExecutor { r -> Thread(r, "ec-waterboard").apply { isDaemon = true } }
 
+    /** A search's plan, and the plan it was started with ([rest]) scored from the same board, to choose between. */
+    private class Planned(val plan: Plan, val rest: List<Flip>, val old: Plan?)
+
     fun install() {
         for (s in listOf(dropdown, on, lead, objective, clickSound, tracer, firstColor, secondColor, showSim)) PuzzleSolvers.registerSetting(s)
+        coordinator.execute { PlanTable.load() }
         on<LevelEvent.Load> { EngineerClient.safely("water board reset") { reset() } }
         onReceive<ClientboundBlockUpdatePacket> { val f = frame ?: return@onReceive; packet(f, pos, blockState) }
         onReceive<ClientboundSectionBlocksUpdatePacket> { val f = frame ?: return@onReceive; runUpdates { p, s -> packet(f, p, s) } }
@@ -144,7 +148,7 @@ object WaterBoardSolver {
     private fun reset() {
         frame = null; room = null; geo = null; tracker = null; todo = ArrayList(); solveAt = WaterSim.NONE; windowOf = emptyMap()
         seenFlips = 0; job?.cancel(true); job = null; jobBase = null; dirty = true; inbox.clear(); leverPowered.fill(null)
-        clickMs.fill(Double.NaN); boardRows = null; planFor = null; dinged = null; held = false; jobUntouched = false
+        clickMs.fill(Double.NaN); layout = -1; planFor = null; dinged = null; held = false; jobUntouched = false
     }
 
     /**
@@ -168,24 +172,23 @@ object WaterBoardSolver {
     // ---- network thread -----------------------------------------------------------------------------------------------------
 
     private fun packet(f: RoomFrame, pos: BlockPos, state: BlockState) {
-        val r = f.toRoom(pos)
-        val ms = nowMs()
-        if (r[2] == Geometry.PLANE_Z && r[0] in Geometry.BX0..Geometry.BX1 && r[1] in Geometry.BY0..82) {
-            inbox.add(Ev(ms, CELL, f.cell(r[0], r[1]), view(state)))
+        val x = f.roomX(pos); val y = pos.y; val z = f.roomZ(pos)
+        if (z == Geometry.PLANE_Z && x in Geometry.BX0..Geometry.BX1 && y in Geometry.BY0..82) {
+            inbox.add(Ev(nowMs(), CELL, f.cell(x, y), view(state)))
             return
         }
-        for (i in Geometry.LEVER_POS.indices) {
+        if (state.block == Blocks.LEVER) for (i in Geometry.LEVER_POS.indices) {
             val p = Geometry.LEVER_POS[i]
-            if (r[0] == p[0] && r[1] == p[1] && r[2] == p[2] && state.block == Blocks.LEVER) {
+            if (x == p[0] && y == p[1] && z == p[2]) {
                 val pw = state.getValue(LeverBlock.POWERED)
-                if (leverPowered[i] != null && leverPowered[i] != pw) inbox.add(Ev(ms, LEVER, i, 0))
+                if (leverPowered[i] != null && leverPowered[i] != pw) inbox.add(Ev(nowMs(), LEVER, i, 0))
                 leverPowered[i] = pw
                 return
             }
         }
-        if (r[0] == 15 && r[1] == 56) {
-            val o = Geometry.GATE_Z.indexOf(r[2])
-            if (o >= 0) inbox.add(Ev(ms, GATE, o, if (state.isAir) 0 else 1))
+        if (x == 15 && y == 56) {
+            val o = Geometry.GATE_Z.indexOf(z)
+            if (o >= 0) inbox.add(Ev(nowMs(), GATE, o, if (state.isAir) 0 else 1))
         }
     }
 
@@ -235,7 +238,7 @@ object WaterBoardSolver {
             // before the first press: a plan for the gates as they were is no plan for these (the table has one for them)
             if (held) { todo = ArrayList(); solveAt = WaterSim.NONE; windowOf = emptyMap(); held = false }
         }
-        tr.gates(now, gates)
+        tr.gates(now, gates, untouched(tr))
         // another objective chosen: plan again for it (from the table while nothing has been flipped)
         if (planFor != null && planFor != objective.value) { todo = ArrayList(); solveAt = WaterSim.NONE; windowOf = emptyMap(); job?.cancel(true); job = null; dirty = true }
         managePlan(tr, now, f)
@@ -278,7 +281,15 @@ object WaterBoardSolver {
     private fun clickTick(tr: Tracker): Int = tr.now(nowMs()) + Math.round(latencyTicks()).toInt()
 
     /** Whole ticks as seconds, two decimals (one tick is 0.05 s). */
-    private fun seconds(ticks: Int): String = String.format(java.util.Locale.ROOT, "%.2f", ticks / 20.0)
+    private fun seconds(ticks: Int): String { val c = ticks * 5; return "${c / 100}.${c / 10 % 10}${c % 10}" }
+
+    /** A board as Hypixel built it, untouched: its precomputed plan, offsets from the first press as every plan is until then. */
+    private fun fromTable(tr: Tracker, now: Double) {
+        val obj = objective.value
+        val p = PlanTable.lookup(layout, tr.geo.rotation, tr.head.closed, obj)?.at(clickTick(tr)) ?: return
+        todo = p.flips.toMutableList(); solveAt = p.solvedAt; windowOf = p.flips.zip(p.window).toMap()
+        planFor = obj; dirty = false; lastPlanMs = now
+    }
 
     private fun managePlan(tr: Tracker, now: Double, f: RoomFrame) {
         // flips that happened: the plan's matching ones are done; anything else means re-planning
@@ -304,6 +315,7 @@ object WaterBoardSolver {
         }
         // nothing pressed yet: the plan waits for it, its first flip on the tick a click now would land
         val untouched = untouched(tr)
+        if (untouched && todo.isEmpty() && job == null) fromTable(tr, now)
         held = untouched && todo.isNotEmpty()
         if (held) shift(clickTick(tr) - todo[0].tick)
         val tNow = tr.now(now)
@@ -337,22 +349,23 @@ object WaterBoardSolver {
             val first = if (untouched) null else mc.player?.let { pl -> val r = f.toRoom(pl.blockPosition()); IntArray(7) { lv -> maxOf(0, spacing.from(r[0] + 0.5, r[2] + 0.5, lv) - leadTicks) } }
             val obj = objective.value
             planFor = obj
-            // a board as Hypixel built it: the precomputed plan (offsets from its first flip, as every plan here is until then)
-            val table = if (untouched && todo.isEmpty()) boardRows?.let { PlanTable.lookup(it, f.rotation, base.closed, obj) } else null
-            job = if (table != null && table.flips.isNotEmpty()) {
-                coordinator.submit<Plan> { planner.score(base, table.at(base.time + 1), objective = obj) }
-            } else coordinator.submit<Plan> { planner.plan(base, seeds, budget, Random.Default, first, objective = obj) }
+            val kept = if (untouched) seeds[0] else rest
+            job = coordinator.submit<Planned> {
+                val p = planner.plan(base, seeds, budget, Random.Default, first, objective = obj, iterations = Planner.iterations(budget, obj))
+                Planned(p, kept, if (kept.isEmpty()) null else planner.score(base, kept, objective = obj))
+            }
         }
     }
 
     /** A new plan replaces the old one only if the old one no longer works from here or the new one is clearly sooner. */
-    private fun adopt(p: Plan, base: WaterSim) {
+    private fun adopt(planned: Planned, base: WaterSim) {
+        val p = planned.plan
         // the flips that were due before the plan's start stay; those the player has done since are gone from [todo]
         val committed = jobCommitted.filter { c -> todo.any { it == c } }
         // a held plan is offsets from the press: compared from the same start as the new one
         val rest = if (jobUntouched) startingAt(todo, base.time + 1) else todo.filter { it.tick > base.time }
         val obj = planFor ?: Objective.FASTEST
-        val old = if (rest.isEmpty()) null else planner.score(base, rest, objective = obj)
+        val old = if (rest.isEmpty()) null else if (rest == planned.rest) planned.old else planner.score(base, rest, objective = obj)
         // the old plan stays unless it no longer solves or the new one is clearly better by the objective's own measure
         val pick = if (old == null || !old.solved || (p.solved && old.cost > p.cost + 20) ||
             (obj == Objective.FASTEST && p.solved && p.solvedAt < old.solvedAt - 5)) p else old
@@ -382,7 +395,7 @@ object WaterBoardSolver {
             rows += sb.toString()
         }
         if (rows.sumOf { r -> r.count { it.uppercaseChar() in Geometry.SLOT_CHARS } } < 10) return null
-        boardRows = rows
+        layout = PlanTable.layoutOf(rows)
         val (g, inn) = Geometry.parse(rows, f.rotation)
         val water = IntArray(g.w * g.h) { -1 }
         for (c in water.indices) {
@@ -436,13 +449,12 @@ object WaterBoardSolver {
         // and over each lever its coming flips, the soonest lowest: server ticks to go, shown as seconds (steps of 0.05 s, one
         // per tick), "CLICK ME!" when due. Before the first press, each flip's time after it (standing still until it comes).
         val from = if (held) todo[0].tick else now
-        for ((lever, flips) in todo.groupBy { it.lever }) {
-            val p = f.toWorld(Geometry.LEVER_POS[lever])
-            flips.forEachIndexed { i, fl ->
-                val ticks = fl.tick - from
-                val text = if (ticks <= 0) "§a§lCLICK ME!" else "§e${seconds(ticks)}s"
-                event.drawText(text, Vec3(p.x + 0.5, p.y + 1.5 + 0.5 * i, p.z + 0.5), 1f, true)
-            }
+        val stacked = IntArray(7)
+        for (fl in todo) {
+            val p = f.toWorld(Geometry.LEVER_POS[fl.lever])
+            val ticks = fl.tick - from
+            val text = if (ticks <= 0) "§a§lCLICK ME!" else "§e${seconds(ticks)}s"
+            event.drawText(text, Vec3(p.x + 0.5, p.y + 1.5 + 0.5 * stacked[fl.lever]++, p.z + 0.5), 1f, true)
         }
         if (solveAt != WaterSim.NONE) {
             val c = f.toWorld(intArrayOf(15, 80, 25))
@@ -474,15 +486,10 @@ object WaterBoardSolver {
                 else -> BlockPos(z + cx, y, -x + cz)
             }
         }
-        fun toRoom(p: BlockPos): IntArray {
-            val dx = p.x - cx; val dz = p.z - cz
-            return when (rotation) {
-                "NORTH" -> intArrayOf(-dx, p.y, -dz)
-                "WEST" -> intArrayOf(dz, p.y, -dx)
-                "SOUTH" -> intArrayOf(dx, p.y, dz)
-                else -> intArrayOf(-dz, p.y, dx)
-            }
-        }
+        private val turn = when (rotation) { "NORTH" -> 0; "WEST" -> 1; "SOUTH" -> 2; else -> 3 }
+        fun roomX(p: BlockPos): Int = when (turn) { 0 -> cx - p.x; 1 -> p.z - cz; 2 -> p.x - cx; else -> cz - p.z }
+        fun roomZ(p: BlockPos): Int = when (turn) { 0 -> cz - p.z; 1 -> cx - p.x; 2 -> p.z - cz; else -> p.x - cx }
+        fun toRoom(p: BlockPos): IntArray = intArrayOf(roomX(p), p.y, roomZ(p))
         fun cell(x: Int, y: Int) = (y - Geometry.Y0) * (Geometry.X1 - Geometry.X0 + 1) + (x - Geometry.X0)
 
         companion object {

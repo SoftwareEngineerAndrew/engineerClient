@@ -63,18 +63,23 @@ class WaterSim private constructor(
     var phase: Int = 0; private set
 
     private var adj = 0
+    /** Scheduled updates waiting, and pushed blocks still to land. */
+    private var queued = 0
+    private var landing = 0
+    /** A cell was written since the outlets were last looked at. */
+    private var touched = true
 
     /**
      * Monte Carlo: random ticks drawn from [rng], each flowing cell with probability [randomRate] a tick. Off while null (the
      * deterministic board). Not copied by [copy] / [setFrom]: each trial sets its own.
      */
-    var rng: java.util.Random? = null
+    var rng: Lcg? = null
     var randomRate = 0.0
 
     fun copy(): WaterSim {
-        val s = WaterSim(geo, cells.copyOf(), due.copyOf(), Array(8) { queue[it].copyOf() }, queueLen.copyOf(), slotIn.copyOf(), landAt.copyOf())
+        val s = WaterSim(geo, cells.copyOf(), due.copyOf(), Array(8) { queue[it].copyOf(maxOf(16, queueLen[it])) }, queueLen.copyOf(), slotIn.copyOf(), landAt.copyOf())
         s.time = time; s.sourceOn = sourceOn; s.closed = closed; s.solvedAt = solvedAt; s.wet = wet; s.wrongHits = wrongHits
-        s.hold = hold; s.openSince = openSince
+        s.hold = hold; s.openSince = openSince; s.queued = queued; s.landing = landing; s.touched = touched
         s.arrivals = arrivals?.copy()
         return s
     }
@@ -84,11 +89,15 @@ class WaterSim private constructor(
         require(o.geo === geo)
         System.arraycopy(o.cells, 0, cells, 0, cells.size)
         System.arraycopy(o.due, 0, due, 0, due.size)
-        for (b in 0 until 8) { val n = o.queueLen[b]; System.arraycopy(o.queue[b], 0, queue[b], 0, n); queueLen[b] = n }
+        for (b in 0 until 8) {
+            val n = o.queueLen[b]
+            if (queue[b].size < n) queue[b] = IntArray(o.queue[b].size)
+            System.arraycopy(o.queue[b], 0, queue[b], 0, n); queueLen[b] = n
+        }
         System.arraycopy(o.slotIn, 0, slotIn, 0, slotIn.size)
         System.arraycopy(o.landAt, 0, landAt, 0, landAt.size)
         time = o.time; sourceOn = o.sourceOn; closed = o.closed; solvedAt = o.solvedAt; wet = o.wet; wrongHits = o.wrongHits
-        hold = o.hold; openSince = o.openSince
+        hold = o.hold; openSince = o.openSince; queued = o.queued; landing = o.landing; touched = o.touched
         arrivals = o.arrivals?.copy()
     }
 
@@ -100,20 +109,21 @@ class WaterSim private constructor(
         time++
         if (flips and WATER_BIT != 0) { time--; phase = 1; setSource(!sourceOn); time++ }
         phase = 0
-        runDue()
+        if (queueLen[time and 7] != 0) runDue()
         if (random != null) for (c in random) randomTick(c)
         val r = rng
         if (r != null && randomRate > 0.0) {
             // each flowing cell is random-ticked with probability [randomRate]: geometric gaps over the cells
-            val lq = ln(1.0 - randomRate)
-            var c = (ln(1.0 - r.nextDouble()) / lq).toInt()
-            while (c in cells.indices) { randomTick(c); c += 1 + (ln(1.0 - r.nextDouble()) / lq).toInt() }
+            val gaps = Gaps.of(randomRate, cells.size)
+            var c = gaps.next(r)
+            while (c < cells.size) { randomTick(c); c += 1 + gaps.next(r) }
         }
-        outlets()
+        // an outlet only fills by a write
+        if (touched) { touched = false; outlets() }
         onSend?.invoke()
         phase = 1
         if (flips and BLOCK_LEVERS != 0) for (k in geo.slotCell.indices) if (flips and (1 shl geo.slotLever[k]) != 0) toggle(k)
-        for (k in landAt.indices) if (landAt[k] == time) { landAt[k] = NONE; set(geo.slotCell[k], SOLID, true) }
+        if (landing != 0) for (k in landAt.indices) if (landAt[k] == time) { landAt[k] = NONE; landing--; set(geo.slotCell[k], SOLID, true) }
         // solved once every gate has been open [hold] ticks running
         if (closed != 0) openSince = NONE
         else {
@@ -128,7 +138,7 @@ class WaterSim private constructor(
     }
 
     /** Water may still move: a scheduled update is waiting, a piston is moving, or the source is in. */
-    fun moving(): Boolean = sourceOn || queueLen.any { it > 0 } || landAt.any { it != NONE }
+    fun moving(): Boolean = sourceOn || queued != 0 || landing != 0
 
     // ---- the server's world -------------------------------------------------------------------------------------------------
 
@@ -139,7 +149,7 @@ class WaterSim private constructor(
 
     private fun toggle(k: Int) {
         val c = geo.slotCell[k]
-        if (landAt[k] != NONE) { landAt[k] = NONE; set(c, SOLID, true) }     // flipped again mid-push: it lands first
+        if (landAt[k] != NONE) { landAt[k] = NONE; landing--; set(c, SOLID, true) }     // flipped again mid-push: it lands first
         if (slotIn[k]) {
             set(c, AIR, true)                                                   // pulled back: open at once
         } else {
@@ -147,7 +157,9 @@ class WaterSim private constructor(
             // the moving piston, placed with flag 4 (BlockPistonBase.doMove): not sent. The client sees it only when the water
             // destroyed there had marked the cell (then as moving_piston); otherwise the cell stays air until the block lands.
             cells[c] = SOLID
+            touched = true
             landAt[k] = time + LAND
+            landing++
         }
         slotIn[k] = !slotIn[k]
     }
@@ -168,6 +180,7 @@ class WaterSim private constructor(
 
     private fun write(c: Int, v: Int) {
         cells[c] = v
+        touched = true
         onWrite?.invoke(c, phase)
     }
 
@@ -184,7 +197,9 @@ class WaterSim private constructor(
         val t = time + RATE
         due[c] = t
         val b = t and 7
+        if (queueLen[b] == queue[b].size) queue[b] = queue[b].copyOf(2 * queueLen[b])
         queue[b][queueLen[b]++] = c
+        queued++
     }
 
     /** A block changed at [c]: its still water neighbours start flowing (BlockStaticLiquid.updateLiquid). */
@@ -199,7 +214,7 @@ class WaterSim private constructor(
     private fun runDue() {
         val b = time and 7
         val n = queueLen[b]
-        if (n == 0) return
+        queued -= n
         val list = queue[b]
         // All due entries leave the queue before any runs (WorldServer.tickUpdates); new ones are 5 ticks out, another bucket.
         var m = 0
@@ -336,7 +351,7 @@ class WaterSim private constructor(
             for (k in geo.slotCell.indices) cells[geo.slotCell[k]] = if (slotIn[k]) SOLID else AIR
             cells[geo.source] = SOLID
             val n = cells.size
-            val s = WaterSim(geo, cells, IntArray(n) { NONE }, Array(8) { IntArray(n) }, IntArray(8), slotIn.copyOf(), IntArray(geo.slotCell.size) { NONE })
+            val s = WaterSim(geo, cells, IntArray(n) { NONE }, Array(8) { IntArray(16) }, IntArray(8), slotIn.copyOf(), IntArray(geo.slotCell.size) { NONE })
             s.closed = closed; s.time = time
             return s
         }
@@ -353,6 +368,78 @@ class WaterSim private constructor(
             // everything that could move next is woken: a still block that is wrong for its neighbours recomputes in 5 ticks
             for (c in s.cells.indices) if (s.cells[c] >= 0) { s.cells[c] = s.cells[c] or DYN; s.schedule(c) }
             return s
+        }
+    }
+}
+
+/** java.util.Random's generator, number for number, without its locking. */
+class Lcg(seed: Long = 0L) {
+    private var s = 0L
+    init { seed(seed) }
+
+    fun seed(v: Long) { s = (v xor MULT) and MASK }
+
+    private fun next(bits: Int): Int {
+        s = (s * MULT + 0xBL) and MASK
+        return (s ushr (48 - bits)).toInt()
+    }
+
+    fun nextInt(bound: Int): Int {
+        var r = next(31)
+        val m = bound - 1
+        if (bound and m == 0) return ((bound.toLong() * r) shr 31).toInt()
+        var u = r
+        while (true) { r = u % bound; if (u - r + m >= 0) return r; u = next(31) }
+    }
+
+    /** nextDouble's 53 bits, before they are scaled to 0..1. */
+    fun next53(): Long = (next(26).toLong() shl 27) + next(27)
+
+    private companion object {
+        const val MULT = 0x5DEECE66DL
+        const val MASK = (1L shl 48) - 1
+    }
+}
+
+/**
+ * The geometric gap between random-ticked cells, floor(ln(1 - u) / ln(1 - rate)) for a uniform u, without the logarithm: it only
+ * steps up as u's 53 bits do, so the draw each gap starts at is found once and looked up. Gaps past [cap] come back as [cap].
+ */
+class Gaps private constructor(private val rate: Double, private val cap: Int) {
+    private val from = LongArray(cap + 1)
+    private val coarse = IntArray(1 shl BITS)
+
+    init {
+        val lq = ln(1.0 - rate)
+        fun gap(m: Long): Int = (ln(1.0 - m * UNIT) / lq).toInt()
+        for (k in 1..cap) {
+            var lo = from[k - 1]; var hi = (1L shl 53) - 1
+            while (lo < hi) { val mid = (lo + hi) ushr 1; if (gap(mid) >= k) hi = mid else lo = mid + 1 }
+            from[k] = if (gap(lo) >= k) lo else Long.MAX_VALUE
+        }
+        var k = 0
+        for (i in coarse.indices) {
+            val m = i.toLong() shl (53 - BITS)
+            while (k < cap && from[k + 1] <= m) k++
+            coarse[i] = k
+        }
+    }
+
+    fun next(r: Lcg): Int {
+        val m = r.next53()
+        var k = coarse[(m ushr (53 - BITS)).toInt()]
+        while (k < cap && from[k + 1] <= m) k++
+        return k
+    }
+
+    companion object {
+        private const val BITS = 12
+        private const val UNIT = 1.0 / (1L shl 53)
+        @Volatile private var last: Gaps? = null
+        fun of(rate: Double, cap: Int): Gaps {
+            val g = last
+            if (g != null && g.rate == rate && g.cap == cap) return g
+            return Gaps(rate, cap).also { last = it }
         }
     }
 }

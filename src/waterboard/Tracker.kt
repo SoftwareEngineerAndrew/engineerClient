@@ -222,8 +222,16 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
     /**
      * The gate wool the client sees. The simulation toggles gates itself when water reaches an outlet (and runs ahead of the
      * server), so the wool only overrules it when the simulated server tick of a moment ago has disagreed for a while.
+     * [still]: the board is untouched, and the wool is taken as it is.
      */
-    fun gates(ms: Double, closed: Int) {
+    fun gates(ms: Double, closed: Int, still: Boolean = false) {
+        // nothing has run on the board: the simulation has toggled no gate, the wool is all there is to know
+        if (still) {
+            val diff = head.closed xor closed
+            if (diff != 0) { for (x in snaps) x.closed = x.closed xor diff; head.closed = closed }
+            gateOff = 0
+            return
+        }
         val t = now(ms) - 3
         val s = snaps.lastOrNull { it.time <= t } ?: return
         if (s.closed == closed) { gateOff = 0; return }
