@@ -20,22 +20,28 @@ import java.util.Locale
 object PhaseTimers : Module(
     name = "Phase Timers",
     category = Category.BOSS,
-    description = "Counts up through each F7 phase: Maxor, Storm, Goldor, and the 3 s until terminals open.",
+    description = "Blade's tick timers for each F7 phase: Maxor, Storm, Goldor, and the 3 s until terminals open.",
     key = null,
 ) {
+    private val maxorOn by BooleanSetting("Maxor Tick Timer", true, desc = "Time since Maxor's first line.")
+    private val maxorColor by ColorSetting("Maxor Color", Color(0xFFAA00AA.toInt()), false, desc = "Colour of the Maxor timer.").withDependency { maxorOn }
     private val stormOn by BooleanSetting("Storm Timer", true, desc = "Time since Storm's first line, until he dies.")
+    private val stormDown by BooleanSetting("Storm Tick Down", false, desc = "Counts down the last 5 s to 29 s instead of up.").withDependency { stormOn }
     private val stormColor by ColorSetting("Storm Color", Color(0xFF00F9DD.toInt()), false, desc = "Colour of the Storm timer.").withDependency { stormOn }
     private val termStartOn by BooleanSetting("Term Start Timer", true, desc = "Counts down the 3 s from Storm's death until terminals can be done.")
     private val goldorOn by BooleanSetting("Goldor Timer", true, desc = "Time since Goldor's first line, green / gold / red through each 3 s death tick.")
-    private val combine by BooleanSetting("Combine Timers", true, desc = "Storm, Term Start and Goldor share one HUD.")
+    private val deathTicks by BooleanSetting("Goldor In Death Ticks", false, desc = "Shows only the time within each 3 s death tick.").withDependency { goldorOn }
+    private val goldorUp by BooleanSetting("Goldor Tick Up", false, desc = "Within each death tick, counts up instead of down from 3 s.").withDependency { goldorOn && deathTicks }
+    private val combine by BooleanSetting("Combine Timers", true, desc = "Maxor, Storm, Term Start and Goldor share one HUD.")
 
-    private val maxorHud by HUD("Maxor Timer", "Time since Maxor's first line.", true, 400, 200, 2f) { example ->
-        if (!example && phase != 1) return@HUD 0 to 0
-        draw(fmt(if (example) 0 else maxorTicks), WHITE)
-    }
-    private val combinedHud by HUD("Combined Timer", "Storm, Term Start and Goldor timers in one place.", false, 400, 230, 2f) { example ->
+    private val maxorHud by HUD("Maxor HUD", "The Maxor timer.", true, 400, 200, 2f) { example ->
+        if (combine) return@HUD 0 to 0
+        if (example) return@HUD draw(fmt(0), maxorColor)
+        maxorText()?.let { (t, c) -> draw(t, c) } ?: (0 to 0)
+    }.withDependency { !combine && maxorOn }
+    private val combinedHud by HUD("Combined Timer", "Maxor, Storm, Term Start and Goldor timers in one place.", false, 400, 230, 2f) { example ->
         if (!combine) return@HUD 0 to 0
-        if (example) return@HUD draw(fmt(0), WHITE)
+        if (example) return@HUD draw(fmt(0), maxorColor)
         current()?.let { (t, c) -> draw(t, c) } ?: (0 to 0)
     }.withDependency { combine }
     private val stormHud by HUD("Storm HUD", "The Storm timer.", false, 400, 230, 2f) { example ->
@@ -54,7 +60,6 @@ object PhaseTimers : Module(
         goldorText()?.let { (t, c) -> draw(t, c) } ?: (0 to 0)
     }.withDependency { !combine && goldorOn }
 
-    private val WHITE = Color(0xFFFFFFFF.toInt())
     private val YELLOW = Color(0xFFFFFF55.toInt())
     private val GREEN = Color(0xFF55FF55.toInt())
     private val GOLD = Color(0xFFFFAA00.toInt())
@@ -66,6 +71,7 @@ object PhaseTimers : Module(
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
     private const val CORE_OPEN = "The Core entrance is opening!"
     private const val TERM_START_TICKS = 60
+    private const val STORM_DOWN_TICKS = 580
 
     /** 1 Maxor, 2 Storm, 3 terminals, 4 after; 0 outside the boss. */
     private var phase = 0
@@ -76,26 +82,39 @@ object PhaseTimers : Module(
     private var termStartLeft = TERM_START_TICKS
     private var stormHurt = false
 
-    private fun fmt(ticks: Int) = String.format(Locale.ROOT, "%.2f", ticks / 20.0)
+    private fun fmt(ticks: Int) = fmt(ticks / 20.0)
+    private fun fmt(seconds: Double) = String.format(Locale.ROOT, "%.2f", seconds)
 
-    private fun stormText(): Pair<String, Color>? =
-        if (stormOn && phase == 2 && !stormDead) fmt(stormTicks) to stormColor else null
+    private fun maxorText(): Pair<String, Color>? =
+        if (maxorOn && phase == 1) fmt(maxorTicks) to maxorColor else null
+
+    private fun stormText(): Pair<String, Color>? {
+        if (!stormOn || phase != 2 || stormDead) return null
+        if (!stormDown) return fmt(stormTicks) to stormColor
+        // Blade's count down: only the last 5 s before 29 s.
+        return if (STORM_DOWN_TICKS - stormTicks in 0..100) fmt(29.0 - stormTicks / 20.0) to stormColor else null
+    }
 
     private fun termStartText(): Pair<String, Color>? =
         if (termStartOn && phase == 2 && stormHurt && termStartLeft > 0) fmt(termStartLeft) to YELLOW else null
 
     private fun goldorText(): Pair<String, Color>? {
         if (!goldorOn || phase != 3) return null
-        val mod = (goldorTicks / 20.0) % 3
-        return fmt(goldorTicks) to if (mod < 1) GREEN else if (mod < 2) GOLD else RED
+        val seconds = goldorTicks / 20.0
+        val mod = seconds % 3
+        val shown = if (!deathTicks) seconds else if (goldorUp) mod else 3 - mod
+        return fmt(shown) to if (mod < 1) GREEN else if (mod < 2) GOLD else RED
     }
 
-    private fun current() = stormText() ?: termStartText() ?: goldorText()
+    private fun current() = maxorText() ?: stormText() ?: termStartText() ?: goldorText()
 
+    // Centred in a fixed width, as Blade draws them, so the HUD doesn't move as digits change.
     private fun GuiGraphicsExtractor.draw(s: String, color: Color): Pair<Int, Int> {
-        text(s, 0, 0, color, true)
-        return mc.font.width(s) to 9
+        text(s, (WIDTH - mc.font.width(s)) / 2, 0, color, true)
+        return WIDTH to 9
     }
+
+    private const val WIDTH = 30
 
     init {
         on<MessageEvent.Chat> {
