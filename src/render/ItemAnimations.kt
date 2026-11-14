@@ -12,14 +12,19 @@ import com.odtheking.odin.utils.itemId
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.math.Axis
 import net.minecraft.core.component.DataComponents
+import net.minecraft.tags.ItemTags
+import net.minecraft.world.InteractionHand
+import net.minecraft.world.entity.HumanoidArm
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.effect.MobEffectUtil
 import net.minecraft.world.effect.MobEffects
+import org.joml.Matrix4f
 import kotlin.math.pow
 
 object ItemAnimations : Module(
     name = "Item Animations",
     category = Category.RENDER,
-    description = "Moves, turns and resizes the held item and changes its swing.",
+    description = "Moves, turns and resizes the held item and changes its swing, swap and blocking.",
     key = null,
 ) {
     private val reset by ActionSetting("Reset Values", desc = "Puts the sliders back to default.") { resetValues() }
@@ -38,6 +43,8 @@ object ItemAnimations : Module(
     private val disableSwing by BooleanSetting("Disable Swing", false, desc = "No swing animation.")
     private val disableTermSwing by BooleanSetting("Disable Terminator Swing", false, desc = "No swing animation while holding a Terminator.")
     private val noHandSway by BooleanSetting("No Hand Sway", false, desc = "The item doesn't lag behind when you turn.")
+    private val noItemReset by BooleanSetting("No Item Reset On Swap", false, desc = "A new held item appears at once instead of lowering and raising.")
+    private val oldBlocking by BooleanSetting("Old Blocking", false, desc = "Holding right click with a sword shows 1.8.9's blocking pose.")
 
     private const val BASE_SWING_TICKS = 6
 
@@ -148,4 +155,30 @@ object ItemAnimations : Module(
         val step = progress - lastProgress
         return lastProgress + (if (step < 0f) step + 1f else step) * partialTicks
     }
+
+    @JvmStatic
+    fun noItemReset() = enabled && noItemReset
+
+    @JvmStatic
+    fun blocking(stack: ItemStack, hand: InteractionHand): Boolean {
+        if (!enabled || !oldBlocking || hand != InteractionHand.MAIN_HAND || stack.isEmpty) return false
+        val player = mc.player ?: return false
+        if (mc.gui.screen() != null || !mc.options.keyUse.isDown || player.isUsingItem) return false
+        return stack.`is`(ItemTags.SWORDS)
+    }
+
+    @JvmStatic
+    fun blockPose(arm: HumanoidArm): Matrix4f = if (arm == HumanoidArm.RIGHT) BLOCK_RIGHT else BLOCK_LEFT
+
+    private fun rad(d: Float) = Math.toRadians(d.toDouble()).toFloat()
+
+    // 1.8.9's chain after the arm transform: transformFirstPersonItem, doBlockTransformations, the old sword display,
+    // then today's handheld display undone since it is applied after this.
+    private val BLOCK_RIGHT: Matrix4f = Matrix4f()
+        .rotateY(rad(45f)).scale(0.4f)
+        .translate(-0.5f, 0.2f, 0f).rotateY(rad(30f)).rotateX(rad(-80f)).rotateY(rad(60f))
+        .translate(0f, 4f / 16f, 2f / 16f).rotateY(rad(-135f)).rotateZ(rad(25f)).scale(1.7f)
+        .mul(Matrix4f().translate(1.13f / 16f, 3.2f / 16f, 1.13f / 16f).rotateY(rad(-90f)).rotateZ(rad(25f)).scale(0.68f).invert())
+
+    private val BLOCK_LEFT: Matrix4f = Matrix4f().scale(-1f, 1f, 1f).mul(BLOCK_RIGHT).scale(-1f, 1f, 1f)
 }

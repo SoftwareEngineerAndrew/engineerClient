@@ -7,7 +7,6 @@
     "CameraOffsetMixin",
     "CursorResetMixin",
     "FovRangeMixin",
-    "OldBlockingMixin",
     "GuiSidebarInvoker",
     "LeverClickMixin",
     "NoPackHeadMixin",

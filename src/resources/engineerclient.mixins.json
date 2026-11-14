@@ -124,6 +124,7 @@
     "ItemAnimationsSwingMixin",
     "ItemAnimationsEquipMixin",
     "NoItemResetMixin",
+    "OldBlockingMixin",
     "ItemProtectionClickMixin"
   ],
   "injectors": {
