@@ -1,5 +1,6 @@
 package com.engineerclient.skyblock
 
+import com.engineerclient.EngineerClient
 import com.engineerclient.mixin.ChatCopyAccessor
 import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
@@ -12,8 +13,6 @@ import com.odtheking.odin.features.Module
 import net.minecraft.ChatFormatting
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.network.chat.Component
-import net.minecraft.network.chat.Style
-import net.minecraft.network.chat.TextColor
 import net.minecraft.util.FormattedCharSequence
 import net.minecraft.util.Mth
 
@@ -29,10 +28,7 @@ object ChatTweaks : Module(
     private val hideEmpty by BooleanSetting("Hide Empty Messages", false, desc = "Drops chat lines with nothing but spaces.")
     private val compactHoppity by BooleanSetting("Compact Hoppity Messages", true, desc = "Joins the two lines of a Hoppity rabbit find into one.")
     private val copyChat by BooleanSetting("Copy On Right Click", true, desc = "Right click a chat message to copy it, shift for one line.")
-    private val removeCodes by BooleanSetting("Copy Without Color Codes", false, desc = "Copies the plain text.").withDependency { copyChat }
-    private val ampersandCodes by BooleanSetting("Copy Codes As &", false, desc = "Writes color codes with & instead of §.").withDependency { copyChat }
     private val copyLineOnly by BooleanSetting("Copy Line Only", false, desc = "Always copies just the clicked line.").withDependency { copyChat }
-    private val copyFeedback by BooleanSetting("Copy Feedback", false, desc = "Says in chat when a message is copied.").withDependency { copyChat }
 
     private var lastKey: String? = null
     private var lastShown: Component? = null
@@ -101,37 +97,14 @@ object ChatTweaks : Module(
 
         val clicked = lines[index]
         val sb = StringBuilder()
-        if (copyLineOnly || event.hasShiftDown()) appendLegacy(sb, clicked.content())
-        else for (i in lines.indices.reversed()) if (lines[i].parent() === clicked.parent()) appendLegacy(sb, lines[i].content())
+        if (copyLineOnly || event.hasShiftDown()) appendPlain(sb, clicked.content())
+        else for (i in lines.indices.reversed()) if (lines[i].parent() === clicked.parent()) appendPlain(sb, lines[i].content())
 
-        var out = sb.toString()
-        if (removeCodes) out = out.replace(Regex("§."), "")
-        if (ampersandCodes) out = out.replace('§', '&')
-        mc.keyboardHandler.clipboard = out
-        if (copyFeedback) mc.gui.hud.chat.addClientSystemMessage(Component.literal("Copied chat message"))
+        mc.keyboardHandler.clipboard = sb.toString().replace(Regex("§."), "")
+        EngineerClient.msg("§7Copied chat message.")
     }
 
-    private val legacyCodes: Map<Int, Char> by lazy {
-        "0123456789abcdef".associateBy { TextColor.fromLegacyFormat(ChatFormatting.getByCode(it)!!)!!.value }
-    }
-
-    private fun appendLegacy(sb: StringBuilder, text: FormattedCharSequence) {
-        var color: Int? = null
-        var last = Style.EMPTY
-        text.accept { _, style, codePoint ->
-            val c = style.color?.value
-            if (c != null && c != color) {
-                legacyCodes[c]?.let { sb.append('§').append(it) }
-                color = c
-            }
-            if (style.isObfuscated && !last.isObfuscated) sb.append("§k")
-            if (style.isBold && !last.isBold) sb.append("§l")
-            if (style.isStrikethrough && !last.isStrikethrough) sb.append("§m")
-            if (style.isUnderlined && !last.isUnderlined) sb.append("§n")
-            if (style.isItalic && !last.isItalic) sb.append("§o")
-            last = style
-            sb.appendCodePoint(codePoint)
-            true
-        }
+    private fun appendPlain(sb: StringBuilder, text: FormattedCharSequence) {
+        text.accept { _, _, codePoint -> sb.appendCodePoint(codePoint); true }
     }
 }
