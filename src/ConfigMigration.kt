@@ -76,6 +76,7 @@ object ConfigMigration {
      *  - Random Stuff's Party Finder Classes is Better Party Finder's Show Missing List, in Odin's config.
      *  - Mob Highlight's Teammate Class Glow goes, in Odin's config.
      *  - Screen Tweaks, Render Cleanup, Chat Tweaks and Tab Tweaks are Visibility.
+     *  - Phase Timers, Timers and Odin's Tick Timers (its Fire Freeze Hud and look) are Tick Timers.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -590,6 +591,39 @@ object ConfigMigration {
             if (module(odin, "Mob Highlight")?.let(::settings)?.remove("Teammate Class Glow") != null) write(odinFile, odin)
         }
 
+        // Phase Timers, Timers and Odin's Tick Timers are Tick Timers, on if any was; Odin's other timers were already in the first two.
+        // With it on, the timers of one that was off go off. HUDs linked to theirs follow. The old entries go, so this runs once.
+        run {
+            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else null
+            val phase = module(modules, "Phase Timers")
+            val timers = module(modules, "Timers")
+            val odinTicks = odin?.let { module(it, "Tick Timers") }
+            if (listOf(phase, timers, odinTicks).all { it == null } || module(modules, "Tick Timers") != null) return@run
+            fun on(m: JsonObject?) = m?.get("enabled")?.asBoolean == true
+            fun hudOff(s: JsonObject, key: String) = (s[key] as? JsonObject ?: JsonObject().also { s.add(key, it) }).addProperty("enabled", false)
+            val anyOn = on(phase) || on(timers) || on(odinTicks)
+            val to = settings(ensure("Tick Timers").also { it.addProperty("enabled", anyOn) })
+            for (m in listOfNotNull(phase, timers)) for ((k, v) in settings(m).entrySet()) if (!to.has(k)) to.add(k, v)
+            odinTicks?.let(::settings)?.let { s -> for (k in ODIN_TICK_TIMERS_KEYS) s[k]?.let { to.add(k, it) } }
+            if (anyOn) {
+                if (!on(phase)) for (k in PHASE_TIMERS_SWITCHES) to.addProperty(k, false)
+                if (!on(timers)) for (k in TIMERS_HUDS) hudOff(to, k)
+                if (!on(odinTicks)) hudOff(to, "Fire Freeze Hud")
+            }
+            listOfNotNull(phase, timers).forEach(modules::remove)
+            fun relink(list: JsonArray) = list.filterIsInstance<JsonObject>().flatMap { it.getAsJsonObject("settings")?.entrySet()?.map { e -> e.value }.orEmpty() }.filterIsInstance<JsonObject>().forEach { hud ->
+                val link = hud["link"]?.takeIf { it.isJsonPrimitive }?.asString ?: return@forEach
+                for (old in listOf("Phase Timers/", "Timers/")) if (link.startsWith(old)) hud.addProperty("link", "Tick Timers/" + link.removePrefix(old))
+            }
+            relink(modules)
+            if (odin != null) {
+                odinTicks?.let(odin::remove)
+                relink(odin)
+                write(odinFile, odin)
+            }
+            changed = true
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)
@@ -618,6 +652,15 @@ object ConfigMigration {
         "Chat Tweaks" to listOf("Remove Chat Limit", "Compact Chat", "Hide Empty Messages", "Compact Hoppity Messages", "Copy On Right Click"),
         "Tab Tweaks" to listOf("Remove Tab Ping", "Remove Useless Tab Heads"),
     )
+
+    private val PHASE_TIMERS_SWITCHES = listOf("Maxor Tick Timer", "Storm Timer", "Term Start Timer", "Goldor Timer")
+
+    private val TIMERS_HUDS = listOf(
+        "Clear Countdown", "Portal Text", "Exit Core Text", "Maxor Move", "Crystal Spawn", "Purple Pad", "Giga Lightning", "Storm Death Time",
+        "Section Time", "Necron DPS", "Tac Insertion",
+    )
+
+    private val ODIN_TICK_TIMERS_KEYS = listOf("Fire Freeze Hud", "Display in Ticks", "Display Symbol", "Show Prefix")
 
     private val TIMERS_KEYS = mapOf("Boss Enter Timer" to "Clear Countdown", "Portal Text" to "Portal Text", "Portal Chime" to "Portal Chime")
 
