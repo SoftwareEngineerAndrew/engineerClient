@@ -395,6 +395,31 @@ object ConfigMigration {
             changed = true
         }
 
+        // Goldor Helper is Positional Messages; Melody Alert is Melody Message's, Current Section and Section Progress
+        // Terminals Status's. Terminals Status is turned on for them with its waypoints off when it was off.
+        module(modules, "Goldor Helper")?.let { gh ->
+            if (module(modules, "Positional Messages") != null) return@let
+            val on = gh.get("enabled")?.asBoolean == true
+            val from = settings(gh)
+            if (Files.exists(odinFile)) {
+                val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+                fun host(name: String) = module(odin, name) ?: JsonObject().apply { addProperty("name", name); addProperty("enabled", false); add("settings", JsonObject()) }.also { odin.add(it) }
+                fun hud(key: String) = from.get(key)?.deepCopy()?.also { if (!on && it.isJsonObject) it.asJsonObject.addProperty("enabled", false) }
+                val melody = host("Melody Message")
+                hud("Melody Alert")?.let { settings(melody).add("Melody Alert", it) }
+                if (on && melody.get("enabled")?.asBoolean != true) melody.addProperty("enabled", true)
+                val ts = host("Terminals Status")
+                val ts2 = settings(ts)
+                for (k in listOf("Current Section", "Section Progress")) hud(k)?.let { ts2.add(k, it) }
+                from.get("Color Progress")?.let { ts2.add("Color Progress", it) }
+                if (on && ts.get("enabled")?.asBoolean != true) { ts.addProperty("enabled", true); ts2.addProperty("Waypoints", false); (ts2.get("Term Info") as? JsonObject)?.addProperty("enabled", false) }
+                write(odinFile, odin)
+            }
+            for (k in listOf("Melody Alert", "Current Section", "Section Progress", "Color Progress")) from.remove(k)
+            gh.addProperty("name", "Positional Messages")
+            changed = true
+        }
+
         // Highlight is Mob Highlight.
         if (Files.exists(odinFile)) {
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray

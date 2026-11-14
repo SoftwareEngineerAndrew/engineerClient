@@ -32,6 +32,7 @@ object TerminalsStatus : Module(
 
         width to 36
     }
+    private val waypoints by BooleanSetting("Waypoints", true, desc = "Marks inactive terminals, devices and levers in the world.")
     private val show by SelectorSetting("Show", Show.All, desc = "Which inactive waypoints to show.")
     private val style by SelectorSetting("Style", Style.Full, desc = "How the inactive waypoints are rendered.")
     private val color by ColorSetting("Waypoint color", Colors.MINECRAFT_YELLOW, true, desc = "The color of the waypoints.")
@@ -152,7 +153,7 @@ object TerminalsStatus : Module(
         }
 
         on<RenderExtractEvent> {
-            if (inactive.isEmpty() || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            if (!waypoints || inactive.isEmpty() || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             inactive.forEach { (stand, kind) ->
                 stand.isCustomNameVisible = !hideDefault
                 val label = kind.label?.takeIf { kind.shown } ?: return@forEach
