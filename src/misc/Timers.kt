@@ -11,6 +11,8 @@ import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.utils.itemId
+import com.odtheking.odin.utils.noControlCodes
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.sounds.SoundEvents
 import com.odtheking.odin.features.Category
@@ -38,8 +40,10 @@ import com.engineerclient.storm.StormCrush
  *  - Maxor Move: Maxor starts moving 85 ticks after his first line (80-87 in 38 recorded runs).
  *  - Crystal Spawn: after a laser hit (Maxor becoming damageable) the top crystals come back 40
  *    ticks later.
- *  - (Storm's crush check and Giga Lightning countdowns are Coffee Client's Timers2.) His "ENERGY HEED MY
- *    CALL!" comes 29 ticks after the strike; Purple Pad goes by it.
+ *  - (Storm's crush check is Coffee Client's Timers2.) His "ENERGY HEED MY CALL!" comes 29 ticks after
+ *    the strike; Purple Pad goes by it.
+ *  - Giga Lightning: Storm's red title countdown steps every 25 ticks and the strike lands about 20
+ *    after its 1, so each number resyncs it.
  *  - Purple Pad: to the pad read to stand on Purple's pillar pad for, so it comes down on him at the
  *    first check he can be crushed on. Pads are read on the 20-tick checks' eve (phase tick 19 mod
  *    20) and step their pillar 5 blocks over the next 17 ticks, and a read 41 or 61 ticks before a
@@ -58,7 +62,7 @@ import com.engineerclient.storm.StormCrush
 object Timers : Module(
     name = "Timers",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Purple's pad, terminal section times, and Necron becoming damageable, the Tactical Insertion return (Goldor's death tick: Odin's Goldor Hud).",
+    description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Purple's pad, Storm's Giga Lightning, terminal section times, and Necron becoming damageable, the Tactical Insertion return (Goldor's death tick: Odin's Goldor Hud).",
     key = null,
 ) {
     // --- Clear Countdown ---------------------------------------------------------------------------
@@ -88,6 +92,10 @@ object Timers : Module(
     private val purplePadHud by HUD("Purple Pad", "Storm: counts down to the pad read to be on Purple's pad for (t 599, then t 619 if that one's missed), so he's crushed the moment he gets there. Gone once the pillar comes down.", true, 10, 160, 1.5f) { example ->
         if (example) timer("Purple", 30, PAD_TOTAL, true) else padLeft(purpleReads())?.let { timer("Purple", it, PAD_TOTAL) } ?: (0 to 0)
     }
+    private val gigaHud by HUD("Giga Lightning", "Storm: counts down to his Giga Lightning striking.", true, 10, 205, 1.5f) { example ->
+        if (example) timer("Giga", 54, GIGA_TOTAL, true) else left(gigaAt, GIGA_TOTAL)?.let { timer("Giga", it, GIGA_TOTAL) } ?: (0 to 0)
+    }
+    private val hideGigaTitle: Boolean by BooleanSetting("Hide Giga Title", true, desc = "Hides Storm's countdown title while Giga Lightning shows.").withDependency { gigaHud.enabled }
     private val stormDeathHud by HUD("Storm Death Time", "Storm: when \"Storm is enraged!\" arrives, says in chat how long he took to die (from his first line) and shows it here for 2 s.", true, 10, 145, 1.5f) { example ->
         if (!example && (!enabled || stormShownUntil - serverTicks <= 0)) return@HUD 0 to 0
         draw("§bStorm died at: §f" + time(if (example) 31 * 20 + 7 else stormDiedTicks))
@@ -121,6 +129,10 @@ object Timers : Module(
     private const val PAD_LEAD = 41
     /** He's in Purple's zone for the first check this long after his lightning line. */
     private const val PURPLE_AFTER_LIGHTNING = 109
+    private const val GIGA_STEP = 25
+    private const val GIGA_AFTER_ONE = 20
+    /** The longest countdown seen starts at 6. */
+    private const val GIGA_TOTAL = 5 * GIGA_STEP + GIGA_AFTER_ONE
     /** The pad timer's colours: green from 3 s out, red under 1 s. */
     private const val PAD_TOTAL = 60
     /** Maxor's health once his armour is off: a laser hit. Flickers within one stun are one hit. */
@@ -171,6 +183,7 @@ object Timers : Module(
     /** When Purple's pillar last stepped down. */
     private var purpleStepAt: Int? = null
     private var necronDpsAt: Int? = null
+    private var gigaAt: Int? = null
     private var tacReturnAt: Int? = null
 
     private fun bossTicksLeft(): Int? {
@@ -311,7 +324,7 @@ object Timers : Module(
         tacReturnAt = null
         bossAt = null; bloodSeen = false; portalOpen = false; portalUntil = 0; coreOpen = false; exitCoreUntil = 0
         maxorMoveAt = null; inMaxor = false; crystalsAt = null; lastHit = Int.MIN_VALUE / 2; maxorHealth = 0f
-        stormStart = null; stormDead = false; necronDpsAt = null
+        stormStart = null; stormDead = false; necronDpsAt = null; gigaAt = null
         stormDiedTicks = 0; stormShownUntil = 0
         lightningAt = null; crushes = 0; purpleStepAt = null
     }
@@ -319,7 +332,7 @@ object Timers : Module(
     init {
         clearHud.enabled = true; portalHud.enabled = true
         maxorHud.enabled = true; crystalHud.enabled = true
-        necronHud.enabled = true; purplePadHud.enabled = true; stormDeathHud.enabled = true; sectionHud.enabled = true
+        necronHud.enabled = true; purplePadHud.enabled = true; gigaHud.enabled = true; stormDeathHud.enabled = true; sectionHud.enabled = true
 
         on<MessageEvent.Chat> { chat(message) }
 
@@ -336,6 +349,13 @@ object Timers : Module(
         onReceive<ClientboundSoundPacket> {
             if (sound.value() != SoundEvents.FLINTANDSTEEL_USE || kotlin.math.abs(pitch - 0.746f) > 0.01f) return@onReceive
             mc.execute { if (mc.player?.mainHandItem?.itemId == "TACTICAL_INSERTION") tacReturnAt = serverTicks + TAC_RETURN }
+        }
+
+        onReceive<ClientboundSetTitleTextPacket> {
+            if (stormStart == null || !gigaHud.enabled) return@onReceive
+            val n = text.string.noControlCodes.trim().toIntOrNull()?.takeIf { it in 1..6 } ?: return@onReceive
+            gigaAt = serverTicks + (n - 1) * GIGA_STEP + GIGA_AFTER_ONE
+            if (hideGigaTitle) it.cancel()
         }
 
         // Purple's pillar stepping down: its layers go through moving pistons (going back up, they don't).
