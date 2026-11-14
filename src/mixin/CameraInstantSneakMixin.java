@@ -1,6 +1,5 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.OdinInstantSneak;
 import net.minecraft.client.Camera;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,7 +17,7 @@ public class CameraInstantSneakMixin {
 
     @Inject(method = "tick", at = @At("TAIL"))
     private void ec$instantSneak(CallbackInfo ci) {
-        if (entity == null || !OdinInstantSneak.active()) return;
+        if (entity == null || !com.odtheking.odin.features.impl.render.Camera.instantSneak()) return;
         eyeHeight = entity.getEyeHeight();
         eyeHeightOld = eyeHeight;
     }

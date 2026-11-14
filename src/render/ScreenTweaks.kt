@@ -9,7 +9,6 @@ import com.odtheking.odin.utils.Color
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.world.effect.MobEffects
 import net.minecraft.world.level.material.FogType
-import net.minecraft.world.entity.Entity
 import net.minecraft.world.inventory.InventoryMenu
 import net.minecraft.world.inventory.Slot
 import net.minecraft.resources.Identifier
@@ -20,7 +19,6 @@ object ScreenTweaks : Module(
     description = "Removes vanilla screen effects and overlays.",
     key = null,
 ) {
-    private val noHurtCamera by BooleanSetting("No Hurt Camera", false, desc = "No camera shake when you take damage.")
     private val noVignette by BooleanSetting("No Vignette", false, desc = "No dark screen edges.")
     private val noWaterOverlay by BooleanSetting("No Water Overlay", false, desc = "No underwater screen texture.")
     private val noSuffocationOverlay by BooleanSetting("No Suffocation Overlay", false, desc = "No block texture when your head is inside a block.")
@@ -31,12 +29,10 @@ object ScreenTweaks : Module(
     private val noTextShadow by BooleanSetting("No Text Shadow", false, desc = "Text is drawn without its shadow.")
     private val noPaneHighlight by BooleanSetting("No Glass Pane Highlight", false, desc = "No hover highlight on unnamed glass panes in menus.")
     private val hideOffhandBackground by BooleanSetting("Hide Offhand Slot Background", false, desc = "No shield outline in the empty offhand slot.")
-    private val fixRidingCamera by BooleanSetting("Fix Riding Camera", false, desc = "The camera no longer lags behind while riding (MC-259512).")
     private val sidebarColors by BooleanSetting("Sidebar Colors", false, desc = "Custom scoreboard background colors.")
     private val sidebarTitleColor by ColorSetting("Sidebar Title Color", Color(0, 0, 0, 0.4f), true, desc = "Behind the scoreboard title.").withDependency { sidebarColors }
     private val sidebarBodyColor by ColorSetting("Sidebar Body Color", Color(0, 0, 0, 0.3f), true, desc = "Behind the scoreboard lines.").withDependency { sidebarColors }
 
-    fun noHurtCamera() = enabled && noHurtCamera
     fun noVignette() = enabled && noVignette
     fun noWaterOverlay() = enabled && noWaterOverlay
     fun noSuffocationOverlay() = enabled && noSuffocationOverlay
@@ -50,7 +46,6 @@ object ScreenTweaks : Module(
     }
     fun fullbright() = enabled && fullbright
     fun noTextShadow() = enabled && noTextShadow
-    fun fixRidingCamera(entity: Entity) = enabled && fixRidingCamera && entity === mc.player && entity.isPassenger
 
     fun hidesPaneHighlight(slot: Slot?): Boolean {
         if (!enabled || !noPaneHighlight || slot == null) return false

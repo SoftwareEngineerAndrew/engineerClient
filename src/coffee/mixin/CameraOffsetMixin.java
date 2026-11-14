@@ -1,6 +1,5 @@
 package com.coffeeclient.mixin;
 
-import com.coffeeclient.misc.CameraOffset;
 import net.minecraft.client.Camera;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -17,7 +16,7 @@ public abstract class CameraOffsetMixin {
 
     @Inject(method = "alignWithEntity", at = @At("TAIL"))
     private void cc$cameraOffset(float partialTicks, CallbackInfo ci) {
-        float blocks = CameraOffset.blocks();
+        float blocks = com.odtheking.odin.features.impl.render.Camera.offsetBlocks();
         if (blocks != 0f && !isDetached()) move(blocks, 0f, 0f);
     }
 }

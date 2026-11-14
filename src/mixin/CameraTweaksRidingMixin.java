@@ -1,6 +1,5 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.CameraTweaks;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -12,6 +11,6 @@ public class CameraTweaksRidingMixin {
 
     @Inject(method = "onPassengerTurned", at = @At("HEAD"))
     private void ec$ridingInputFix(Entity passenger, CallbackInfo ci) {
-        CameraTweaks.INSTANCE.onPassengerTurned(passenger, ((Entity) (Object) this).getYRot());
+        com.odtheking.odin.features.impl.render.Camera.onPassengerTurned(passenger, ((Entity) (Object) this).getYRot());
     }
 }

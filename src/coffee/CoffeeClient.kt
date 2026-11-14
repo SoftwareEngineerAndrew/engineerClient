@@ -1,6 +1,5 @@
 package com.coffeeclient
 
-import com.coffeeclient.misc.CameraOffset
 import com.coffeeclient.misc.OldBlocking
 import com.coffeeclient.misc.HighlightLevers
 import com.coffeeclient.misc.Termsim
@@ -26,7 +25,7 @@ object CoffeeClient : ClientModInitializer {
     override fun onInitializeClient() {
         // Odin's addon path: own ClickGUI panel ("Coffee Client") and own config file
         // (config/odin/addons/coffeeclient.json).
-        val modules = arrayOf(PreRequeue, CameraOffset, OldBlocking, SoundEditor, RandomStuff, Termsim, HighlightLevers, TermInfoHud, Timers2, QuietMedia)
+        val modules = arrayOf(PreRequeue, OldBlocking, SoundEditor, RandomStuff, Termsim, HighlightLevers, TermInfoHud, Timers2, QuietMedia)
         ModuleManager.registerModules(ModuleConfig("coffeeclient.json"), *modules)
         // A module made with toggled = true would start on but off Odin's event bus.
         safely("subscribe enabled") { com.engineerclient.EngineerClient.subscribeEnabled(modules.asList()) }

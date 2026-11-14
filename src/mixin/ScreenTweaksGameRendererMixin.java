@@ -1,6 +1,5 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.ScreenTweaks;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
@@ -14,6 +13,6 @@ public class ScreenTweaksGameRendererMixin {
 
     @Inject(method = "bobHurt", at = @At("HEAD"), cancellable = true)
     private void ec$noHurtCamera(CameraRenderState cameraState, PoseStack poseStack, CallbackInfo ci) {
-        if (ScreenTweaks.INSTANCE.noHurtCamera()) ci.cancel();
+        if (com.odtheking.odin.features.impl.render.Camera.noHurtCamera()) ci.cancel();
     }
 }

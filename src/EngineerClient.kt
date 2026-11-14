@@ -110,7 +110,6 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.render.DarkMode,
             com.engineerclient.render.TimeChanger,
             com.engineerclient.render.BlockOverlay,
-            com.engineerclient.render.CameraTweaks,
             com.engineerclient.dungeon.BonzoSound,
             com.engineerclient.dungeon.SuperboomGhostBlock,
             com.engineerclient.skyblock.MoveDisconnectButton,
@@ -145,7 +144,6 @@ object EngineerClient : ClientModInitializer {
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("door outline") { com.engineerclient.misc.OdinDoorOutline.install() }
         safely("hype explosion") { com.engineerclient.misc.OdinHypeExplosion.install() }
-        safely("instant sneak") { com.engineerclient.misc.OdinInstantSneak.install() }
         safely("instant chime") { com.engineerclient.misc.OdinInstantChime.install() }
         safely("ss alerts") { com.engineerclient.misc.OdinSimonSaysAlerts.install() }
         safely("custom keybinds") { com.engineerclient.misc.OdinCustomKeybinds.install() }
