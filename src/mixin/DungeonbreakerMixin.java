@@ -11,12 +11,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Minecraft.class)
 public class DungeonbreakerMixin {
     @Inject(method = "startAttack()Z", at = @At("HEAD"), cancellable = true)
-    private void ec$torchGuardAttack(CallbackInfoReturnable<Boolean> cir) {
+    private void ec$guardAttack(CallbackInfoReturnable<Boolean> cir) {
         if (Dungeonbreaker.blocksAttack()) cir.setReturnValue(false);
     }
 
     @Inject(method = "continueAttack(Z)V", at = @At("HEAD"), cancellable = true)
-    private void ec$torchGuardHold(boolean attacking, CallbackInfo ci) {
+    private void ec$guardHold(boolean attacking, CallbackInfo ci) {
         if (attacking && Dungeonbreaker.blocksAttack()) ci.cancel();
     }
 }

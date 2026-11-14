@@ -14,20 +14,27 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.world.level.BlockGetter
+import net.minecraft.world.level.block.AbstractSkullBlock
 import net.minecraft.world.level.block.BaseTorchBlock
+import net.minecraft.world.level.block.ChestBlock
+import net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock
+import net.minecraft.world.level.block.HorizontalDirectionalBlock
+import net.minecraft.world.level.block.LeverBlock
 import net.minecraft.world.level.block.RedstoneWallTorchBlock
 import net.minecraft.world.level.block.WallTorchBlock
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.block.state.properties.AttachFace
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.HitResult
 
 object Dungeonbreaker : Module(
     name = "Dungeonbreaker",
     category = Category.DUNGEON,
-    description = "Dungeon Breaker torch guard and charges display.",
+    description = "Dungeon Breaker torch and secret guards and charges display.",
     key = null,
 ) {
     private val torchGuard by BooleanSetting("Torch Guard", true, desc = "Stops the Dungeon Breaker from hitting torches and the blocks they hang on.")
+    private val secretGuard by BooleanSetting("Stop Breaking Secrets", true, desc = "Stops the Dungeon Breaker from hitting chests, levers, skulls and the blocks levers hang on.")
     private val chargesDisplay by BooleanSetting("Charges Display", true, desc = "Shows the charges left in your Dungeon Breaker.")
 
     private val chargesRegex = Regex("Charges: (\\d+)/(\\d+)⸕")
@@ -52,13 +59,24 @@ object Dungeonbreaker : Module(
 
     @JvmStatic
     fun blocksAttack(): Boolean {
-        if (!enabled || !torchGuard || !DungeonUtils.inDungeons) return false
+        if (!enabled || (!torchGuard && !secretGuard) || !DungeonUtils.inDungeons) return false
         val player = mc.player ?: return false
         val level = mc.level ?: return false
         val hit = mc.hitResult as? BlockHitResult ?: return false
         if (hit.type != HitResult.Type.BLOCK || player.mainHandItem.itemId != "DUNGEONBREAKER") return false
         val pos = hit.blockPos
-        return level.getBlockState(pos).block is BaseTorchBlock || holdsTorch(level, pos)
+        val block = level.getBlockState(pos).block
+        return (torchGuard && (block is BaseTorchBlock || holdsTorch(level, pos))) ||
+            (secretGuard && (block is ChestBlock || block is LeverBlock || block is AbstractSkullBlock || holdsLever(level, pos)))
+    }
+
+    private fun holdsLever(level: BlockGetter, pos: BlockPos): Boolean = Direction.entries.any { dir ->
+        val state = level.getBlockState(pos.relative(dir))
+        state.block is LeverBlock && when (state.getValue(FaceAttachedHorizontalDirectionalBlock.FACE)) {
+            AttachFace.FLOOR -> dir == Direction.UP
+            AttachFace.CEILING -> dir == Direction.DOWN
+            else -> state.getValue(HorizontalDirectionalBlock.FACING) == dir
+        }
     }
 
     private fun wallFacing(state: BlockState): Direction? = when (state.block) {
