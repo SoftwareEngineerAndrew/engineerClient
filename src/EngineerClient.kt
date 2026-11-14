@@ -82,7 +82,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.misc.ItemHighlight, com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,
             com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.LagWarning, com.engineerclient.dungeon.ExplosiveShot,
-            com.engineerclient.dungeon.TickTimers, com.engineerclient.dungeon.PositionalMessages, com.engineerclient.dungeon.Relics, com.engineerclient.dungeon.BossWaypoints,
+            com.engineerclient.dungeon.TickTimers, com.engineerclient.dungeon.PositionalMessages, com.engineerclient.dungeon.Relics,
             com.engineerclient.skyblock.ItemTweaks,
             com.engineerclient.skyblock.EnchantColors,
             com.engineerclient.skyblock.ItemProtection,

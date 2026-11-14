@@ -1,15 +1,18 @@
 package com.odtheking.odin.features.impl.dungeon.dungeonwaypoints
 
+import com.engineerclient.dungeon.BossWaypoints
 import com.github.stivais.commodore.parsers.CommandParsable
 import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.OdinMod.scope
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.*
 import com.odtheking.odin.events.*
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.EventPriority
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.impl.render.TemporaryWaypoints
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.modMessage
@@ -25,8 +28,8 @@ import net.minecraft.world.phys.AABB
  * @author Bonsai
  */
 object DungeonWaypoints : Module(
-    name = "Dungeon Waypoints",
-    description = "Custom Waypoints for Dungeon Rooms."
+    name = "Waypoints",
+    description = "Room, boss and party waypoints."
 ) {
     var allowEdits by BooleanSetting("Allow Edits", false, desc = "Allows you to edit waypoints.")
     val allowTextEdit by BooleanSetting("Allow Text Edit", false, desc = "Allows you to set the text of a waypoint while sneaking.").withDependency { allowEdits }
@@ -81,10 +84,16 @@ object DungeonWaypoints : Module(
         modMessage("§aSuccessfully reset current room!")
     }
 
+    val partyWaypoints by BooleanSetting("Party Waypoints", true, desc = "Adds waypoints from coordinates party members send.")
+
     var lastEtherPos: BlockPos? = null
     var lastEtherTime = 0L
 
     init {
+        // Boss waypoint commands register on load, whether or not this is on.
+        BossWaypoints
+        TemporaryWaypoints
+
         onReceive<ClientboundPlayerPositionPacket> {
             SecretWaypoints.onEtherwarp(this)
         }
@@ -134,8 +143,20 @@ object DungeonWaypoints : Module(
         inline val isSecret: Boolean get() = type == WaypointType.SECRET
     }
 
+    override fun onEnable() {
+        super.onEnable()
+        EventBus.subscribe(BossWaypoints)
+        EventBus.subscribe(TemporaryWaypoints)
+    }
+
+    override fun onDisable() {
+        super.onDisable()
+        EventBus.unsubscribe(BossWaypoints)
+        EventBus.unsubscribe(TemporaryWaypoints)
+    }
+
     override fun onKeybind() {
         allowEdits = !allowEdits
-        modMessage("Dungeon Waypoint editing ${if (allowEdits) "§aenabled" else "§cdisabled"}§r!")
+        modMessage("Waypoint editing ${if (allowEdits) "§aenabled" else "§cdisabled"}§r!")
     }
 }

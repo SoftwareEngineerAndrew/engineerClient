@@ -82,7 +82,7 @@ val dungeonWaypointsCommand = Commodore("dwp", "dungeonwaypoints") {
             val existing = WaypointPackFileUtils.listPackNames().toSet()
             val name = generateSequence(1) { it + 1 }.map { if (it == 1) "Imported" else "Imported $it" }.first { it !in existing }
             if (!DungeonWaypoints.importPack(name, waypoints)) return@launch modMessage("§cFailed to create pack '$name'.")
-            modMessage("Imported waypoints as new pack '$name'!${if (!DungeonWaypoints.enabled) " §7(Make sure to enable the DungeonWayPoints module)" else ""}")
+            modMessage("Imported waypoints as new pack '$name'!${if (!DungeonWaypoints.enabled) " §7(Make sure to enable the Waypoints module)" else ""}")
         }
     }
 }

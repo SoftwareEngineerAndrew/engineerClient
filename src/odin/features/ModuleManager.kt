@@ -74,7 +74,7 @@ object ModuleManager {
 
             // render
             ClickGUIModule, Camera, Etherwarp, PlayerSize,
-            PlayerDisplay, TemporaryWaypoints, Highlight, GyroWand,
+            PlayerDisplay, Highlight, GyroWand,
 
             //skyblock
             ChatCommands, NoCursorReset, Ragnarock, SpringBoots, MenuKeybinds, AutoSprint,
