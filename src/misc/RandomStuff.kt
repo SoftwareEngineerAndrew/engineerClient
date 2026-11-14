@@ -65,6 +65,7 @@ object RandomStuff : Module(
     private val hideSheep by BooleanSetting("Hide Dungeon Sheep", true, desc = "Sheep are not drawn in dungeons.")
 
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "Hides the item name that pops up above the hotbar when you switch to a different item.")
+    private val hideRecipeBook by BooleanSetting("Hide Recipe Book", false, desc = "No recipe book button or book in the inventory and crafting screens.")
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the entire action bar (the overlay text above the hotbar) — health/mana/defense text, level up messages, all of it.")
 
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", true, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
@@ -280,6 +281,8 @@ object RandomStuff : Module(
 
     /** Hide Item Names: read by GuiItemNameMixin. */
     fun hidesItemNames(): Boolean = enabled && hideItemNames
+
+    fun hidesRecipeBook(): Boolean = enabled && hideRecipeBook
 
     /** Force Cursor Reset: whether it is on at all; read by Coffee Client's CursorReset. */
     fun forcesTermCursorReset(): Boolean = enabled && termCursorReset

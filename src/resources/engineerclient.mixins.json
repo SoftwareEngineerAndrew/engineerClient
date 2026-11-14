@@ -126,7 +126,9 @@
     "ItemAnimationsEquipMixin",
     "NoItemResetMixin",
     "OldBlockingMixin",
-    "ItemProtectionClickMixin"
+    "ItemProtectionClickMixin",
+    "HideRecipeBookScreenMixin",
+    "HideRecipeBookComponentMixin"
   ],
   "injectors": {
     "defaultRequire": 1
