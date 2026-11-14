@@ -116,7 +116,6 @@
     "CameraTweaksPortalMixin",
     "SuperboomGhostMixin",
     "SuperboomGhostCollisionMixin",
-    "MoveDisconnectMixin",
     "DungeonbreakerMixin",
     "WorldBorderClickMixin",
     "WorldBorderUseMixin",

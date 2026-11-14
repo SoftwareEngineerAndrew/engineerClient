@@ -108,7 +108,6 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.render.BlockOverlay,
             com.engineerclient.dungeon.BonzoSound,
             com.engineerclient.dungeon.SuperboomGhostBlock,
-            com.engineerclient.skyblock.MoveDisconnectButton,
             com.engineerclient.dungeon.Dungeonbreaker,
             com.engineerclient.dungeon.ShadowAssassinJumpHider,
             com.engineerclient.dungeon.DungeonQueue,
