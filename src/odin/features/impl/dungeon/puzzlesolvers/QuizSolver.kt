@@ -34,8 +34,8 @@ object QuizSolver {
     fun onMessage(msg: String) {
         when (msg) {
             "[STATUE] Oruo the Omniscient: I am Oruo the Omniscient. I have lived many lives. I have learned all there is to know." -> timer = Triple(START_DURATION, START_DURATION, 1)
-            "[STATUE] Oruo the Omniscient: 2 questions left... Then you will have proven your worth to me!" -> timer = Triple(QUESTION_DURATION, QUESTION_DURATION, 2)
-            "[STATUE] Oruo the Omniscient: One more question!" -> timer = Triple(QUESTION_DURATION, QUESTION_DURATION, 3)
+            "[STATUE] Oruo the Omniscient: 2 questions left... Then you will have proven your worth to me!" -> if (timer.third != 2) timer = Triple(QUESTION_DURATION, QUESTION_DURATION, 2)
+            "[STATUE] Oruo the Omniscient: One more question!" -> if (timer.third != 3) timer = Triple(QUESTION_DURATION, QUESTION_DURATION, 3)
         }
 
         if (msg.startsWith("[STATUE] Oruo the Omniscient: ") && msg.endsWith("correctly!")) {
@@ -44,7 +44,13 @@ object QuizSolver {
                 reset()
                 return
             }
-            if (msg.contains("answered Question #")) triviaOptions.forEach { it.isCorrect = false }
+            if (msg.contains("answered Question #")) {
+                triviaOptions.forEach { it.isCorrect = false }
+                // Oruo's remark comes 40 ticks after a right answer (39 before "One more question!"), so the timer starts here.
+                val next = if (msg.contains("Question #1 ")) 2 else 3
+                val total = QUESTION_DURATION + if (next == 2) 40 else 39
+                timer = Triple(total, total, next)
+            }
         }
 
         if (msg.trim().startsWithOneOf("ⓐ", "ⓑ", "ⓒ", ignoreCase = true) && triviaAnswers?.any { msg.endsWith(it) } == true) {
