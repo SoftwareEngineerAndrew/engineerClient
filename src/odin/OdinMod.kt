@@ -62,7 +62,7 @@ object OdinMod : ClientModInitializer {
 
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             arrayOf(
-                mainCommand, devCommand, waypointCommand,
+                mainCommand, devCommand,
                 soopyCommand, termSimCommand,
                 dungeonWaypointsCommand, cataCommand
             ).forEach { commodore -> commodore.register(dispatcher) }

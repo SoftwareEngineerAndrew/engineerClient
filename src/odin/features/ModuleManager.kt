@@ -19,7 +19,6 @@ import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
 import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
 import com.odtheking.odin.features.impl.nether.*
 import com.odtheking.odin.features.impl.render.*
-import com.odtheking.odin.features.impl.render.waypoints.Waypoints
 import com.odtheking.odin.features.impl.skyblock.*
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
@@ -72,7 +71,7 @@ object ModuleManager {
 
             // render
             ClickGUIModule, Camera, Etherwarp, PlayerSize, PerformanceHUD, RenderOptimizer,
-            PlayerDisplay, TemporaryWaypoints, Waypoints, HidePlayers, Highlight, GyroWand,
+            PlayerDisplay, TemporaryWaypoints, HidePlayers, Highlight, GyroWand,
 
             //skyblock
             ChatCommands, NoCursorReset, Ragnarock, SpringBoots, WardrobeKeybinds, PetKeybinds, AutoSprint,
