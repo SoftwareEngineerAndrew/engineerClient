@@ -422,6 +422,26 @@ object ConfigMigration {
             changed = true
         }
 
+        // Freeze Display is Lag Warning, its HUD too.
+        module(modules, "Freeze Display")?.let { fd ->
+            if (module(modules, "Lag Warning") != null) return@let
+            fd.addProperty("name", "Lag Warning")
+            settings(fd).remove("Freeze Display")?.let { settings(fd).add("Lag Warning", it) }
+            changed = true
+        }
+
+        // POV Previews is a section of Leap Menu: its settings move there and its switch is Show POV Previews.
+        module(modules, "POV Previews")?.let { pov ->
+            if (!Files.exists(odinFile)) return@let
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val leap = module(odin, "Leap Menu") ?: JsonObject().apply { addProperty("name", "Leap Menu"); addProperty("enabled", false) }.also { odin.add(it) }
+            val to = settings(leap)
+            if (to.has("Show POV Previews")) return@let
+            to.addProperty("Show POV Previews", pov.get("enabled")?.asBoolean == true)
+            for ((k, v) in settings(pov).entrySet()) if (k != "Keybind" && !to.has(k)) to.add(k, v)
+            write(odinFile, odin)
+        }
+
         // Highlight is Mob Highlight.
         if (Files.exists(odinFile)) {
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray

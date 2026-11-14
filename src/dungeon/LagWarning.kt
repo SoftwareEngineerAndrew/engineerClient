@@ -12,8 +12,8 @@ import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 
-object FreezeDisplay : Module(
-    name = "Freeze Display",
+object LagWarning : Module(
+    name = "Lag Warning",
     category = Category.RENDER,
     description = "Shows how long the server has been frozen once it passes a threshold.",
     key = null,
@@ -24,7 +24,7 @@ object FreezeDisplay : Module(
 
     @Volatile private var lastTick = System.currentTimeMillis()
 
-    private val hud by HUD("Freeze Display", "Time since the last server tick.", false, 400, 200, 2f) { example ->
+    private val hud by HUD("Lag Warning", "Time since the last server tick.", false, 400, 200, 2f) { example ->
         val since = System.currentTimeMillis() - lastTick
         val shown = example || (since > threshold && !mc.isLocalServer && (!dungeonsOnly || DungeonUtils.inDungeons))
         if (!shown) return@HUD 0 to 0

@@ -19,7 +19,7 @@ import kotlin.math.roundToInt
 /** Which panel each module sits in. */
 object Placement {
     /** Kept out of the panels; opened on their own instead. */
-    val HIDDEN = setOf("Command Keybinds")
+    val HIDDEN = setOf("Command Keybinds", "POV Previews")
 
     val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Crimson Isle", "Skyblock", "Render", "AscentClient", "Coffee Client", "Devgineer Client")
 
@@ -30,9 +30,9 @@ object Placement {
     }
 
     private val byName: Map<String, String> = mapOf(
-        "Dungeons" to listOf("ADR", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers", "Timers2", "Score Time", "Dungeon Map", "Leap Menu", "POV Previews", "Extra Stats", "Blessing Display", "Dungeon Queue", "Pre-Requeue", "Freeze Display", "Croesus", "Invincibility Timer", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay"),
+        "Dungeons" to listOf("ADR", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers", "Timers2", "Score Time", "Dungeon Map", "Leap Menu", "Extra Stats", "Blessing Display", "Dungeon Queue", "Pre-Requeue", "Lag Warning", "Croesus", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay"),
         "Clear" to listOf("Block Instaclear", "Blood Camp", "BR Roles", "Clear Breakdown", "Close Chest On Key", "Door Highlight", "Dungeon Waypoints", "Item Highlight", "Mimic", "Puzzles", "Room Alerts", "Secret Clicked", "Superboom Ghost Block", "Map Info", "Mob Highlight", "Shadow Assassin"),
-        "Boss" to listOf("Agro Sphere", "Boss Waypoints", "Explosive Shot", "LCM Melee Warning", "Livid Solver", "Maxor Crystals", "Phase Timers", "Spirit Bear", "Terracotta Timer", "Tick Timers", "Wither Dragons", "Relics"),
+        "Boss" to listOf("Agro Sphere", "Boss Waypoints", "Explosive Shot", "LCM Melee Warning", "Livid Solver", "Maxor Crystals", "Phase Timers", "Spirit Bear", "Terracotta Timer", "Invincibility Timer", "Tick Timers", "Wither Dragons", "Relics"),
         "Terminals" to listOf("Arrow Align", "Arrows Device", "EE Highlight", "Positional Messages", "Highlight Levers", "i4 Aim", "Melody Message", "Recore", "Simon Says", "Term Info", "Term Progress", "Terminal Hitboxes", "Terminal Solver", "Terminal Sounds", "Terminal Times", "Terminal Titles", "Terminals Status", "ADS", "SS Practice", "Terminal Simulator", "Termsim"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
         "Skyblock" to listOf("Arrows", "Chat Commands", "Coffee Random Stuff", "Command Aliases", "Enchant Colors", "Etherwarp", "Fast Launch", "Gyro Wand", "Health & Mana", "Item Protection", "Item Tweaks", "No Cursor Reset", "Player Display", "Ragnarock", "Random Stuff", "Search Bar", "Slot Binds", "Sound Collector", "Sound Editor", "Spring Boots", "Temporary Waypoints", "Menu Keybinds", "Sounds"),

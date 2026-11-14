@@ -82,7 +82,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.practice.TerminalHitboxes,
             com.engineerclient.misc.ItemHighlight, com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,
-            com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.FreezeDisplay, com.engineerclient.dungeon.ExplosiveShot,
+            com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.LagWarning, com.engineerclient.dungeon.ExplosiveShot,
             com.engineerclient.dungeon.PhaseTimers, com.engineerclient.dungeon.PositionalMessages, com.engineerclient.dungeon.Relics, com.engineerclient.dungeon.BossWaypoints,
             com.engineerclient.skyblock.ChatTweaks,
             com.engineerclient.skyblock.TabTweaks,
@@ -153,6 +153,7 @@ object EngineerClient : ClientModInitializer {
         safely("water board") { com.engineerclient.waterboard.WaterBoardSolver.install() }
         safely("tic tac toe") { com.engineerclient.dungeon.TicTacToeSolver.install() }
         safely("terminal huds") { com.engineerclient.dungeon.TerminalHuds.install() }
+        safely("pov in leap menu") { com.engineerclient.pov.PovInLeapMenu.install() }
         safely("creeper beams ding") { com.engineerclient.dungeon.CreeperBeamsDing.install() }
         safely("puzzle overlay") { com.engineerclient.misc.PuzzleOverlay.install() }
         safely("map configs") { ModuleManager.loadConfigurations() }
