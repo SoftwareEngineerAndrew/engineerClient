@@ -70,7 +70,7 @@ object ModuleManager {
             DungeonMap,
 
             // boss
-            TerminalSimulator, TerminalSolver, TerminalTimes, TerminalSounds, TickTimers, ArrowAlign,
+            TerminalSimulator, TerminalSolver, TerminalTimes, TerminalSounds, ArrowAlign,
             TerminalsStatus, MelodyMessage, WitherDragons, SimonSays, ArrowsDevice, TerminalTitles,
 
             // render

@@ -77,13 +77,13 @@ object EngineerClient : ClientModInitializer {
         listOf(
             PosePov, com.engineerclient.party.TermProgress, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
             com.engineerclient.clearbreakdown.ClearBreakdown,
-            RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning, com.engineerclient.misc.CommandAliases,
+            RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.LcmMeleeWarning, com.engineerclient.misc.CommandAliases,
             com.engineerclient.misc.BlockInstaclear,
             com.engineerclient.practice.TerminalHitboxes,
             com.engineerclient.misc.ItemHighlight, com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,
             com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.LagWarning, com.engineerclient.dungeon.ExplosiveShot,
-            com.engineerclient.dungeon.PhaseTimers, com.engineerclient.dungeon.PositionalMessages, com.engineerclient.dungeon.Relics, com.engineerclient.dungeon.BossWaypoints,
+            com.engineerclient.dungeon.TickTimers, com.engineerclient.dungeon.PositionalMessages, com.engineerclient.dungeon.Relics, com.engineerclient.dungeon.BossWaypoints,
             com.engineerclient.skyblock.ItemTweaks,
             com.engineerclient.skyblock.EnchantColors,
             com.engineerclient.skyblock.ItemProtection,
@@ -125,7 +125,6 @@ object EngineerClient : ClientModInitializer {
         safely("ss solver") { com.engineerclient.practice.OdinSimonSays.install() }
         safely("masks used") { com.engineerclient.misc.OdinMasksUsed.install() }
         safely("chat melody") { com.engineerclient.misc.OdinMelodyChat.install() }
-        safely("tick timers") { com.engineerclient.misc.OdinTickTimers.install() }
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("door outline") { com.engineerclient.misc.OdinDoorOutline.install() }
         safely("instant chime") { com.engineerclient.misc.OdinInstantChime.install() }
@@ -165,7 +164,7 @@ object EngineerClient : ClientModInitializer {
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            for (m in listOf(AgroSphere, com.engineerclient.practice.Recore, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, ADR, SimonSaysPractice)) if (!m.enabled) m.toggle()
+            for (m in listOf(AgroSphere, com.engineerclient.practice.Recore, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.dungeon.TickTimers, ADR, SimonSaysPractice)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 

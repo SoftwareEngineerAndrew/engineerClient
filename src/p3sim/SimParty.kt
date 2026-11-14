@@ -566,7 +566,7 @@ object PartyClient {
                 EngineerClient.safely("p3sim splits stop") { com.engineerclient.splits.DungeonSplits.simStop() }
                 // Stop and practice starts too: Odin's i4 solver forgets the blocks it marked hit.
                 EngineerClient.safely("p3sim arrows device") { Fight.resetArrowsDevice() }
-                EngineerClient.safely("p3sim tick timers stop") { com.engineerclient.misc.OdinTickTimers.stopAll() }
+                EngineerClient.safely("p3sim tick timers stop") { com.engineerclient.dungeon.TickTimers.stopAll() }
             }
             "masksReset" -> EngineerClient.safely("p3sim masks") { com.engineerclient.misc.OdinMasksUsed.resetTimers() }
             "arrowsReset" -> EngineerClient.safely("p3sim arrows device") { Fight.resetArrowsDevice() }

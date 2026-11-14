@@ -18,7 +18,7 @@ import java.util.Locale
  *
  *  - Coffee Client's Term Info ([drawInfo]): the current section's progress, 3/7 (green once the gate is down), or
  *    in detail its terms, levers, device and gate.
- *  - Timers' Section Time ([sectionTime]): when a section is done, how long it took, in purple, for a few seconds
+ *  - Tick Timers' Section Time ([sectionTime]): when a section is done, how long it took, in purple, for a few seconds
  *    (server ticks). S1 runs from Goldor's first line, each next one from the last one's end.
  *  - Recore: told when S3 is done by this count ([Recore.s3Done]) and when the sim starts ([Recore.simStart]).
  *  - Term Info's Completion Titles ([isCompletionTitle]) and Role Times ([sectionNumber], [deviceDone]).
@@ -47,7 +47,7 @@ object TermInfo {
         return text.takeIf { System.currentTimeMillis() - at <= seconds * 1000 }
     }
 
-    /** When the last section's time went up (ms), 0 for none: Timers' Section Time Ding plays on each new one. */
+    /** When the last section's time went up (ms), 0 for none: Tick Timers' Section Time Ding plays on each new one. */
     val sectionDoneAt: Long get() = shownTime?.second ?: 0L
 
     private val CONTROL_CODES = Regex("§.")

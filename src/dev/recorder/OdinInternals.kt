@@ -133,8 +133,8 @@ object OdinInternals {
             M("dragonHealth") { DragonCheck.dragonHealthMap.entries.toList().map { (u, p) -> listOf(u.toString(), (p.first as? Entity)?.id, p.second) } },
             M("dragonsOn") { Reflect.moduleEnabled(BOSS + "WitherDragons") },
         )),
-        Probe("odin.priv", "TickTimers", BOSS + "TickTimers", fields(BOSS + "TickTimers", "necronTime", "goldorTickTime", "goldorStartTime", "padTickTime",
-            "lightningTickTime", "pyTriggered", "pyTickTime", "stormTick", "secretsCounter", "fireFreezeTime")),
+        Probe("odin.priv", "TickTimers", "com.engineerclient.dungeon.TickTimers", fields("com.engineerclient.dungeon.TickTimers", "phase", "maxorTicks", "stormTicks",
+            "goldorTicks", "termStartLeft", "lightningAt", "gigaAt", "necronDpsAt", "fireFreezeTime")),
         Probe("odin.priv", "TerminalTimes", BOSS + "TerminalTimes", fields(BOSS + "TerminalTimes", "completed", "times", "gateBlown", "sectionTimer", "phaseTimer") +
             f(BOSS + "TerminalTimes", "currentTick", ticking = true)),
         Probe("odin.priv", "Relics", "com.engineerclient.dungeon.Relics", fields("com.engineerclient.dungeon.Relics", "currentRelic", "relicPlaceTick", "p5Ticks")),
