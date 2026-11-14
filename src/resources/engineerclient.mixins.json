@@ -112,7 +112,8 @@
     "ItemAnimationsRendererMixin",
     "ItemAnimationsSwingMixin",
     "ItemAnimationsEquipMixin",
-    "NoItemResetMixin"
+    "NoItemResetMixin",
+    "ItemProtectionClickMixin"
   ],
   "injectors": {
     "defaultRequire": 1

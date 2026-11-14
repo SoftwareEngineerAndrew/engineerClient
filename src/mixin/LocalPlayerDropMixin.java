@@ -1,6 +1,7 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.misc.DropAnimation;
+import com.engineerclient.skyblock.ItemProtection;
 import com.engineerclient.waypoints.BrWaypoints2;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import com.llamalad7.mixinextras.sugar.Local;
@@ -22,7 +23,7 @@ public class LocalPlayerDropMixin {
 
     @Inject(method = "dropItem", at = @At("HEAD"), cancellable = true)
     private void ec$wandDrop(LocalPlayer player, boolean fullStack, CallbackInfo ci) {
-        if (BrWaypoints2.onDrop()) ci.cancel();
+        if (BrWaypoints2.onDrop() || ItemProtection.blocksDrop(player)) ci.cancel();
     }
 
     /** Remembers the stack that was in hand when the drop packet goes out, for {@link DropAnimation}. */
