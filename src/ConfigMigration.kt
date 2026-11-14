@@ -395,6 +395,13 @@ object ConfigMigration {
             changed = true
         }
 
+        // Highlight is Mob Highlight.
+        if (Files.exists(odinFile)) {
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val old = module(odin, "Highlight")
+            if (old != null && module(odin, "Mob Highlight") == null) { old.addProperty("name", "Mob Highlight"); write(odinFile, odin) }
+        }
+
         // Puzzle Solvers is Puzzles; Creeper Beams Ding and Puzzle Overlay are its settings.
         if (Files.exists(odinFile)) {
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
