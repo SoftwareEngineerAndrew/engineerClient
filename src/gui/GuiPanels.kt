@@ -73,12 +73,12 @@ class ModuleView(val module: Module) {
     fun measure(query: String): Int {
         val nameMatch = query.isEmpty() || module.name.contains(query, true)
         val settingMatch = if (query.isEmpty() || nameMatch) emptySet()
-        else views.filter { it.setting.isVisible && it.setting.name.contains(query, true) }.toSet()
+        else views.filter { it.setting !is com.odtheking.odin.clickgui.settings.impl.DropdownSetting && it.setting.name.contains(query, true) }.toSet()
         shownP = shown.update(nameMatch || settingMatch.isNotEmpty())
         expandP = expand.update(views.isNotEmpty() && (expanded || settingMatch.isNotEmpty()))
         settingsHeight = 0
         views.forEachIndexed { i, v ->
-            settingP[i] = v.shown.update(v.setting.isVisible && (settingMatch.isEmpty() || v in settingMatch))
+            settingP[i] = v.shown.update(if (settingMatch.isEmpty()) v.setting.isVisible else v in settingMatch)
             settingsHeight += (v.height() * settingP[i]).roundToInt()
         }
         return ((Theme.ROW + settingsHeight * expandP) * shownP).roundToInt()
