@@ -91,7 +91,6 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.CloseChestOnKey,
             com.engineerclient.skyblock.RunsLogger,
             com.engineerclient.skyblock.NametagTweaks,
-            com.engineerclient.skyblock.NoItemPlace,
             com.engineerclient.skyblock.Arrows,
             com.engineerclient.skyblock.SearchBar,
             com.engineerclient.visual.Sounds,

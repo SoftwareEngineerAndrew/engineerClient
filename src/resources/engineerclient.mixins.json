@@ -38,7 +38,6 @@
     "NametagEntityMixin",
     "NametagLivingMixin",
     "NametagTextMixin",
-    "NoItemPlaceMixin",
     "ArrowFixMixin",
     "ClickGuiTextMixin",
     "ContainerScreenAccessor",
