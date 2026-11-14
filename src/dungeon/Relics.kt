@@ -1,6 +1,8 @@
 package com.engineerclient.dungeon
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.practice.LeapHighlightLook
+import com.engineerclient.practice.LeapTeammates
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.BlockInteractEvent
 import com.odtheking.odin.events.LevelEvent
@@ -19,22 +21,31 @@ import com.odtheking.odin.utils.itemId
 import com.odtheking.odin.utils.render.drawCustomBeacon
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
+import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.core.BlockPos
+import net.minecraft.resources.Identifier
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.phys.AABB
 import java.util.Locale
 import kotlin.math.hypot
 
 object Relics : Module(
     name = "Relics",
     category = Category.BOSS,
-    description = "P5 relics: correct cauldron beacon, wrong cauldron click block, place times and PBs.",
+    description = "P5 relics: correct cauldron beacon, wrong cauldron click block, place times, PBs and a leap highlight.",
     key = null,
 ) {
     private val relicBeacon by BooleanSetting("Relic Beacon", true, desc = "Draws a beacon at your relic's cauldron.")
     private val blockWrong by BooleanSetting("Block Wrong Cauldron", true, desc = "Right clicks on a cauldron that isn't your relic's do nothing.")
     private val allTimes by BooleanSetting("All Relic Times", true, desc = "Once all five relics are in, says in chat when each was placed.")
+    private val leapHighlight by BooleanSetting("Relic Leap Highlight", true, desc = "Before P5, where the teammate below Necron's platform is in the leap menu.")
+    private val look = LeapHighlightLook(this, "Relic Leap Look", { leapHighlight }, "someone is below Necron's platform",
+        "Shows the highlight now, top right, as if someone were below Necron's platform. Turn it off after.",
+        Color(170, 0, 255, 121 / 255f))
 
     private val relicPBs = PersonalBest(this, "Relics")
 
@@ -47,17 +58,49 @@ object Relics : Module(
     }
 
     private val PICKED = Regex("^(.+) picked the Corrupted (Red|Purple|Orange|Green|Blue) Relic!$")
+    private val RELIC_BOX = AABB(51.5, 3.0, 73.5, 57.5, 8.0, 79.5)
 
     private var currentRelic: Relic? = null
     private var relicPlaceTick = -1
     private var p5Ticks = -1
     private val placed = HashMap<Relic, Int>()
     private var sent = false
+    private val inBoxSince = LinkedHashMap<String, Long>()
 
     private fun relicAt(pos: BlockPos) = Relic.entries.firstOrNull { pos.x == it.cauldron.x && pos.z == it.cauldron.z && (pos.y == 7 || pos.y == 6) }
 
     private fun reset() {
-        currentRelic = null; relicPlaceTick = -1; p5Ticks = -1; placed.clear(); sent = false
+        currentRelic = null; relicPlaceTick = -1; p5Ticks = -1; placed.clear(); sent = false; inBoxSince.clear()
+    }
+
+    private fun beforeP5() = DungeonUtils.isFloor(7) && DungeonUtils.inBoss && DungeonUtils.getF7Phase() != M7Phases.P5
+
+    private fun trackBox() {
+        val level = mc.level
+        if (!enabled || !leapHighlight || level == null || !beforeP5()) { inBoxSince.clear(); return }
+        val now = System.currentTimeMillis()
+        for (m in DungeonUtils.leapTeammates) {
+            if (m.name == "Empty") continue
+            val p = LeapTeammates.entity(m, level)
+            if (p == null || com.engineerclient.DeadPlayers.isDead(m) || !RELIC_BOX.contains(p.position())) inBoxSince.remove(m.name)
+            else if (!LeapTeammates.inFlight(p)) inBoxSince.putIfAbsent(m.name, now)
+        }
+    }
+
+    private fun drawHighlight(gfx: GuiGraphicsExtractor) {
+        if (!enabled || !leapHighlight || mc.gui.hud.isHidden) return
+        val self = mc.player ?: return
+        if (!look.screenAllows()) return
+        val targets = if (look.preview) {
+            listOf(LeapHighlightLook.Target(1, "Teammate", "mage", self.skin, System.currentTimeMillis() / 3000 * 3000))
+        } else {
+            val mates = DungeonUtils.leapTeammates
+            inBoxSince.entries.sortedBy { it.value }.mapNotNull { (n, since) ->
+                val i = mates.indexOfFirst { it.name == n }.takeIf { it in 0..3 } ?: return@mapNotNull null
+                LeapHighlightLook.Target(i, mates[i].name, mates[i].clazz.name.lowercase(), mates[i].playerSkin ?: self.skin, since)
+            }
+        }
+        look.draw(gfx, targets)
     }
 
     init {
@@ -119,5 +162,9 @@ object Relics : Module(
         }
 
         on<LevelEvent.Load> { reset() }
+
+        HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "relic_leap")) { gfx, _ ->
+            EngineerClient.safely("relic leap") { trackBox(); drawHighlight(gfx) }
+        }
     }
 }
