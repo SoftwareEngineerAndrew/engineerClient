@@ -70,7 +70,7 @@ object ModuleManager {
             TerminalsStatus, MelodyMessage, WitherDragons, SimonSays, ArrowsDevice, TerminalTitles,
 
             // render
-            ClickGUIModule, Camera, Etherwarp, PlayerSize, PerformanceHUD,
+            ClickGUIModule, Camera, Etherwarp, PlayerSize,
             PlayerDisplay, TemporaryWaypoints, Highlight, GyroWand,
 
             //skyblock

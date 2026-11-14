@@ -4,7 +4,6 @@ import com.devgineerclient.betterrecorder.BetterRecorder
 import com.devgineerclient.bossrecorder.BossRecorder
 import com.devgineerclient.maxor.MaxorCrystals
 import com.devgineerclient.misc.FastLaunch
-import com.devgineerclient.perf.PerfMonitor
 import com.devgineerclient.recorder.DungeonRecorder
 import com.devgineerclient.splits.DungeonSplits
 import com.devgineerclient.splits.PaceTargets
@@ -25,13 +24,13 @@ object DevgineerClient : ClientModInitializer {
     override fun onInitializeClient() {
         safely("launch timeline") { com.devgineerclient.misc.LaunchTimeline.install() }
         // Odin's addon path: own ClickGUI panel, own config file (config/odin/addons/devgineerclient.json).
-        val modules = arrayOf(DungeonRecorder, BetterRecorder, BossRecorder, MaxorCrystals, DungeonSplits, com.devgineerclient.practice.I4Aims, FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.SoundCollector, PerfMonitor)
+        val modules = arrayOf(DungeonRecorder, BetterRecorder, BossRecorder, MaxorCrystals, DungeonSplits, com.devgineerclient.practice.I4Aims, FastLaunch, com.devgineerclient.misc.RenderTweaks, com.devgineerclient.misc.SoundCollector)
         ModuleManager.registerModules(ModuleConfig("devgineerclient.json"), *modules)
         // A module made with toggled = true would start on but off Odin's event bus.
         safely("subscribe enabled") { com.engineerclient.EngineerClient.subscribeEnabled(modules.asList()) }
         // On by default, existing installs included (once: turning it off sticks). After registration, so saved settings are read.
         safely("fast launch default") { FastLaunch.enableByDefault() }
-        safely("perf monitor default") { PerfMonitor.enableByDefault() }
+        safely("perf monitor default") { com.engineerclient.visual.Performance.enableMonitorByDefault() }
         safely("maxor crystals default") { MaxorCrystals.enableByDefault() }
         safely("boss recorder default") { BossRecorder.enableByDefault() }
         safely("better recorder default") { BetterRecorder.enableByDefault() }

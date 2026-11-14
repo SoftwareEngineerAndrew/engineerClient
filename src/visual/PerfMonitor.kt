@@ -1,14 +1,9 @@
-package com.devgineerclient.perf
+package com.engineerclient.visual
 
-import com.devgineerclient.DevgineerClient
+import com.engineerclient.EngineerClient
+import com.engineerclient.EngineerClient.mc
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.renderpearl.api.commands.GpuQueryPool
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.core.on
-import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import java.io.BufferedWriter
@@ -40,7 +35,7 @@ class GpuTimer(private val slots: Int) {
             val p = pool ?: RenderSystem.getDevice().createTimestampQueryPool(slots * 2).also { pool = it }
             RenderSystem.getDevice().createCommandEncoder().writeTimestamp(p, next * 2)
             open = next
-        } catch (e: Throwable) { failed = true; DevgineerClient.logger.warn("[perf] GPU timestamps unavailable", e) }
+        } catch (e: Throwable) { failed = true; EngineerClient.logger.warn("[perf] GPU timestamps unavailable", e) }
     }
 
     fun end() {
@@ -79,27 +74,8 @@ class GpuTimer(private val slots: Int) {
  * The game thread only takes nanoTimes and adds them up; everything else (the JVM, threads, the file) is on two background
  * threads, and thread CPU comes from /proc, so nothing here pauses the game.
  */
-object PerfMonitor : Module(
-    name = "Performance Monitor",
-    key = null,
-    category = Category.custom("Devgineer Client", 860, 10),
-    description = "Records how smooth the game runs from launch on (every hitch and what caused it, a line a second) to logs/perf. Draws nothing.",
-) {
-    private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
-
-    fun enableByDefault() {
-        if (switchedOn) return
-        switchedOn = true
-        if (!enabled) toggle()
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
-    }
-
-    private val on get() = enabled
-
-    init {
-        on<LevelEvent.Load> { mark("world load") }
-        ScreenEvents.AFTER_INIT.register { _, screen, _, _ -> mark("screen " + screen.javaClass.simpleName) }
-    }
+object PerfMonitor {
+    private val on get() = Performance.recording
 
     /** A frame this long or longer is a hitch (a visible stutter: three frames at 144 Hz). */
     private const val HITCH_NS = 20_000_000L
@@ -212,7 +188,7 @@ object PerfMonitor : Module(
 
     /** A moment worth lining the numbers up against: the launch's (LaunchTimeline), a world load, a screen opening. */
     fun mark(name: String) {
-        if (!enabled) return
+        if (!on) return
         val t = tMs()
         marks += name to t
         if (name == "sb-world" && skyblockAt < 0) skyblockAt = t
@@ -230,8 +206,8 @@ object PerfMonitor : Module(
                 if (on) runCatching { classify(m.stackTrace) }.getOrNull()?.let { samples += it }
                 try { Thread.sleep(10) } catch (_: InterruptedException) { break }
             }
-        }, "dc perf sampler").apply { isDaemon = true; priority = Thread.MAX_PRIORITY; start() }
-        Thread({ writerLoop() }, "dc perf writer").apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
+        }, "ec perf sampler").apply { isDaemon = true; priority = Thread.MAX_PRIORITY; start() }
+        Thread({ writerLoop() }, "ec perf writer").apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
         listenGc()
     }
 
@@ -242,9 +218,8 @@ object PerfMonitor : Module(
     private fun modOf(cls: String, method: String): String? {
         val parts = method.split('$')
         if (parts.size >= 4 && parts[0] in mixinHandlers) return "mixin " + parts[2]
-        for ((prefix, label) in arrayOf("com.devgineerclient." to "devgineer", "com.engineerclient." to "engineer", "com.coffeeclient." to "coffee")) {
-            if (cls.startsWith(prefix)) return label + "/" + cls.substring(prefix.length).substringBefore('.')
-        }
+        val pkg = cls.split('.')
+        if (pkg.size > 2 && pkg[0] == "com" && pkg[1].endsWith("client")) return pkg[1].removeSuffix("client") + "/" + pkg[2]
         if (infra.any { cls.startsWith(it) }) return null
         return when {
             cls.startsWith("com.odtheking.") -> "Odin"
@@ -299,13 +274,13 @@ object PerfMonitor : Module(
             val name = "perf-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".jsonl"
             Files.list(dir).use { s -> s.filter { it.fileName.toString().startsWith("perf-") }.sorted(Comparator.reverseOrder()).skip(KEEP_FILES - 1L).forEach { Files.deleteIfExists(it) } }
             Files.newBufferedWriter(dir.resolve(name), StandardOpenOption.CREATE, StandardOpenOption.APPEND)
-        }.onFailure { DevgineerClient.logger.warn("[perf] can't open the perf log", it) }.getOrNull()?.also { out = it }
+        }.onFailure { EngineerClient.logger.warn("[perf] can't open the perf log", it) }.getOrNull()?.also { out = it }
     }
 
     private fun writerLoop() {
         while (true) {
             try { Thread.sleep(250) } catch (_: InterruptedException) { break }
-            runCatching { drain() }.onFailure { DevgineerClient.logger.warn("[perf] writer", it) }
+            runCatching { drain() }.onFailure { EngineerClient.logger.warn("[perf] writer", it) }
         }
     }
 

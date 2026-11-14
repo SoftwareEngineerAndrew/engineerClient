@@ -100,7 +100,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.visual.MonoAudio,
             com.engineerclient.visual.SoundManager,
             com.engineerclient.visual.SoundTweaks,
-            com.engineerclient.visual.InfoDisplay,
+            com.engineerclient.visual.Performance,
             com.engineerclient.visual.BlazeDaggerHUD,
             com.engineerclient.visual.PetMenu,
             com.engineerclient.render.ScreenTweaks,
