@@ -1,6 +1,7 @@
 package com.odtheking.mixin.mixins;
 
 import com.engineerclient.render.RenderCleanup;
+import com.odtheking.odin.features.impl.dungeon.Highlight;
 import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -22,6 +23,7 @@ public abstract class EntityRendererMixin<T extends Entity> {
 
         if (shouldHideDeadEntity(entity) ||
                 PuzzleSolvers.shouldHideBlaze(entity) ||
+                Highlight.hidesTag(entity) ||
                 !RenderCleanup.INSTANCE.shouldRenderPlayer(entity) ||
                 shouldHideDyingArmorStand(entity)
         ) cir.setReturnValue(false);

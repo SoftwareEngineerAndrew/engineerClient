@@ -39,7 +39,7 @@ import net.minecraft.world.phys.AABB
 object OdinHighlightLook {
 
     private enum class Style { OUTLINE, FILLED, BOTH }
-    private enum class Kind { STAR, TANK, MINI, FEL, ASSASSIN, BAT, WITHER }
+    private enum class Kind { STAR, TANK, MINI, FEL, ASSASSIN, BAT, WITHER, MIMIC }
 
     private val mobHighlight = BooleanSetting("Mob Highlight", true, desc = "Boxes dungeon mobs by kind.")
     private val style = SelectorSetting("Highlight Style", Style.OUTLINE, desc = "Outline, filled or both.").withDependency { mobHighlight.value }
@@ -61,6 +61,7 @@ object OdinHighlightLook {
         Kind.ASSASSIN to Colours("Shadow Assassin", 0xFF800080.toInt(), 0xFF800080.toInt()),
         Kind.BAT to Colours("Bat", -14531329, -14531329),
         Kind.WITHER to Colours("Wither", -2011028958, -2011028958),
+        Kind.MIMIC to Colours("Mimic", 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt()),
     )
 
     private val BAT_HEALTHS = setOf(100f, 200f, 400f, 800f)
@@ -69,13 +70,13 @@ object OdinHighlightLook {
     private val MINIS = listOf("Lost Adventurer", "Angry Archaeologist", "Frozen Adventurer")
 
     private val found = HashMap<Int, Pair<Entity, Kind>>()
-    /** Name tags already looked at (a tag's name never changes once it has one). */
-    private val seenTags = HashSet<Int>()
+    private val claimedTags = HashSet<Int>()
 
     private val mc: Minecraft get() = Minecraft.getInstance()
 
     private fun kindOf(name: String): Kind? = when {
         "King Midas" in name -> Kind.MINI
+        "Mimic" in name -> Kind.MIMIC
         "✯ " !in name -> null
         "Fel" in name -> Kind.FEL
         MINIS.any { it in name } -> Kind.MINI
@@ -102,12 +103,13 @@ object OdinHighlightLook {
         for (e in level.entitiesForRendering()) {
             when (e) {
                 is ArmorStand -> {
-                    if (e.id in seenTags) continue
+                    // Not judged once: a tag's ✯ can come in a later name update than its first.
+                    if (e.id in claimedTags) continue
                     val name = e.customName?.string ?: continue
-                    seenTags += e.id
                     val kind = kindOf(name) ?: continue
                     val offset = if ("withermancer" in name.lowercase()) 3 else 1
                     val mob = level.getEntity(e.id - offset) ?: continue
+                    claimedTags += e.id
                     if (mob is ArmorStand || !mob.isAlive) continue
                     found[mob.id] = mob to kind
                 }
@@ -144,7 +146,7 @@ object OdinHighlightLook {
             }
         }
 
-        on<LevelEvent.Load> { found.clear(); seenTags.clear() }
+        on<LevelEvent.Load> { found.clear(); claimedTags.clear() }
         EventBus.subscribe(this)
     }
 }

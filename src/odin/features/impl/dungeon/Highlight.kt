@@ -1,8 +1,6 @@
 package com.odtheking.odin.features.impl.dungeon
 
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.world.entity.Entity
@@ -21,23 +19,12 @@ object Highlight : Module(
     // https://regex101.com/r/QQf502/2
     private val starredRegex = Regex("^.*✯ .*\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?.?❤$")
 
-    init {
-        on<TickEvent.End> {
-            if (!hideNonNames || !DungeonUtils.inClear) return@on
-
-            val entitiesToRemove = mutableListOf<Entity>()
-            level.entitiesForRendering().forEach { e ->
-                if (!e.isAlive || e !is ArmorStand) return@forEach
-
-                val entityName = e.name.string
-                if (!dungeonMobSpawns.any { it in entityName }) return@forEach
-
-                val isStarred = starredRegex.matches(entityName)
-
-                if (e.isInvisible && !isStarred) entitiesToRemove.add(e)
-            }
-            entitiesToRemove.forEach { it.remove(Entity.RemovalReason.DISCARDED) }
-        }
+    /** Only not drawn: removing the tag would also lose a ✯ it gets later, and the mob highlight finds mobs by their tags. */
+    @JvmStatic
+    fun hidesTag(entity: Entity): Boolean {
+        if (!enabled || !hideNonNames || entity !is ArmorStand || !entity.isInvisible || !DungeonUtils.inClear) return false
+        val name = entity.name.string
+        return dungeonMobSpawns.any { it in name } && !starredRegex.matches(name)
     }
 
     @JvmStatic
