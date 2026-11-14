@@ -379,6 +379,22 @@ object ConfigMigration {
             changed = true
         }
 
+        // Name Changer, Server ID Hider and Nametag Tweaks are Scoreboard and Nametags, on if any was.
+        run {
+            val names = module(modules, "Name Changer")
+            val server = module(modules, "Server ID Hider")
+            val tags = module(modules, "Nametag Tweaks")
+            if (listOf(names, server, tags).all { it == null } || module(modules, "Scoreboard and Nametags") != null) return@run
+            fun on(m: JsonObject?) = m?.get("enabled")?.asBoolean == true
+            val to = settings(ensure("Scoreboard and Nametags").also { it.addProperty("enabled", on(names) || on(server) || on(tags)) })
+            to.addProperty("Name Changer", on(names))
+            to.addProperty("Server ID Hider", on(server))
+            for (m in listOf(names, server)) m?.let(::settings)?.entrySet()?.forEach { (k, v) -> if (k != "Keybind") to.add(k, v) }
+            if (on(tags)) settings(tags!!).entrySet().forEach { (k, v) -> if (k != "Keybind") to.add(k, v) }
+            listOfNotNull(names, server, tags).forEach(modules::remove)
+            changed = true
+        }
+
         // Bonzo Sound is a Sounds setting; Sounds turns on with it.
         module(modules, "Bonzo Sound")?.let { b ->
             val on = b.get("enabled")?.asBoolean == true

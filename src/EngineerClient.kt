@@ -90,7 +90,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.ItemProtection,
             com.engineerclient.skyblock.CloseChestOnKey,
             com.engineerclient.skyblock.RunsLogger,
-            com.engineerclient.skyblock.NametagTweaks,
+            com.engineerclient.render.ScoreboardNametags,
             com.engineerclient.skyblock.Arrows,
             com.engineerclient.skyblock.SearchBar,
             com.engineerclient.visual.Sounds,
@@ -105,7 +105,6 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.dungeon.Dungeonbreaker,
             com.engineerclient.dungeon.ShadowAssassin,
             com.engineerclient.dungeon.DungeonQueue,
-            com.engineerclient.render.NameChanger, com.engineerclient.render.ServerIdHider,
             com.engineerclient.render.ItemAnimations,
         )
     }

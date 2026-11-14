@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.skyblock.NametagTweaks;
+import com.engineerclient.render.ScoreboardNametags;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -12,6 +12,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class NametagLivingMixin {
     @Inject(method = "shouldShowName(Lnet/minecraft/world/entity/LivingEntity;D)Z", at = @At("HEAD"), cancellable = true)
     private void ec$hideDinnerbone(LivingEntity entity, double distanceSq, CallbackInfoReturnable<Boolean> cir) {
-        if (NametagTweaks.INSTANCE.hidesDinnerbone(entity)) cir.setReturnValue(false);
+        if (ScoreboardNametags.INSTANCE.hidesDinnerbone(entity)) cir.setReturnValue(false);
     }
 }

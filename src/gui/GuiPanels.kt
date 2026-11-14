@@ -36,7 +36,7 @@ object Placement {
         "Terminals" to listOf("Arrow Align", "Arrows Device", "EE Highlight", "Goldor Helper", "Highlight Levers", "i4 Aim", "Melody Message", "Recore", "Simon Says", "Term Info", "Term Progress", "Terminal Hitboxes", "Terminal Solver", "Terminal Sounds", "Terminal Times", "Terminal Titles", "Terminals Status", "ADS", "SS Practice", "Terminal Simulator", "Termsim"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
         "Skyblock" to listOf("Arrows", "Chat Commands", "Coffee Random Stuff", "Command Aliases", "Etherwarp", "Fast Launch", "Gyro Wand", "Health & Mana", "Item Protection", "Item Tweaks", "No Cursor Reset", "Player Display", "Ragnarock", "Random Stuff", "Search Bar", "Slot Binds", "Sound Collector", "Sound Editor", "Sound Tweaks", "Spring Boots", "Temporary Waypoints", "Menu Keybinds", "Sounds"),
-        "Render" to listOf("Block Overlay", "Camera", "Chat Tweaks", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Name Changer", "Nametag Tweaks", "Performance", "Player Size", "Render Cleanup", "Render Tweaks", "Screen Tweaks", "Scrollable Tooltip", "Server ID Hider", "Tab Tweaks"),
+        "Render" to listOf("Block Overlay", "Camera", "Chat Tweaks", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Performance", "Player Size", "Render Cleanup", "Render Tweaks", "Screen Tweaks", "Scoreboard and Nametags", "Scrollable Tooltip", "Tab Tweaks"),
     ).flatMap { (panel, names) -> names.map { it to panel } }.toMap()
 
     fun of(module: Module): String {
