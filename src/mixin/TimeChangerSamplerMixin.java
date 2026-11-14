@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.TimeChanger;
+import com.engineerclient.render.ScreenTweaks;
 import net.minecraft.client.ClientClockManager;
 import net.minecraft.core.Holder;
 import net.minecraft.world.clock.ClockManager;
@@ -21,7 +21,7 @@ public class TimeChangerSamplerMixin {
 
     @ModifyArg(method = "applyTimeBased", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/KeyframeTrackSampler;sample(J)Ljava/lang/Object;"), index = 0)
     private long ec$changeTime(long ticks) {
-        if (!TimeChanger.extractingSky || !(clockManager instanceof ClientClockManager) || !clock.is(WorldClocks.OVERWORLD)) return ticks;
-        return TimeChanger.INSTANCE.time();
+        if (!ScreenTweaks.extractingSky || !(clockManager instanceof ClientClockManager) || !clock.is(WorldClocks.OVERWORLD)) return ticks;
+        return ScreenTweaks.INSTANCE.time();
     }
 }

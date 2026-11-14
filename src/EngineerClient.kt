@@ -107,8 +107,6 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.render.ScreenTweaks,
             com.engineerclient.render.RenderCleanup,
             com.engineerclient.render.ScrollableTooltip,
-            com.engineerclient.render.DarkMode,
-            com.engineerclient.render.TimeChanger,
             com.engineerclient.render.BlockOverlay,
             com.engineerclient.dungeon.BonzoSound,
             com.engineerclient.dungeon.SuperboomGhostBlock,

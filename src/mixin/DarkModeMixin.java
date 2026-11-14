@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.DarkMode;
+import com.engineerclient.render.ScreenTweaks;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.Hud;
@@ -14,11 +14,11 @@ public class DarkModeMixin {
 
     @Inject(method = "extractRenderState", at = @At("HEAD"))
     private void ec$tintBeforeHud(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker, CallbackInfo ci) {
-        DarkMode.INSTANCE.draw(graphics, false);
+        ScreenTweaks.INSTANCE.drawDarkMode(graphics, false);
     }
 
     @Inject(method = "extractRenderState", at = @At("TAIL"))
     private void ec$tintAfterHud(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker, CallbackInfo ci) {
-        DarkMode.INSTANCE.draw(graphics, true);
+        ScreenTweaks.INSTANCE.drawDarkMode(graphics, true);
     }
 }
