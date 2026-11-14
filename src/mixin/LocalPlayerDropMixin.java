@@ -4,7 +4,11 @@ import com.engineerclient.misc.DropAnimation;
 import com.engineerclient.skyblock.ItemProtection;
 import com.engineerclient.waypoints.BrWaypoints2;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
@@ -31,5 +35,12 @@ public class LocalPlayerDropMixin {
     private void ec$rememberDrop(LocalPlayer player, boolean fullStack, CallbackInfo ci, @Local(name = "prediction") ItemStack prediction) {
         if (!DropAnimation.shouldProceed()) return;
         DropAnimation.setDroppedData(prediction, player.getInventory().getSelectedSlot());
+    }
+
+    /** No Drop Animation: no arm swing on a drop (the swing is only drawn, never sent). */
+    @WrapOperation(method = "dropItem", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;swing(Lnet/minecraft/world/InteractionHand;Lnet/minecraft/world/item/component/SwingAnimation;Z)Z"))
+    private boolean ec$noDropSwing(LocalPlayer player, InteractionHand hand, SwingAnimation animation, boolean flag, Operation<Boolean> original) {
+        if (!DropAnimation.shouldProceed()) return original.call(player, hand, animation, flag);
+        return true;
     }
 }
