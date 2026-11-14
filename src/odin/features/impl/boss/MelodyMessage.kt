@@ -52,7 +52,7 @@ object MelodyMessage : Module(
             track(example, 0, mc.user.name)
         }
 
-        if (melodyWebSocket.connected) {
+        if (melodyWebSocket.connected || melodies.isNotEmpty()) {
             melodies.entries.forEachIndexed { i, (name, data) ->
                 if (showPlayer == ShowPlayer.NONE && name == mc.user.name) return@forEachIndexed
                 drawMelody(data, i, name)
