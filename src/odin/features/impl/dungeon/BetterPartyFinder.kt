@@ -1,5 +1,6 @@
 package com.odtheking.odin.features.impl.dungeon
 
+import com.engineerclient.ClassDetect
 import com.odtheking.odin.OdinMod.scope
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.ActionSetting
@@ -13,19 +14,40 @@ import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.formatNumber
 import com.odtheking.odin.utils.formatTime
 import com.odtheking.odin.utils.handlers.schedule
+import com.odtheking.odin.utils.lore
 import com.odtheking.odin.utils.modMessage
+import com.odtheking.odin.utils.network.hypixelapi.HypixelData
 import com.odtheking.odin.utils.network.hypixelapi.RequestUtils
+import com.odtheking.odin.utils.noControlCodes
+import com.odtheking.odin.utils.romanToInt
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.PartyUtils
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.Floor
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
+import net.minecraft.world.inventory.Slot
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
+import java.util.concurrent.ConcurrentHashMap
 
 object BetterPartyFinder : Module(
     name = "Better Party Finder",
-    description = "Provides stats when a player joins your party. Includes autokick functionality.",
+    description = "Party Finder overlay, stats of players who join your party and autokick.",
 ) {
+    private val showLevelReq by BooleanSetting("Show Level Req", true, desc = "Red level requirement on each party.")
+    private val showMissingOverlay by BooleanSetting("Show Missing Classes", true, desc = "Missing classes on each party's head.")
+    private val showMissingTooltip by BooleanSetting("Show Missing List", true, desc = "Missing classes at the bottom of the tooltip, yours in colour.")
+    private val tooltipCata by BooleanSetting("Tooltip Cata Level", false, desc = "Each member's Catacombs level in the tooltip.")
+    private val tooltipSecrets by BooleanSetting("Tooltip Secrets", false, desc = "Each member's total and average secrets in the tooltip.")
+    private val tooltipMp by BooleanSetting("Tooltip Magical Power", false, desc = "Each member's magical power in the tooltip.")
+    private val tooltipPb by BooleanSetting("Tooltip PB", false, desc = "Each member's S+ PB on the party's floor in the tooltip.")
+
     private val statsDisplay by BooleanSetting("Stats display", true, desc = "Displays stats of players who join your party")
     private val sendKickLine by BooleanSetting("Send Kick Line", true, desc = "Sends a line in party chat to kick a player.").withDependency { statsDisplay }
 
@@ -45,6 +67,21 @@ object BetterPartyFinder : Module(
     private val pfRegex = Regex("^Party Finder > (?:\\[.{1,7}])? ?(.{1,16}) joined the dungeon group! \\(.*\\)$")
 
     private val kickedList = mutableSetOf<String>()
+
+    private val partyMemberRegex = Regex("^\\s*(\\w{1,16}):?\\s+(Archer|Tank|Berserk|Healer|Mage)\\s*\\((\\d+)\\)\\s*$")
+    private val levelRequiredRegex = Regex("Dungeon Level Required:\\s*(\\d+)")
+    private val floorRegex = Regex("Floor:\\s*Floor\\s+(\\w+)")
+    private val classes = DungeonClass.entries.filter { it != DungeonClass.EMPTY }
+    private val headColors = mapOf(
+        DungeonClass.ARCHER to '4', DungeonClass.TANK to 'a', DungeonClass.BERSERK to '6',
+        DungeonClass.HEALER to '5', DungeonClass.MAGE to 'b',
+    )
+    private val listingSlots = setOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34)
+
+    private class Fetched(val member: HypixelData.MemberData?, val time: Long = System.currentTimeMillis())
+    private val profiles = ConcurrentHashMap<String, Fetched>()
+    private val pending = ConcurrentHashMap.newKeySet<String>()
+    private val fetchPermits = Semaphore(5)
 
     init {
         on<MessageEvent.Chat> {
@@ -101,5 +138,130 @@ object BetterPartyFinder : Module(
                 }
             }
         }
+    }
+
+    // The Party Finder of other activities shares the title; only the dungeon one shows Combat Level nowhere on its nether star.
+    private fun inDungeonFinder(screen: AbstractContainerScreen<*>): Boolean {
+        if (screen.title.string != "Party Finder") return false
+        val star = screen.menu.slots.getOrNull(50)?.item?.takeIf { it.`is`(Items.NETHER_STAR) } ?: return false
+        val line = star.lore.getOrNull(5)?.string ?: return false
+        return !line.contains("Combat Level: ")
+    }
+
+    private fun listing(screen: AbstractContainerScreen<*>, stack: ItemStack): Boolean =
+        enabled && stack.`is`(Items.PLAYER_HEAD) && inDungeonFinder(screen) &&
+            screen.menu.slots.any { it.index in listingSlots && it.item === stack }
+
+    private fun classNamed(name: String) = classes.firstOrNull { it.name.equals(name, ignoreCase = true) }
+
+    fun drawSlot(screen: AbstractContainerScreen<*>, graphics: GuiGraphicsExtractor, slot: Slot) {
+        if (!showLevelReq && !showMissingOverlay) return
+        if (slot.index !in listingSlots) return
+        val stack = slot.item.takeUnless { it.isEmpty || !it.`is`(Items.PLAYER_HEAD) } ?: return
+        if (!enabled || !inDungeonFinder(screen)) return
+
+        var levelRequired = 0
+        val taken = HashSet<DungeonClass>()
+        for (line in stack.lore) {
+            val clean = line.string.noControlCodes
+            levelRequiredRegex.find(clean)?.let { levelRequired = it.groupValues[1].toInt() }
+            partyMemberRegex.matchEntire(clean)?.let { m -> classNamed(m.groupValues[2])?.let(taken::add) }
+        }
+
+        if (showLevelReq && levelRequired != 0) {
+            val str = "§c$levelRequired"
+            drawScaled(graphics, str, slot.x + 16f - mc.font.width(str) * 0.6f, slot.y.toFloat(), 0.6f)
+        }
+
+        if (showMissingOverlay) {
+            val missing = classes.filter { it !in taken }.map { "§${headColors[it]}§l${it.name[0]}" }
+            listOf(missing.take(2).joinToString(""), missing.drop(2).take(2).joinToString(""))
+                .filter { it.isNotEmpty() }
+                .forEachIndexed { i, line -> drawScaled(graphics, line, slot.x.toFloat(), slot.y + 10f - i * 6f, 0.65f) }
+        }
+    }
+
+    private fun drawScaled(graphics: GuiGraphicsExtractor, text: String, x: Float, y: Float, scale: Float) {
+        val pose = graphics.pose()
+        pose.pushMatrix()
+        pose.translate(x, y)
+        pose.scale(scale)
+        graphics.text(mc.font, text, 0, 0, -1, true)
+        pose.popMatrix()
+    }
+
+    /** Returns [lines] itself when there is nothing to change. */
+    fun decorateTooltip(screen: AbstractContainerScreen<*>, stack: ItemStack, lines: List<Component>): List<Component> {
+        if (!listing(screen, stack)) return lines
+
+        var floor = 0
+        var master = false
+        val missing = classes.toMutableList()
+        val wantStats = tooltipCata || tooltipSecrets || tooltipMp || tooltipPb
+
+        val out = lines.map { line ->
+            val clean = line.string.noControlCodes
+            if (clean.contains("Dungeon: Master Mode")) master = true
+            floorRegex.find(clean)?.let { floor = romanToInt(it.groupValues[1]) }
+            val m = partyMemberRegex.matchEntire(clean) ?: return@map line
+            val (name, className, level) = m.destructured
+            classNamed(className)?.let(missing::remove)
+            val stats = if (wantStats) memberStats(name, floor, master) else ""
+            Component.literal(" §b$name: §e$className ${levelColor(level.toInt())}$level $stats")
+        }.toMutableList()
+
+        if (showMissingTooltip) {
+            val mine = ClassDetect.myClass()
+            out.add(Component.literal("§cMissing: §7" + missing.joinToString(", ") { clazz ->
+                val label = clazz.name.lowercase().replaceFirstChar(Char::titlecase)
+                if (clazz == mine) "§${headColors[clazz]}§l$label§7" else label
+            }))
+        }
+        return out
+    }
+
+    private fun memberStats(name: String, floor: Int, master: Boolean): String {
+        val key = name.lowercase()
+        val fetched = profiles[key]?.takeIf { System.currentTimeMillis() - it.time < 10 * 60 * 1000L }
+        if (fetched == null) {
+            if (pending.add(key)) scope.launch {
+                fetchPermits.withPermit {
+                    val result = RequestUtils.getProfile(name)
+                    profiles[key] = Fetched(result.getOrNull()?.memberData)
+                    pending.remove(key)
+                }
+            }
+            return "§7(Loading...)"
+        }
+        val member = fetched.member ?: return "§c(Failed)"
+        return buildString {
+            if (tooltipCata) append("§b(§6${member.dungeons.dungeonTypes.catacombs.level.toInt()}§b)§r ")
+            if (tooltipSecrets) append("§8[§a${member.dungeons.secrets}§8/§b${"%.2f".format(member.dungeons.avrSecrets)}§8]§r ")
+            if (tooltipMp) append("§8[§d${if (member.inventoryApi) member.magicalPower else "API off"}§8]§r ")
+            if (tooltipPb) {
+                val types = member.dungeons.dungeonTypes
+                val pb = (if (master) types.mastermode else types.catacombs).fastestTimeSPlus["$floor"]
+                append("§8[§9${pb?.let { mmss(it.toLong()) } ?: "N/A"}§8]§r ")
+            }
+        }
+    }
+
+    private fun mmss(ms: Long): String {
+        val secs = ms / 1000
+        return "${secs / 60}:${(secs % 60).toString().padStart(2, '0')}"
+    }
+
+    private fun levelColor(level: Int) = when {
+        level >= 50 -> "§c§l"
+        level >= 45 -> "§c"
+        level >= 40 -> "§6"
+        level >= 35 -> "§d"
+        level >= 30 -> "§9"
+        level >= 25 -> "§b"
+        level >= 20 -> "§2"
+        level >= 15 -> "§a"
+        level >= 10 -> "§e"
+        level >= 5 -> "§f"
+        else -> "§7"
     }
 }

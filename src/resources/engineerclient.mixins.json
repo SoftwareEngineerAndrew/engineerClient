@@ -41,7 +41,7 @@
     "ArrowFixMixin",
     "ClickGuiTextMixin",
     "ContainerScreenAccessor",
-    "ContainerTooltipMixin",
+    "PartyFinderMixin",
     "FogColorMixin",
     "GameModeRecordMixin",
     "TerminalTapMixin",
