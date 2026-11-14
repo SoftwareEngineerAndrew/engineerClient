@@ -144,6 +144,7 @@ object EngineerClient : ClientModInitializer {
         safely("instant sneak") { com.engineerclient.misc.OdinInstantSneak.install() }
         safely("instant chime") { com.engineerclient.misc.OdinInstantChime.install() }
         safely("ss alerts") { com.engineerclient.misc.OdinSimonSaysAlerts.install() }
+        safely("custom keybinds") { com.engineerclient.misc.OdinCustomKeybinds.install() }
         safely("splits look") { OdinSplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }
