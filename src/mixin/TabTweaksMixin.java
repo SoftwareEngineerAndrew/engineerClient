@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.ScreenTweaks;
+import com.engineerclient.render.Visibility;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class TabTweaksMixin {
     @Inject(method = "extractPingIcon", at = @At("HEAD"), cancellable = true)
     private void ec$hidePing(GuiGraphicsExtractor graphics, int slotWidth, int xo, int yo, PlayerInfo info, CallbackInfo ci) {
-        if (ScreenTweaks.INSTANCE.hidesPing()) ci.cancel();
+        if (Visibility.INSTANCE.hidesPing()) ci.cancel();
     }
 
     @WrapOperation(
@@ -24,7 +24,7 @@ public class TabTweaksMixin {
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/components/PlayerFaceExtractor;extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/resources/Identifier;IIIZZI)V")
     )
     private void ec$hideHead(GuiGraphicsExtractor graphics, Identifier texture, int x, int y, int size, boolean hat, boolean flip, int color, Operation<Void> original) {
-        if (ScreenTweaks.INSTANCE.hidesHead(texture)) return;
+        if (Visibility.INSTANCE.hidesHead(texture)) return;
         original.call(graphics, texture, x, y, size, hat, flip, color);
     }
 }

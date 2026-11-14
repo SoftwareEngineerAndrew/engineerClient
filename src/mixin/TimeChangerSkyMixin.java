@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.ScreenTweaks;
+import com.engineerclient.render.Visibility;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import net.minecraft.client.Camera;
@@ -14,11 +14,11 @@ public class TimeChangerSkyMixin {
 
     @WrapMethod(method = "extractRenderState")
     private void ec$skyTime(ClientLevel level, float partialTicks, Camera camera, SkyRenderState state, Operation<Void> original) {
-        ScreenTweaks.extractingSky = ScreenTweaks.INSTANCE.changesTime();
+        Visibility.extractingSky = Visibility.INSTANCE.changesTime();
         try {
             original.call(level, partialTicks, camera, state);
         } finally {
-            ScreenTweaks.extractingSky = false;
+            Visibility.extractingSky = false;
         }
     }
 }

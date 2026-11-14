@@ -96,7 +96,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.visual.Sounds,
             com.engineerclient.visual.Performance,
             com.engineerclient.visual.BlazeDaggerHUD,
-            com.engineerclient.render.ScreenTweaks,
+            com.engineerclient.render.Visibility,
             com.engineerclient.render.ScrollableTooltip,
             com.engineerclient.render.BlockOverlay,
             com.engineerclient.dungeon.SuperboomGhostBlock,

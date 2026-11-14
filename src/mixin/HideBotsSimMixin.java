@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * The P3 Sim's half of Screen Tweaks' Hide Players: the sim's party are mannequins, not players, so
+ * The P3 Sim's half of Visibility's Hide Players: the sim's party are mannequins, not players, so
  * that rule never sees them. With the sim's Hide players on, {@link P3Sim#hideBot} applies the
  * same rule (Hide All Players, or within the distance) to them. Nothing outside the sim.
  */

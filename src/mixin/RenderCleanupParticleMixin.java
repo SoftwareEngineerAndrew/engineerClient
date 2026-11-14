@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.ScreenTweaks;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleEngine;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,6 +13,6 @@ public class RenderCleanupParticleMixin {
 
     @Inject(method = "add", at = @At("HEAD"), cancellable = true)
     private void ec$hideParticle(Particle particle, CallbackInfo ci) {
-        if (ScreenTweaks.INSTANCE.hidesParticle(particle)) ci.cancel();
+        if (Visibility.INSTANCE.hidesParticle(particle)) ci.cancel();
     }
 }

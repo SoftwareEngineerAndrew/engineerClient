@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.ScreenTweaks;
+import com.engineerclient.render.Visibility;
 import net.minecraft.network.chat.Style;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -12,6 +12,6 @@ public class ScreenTweaksTextShadowMixin {
 
     @Inject(method = "getShadowColor", at = @At("HEAD"), cancellable = true)
     private void ec$noTextShadow(Style style, int color, CallbackInfoReturnable<Integer> cir) {
-        if (ScreenTweaks.INSTANCE.noTextShadow()) cir.setReturnValue(0);
+        if (Visibility.INSTANCE.noTextShadow()) cir.setReturnValue(0);
     }
 }

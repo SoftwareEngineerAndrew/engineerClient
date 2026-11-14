@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.ScreenTweaks;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.EffectsInInventory;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -16,6 +16,6 @@ public class ScreenTweaksInventoryEffectsMixin {
 
     @Inject(method = "extractEffects", at = @At("HEAD"), cancellable = true)
     private void ec$hideInventoryEffects(GuiGraphicsExtractor graphics, Collection<MobEffectInstance> effects, int x0, int yStep, int mouseX, int mouseY, int maxWidth, CallbackInfo ci) {
-        if (ScreenTweaks.INSTANCE.hideInventoryEffects()) ci.cancel();
+        if (Visibility.INSTANCE.hideInventoryEffects()) ci.cancel();
     }
 }

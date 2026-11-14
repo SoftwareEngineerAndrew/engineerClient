@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.ScreenTweaks;
+import com.engineerclient.render.Visibility;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -18,11 +18,11 @@ public class ScreenTweaksOverlayMixin {
 
     @Inject(method = "submitWater", at = @At("HEAD"), cancellable = true)
     private static void ec$noWaterOverlay(PlayerRenderState.WaterOverlay overlay, PoseStack poseStack, SubmitNodeCollector collector, CallbackInfo ci) {
-        if (ScreenTweaks.INSTANCE.noWaterOverlay()) ci.cancel();
+        if (Visibility.INSTANCE.noWaterOverlay()) ci.cancel();
     }
 
     @WrapOperation(method = "submit", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/ScreenEffectRenderer;submitBlockSprite(Lnet/minecraft/resources/Identifier;FFFFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;I)V"))
     private void ec$noSuffocationOverlay(Identifier atlas, float u0, float v0, float u1, float v1, PoseStack poseStack, SubmitNodeCollector collector, int color, Operation<Void> original) {
-        if (!ScreenTweaks.INSTANCE.noSuffocationOverlay()) original.call(atlas, u0, v0, u1, v1, poseStack, collector, color);
+        if (!Visibility.INSTANCE.noSuffocationOverlay()) original.call(atlas, u0, v0, u1, v1, poseStack, collector, color);
     }
 }

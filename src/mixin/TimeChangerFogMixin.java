@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.ScreenTweaks;
+import com.engineerclient.render.Visibility;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import net.minecraft.client.Camera;
@@ -14,11 +14,11 @@ public class TimeChangerFogMixin {
 
     @WrapMethod(method = "getBaseColor")
     private Vector3fc ec$fogTime(ClientLevel level, Camera camera, int renderDistance, float partialTicks, Operation<Vector3fc> original) {
-        ScreenTweaks.extractingSky = ScreenTweaks.INSTANCE.changesTime();
+        Visibility.extractingSky = Visibility.INSTANCE.changesTime();
         try {
             return original.call(level, camera, renderDistance, partialTicks);
         } finally {
-            ScreenTweaks.extractingSky = false;
+            Visibility.extractingSky = false;
         }
     }
 }

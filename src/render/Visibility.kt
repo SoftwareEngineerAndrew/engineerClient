@@ -42,8 +42,8 @@ import net.minecraft.world.item.Items
 import net.minecraft.world.level.material.FogType
 import java.time.LocalTime
 
-object ScreenTweaks : Module(
-    name = "Screen Tweaks",
+object Visibility : Module(
+    name = "Visibility",
     category = Category.RENDER,
     description = "Screen effects, clutter, chat and tab list tweaks.",
     key = null,

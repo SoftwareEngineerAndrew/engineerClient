@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.ScreenTweaks;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.renderer.Lightmap;
 import net.minecraft.client.renderer.LightmapRenderStateExtractor;
 import net.minecraft.client.renderer.state.LightmapRenderState;
@@ -13,7 +13,7 @@ public class ScreenTweaksLightmapMixin {
 
     @ModifyVariable(method = "render", at = @At("HEAD"), argsOnly = true)
     private LightmapRenderState ec$fullbright(LightmapRenderState state) {
-        if (!ScreenTweaks.INSTANCE.fullbright()) return state;
+        if (!Visibility.INSTANCE.fullbright()) return state;
         state.skyFactor = 1f;
         state.blockFactor = 1f;
         state.nightVisionEffectIntensity = 0f;

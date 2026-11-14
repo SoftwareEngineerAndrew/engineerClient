@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.render.ScreenTweaks;
+import com.engineerclient.render.Visibility;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.DeltaTracker;
@@ -17,21 +17,21 @@ public class ScreenTweaksHudMixin {
 
     @Inject(method = "extractEffects", at = @At("HEAD"), cancellable = true)
     private void ec$hidePotionHud(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker, CallbackInfo ci) {
-        if (ScreenTweaks.INSTANCE.hidePotionHud()) ci.cancel();
+        if (Visibility.INSTANCE.hidePotionHud()) ci.cancel();
     }
 
     @Inject(method = "extractVignette", at = @At("HEAD"), cancellable = true)
     private void ec$noVignette(GuiGraphicsExtractor graphics, Entity camera, CallbackInfo ci) {
-        if (ScreenTweaks.INSTANCE.noVignette()) ci.cancel();
+        if (Visibility.INSTANCE.noVignette()) ci.cancel();
     }
 
     @WrapOperation(method = "displayScoreboardSidebar", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;fill(IIIII)V", ordinal = 0))
     private void ec$sidebarTitle(GuiGraphicsExtractor graphics, int x0, int y0, int x1, int y1, int color, Operation<Void> original) {
-        original.call(graphics, x0, y0, x1, y1, ScreenTweaks.INSTANCE.sidebarColor(true, color));
+        original.call(graphics, x0, y0, x1, y1, Visibility.INSTANCE.sidebarColor(true, color));
     }
 
     @WrapOperation(method = "displayScoreboardSidebar", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;fill(IIIII)V", ordinal = 1))
     private void ec$sidebarBody(GuiGraphicsExtractor graphics, int x0, int y0, int x1, int y1, int color, Operation<Void> original) {
-        original.call(graphics, x0, y0, x1, y1, ScreenTweaks.INSTANCE.sidebarColor(false, color));
+        original.call(graphics, x0, y0, x1, y1, Visibility.INSTANCE.sidebarColor(false, color));
     }
 }
