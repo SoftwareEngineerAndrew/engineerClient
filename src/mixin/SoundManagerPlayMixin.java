@@ -14,6 +14,6 @@ public abstract class SoundManagerPlayMixin {
     @Inject(method = "play", at = @At("HEAD"), cancellable = true)
     private void ec$onPlay(SoundInstance instance, CallbackInfoReturnable<SoundEngine.PlayResult> cir) {
         com.engineerclient.visual.Sounds.recordPlayedSound(instance);
-        if (Arrows.onSoundPlay(instance)) cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
+        if (Arrows.onSoundPlay(instance) || com.engineerclient.visual.Sounds.muteClientSound(instance)) cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
     }
 }

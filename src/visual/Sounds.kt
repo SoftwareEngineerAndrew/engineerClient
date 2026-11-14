@@ -7,10 +7,13 @@ import com.odtheking.odin.clickgui.settings.impl.MapSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
+import com.odtheking.odin.utils.itemId
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.resources.sounds.SimpleSoundInstance
 import net.minecraft.client.resources.sounds.SoundInstance
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
@@ -38,6 +41,16 @@ object Sounds : Module(
         mc.schedule { mc.gui.setScreen(SoundManagerScreen(previous)) }
     }
     private val muteCooldown by BooleanSetting("Mute Cooldown Sound", true, desc = "No sound when an ability is on cooldown.")
+    private val hideCooldownMessage by BooleanSetting("Hide Cooldown Message", false, desc = "Hides the \"This ability is on cooldown\" chat message.")
+    private val muteF7 by BooleanSetting("Mute F7 Boss Sounds", false, desc = "Mutes very loud sounds and the wither hurt/death spam in the F7/M7 boss.")
+    private val muteAboveCap by BooleanSetting("Mute Sounds Above Cap", false, desc = "Also mutes F7/M7 boss sounds louder than normal (volume over 1).").withDependency { muteF7 }
+    private val capF7 by BooleanSetting("Cap F7 Boss Sounds", false, desc = "Plays F7/M7 boss sounds louder than normal at normal volume instead.").withDependency { muteF7 }
+    private val muteWitherborn by BooleanSetting("Mute Witherborn Sound", false, desc = "Mutes the Witherborn wither exploding.")
+    private val muteBonzoStaff by BooleanSetting("Mute Bonzo Staff Sound", false, desc = "Mutes the Bonzo Staff's firework blasts and ghast shriek.")
+    private val lastBreath by BooleanSetting("Last Breath Pull Sound", false, desc = "Ticking sound while drawing a Last Breath, like Spring Boots.")
+    private val lastBreathVolume by NumberSetting("Last Breath Volume", 1f, 0.0..5.0, 0.1f, desc = "Volume of the ticking.").withDependency { lastBreath }
+    private val lastBreathThreshold by NumberSetting("Last Breath Threshold", 9, 0..21, 1, desc = "Ticks of drawing before the sound changes (21 never).").withDependency { lastBreath }
+    private val golemSound by BooleanSetting("Golem Stage 5 Sound", false, desc = "Anvil sound when the End Stone Protector rises.")
     private val oldTuba by BooleanSetting("Old Tuba Sound", true, desc = "The Weird Tuba plays the 1.8.9 wolf howl.")
     private val oldRagnarock by BooleanSetting("Old Ragnarock Sound", true, desc = "Ragnarock plays the 1.8.9 wolf howl.")
     private val bonzo by BooleanSetting("Bonzo Sound", false, desc = "The old ghast moan when your Bonzo's Mask saves you.")
@@ -58,8 +71,54 @@ object Sounds : Module(
     @Volatile var recentSoundsVersion = 0L
         private set
 
+    private var pullTicks = 0
+    private val cooldownMessage = Regex("^This ability is on cooldown for \\d+s\\.$")
+    private val bonzoBlasts = setOf(SoundEvents.FIREWORK_ROCKET_BLAST.location(), SoundEvents.FIREWORK_ROCKET_BLAST_FAR.location())
+
+    private fun inF7Boss() = DungeonUtils.inBoss && DungeonUtils.isFloor(7)
+
     init {
-        on<LevelEvent.Load> { recentSounds.clear() }
+        on<LevelEvent.Load> { recentSounds.clear(); pullTicks = 0 }
+        on<MessageEvent.Chat> {
+            if (hideCooldownMessage && cooldownMessage.matches(message)) cancel()
+            if (golemSound && message == "The ground begins to shake as an End Stone Protector rises from below!")
+                mc.player?.playSound(SoundEvents.ANVIL_PLACE, 1f, 1f)
+        }
+        on<TickEvent.End> {
+            val player = mc.player
+            val held = player?.mainHandItem
+            if (!lastBreath || player == null || held == null || held.isEmpty || !player.isUsingItem || player.useItem !== held ||
+                held.itemId.let { it != "LAST_BREATH" && it != "STARRED_LAST_BREATH" }) {
+                pullTicks = 0
+                return@on
+            }
+            pullTicks++
+            val pitch = 0.5f + pullTicks.coerceAtMost(20) * 0.075f
+            if (pullTicks >= lastBreathThreshold) player.playSound(SoundEvents.ARROW_HIT_PLAYER, lastBreathVolume, pitch)
+            else player.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), lastBreathVolume, pitch)
+        }
+        onReceive<ClientboundSoundPacket> { event ->
+            val s = sound.value()
+            if (muteWitherborn && s == SoundEvents.WITHER_DEATH && volume == 1f && abs(pitch - 1.1904762f) < 0.0001f ||
+                muteBonzoStaff && s == SoundEvents.GHAST_AMBIENT && volume == 1f && pitch in 1.39f..1.8f) {
+                event.cancel()
+                return@onReceive
+            }
+            if (!muteF7 || !inF7Boss()) return@onReceive
+            if (capF7 && volume > 1f) {
+                event.cancel()
+                val snd = sound
+                val src = source
+                val px = x
+                val py = y
+                val pz = z
+                val pit = pitch
+                mc.execute { mc.level?.playLocalSound(px, py, pz, snd.value(), src, 1f, pit, false) }
+                return@onReceive
+            }
+            if (volume >= 2f || muteAboveCap && volume > 1f ||
+                volume == 0.5f && (s == SoundEvents.WITHER_HURT || s == SoundEvents.WITHER_DEATH && pitch in 0.87f..1.16f)) event.cancel()
+        }
         on<MessageEvent.Chat> {
             if (!bonzo || !message.startsWith("Your") || !message.endsWith("Bonzo's Mask saved your life!")) return@on
             mc.player?.playSound(SoundEvents.GHAST_AMBIENT, bonzoVolume, bonzoPitch)
@@ -86,6 +145,10 @@ object Sounds : Module(
                 (s == SoundEvents.ZOMBIE_VILLAGER_CURE && abs(pitch - 2f) < 0.01f)) event.cancel()
         }
     }
+
+    @JvmStatic
+    fun muteClientSound(sound: SoundInstance): Boolean =
+        enabled && muteBonzoStaff && sound.identifier in bonzoBlasts
 
     @JvmStatic
     fun monoActive(): Boolean = enabled && monoAudio
