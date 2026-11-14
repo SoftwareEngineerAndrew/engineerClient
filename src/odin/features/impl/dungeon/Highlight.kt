@@ -1,30 +1,18 @@
 package com.odtheking.odin.features.impl.dungeon
 
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.render.BoxStyle
-import com.odtheking.odin.utils.render.drawStyledBox
-import com.odtheking.odin.utils.renderBoundingBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.player.Player
 
 object Highlight : Module(
     name = "Highlight",
-    description = "Allows you to highlight selected entities."
+    description = "Blade's mob highlight: starred mobs, tanks, minibosses, Fels, Shadow Assassins, bats, withers and Mimics."
 ) {
-    private val highlightStar by BooleanSetting("Highlight Starred Mobs", true, desc = "Highlights starred dungeon mobs.")
-    private val color by ColorSetting("Highlight color", Colors.WHITE, true, desc = "The color of the highlight.")
-    private val renderStyle by SelectorSetting("Render Style", BoxStyle.OUTLINE, desc = "Style of the box.")
     private val hideNonNames by BooleanSetting("Hide non-starred names", true, desc = "Hides names of entities that are not starred.")
 
     private val teammateClassGlow by BooleanSetting("Teammate Class Glow", true, desc = "Highlights dungeon teammates based on their class color.")
@@ -33,11 +21,9 @@ object Highlight : Module(
     // https://regex101.com/r/QQf502/2
     private val starredRegex = Regex("^.*✯ .*\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?.?❤$")
 
-    private val entities = mutableSetOf<Entity>()
-
     init {
         on<TickEvent.End> {
-            if ((!highlightStar && !hideNonNames) || !DungeonUtils.inClear) return@on
+            if (!hideNonNames || !DungeonUtils.inClear) return@on
 
             val entitiesToRemove = mutableListOf<Entity>()
             level.entitiesForRendering().forEach { e ->
@@ -48,35 +34,11 @@ object Highlight : Module(
 
                 val isStarred = starredRegex.matches(entityName)
 
-                if (hideNonNames && e.isInvisible && !isStarred) entitiesToRemove.add(e)
-
-                if (highlightStar && isStarred)
-                    level.getEntities(e, e.boundingBox.move(0.0, -1.0, 0.0)) { isValidEntity(it) }.firstOrNull()?.let { entities.add(it) }
+                if (e.isInvisible && !isStarred) entitiesToRemove.add(e)
             }
             entitiesToRemove.forEach { it.remove(Entity.RemovalReason.DISCARDED) }
-            entities.removeIf { entity -> !entity.isAlive }
-        }
-
-        on<RenderExtractEvent> {
-            if (!highlightStar || !DungeonUtils.inClear) return@on
-
-            entities.forEach { entity ->
-                if (entity.isAlive) drawStyledBox(entity.renderBoundingBox, color, renderStyle, true)
-            }
-        }
-
-        on<LevelEvent.Load> {
-            entities.clear()
         }
     }
-
-    private fun isValidEntity(entity: Entity): Boolean =
-        when (entity) {
-            is ArmorStand -> false
-            is WitherBoss -> false
-            is Player -> entity.uuid.version() == 2 && entity != mc.player
-            else -> !entity.isInvisible
-        }
 
     @JvmStatic
     fun getTeammateColor(entity: Entity): Int? {

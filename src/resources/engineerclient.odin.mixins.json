@@ -18,7 +18,6 @@
     "SimonSaysBlocksMixin",
     "SimonSaysTicksMixin",
     "TickTimersGoldorMixin",
-    "HighlightRenderMixin",
     "LcmStyleMixin",
     "LcmMapInfoMixin",
     "PaulScoreMixin",
