@@ -9,6 +9,10 @@ import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
+import com.odtheking.odin.events.core.onReceive
+import com.odtheking.odin.utils.itemId
+import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.sounds.SoundEvents
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Colors
@@ -54,7 +58,7 @@ import com.engineerclient.storm.StormCrush
 object Timers : Module(
     name = "Timers",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Purple's pad, terminal section times, and Necron becoming damageable (Goldor's death tick: Odin's Goldor Hud).",
+    description = "Countdowns through a run: clear, exit core, Maxor moving, crystals, Purple's pad, terminal section times, and Necron becoming damageable, the Tactical Insertion return (Goldor's death tick: Odin's Goldor Hud).",
     key = null,
 ) {
     // --- Clear Countdown ---------------------------------------------------------------------------
@@ -99,7 +103,13 @@ object Timers : Module(
         if (example) timer("Necron", 35, NECRON_DPS, true) else left(necronDpsAt, NECRON_DPS)?.let { timer("Necron", it, NECRON_DPS) } ?: (0 to 0)
     }
 
+    private val tacHud by HUD("Tac Insertion", "Counts down to the Tactical Insertion taking you back, 3 s after you mark the spot.", true, 10, 190, 1.5f) { example ->
+        if (example) timer("Tac", 30, TAC_RETURN, true) else left(tacReturnAt, TAC_RETURN)?.let { timer("Tac", it, TAC_RETURN) } ?: (0 to 0)
+    }
+
     private const val CAMP_TICKS = 50 * 20
+    /** The Tactical Insertion returns you 60 server ticks after the mark's flint sound. */
+    private const val TAC_RETURN = 60
     private const val PORTAL_TICKS = 4 * 20
     private const val PORTAL_TEXT = 36
     private const val EXIT_CORE_TEXT = 16
@@ -161,6 +171,7 @@ object Timers : Module(
     /** When Purple's pillar last stepped down. */
     private var purpleStepAt: Int? = null
     private var necronDpsAt: Int? = null
+    private var tacReturnAt: Int? = null
 
     private fun bossTicksLeft(): Int? {
         if (!enabled || DungeonUtils.inBoss) return null
@@ -297,6 +308,7 @@ object Timers : Module(
     private fun inCore(x: Double, y: Double, z: Double) = x >= 39 && x < 71 && y >= 110 && y < 155.5 && z >= 54 && z < 118
 
     private fun reset() {
+        tacReturnAt = null
         bossAt = null; bloodSeen = false; portalOpen = false; portalUntil = 0; coreOpen = false; exitCoreUntil = 0
         maxorMoveAt = null; inMaxor = false; crystalsAt = null; lastHit = Int.MIN_VALUE / 2; maxorHealth = 0f
         stormStart = null; stormDead = false; necronDpsAt = null
@@ -320,6 +332,11 @@ object Timers : Module(
         }
 
         on<TickEvent.End> { watchMaxor(); watchCore(); sectionDing() }
+
+        onReceive<ClientboundSoundPacket> {
+            if (sound.value() != SoundEvents.FLINTANDSTEEL_USE || kotlin.math.abs(pitch - 0.746f) > 0.01f) return@onReceive
+            mc.execute { if (mc.player?.mainHandItem?.itemId == "TACTICAL_INSERTION") tacReturnAt = serverTicks + TAC_RETURN }
+        }
 
         // Purple's pillar stepping down: its layers go through moving pistons (going back up, they don't).
         on<BlockUpdateEvent> {
