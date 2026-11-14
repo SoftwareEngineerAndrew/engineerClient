@@ -51,7 +51,10 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     fun unfocus() {
         val was = focus ?: return
         focus = null
-        if (was is TextField) was.onDone?.invoke()
+        if (was is TextField) {
+            mc.textInputManager().stopTextInput(was)
+            was.onDone?.invoke()
+        }
     }
 
     fun drag(move: (Double, Double) -> Unit, end: () -> Unit = {}) {
@@ -87,6 +90,8 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     }
 
     override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
+        // 26.3 only sends typed characters while text input is on.
+        (focus as? TextField)?.let { mc.textInputManager().startTextInput(it) }
         val mx = mouseX / scale.toDouble()
         val my = mouseY / scale.toDouble()
         val frameHits = ArrayList<Hit>()

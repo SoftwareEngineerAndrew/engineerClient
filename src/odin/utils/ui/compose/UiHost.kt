@@ -129,6 +129,8 @@ class UiHost(content: @Composable () -> Unit) {
         focused?.onFocusChanged?.invoke(false)
         focused = node
         node?.onFocusChanged?.invoke(true)
+        val input = net.minecraft.client.Minecraft.getInstance().textInputManager()
+        if (node?.onChar != null) input.startTextInput(this) else input.stopTextInput(this)
     }
 
     private inline fun ancestry(from: UiNode?, predicate: (UiNode) -> Boolean): UiNode? {
