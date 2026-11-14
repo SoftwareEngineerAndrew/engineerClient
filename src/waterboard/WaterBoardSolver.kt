@@ -123,7 +123,7 @@ object WaterBoardSolver {
     fun install() {
         for (s in listOf(dropdown, on, lead, objective, clickSound, tracer, firstColor, secondColor, showSim)) PuzzleSolvers.registerSetting(s)
         coordinator.execute { PlanTable.load() }
-        on<LevelEvent.Load> { EngineerClient.safely("water board reset") { reset() } }
+        on<LevelEvent.Load> { EngineerClient.safely("water board reset") { reset(); carried = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed } }
         onReceive<ClientboundBlockUpdatePacket> { val f = frame ?: return@onReceive; packet(f, pos, blockState) }
         onReceive<ClientboundSectionBlocksUpdatePacket> { val f = frame ?: return@onReceive; runUpdates { p, s -> packet(f, p, s) } }
         on<UseItemOnPostEvent> { EngineerClient.safely("water board click") { clicked(hitResult.blockPos) } }
@@ -138,7 +138,15 @@ object WaterBoardSolver {
      */
 
 
-    private fun active(): Boolean = on.value && PuzzleSolvers.enabled && DungeonUtils.inDungeons && Puzzle.WATER_BOARD.status != PuzzleStatus.Completed
+    private fun active(): Boolean = on.value && PuzzleSolvers.enabled && DungeonUtils.inDungeons && !solved()
+
+    // Odin keeps the last run's status until the tab list names the puzzle again
+    private var carried = false
+    private fun solved(): Boolean {
+        val done = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed
+        if (!done) carried = false
+        return done && !carried
+    }
 
     private fun nowMs(): Double = System.nanoTime() / 1e6
 
@@ -216,7 +224,7 @@ object WaterBoardSolver {
             geo = read.first
             tracker = Tracker(read.first, read.second, nowMs())
             inbox.clear(); dirty = true
-            EngineerClient.logger.info("[ec] water board: ${read.first.slotCell.size} lever blocks, gates closed ${Integer.toBinaryString(read.second.closed)}, ${if (read.second.cells.any { it >= 0 }) "water on it" else "dry"}")
+            EngineerClient.logger.info("[ec] water board: board $layout, ${read.first.slotCell.size} lever blocks, gates closed ${Integer.toBinaryString(read.second.closed)}, ${if (read.second.cells.any { it >= 0 }) "water on it" else "dry"}")
         }
         val tr = tracker!!
         while (true) {
