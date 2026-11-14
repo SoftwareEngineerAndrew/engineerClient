@@ -19,8 +19,10 @@ import kotlin.math.PI
 import kotlin.math.roundToInt
 
 /** How one setting is drawn and used; [height] may grow while something of it is open. */
-abstract class SettingView(open val setting: RenderableSetting<*>) {
-    val shown = Anim(200f, setting.isVisible)
+abstract class SettingView(base: RenderableSetting<*>) {
+    open val setting: RenderableSetting<*> = base
+    // Subclasses override setting, which is still null while this constructor runs.
+    val shown = Anim(200f, base.isVisible)
     abstract fun height(): Int
     abstract fun draw(ui: Ui, x: Int, y: Int)
 
