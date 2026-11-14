@@ -16,32 +16,37 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Which panel each module sits in: its own category, or for an addon's own panel, the closest of the usual ones. */
+/** Which panel each module sits in. */
 object Placement {
-    val standard: List<Category> get() = listOf(Category.DUNGEON, Category.BOSS, Category.RENDER, Category.SKYBLOCK, Category.NETHER)
-    const val OTHER = "Misc"
+    val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Dragons", "Simulators", "Kuudra", "Skyblock", "Render")
 
-    private val byName = mapOf(
-        "ADR" to "Dungeon", "Clear Breakdown" to "Dungeon", "Block Instaclear" to "Dungeon", "Item Highlight" to "Dungeon",
-        "Puzzle Overlay" to "Dungeon", "Timers" to "Dungeon", "POV Previews" to "Dungeon", "Sub Splits" to "Dungeon",
-        "BR Roles" to "Dungeon", "Pre-Requeue" to "Dungeon", "Better Recorder" to "Dungeon", "Dungeon Recorder" to "Dungeon",
-        "All Sub Splits" to "Dungeon",
-        "Agro Sphere" to "Boss", "LCM Melee Warning" to "Boss", "ADS" to "Boss", "Term Progress" to "Boss", "EE Highlight" to "Boss",
-        "Recore" to "Boss", "SS Practice" to "Boss", "Terminal Hitboxes" to "Boss", "Highlight Levers" to "Boss", "Term Info" to "Boss",
-        "Termsim" to "Boss", "Timers2" to "Boss", "Boss Recorder" to "Boss", "Maxor Crystals" to "Boss", "i4 Aim" to "Boss",
-        "Health & Mana" to "Render", "Chunk Culling" to "Render", "Camera Offset" to "Render", "Old Blocking" to "Render",
-        "Render Tweaks" to "Render", "Performance Monitor" to "Render",
-        "Random Stuff" to "Skyblock", "Legit Zpew" to "Skyblock", "Coffee Random Stuff" to "Skyblock", "Quiet Media" to "Skyblock",
-        "Sound Editor" to "Skyblock", "Sound Collector" to "Skyblock", "Fast Launch" to "Skyblock",
-    )
+    /** Where a panel starts: five to a row, two rows. */
+    fun home(name: String): Pair<Int, Int> {
+        val i = PANELS.indexOf(name).coerceAtLeast(0)
+        return 10 + (i % 5) * (Theme.WIDTH + 10) to if (i < 5) 10 else 230
+    }
+
+    private val byName: Map<String, String> = mapOf(
+        "Dungeons" to listOf("ADR", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers", "Timers2", "Score Time", "Dungeon Map", "Map Info", "Leap Menu", "POV Previews", "Highlight", "Extra Stats", "Blessing Display", "Breaker Display", "Dungeon Queue", "Pre-Requeue", "Solo Clear Queue", "Warp Cooldown", "Freeze Display", "Croesus", "Invincibility Timer", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam"),
+        "Clear" to listOf("Block Instaclear", "Blood Camp", "BR Roles", "Clear Breakdown", "Close Chest On Key", "Creeper Beams Ding", "Door Highlight", "Dungeon Breaker Torch Guard", "Dungeon Waypoints", "Item Highlight", "Mimic", "Puzzle HUD", "Puzzle Overlay", "Puzzle Solvers", "Room Alerts", "Room Clear", "Secret Clicked", "Secrets Counter", "Superboom Ghost Block", "Tic Tac Toe Solver"),
+        "Boss" to listOf("Agro Sphere", "Boss Waypoints", "Explosive Shot", "LCM Melee Warning", "Livid Solver", "Maxor Crystals", "Phase Timers", "Spirit Bear", "Storm Helper", "Terracotta Timer", "Tick Timers", "World Border Click Fix"),
+        "Terminals" to listOf("Arrow Align", "Arrows Device", "Bonzo Sound", "EE Highlight", "Goldor Helper", "Highlight Levers", "i4 Aim", "Leap Count", "Melody Message", "Recore", "Simon Says", "Term Info", "Term Progress", "Terminal Hitboxes", "Terminal Solver", "Terminal Sounds", "Terminal Times", "Terminal Titles", "Terminals Status"),
+        "Dragons" to listOf("Wither Dragons", "King Relic", "Relic Helper"),
+        "Simulators" to listOf("ADS", "SS Practice", "Terminal Simulator", "Termsim"),
+        "Kuudra" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius"),
+        "Skyblock" to listOf("Arrow Fix", "Arrow Hit Sound", "Arrow Swap Title", "Blaze Dagger HUD", "Chat Commands", "Chat Tweaks", "Coffee Random Stuff", "Command Aliases", "Command Keybinds", "Etherwarp", "Fast Launch", "Gyro Wand", "Health & Mana", "Item Protection", "Item Tweaks", "Kicked Timer", "Legit Zpew", "Loadout Keybinds", "Mono Audio", "Move Disconnect Button", "Name Changer", "No Cursor Reset", "No Item Place", "Pet Keybinds", "Pet Menu", "Player Display", "Quiver Display", "Ragnarock", "Random Stuff", "Salvage Overlay", "Search Bar", "Server ID Hider", "Slot Binds", "Sound Collector", "Sound Editor", "Sound Manager", "Sound Tweaks", "Spring Boots", "Tab Tweaks", "Temporary Waypoints", "Wardrobe Keybinds", "Waypoints"),
+        "Render" to listOf("Block Overlay", "Camera", "Camera Offset", "Camera Tweaks", "Chunk Culling", "Click GUI", "Colors", "Dark Mode", "Hide Players", "Info Display", "Item Animations", "Nametag Tweaks", "No Item Reset On Swap", "Old Blocking", "Performance HUD", "Performance Monitor", "Player Size", "Render Cleanup", "Render Optimizer", "Render Test", "Render Tweaks", "Screen Tweaks", "Scrollable Tooltip", "Time Changer"),
+    ).flatMap { (panel, names) -> names.map { it to panel } }.toMap()
 
     fun of(module: Module): String {
-        if (module.category in standard) return module.category.name
         byName[module.name]?.let { return it }
-        val pkg = module.javaClass.packageName
-        for ((word, panel) in listOf("dungeon" to "Dungeon", "boss" to "Boss", "nether" to "Nether", "kuudra" to "Nether", "render" to "Render", "skyblock" to "Skyblock"))
-            if (word in pkg) return panel
-        return OTHER
+        return when (module.category) {
+            Category.DUNGEON -> "Clear"
+            Category.BOSS -> "Boss"
+            Category.NETHER -> "Kuudra"
+            Category.RENDER -> "Render"
+            else -> "Skyblock"
+        }
     }
 }
 
@@ -193,12 +198,13 @@ class Panel(val name: String, val modules: List<ModuleView>, defaultX: Int, defa
 
         fun build(views: (Module) -> ModuleView): List<Panel> {
             val grouped = LinkedHashMap<String, MutableList<Module>>()
-            for (c in Placement.standard) grouped[c.name] = mutableListOf()
+            // The panels were renamed: places saved for the old ones would pile the new ones up.
+            if ("Dungeons" !in ClickGUIModule.panelSetting) ClickGUIModule.panelSetting.clear()
+            for (name in Placement.PANELS) grouped[name] = mutableListOf()
             for (m in ModuleManager.modules.values) grouped.getOrPut(Placement.of(m)) { mutableListOf() }.add(m)
             return grouped.filterValues { it.isNotEmpty() }.map { (name, list) ->
-                val cat = Placement.standard.firstOrNull { it.name == name }
-                val x = cat?.x ?: (Placement.standard.maxOf { it.x } + 170)
-                Panel(name, list.sortedByDescending { mc.font.width(it.name) }.map(views), x, cat?.y ?: 10)
+                val (x, y) = Placement.home(name)
+                Panel(name, list.sortedByDescending { mc.font.width(it.name) }.map(views), x, y)
             }
         }
     }
