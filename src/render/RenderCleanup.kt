@@ -16,9 +16,18 @@ object RenderCleanup : Module(
     private val hideBlockBreak by BooleanSetting("Hide Block Break Particles", false, desc = "No block crack and break particles.")
     private val hideSmoke by BooleanSetting("Hide Smoke Particles", false, desc = "No smoke particles.")
     private val hideGroundedArrows by BooleanSetting("Hide Grounded Arrows", false, desc = "Arrows stuck in blocks are not drawn.")
+    private val hideStuckArrows by BooleanSetting("Hide Stuck Arrows", true, desc = "No arrows stuck in players.")
+    private val hideEntityFire by BooleanSetting("Hide Entity Fire", true, desc = "No fire drawn on burning entities.")
+    private val disableGlowing by BooleanSetting("Disable Glowing", true, desc = "No glowing outline on entities.")
 
     fun hidesParticle(particle: Particle): Boolean = enabled &&
         (hideBlockBreak && particle is TerrainParticle || hideSmoke && particle is SmokeParticle)
 
     fun hidesGroundedArrows() = enabled && hideGroundedArrows
+
+    fun hidesStuckArrows() = enabled && hideStuckArrows
+
+    fun hidesEntityFire() = enabled && hideEntityFire
+
+    fun disablesGlowing() = enabled && disableGlowing
 }
