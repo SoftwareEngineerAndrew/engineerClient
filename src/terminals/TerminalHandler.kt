@@ -39,6 +39,8 @@ abstract class TerminalHandler(val type: TerminalTypes) {
     private val pending = ArrayList<Pending>()
     private var seq = 0
     private var filling = false
+    private val received = BooleanArray(area)
+    private var lastSlots: List<Slot>? = null
 
     /** Content bounds, for the custom grid. */
     var top = 1; var left = 1; var rows = 1; var cols = 1
@@ -70,7 +72,10 @@ abstract class TerminalHandler(val type: TerminalTypes) {
         }
         if (answeredSeq >= 0) pending.removeAll { it.seq < answeredSeq }
         if (!ready) {
-            if (only < 0 || (0 until area).all { !slots[it].item.isEmpty }) becomeReady() else filling = true
+            // Only what was sent to this terminal counts: a reused window still holds the last one's items.
+            if (only < 0) received.fill(true) else if (only in 0 until area) received[only] = true
+            lastSlots = slots
+            if (received.all { it }) becomeReady() else filling = true
         }
         if (pending.size != before || ready) recompute()
     }
@@ -115,7 +120,7 @@ abstract class TerminalHandler(val type: TerminalTypes) {
 
     /** Each client tick: a window filled slot by slot is complete once a tick passes; unanswered clicks time out. */
     fun tick() {
-        if (filling && !ready) { becomeReady(); recompute() }
+        if (filling && !ready) lastSlots?.let { update(it, -1) }
         if (pending.isEmpty()) return
         val limit = ClickRtt.timeoutNs()
         val now = System.nanoTime()
