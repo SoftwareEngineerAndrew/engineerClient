@@ -6,7 +6,6 @@
   "client": [
     "BlockUpdateServerThreadMixin",
     "DoorHighlightOutlineMixin",
-    "HypeExplosionMixin",
     "HudElementMixin",
     "InvincibilityHudMixin",
     "InvincibilityPhoenixMixin",

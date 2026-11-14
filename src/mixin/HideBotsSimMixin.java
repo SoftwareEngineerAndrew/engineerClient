@@ -10,9 +10,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * The P3 Sim's half of Odin's Hide Players: the sim's party are mannequins, not players, so
- * Odin's rule never sees them. With the sim's Hide players on, {@link P3Sim#hideBot} applies the
- * same rule (Hide all, or within Distance) to them. Nothing outside the sim.
+ * The P3 Sim's half of Render Cleanup's Hide Players: the sim's party are mannequins, not players, so
+ * that rule never sees them. With the sim's Hide players on, {@link P3Sim#hideBot} applies the
+ * same rule (Hide All Players, or within the distance) to them. Nothing outside the sim.
  */
 @Mixin(EntityRenderDispatcher.class)
 public class HideBotsSimMixin {

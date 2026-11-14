@@ -70,8 +70,8 @@ object ModuleManager {
             TerminalsStatus, MelodyMessage, WitherDragons, SimonSays, ArrowsDevice, TerminalTitles,
 
             // render
-            ClickGUIModule, Camera, Etherwarp, PlayerSize, PerformanceHUD, RenderOptimizer,
-            PlayerDisplay, TemporaryWaypoints, HidePlayers, Highlight, GyroWand,
+            ClickGUIModule, Camera, Etherwarp, PlayerSize, PerformanceHUD,
+            PlayerDisplay, TemporaryWaypoints, Highlight, GyroWand,
 
             //skyblock
             ChatCommands, NoCursorReset, Ragnarock, SpringBoots, WardrobeKeybinds, PetKeybinds, AutoSprint,

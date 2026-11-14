@@ -143,7 +143,6 @@ object EngineerClient : ClientModInitializer {
         safely("tick timers") { com.engineerclient.misc.OdinTickTimers.install() }
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("door outline") { com.engineerclient.misc.OdinDoorOutline.install() }
-        safely("hype explosion") { com.engineerclient.misc.OdinHypeExplosion.install() }
         safely("instant chime") { com.engineerclient.misc.OdinInstantChime.install() }
         safely("ss alerts") { com.engineerclient.misc.OdinSimonSaysAlerts.install() }
         safely("custom keybinds") { com.engineerclient.misc.OdinCustomKeybinds.install() }
