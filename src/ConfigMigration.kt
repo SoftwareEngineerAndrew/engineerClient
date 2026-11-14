@@ -63,6 +63,7 @@ object ConfigMigration {
      *  - Sub Splits' Core* settings and Paste Last In Core are Recore's (on if they were in use).
      *  - BR Roles' Doorer Kills is its Door Kills: on is Always, off Never.
      *  - Legit Zpew is Etherwarp's Legit Zpew setting, in Odin's config.
+     *  - Dungeon Breaker Torch Guard and Odin's Breaker Display are Dungeonbreaker.
      *  - Timers' Necron Drop HUD is its Necron DPS (where it was, on or off as it was).
      *  - ADS's Shortbow Cooldown is its Shortbow Shot Cooldown (the wrong default 2 dropped, so it reads 5).
      *  - ADR's Private Runs is its Unlisted Runs (2026-10-30, ADM 1.0.10).
@@ -119,6 +120,25 @@ object ConfigMigration {
                 write(odinFile, odin)
             }
             modules.remove(lz)
+            changed = true
+        }
+
+        // Dungeon Breaker Torch Guard and Odin's Breaker Display are Dungeonbreaker's Torch Guard and Charges Display.
+        run {
+            val tg = module(modules, "Dungeon Breaker Torch Guard")
+            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else null
+            val bd = odin?.let { module(it, "Breaker Display") }
+            if (tg == null && bd == null) return@run
+            if (module(modules, "Dungeonbreaker") == null) {
+                val tgOn = tg?.get("enabled")?.asBoolean ?: false
+                val bdOn = bd?.get("enabled")?.asBoolean ?: false
+                val s = settings(ensure("Dungeonbreaker").also { it.addProperty("enabled", tgOn || bdOn) })
+                s.addProperty("Torch Guard", tgOn)
+                s.addProperty("Charges Display", bdOn)
+                bd?.let { for ((k, v) in settings(it).entrySet()) if (!s.has(k)) s.add(k, v) }
+            }
+            tg?.let { modules.remove(it) }
+            if (odin != null && bd != null) { odin.remove(bd); write(odinFile, odin) }
             changed = true
         }
 

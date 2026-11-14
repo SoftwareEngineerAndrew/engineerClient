@@ -165,7 +165,7 @@ object OdinInternals {
         Probe("odin.p3", "InactiveWaypoints", BOSS + "TerminalsStatus", fields(BOSS + "TerminalsStatus", "inactiveList", "section", "terminals", "levers", "device",
             "gate", "isComplete", "firstInSection", "lastCompleted")),
         Probe("odin.p3", "SimonSays", BOSS + "SimonSays", fields(BOSS + "SimonSays", "clickInOrder", "clickNeeded", "firstPhase", "startClickCounter", "lastLanternTick")),
-        Probe("odin.p3", "BreakerDisplay", DUNGEON + "BreakerDisplay", fields(DUNGEON + "BreakerDisplay", "charges", "maxCharges")),
+        Probe("odin.p3", "BreakerDisplay", "com.engineerclient.dungeon.Dungeonbreaker", fields("com.engineerclient.dungeon.Dungeonbreaker", "charges", "maxCharges")),
 
         // ---- map: the special column guess's inputs (colorGuessForUnknown is not known to be pure, so it is never called)
         Probe("odin.special", "SpecialColumn", null, listOf(
