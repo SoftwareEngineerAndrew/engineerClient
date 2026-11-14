@@ -78,6 +78,7 @@ object ConfigMigration {
      *  - Screen Tweaks, Render Cleanup, Chat Tweaks and Tab Tweaks are Visibility.
      *  - Phase Timers, Timers and Odin's Tick Timers (its Fire Freeze Hud and look) are Tick Timers.
      *  - Odin's terminal modules, Term Progress and Terminal Hitboxes are Terminals.
+     *  - Odin's Dungeon Waypoints, Boss Waypoints and Odin's Temporary Waypoints (its From Party Chat) are Waypoints.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -655,6 +656,24 @@ object ConfigMigration {
                 write(odinFile, odin)
             }
             changed = true
+        }
+
+        // Dungeon Waypoints is Waypoints, on if it, Boss Waypoints or Temporary Waypoints was; Party Waypoints is Temporary
+        // Waypoints' From Party Chat where it was on. The old entries go, so this runs once.
+        run {
+            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else JsonArray()
+            val dw = module(odin, "Dungeon Waypoints")
+            val tw = module(odin, "Temporary Waypoints")
+            val bw = module(modules, "Boss Waypoints")
+            if (listOf(dw, tw, bw).all { it == null } || module(odin, "Waypoints") != null) return@run
+            fun on(m: JsonObject?) = m?.get("enabled")?.asBoolean == true
+            val w = dw ?: JsonObject().apply { addProperty("name", "Waypoints"); add("settings", JsonObject()) }.also { odin.add(it) }
+            w.addProperty("name", "Waypoints")
+            w.addProperty("enabled", on(dw) || on(bw) || on(tw))
+            tw?.let { settings(w).addProperty("Party Waypoints", on(it) && (settings(it)["From Party Chat"]?.asBoolean ?: true)) }
+            tw?.let(odin::remove)
+            write(odinFile, odin)
+            bw?.let { modules.remove(it); changed = true }
         }
 
         if (changed) {
