@@ -18,7 +18,7 @@ import kotlin.math.roundToInt
 
 /** Which panel each module sits in. */
 object Placement {
-    val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Dragons", "Simulators", "Kuudra", "Skyblock", "Render", "AscentClient", "Coffee Client")
+    val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Dragons", "Simulators", "Kuudra", "Skyblock", "Render", "AscentClient", "Coffee Client", "Devgineer Client")
 
     /** Where a panel starts: five to a row. */
     fun home(name: String): Pair<Int, Int> {
@@ -35,13 +35,14 @@ object Placement {
         "Simulators" to listOf("ADS", "SS Practice", "Terminal Simulator", "Termsim"),
         "Kuudra" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius"),
         "Skyblock" to listOf("Arrow Fix", "Arrow Hit Sound", "Arrow Swap Title", "Blaze Dagger HUD", "Chat Commands", "Chat Tweaks", "Coffee Random Stuff", "Command Aliases", "Command Keybinds", "Etherwarp", "Fast Launch", "Gyro Wand", "Health & Mana", "Item Protection", "Item Tweaks", "Kicked Timer", "Legit Zpew", "Loadout Keybinds", "Mono Audio", "Move Disconnect Button", "Name Changer", "No Cursor Reset", "No Item Place", "Pet Keybinds", "Pet Menu", "Player Display", "Quiver Display", "Ragnarock", "Random Stuff", "Salvage Overlay", "Search Bar", "Server ID Hider", "Slot Binds", "Sound Collector", "Sound Editor", "Sound Manager", "Sound Tweaks", "Spring Boots", "Tab Tweaks", "Temporary Waypoints", "Wardrobe Keybinds", "Waypoints"),
-        "Render" to listOf("Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Dark Mode", "Hide Players", "Info Display", "Item Animations", "Nametag Tweaks", "No Item Reset On Swap", "Old Blocking", "Performance HUD", "Performance Monitor", "Player Size", "Render Cleanup", "Render Optimizer", "Render Test", "Render Tweaks", "Screen Tweaks", "Scrollable Tooltip", "Time Changer"),
+        "Render" to listOf("Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Info Display", "Item Animations", "Nametag Tweaks", "No Item Reset On Swap", "Old Blocking", "Performance HUD", "Performance Monitor", "Player Size", "Render Cleanup", "Render Tweaks", "Screen Tweaks", "Scrollable Tooltip"),
     ).flatMap { (panel, names) -> names.map { it to panel } }.toMap()
 
     fun of(module: Module): String {
         val pkg = module.javaClass.packageName
         if (pkg.startsWith("com.ascentclient")) return "AscentClient"
         if (pkg.startsWith("com.coffeeclient")) return "Coffee Client"
+        if (pkg.startsWith("com.devgineerclient")) return "Devgineer Client"
         byName[module.name]?.let { return it }
         return when (module.category) {
             Category.DUNGEON -> "Clear"
