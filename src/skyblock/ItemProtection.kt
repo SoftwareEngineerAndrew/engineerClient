@@ -71,16 +71,28 @@ object ItemProtection : Module(
     @JvmStatic
     fun blocksDrop(player: LocalPlayer): Boolean {
         if (dropHeldInRun && DungeonUtils.inDungeons) return false
-        return isProtected(player.inventory.selectedItem)
+        val stack = player.inventory.selectedItem
+        if (!isProtected(stack)) return false
+        dropAlert(stack)
+        return true
+    }
+
+    private var lastAlert = 0L
+
+    private fun dropAlert(stack: ItemStack) {
+        val now = System.currentTimeMillis()
+        if (now - lastAlert < 1000) return
+        lastAlert = now
+        EngineerClient.msg(Component.literal("§cStopped ").append(stack.hoverName).append("§c from being dropped."))
     }
 
     @JvmStatic
     fun blocksClick(screen: AbstractContainerScreen<*>, slot: Slot?, slotId: Int, input: ContainerInput): Boolean {
         if (!enabled) return false
-        if (slotId == AbstractContainerMenu.SLOT_CLICKED_OUTSIDE && isProtected(screen.menu.carried)) return true
+        if (slotId == AbstractContainerMenu.SLOT_CLICKED_OUTSIDE && isProtected(screen.menu.carried)) { dropAlert(screen.menu.carried); return true }
         val stack = slot?.item ?: return false
         if (!isProtected(stack)) return false
-        if (input == ContainerInput.THROW) return true
+        if (input == ContainerInput.THROW) { dropAlert(stack); return true }
         val what = blockedAction(screen) ?: return false
         EngineerClient.msg(Component.literal("§cStopped ").append(stack.hoverName).append("§c from being $what."))
         return true
