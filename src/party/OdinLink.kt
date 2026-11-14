@@ -1,7 +1,9 @@
 package com.engineerclient.party
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.clearbreakdown.OdinSync
 import com.engineerclient.pov.PoseShare
+import com.engineerclient.tpmaze.TeamTpMaze
 import com.google.gson.JsonParser
 import com.odtheking.odin.features.impl.boss.MelodyMessage
 import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
@@ -11,21 +13,28 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
 /**
- * Odin's websocket messages (melody progress, map sync) over ADM's party link, the way Pose POV shares: straight to
- * teammates over TURN, `[14][channel][Odin's JSON]`. Odin's socket still carries them to anyone the link didn't reach,
- * plain Odin users included, and whatever comes either way goes to the same Odin handler, which takes repeats fine.
+ * Websocket messages (melody progress, map sync, Team TP Maze) over ADM's party link first, the way Pose POV shares: straight
+ * to teammates over TURN, `[14][channel][JSON]`. Odin's socket still carries them to anyone the link didn't reach, plain Odin
+ * users included, and whatever comes either way goes to the same handlers, which take repeats fine.
  */
 object OdinLink {
     private const val KIND = 14
     // TURN packets are 300 bytes; less its 20 of header and tag, and this frame's own 2.
     private const val MAX_JSON = 278
 
-    private val channels: List<Pair<WebSocketConnection, String>> by lazy {
-        listOf(MelodyMessage.melodyWebSocket to "username", DungeonMap.syncSocket to "playerName")
+    /** A channel's socket, the field naming who sent a message, and other listeners on the same lobby channel. Index = wire channel. */
+    private class Channel(val socket: WebSocketConnection, val nameField: String, val also: List<WebSocketConnection> = emptyList())
+
+    private val channels: List<Channel> by lazy {
+        listOf(
+            Channel(MelodyMessage.melodyWebSocket, "username"),
+            Channel(DungeonMap.syncSocket, "playerName", listOf(OdinSync.socket)),
+            Channel(TeamTpMaze.socket, "from"),
+        )
     }
 
     fun install() {
-        channels.forEachIndexed { i, (socket, _) -> socket.bridge = { send(i, it) } }
+        channels.forEachIndexed { i, c -> c.socket.bridge = { send(i, it) } }
         PoseShare.onExtra(KIND) { sender, b -> EngineerClient.safely("odin link") { heard(sender, b) } }
     }
 
@@ -40,11 +49,14 @@ object OdinLink {
 
     private fun heard(sender: String, b: ByteBuffer) {
         if (b.remaining() < 2) return
-        val (socket, nameField) = channels.getOrNull(b.get().toInt() and 255) ?: return
+        val channel = channels.getOrNull(b.get().toInt() and 255) ?: return
         val json = StandardCharsets.UTF_8.decode(b).toString()
         // A teammate may only speak for themselves.
-        val name = runCatching { JsonParser.parseString(json).asJsonObject[nameField].asString }.getOrNull() ?: return
+        val name = runCatching { JsonParser.parseString(json).asJsonObject[channel.nameField].asString }.getOrNull() ?: return
         if (!name.equals(sender, ignoreCase = true)) return
-        EngineerClient.mc.execute { socket.receive(json) }
+        EngineerClient.mc.execute {
+            channel.socket.receive(json)
+            for (s in channel.also) s.receive(json)
+        }
     }
 }

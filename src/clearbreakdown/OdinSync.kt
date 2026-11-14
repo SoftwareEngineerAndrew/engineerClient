@@ -9,7 +9,7 @@ import com.odtheking.odin.utils.skyblock.LocationUtils
  * Odin's dungeon map sync, read by Clear Breakdown on a connection of its own: every Odin user in
  * the lobby says which room they're in and how many of its secrets their action bar shows. Odin's
  * own socket (DungeonMap.syncSocket) takes a single message handler, and setting it would break
- * Odin's map, so this is a second listener on the same lobby. It never sends.
+ * Odin's map, so this is a second listener on the same lobby (OdinLink hands it what comes over the party link). It never sends.
  */
 object OdinSync {
     /** A teammate's report: who, the room's tiles (Odin's packed IVec2s) and its found secrets. */
@@ -21,7 +21,7 @@ object OdinSync {
     private class Msg(val playerName: String?, val roomName: String?, val tiles: List<Tile>?, val foundSecrets: Int?)
     private class Tile(val data: Long?)
 
-    private val socket = webSocket {
+    internal val socket = webSocket {
         onMessage { text ->
             val m = try { gson.fromJson(text, Msg::class.java) } catch (_: Exception) { null } ?: return@onMessage
             val player = m.playerName ?: return@onMessage
