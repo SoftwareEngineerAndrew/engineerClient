@@ -5,6 +5,7 @@ import com.engineerclient.misc.RandomStuff;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import org.spongepowered.asm.mixin.Mixin;
@@ -24,5 +25,6 @@ public class OwnArrowsHideMixin {
         if (entity instanceof AbstractArrow arrow
             && RandomStuff.INSTANCE.hidesOwnArrow(arrow, ((ArrowInGroundInvoker) arrow).ec$isInGround())) cir.setReturnValue(false);
         if (entity instanceof ItemEntity item && ItemHighlight.INSTANCE.hides(item)) cir.setReturnValue(false);
+        if (entity instanceof Sheep && RandomStuff.INSTANCE.hidesSheep()) cir.setReturnValue(false);
     }
 }
