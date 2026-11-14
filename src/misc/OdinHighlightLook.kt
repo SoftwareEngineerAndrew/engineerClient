@@ -25,7 +25,9 @@ import net.minecraft.world.entity.monster.Enderman
 import net.minecraft.world.entity.monster.zombie.Zombie
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.Items
+import net.minecraft.world.level.block.entity.TrappedChestBlockEntity
 import net.minecraft.world.phys.AABB
+import net.minecraft.core.BlockPos
 
 /**
  * A "Look" for Odin's Highlight: Odin's, or one remade from Blade Addons' Mob Highlight.
@@ -58,6 +60,8 @@ object OdinHighlightLook {
     private val assassinColor = ColorSetting("Shadow Assassin Color", Color(128, 0, 128, 1f), true, desc = "Blade: Shadow Assassins.").withDependency { blade }
     private val mimicColor = ColorSetting("Mimic Color", Colors.WHITE, true, desc = "Blade: Mimics.").withDependency { blade }
     private val hideInvisible = BooleanSetting("Hide Invisible", true, desc = "Blade: no box on an invisible Shadow Assassin, and only the head of an invisible Fel.").withDependency { blade }
+    private val mimicChests = BooleanSetting("Mimic Chests", true, desc = "Boxes trapped chests (Mimics) in dungeons. Added by ADM.")
+    private val mimicChestColor = ColorSetting("Mimic Chest Color", Color(231, 11, 11, 0.9f), true, desc = "Mimic chest box.").withDependency { mimicChests.value }
     private val notWhileBlind = BooleanSetting("Not While Blind", true, desc = "Blade: no boxes while you have Blindness.").withDependency { blade }
 
     /** Read by HighlightRenderMixin: Odin's own boxes are skipped while the Blade look is on. */
@@ -127,16 +131,42 @@ object OdinHighlightLook {
         found.values.removeIf { (e, _) -> !e.isAlive || e.isRemoved }
     }
 
+    private val CHEST_BOX = AABB(0.0625, 0.0, 0.0625, 0.9375, 0.875, 0.9375)
+    private var chests: List<BlockPos> = emptyList()
+    private var chestScanTick = 0
+
+    private fun mimicChestsOn(): Boolean = Highlight.enabled && mimicChests.value && DungeonUtils.inClear
+
+    private fun style(): BoxStyle = (Highlight.settings["Render Style"] as? SelectorSetting)?.value as? BoxStyle ?: BoxStyle.OUTLINE
+
+    private fun scanChests() {
+        val level = mc.level ?: return
+        val me = mc.player ?: return
+        val cx = me.blockPosition().x shr 4
+        val cz = me.blockPosition().z shr 4
+        val r = mc.options.renderDistance().get()
+        val out = ArrayList<BlockPos>()
+        for (x in cx - r..cx + r) for (z in cz - r..cz + r) {
+            if (!level.hasChunk(x, z)) continue
+            for (be in level.getChunk(x, z).blockEntities.values) if (be is TrappedChestBlockEntity) out += be.blockPos
+        }
+        chests = out
+    }
+
     /** Adds the settings to Odin's Highlight; before OdinSplitsLook.install, which re-reads Odin's config. */
     fun install() {
-        for (s in listOf(look, tankColor, miniColor, felColor, assassinColor, mimicColor, hideInvisible, notWhileBlind)) Highlight.registerSetting(s)
+        for (s in listOf(look, tankColor, miniColor, felColor, assassinColor, mimicColor, hideInvisible, mimicChests, mimicChestColor, notWhileBlind)) Highlight.registerSetting(s)
 
-        on<TickEvent.End> { if (active()) scan() }
+        on<TickEvent.End> {
+            if (active()) scan()
+            if (mimicChestsOn() && ++chestScanTick % 20 == 0) scanChests()
+        }
 
         on<RenderExtractEvent> {
+            if (mimicChestsOn()) for (pos in chests) drawStyledBox(CHEST_BOX.move(pos), mimicChestColor.value, style(), true)
             if (!active()) return@on
             if (notWhileBlind.value && mc.player?.hasEffect(MobEffects.BLINDNESS) == true) return@on
-            val style = (Highlight.settings["Render Style"] as? SelectorSetting)?.value as? BoxStyle ?: BoxStyle.OUTLINE
+            val style = style()
             for ((e, kind) in found.values) {
                 if (!e.isAlive) continue
                 if (hideInvisible.value && e is Player && e.isInvisible) continue
@@ -144,7 +174,7 @@ object OdinHighlightLook {
             }
         }
 
-        on<LevelEvent.Load> { found.clear(); seenTags.clear() }
+        on<LevelEvent.Load> { found.clear(); seenTags.clear(); chests = emptyList() }
         EventBus.subscribe(this)
     }
 }
