@@ -226,7 +226,7 @@ object TeleportLaw {
      *   1.27's ray is), so whether the server has the sneak's pose yet is timing the client can't see.
      * - The first cell that stops the ray is the target: any block with a collision box (carpets and lily pads too) and
      *   signs, banners, tripwire hooks and pressure plates; never heads, ladders, flower pots, buttons or levers.
-     * - A sign, wall banner or tripwire hook is no floor: refused. Else you land on top (x.5, y + 1.05, z.5), a cell
+     * - A sign or tripwire hook is no floor: refused; a wall banner is one. Else you land on top (x.5, y + 1.05, z.5), a cell
      *   higher on a block taller than a cell, when the two cells there have no collision (a chest counts as free).
      */
     fun etherwarp(fx: Double, fy: Double, fz: Double, yaw: Float, pitch: Float, distance: Double, w: Cells, eye: Double = SNEAK_EYE): DoubleArray? {
@@ -252,7 +252,7 @@ object TeleportLaw {
 
     private val STOPS_ANYWAY = Regex("_sign$|_banner$|^tripwire_hook$|_pressure_plate$")
     private val NEVER_STOPS = Regex("(_head|_skull)$|^ladder$|^(flower_pot|potted_)|_button$|^lever$")
-    private val NO_FLOOR = Regex("_sign$|_wall_banner$|^tripwire_hook$")
+    private val NO_FLOOR = Regex("_sign$|^tripwire_hook$")
     private val CHEST = Regex("^(chest|trapped_chest|ender_chest)$")
 
     private fun stops(id: String, top: Double) = (STOPS_ANYWAY.containsMatchIn(id) || top > 0.0) && !NEVER_STOPS.containsMatchIn(id)
