@@ -16,14 +16,14 @@ internal fun showTitle(text: String, seconds: Double) {
     hud.setTitle(Component.literal(text.replace('&', '§')))
 }
 
-internal class SoundOption(module: Module, default: String, pitch: Float = 1f) {
-    private val on = module.registerSetting(BooleanSetting("Sound", true, desc = "Play a sound with it."))
-    private val id = module.registerSetting(StringSetting("Sound Id", default, 64, desc = "Sound id, as /playsound takes it.", placeholder = "").withDependency { on.value })
-    private val pitch = module.registerSetting(NumberSetting("Sound Pitch", pitch, 0.1..2.0, 0.01f, desc = "Pitch.").withDependency { on.value })
-    private val volume = module.registerSetting(NumberSetting("Sound Volume", 1f, 0.1..1.0, 0.01f, desc = "Volume.").withDependency { on.value })
+internal class SoundOption(module: Module, default: String, pitch: Float = 1f, prefix: String = "", shown: () -> Boolean = { true }) {
+    private val on = module.registerSetting(BooleanSetting("${prefix}Sound", true, desc = "Play a sound with it.").withDependency { shown() })
+    private val id = module.registerSetting(StringSetting("${prefix}Sound Id", default, 64, desc = "Sound id, as /playsound takes it.", placeholder = "").withDependency { shown() && on.value })
+    private val pitch = module.registerSetting(NumberSetting("${prefix}Sound Pitch", pitch, 0.1..2.0, 0.01f, desc = "Pitch.").withDependency { shown() && on.value })
+    private val volume = module.registerSetting(NumberSetting("${prefix}Sound Volume", 1f, 0.1..1.0, 0.01f, desc = "Volume.").withDependency { shown() && on.value })
 
     init {
-        module.registerSetting(ActionSetting("Play Sound", desc = "Plays it.") { force() }.withDependency { on.value })
+        module.registerSetting(ActionSetting("${prefix}Play Sound", desc = "Plays it.") { force() }.withDependency { shown() && on.value })
     }
 
     val enabled get() = on.value

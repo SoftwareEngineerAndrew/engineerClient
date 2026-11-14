@@ -27,8 +27,8 @@ import net.minecraft.world.entity.monster.Blaze
 import net.minecraft.world.level.block.Blocks
 
 object PuzzleSolvers : Module(
-    name = "Puzzle Solvers",
-    description = "Displays solutions for Water Board, TP Maze, Ice Fill, Blaze, Creeper Beams, Three Weirdos, Quiz, Boulder and Tic Tac Toe dungeon puzzles.",
+    name = "Puzzles",
+    description = "Puzzle solvers, the puzzle overlay and the Creeper Beams ding.",
     key = null
 ) {
     private val mazeDropDown by DropdownSetting("TP Maze", desc = "Shows settings for the TP maze puzzle solver.")
@@ -96,6 +96,21 @@ object PuzzleSolvers : Module(
     private val puzzleTimersMap = hashMapOf<String, PuzzleTimer>()
     private data class PuzzleTimer(val timeEntered: Long = System.currentTimeMillis(), var sentMessage: Boolean = false)
     private val weirdosRegex = Regex("\\[NPC] (.+): (.+).?")
+
+    /** Registers what [add] adds straight after the setting named [after]. */
+    fun insertSettings(after: String, add: () -> Unit) {
+        val before = settings.keys.toSet()
+        add()
+        val added = settings.filterKeys { it !in before }
+        val rebuilt = LinkedHashMap<String, com.odtheking.odin.clickgui.settings.Setting<*>>()
+        for ((k, v) in settings) {
+            if (k in added) continue
+            rebuilt[k] = v
+            if (k == after) rebuilt.putAll(added)
+        }
+        if (after !in rebuilt) rebuilt.putAll(added)
+        settings.clear(); settings.putAll(rebuilt)
+    }
 
     private inline val isInPuzzle get() = DungeonUtils.currentRoom?.data?.type == RoomType.PUZZLE
 

@@ -395,6 +395,42 @@ object ConfigMigration {
             changed = true
         }
 
+        // Puzzle Solvers is Puzzles; Creeper Beams Ding and Puzzle Overlay are its settings.
+        if (Files.exists(odinFile)) {
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            var odinChanged = false
+            val old = module(odin, "Puzzle Solvers")
+            if (old != null && module(odin, "Puzzles") == null) { old.addProperty("name", "Puzzles"); odinChanged = true }
+            val ding = module(modules, "Creeper Beams Ding")
+            val overlay = module(modules, "Puzzle Overlay")
+            if (ding != null || overlay != null) {
+                val puzzles = module(odin, "Puzzles") ?: JsonObject().apply { addProperty("name", "Puzzles"); addProperty("enabled", true) }.also { odin.add(it) }
+                val to = settings(puzzles)
+                ding?.let { d ->
+                    to.addProperty("Creeper Beams Ding", d.get("enabled")?.asBoolean == true)
+                    for ((k, v) in settings(d).entrySet()) when (k) {
+                        "Keybind" -> {}
+                        "Remove Creeper Hurt", "Remove Explosion" -> to.add(k, v)
+                        else -> to.add("Ding $k", v)
+                    }
+                    modules.remove(d)
+                }
+                overlay?.let { o ->
+                    val on = o.get("enabled")?.asBoolean == true
+                    for ((k, v) in settings(o).entrySet()) when (k) {
+                        "Keybind" -> {}
+                        "Puzzle Overlay" -> to.add(k, v.deepCopy().also { if (!on && it.isJsonObject) it.asJsonObject.addProperty("enabled", false) })
+                        "Style", "Player Names" -> to.add("Overlay $k", v)
+                        else -> to.add(k, v)
+                    }
+                    modules.remove(o)
+                }
+                odinChanged = true
+                changed = true
+            }
+            if (odinChanged) write(odinFile, odin)
+        }
+
         // Bonzo Sound is a Sounds setting; Sounds turns on with it.
         module(modules, "Bonzo Sound")?.let { b ->
             val on = b.get("enabled")?.asBoolean == true

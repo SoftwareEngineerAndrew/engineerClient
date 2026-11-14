@@ -2,18 +2,20 @@ package com.engineerclient.misc
 
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.render.textDim
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 /**
@@ -22,23 +24,22 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  * where the tab list has it, so a puzzle found later fills its own "???" instead of moving to the bottom (dtmap's
  * default lists them in map scan order). The Odin style draws it the way Odin's Puzzle HUD did, in the same order.
  */
-object PuzzleOverlay : Module(
-    name = "Puzzle Overlay",
-    category = Category.custom("Engineer Client", 860, 10),
-    description = "dtmap's puzzle list (green done, red not, ??? not found yet), always in the tab list's order.",
-    key = null,
-) {
-    private val beforeStart by BooleanSetting("Before Start", true, desc = "Shows before the run starts (dtmap's default).")
-    private val duringClear by BooleanSetting("During Clear", false, desc = "Shows during the clear too, until the boss.")
-    private val style by SelectorSetting("Style", Style.ADM, desc = "ADM: dtmap's list. Odin: Odin's Puzzle HUD.")
-    private val playerNames by BooleanSetting("Player Names", true, desc = "Shows who solved or failed each puzzle.").withDependency { style == Style.ODIN }
+object PuzzleOverlay {
+    private val mc: Minecraft get() = Minecraft.getInstance()
+    private val dropdown = DropdownSetting("Overlay", desc = "Shows settings for the puzzle overlay.")
+    private val hud = PuzzleSolvers.HUD("Puzzle Overlay", "The dungeon's puzzles in the tab list's order: green done, red not, ??? not found yet.", true, 10, 60, 1f) { example ->
+        val s = if (example) EXAMPLE else section?.takeIf { shown() } ?: return@HUD 0 to 0
+        if (styleSetting.value == Style.ODIN) drawOdin(s) else draw(s)
+    }.withDependency { dropdown.value }
+    private val beforeStartSetting = BooleanSetting("Before Start", true, desc = "Shows before the run starts (dtmap's default).").withDependency { dropdown.value }
+    private val duringClearSetting = BooleanSetting("During Clear", false, desc = "Shows during the clear too, until the boss.").withDependency { dropdown.value }
+    private val styleSetting = SelectorSetting("Overlay Style", Style.ADM, desc = "ADM: dtmap's list. Odin: Odin's Puzzle HUD.").withDependency { dropdown.value }
+    private val playerNamesSetting = BooleanSetting("Overlay Player Names", true, desc = "Shows who solved or failed each puzzle.").withDependency { dropdown.value && styleSetting.value == Style.ODIN }
+    private val beforeStart get() = beforeStartSetting.value
+    private val duringClear get() = duringClearSetting.value
+    private val playerNames get() = playerNamesSetting.value
 
     private enum class Style(private val label: String) { ADM("ADM"), ODIN("Odin"); override fun toString() = label }
-
-    private val hud by HUD("Puzzle Overlay", "The dungeon's puzzles in the tab list's order: green done, red not, ??? not found yet.", true, 10, 60, 1f) { example ->
-        val s = if (example) EXAMPLE else section?.takeIf { shown() } ?: return@HUD 0 to 0
-        if (style == Style.ODIN) drawOdin(s) else draw(s)
-    }
 
     /** The tab list's puzzle section, read once a tick. */
     private var section: TabPuzzles.Section? = null
@@ -89,10 +90,14 @@ object PuzzleOverlay : Module(
         return width to (slots.size + 1) * lineHeight
     }
 
-    init {
+    fun install() {
+        PuzzleSolvers.insertSettings("Draft prompt") {
+            for (s in listOf(dropdown, hud, beforeStartSetting, duringClearSetting, styleSetting, playerNamesSetting)) PuzzleSolvers.registerSetting(s)
+        }
         on<LevelEvent.Load> { started = false; section = null }
         on<MessageEvent> { if (message.contains(MORT_START)) started = true }
-        on<TickEvent.End> { section = if (DungeonUtils.inDungeons) TabPuzzles.read() else null }
+        on<TickEvent.End> { section = if (PuzzleSolvers.enabled && hud.value.enabled && DungeonUtils.inDungeons) TabPuzzles.read() else null }
+        EventBus.subscribe(this)
     }
 
     private const val MORT_START = "Mort: Here, I found this map when I first entered the dungeon."

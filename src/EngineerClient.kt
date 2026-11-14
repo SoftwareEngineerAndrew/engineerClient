@@ -80,9 +80,9 @@ object EngineerClient : ClientModInitializer {
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.Timers, com.engineerclient.misc.LcmMeleeWarning, com.engineerclient.misc.CommandAliases,
             com.engineerclient.misc.BlockInstaclear,
             com.engineerclient.practice.TerminalHitboxes,
-            com.engineerclient.misc.ItemHighlight,com.engineerclient.misc.PuzzleOverlay, com.engineerclient.culling.ChunkCulling,
+            com.engineerclient.misc.ItemHighlight, com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,
-            com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.CreeperBeamsDing, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.FreezeDisplay, com.engineerclient.dungeon.ExplosiveShot,
+            com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.FreezeDisplay, com.engineerclient.dungeon.ExplosiveShot,
             com.engineerclient.dungeon.PhaseTimers, com.engineerclient.dungeon.GoldorHelper, com.engineerclient.dungeon.Relics, com.engineerclient.dungeon.BossWaypoints,
             com.engineerclient.skyblock.ChatTweaks,
             com.engineerclient.skyblock.TabTweaks,
@@ -151,6 +151,8 @@ object EngineerClient : ClientModInitializer {
         safely("team tp maze") { com.engineerclient.tpmaze.TeamTpMaze.install() }
         safely("water board") { com.engineerclient.waterboard.WaterBoardSolver.install() }
         safely("tic tac toe") { com.engineerclient.dungeon.TicTacToeSolver.install() }
+        safely("creeper beams ding") { com.engineerclient.dungeon.CreeperBeamsDing.install() }
+        safely("puzzle overlay") { com.engineerclient.misc.PuzzleOverlay.install() }
         safely("map configs") { ModuleManager.loadConfigurations() }
         safely("hover terms") { com.engineerclient.practice.TermsimExtras.install() }
         safely("click limit") { com.engineerclient.misc.OdinClickLimit.install() }
