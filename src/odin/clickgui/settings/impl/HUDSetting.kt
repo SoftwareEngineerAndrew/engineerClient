@@ -26,6 +26,10 @@ class HUDSetting(
     override val default: HudElement = hud
     override var value: HudElement = default
 
+    init {
+        hud.id = "${module.name}/$name"
+    }
+
     val isEnabled: Boolean get() = module.enabled && value.enabled
     val hud get() = value
 

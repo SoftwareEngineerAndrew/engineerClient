@@ -32,6 +32,7 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
     private var dragging = false
     private var grabX = 0
     private var grabY = 0
+    private var linking = false
     private var categoryIndex = 0
     private var swappedTime = System.currentTimeMillis()
 
@@ -66,7 +67,14 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
         val x = event.x().toInt()
         val y = event.y().toInt()
-        selected = huds.lastOrNull { val h = it.hud; x in h.x..h.x + h.scaledWidth && y in h.y..h.y + h.scaledHeight }
+        val hit = huds.lastOrNull { val h = it.hud; x in h.x..h.x + h.scaledWidth && y in h.y..h.y + h.scaledHeight }
+        val from = selected
+        if (linking && from != null) {
+            linking = false
+            if (hit != null && hit !== from) from.hud.linkTo(hit.hud)
+            return true
+        }
+        selected = hit
         selected?.let {
             dragging = true
             grabX = x - it.hud.x
@@ -122,6 +130,7 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         val h = minecraft.window.guiScaledHeight
         when {
             key == InputConstants.KEY_R -> OdinHuds.reset(setting)
+            key == InputConstants.KEY_L -> if (hud.link != null) hud.unlink() else linking = !linking
             key == InputConstants.KEY_H && ctrl -> hud.x = (w - hud.scaledWidth) / 2
             key == InputConstants.KEY_V && ctrl -> hud.y = (h - hud.scaledHeight) / 2
             key == InputConstants.KEY_S -> {
@@ -177,7 +186,18 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
             graphics.text(font, it.name, hud.x + (hud.scaledWidth - font.width(it.name)) / 2, hud.y - font.lineHeight - MARGIN, WHITE, true)
         }
 
+        for (s in huds) {
+            val child = s.hud
+            val parent = child.parent() ?: continue
+            drawLink(graphics, child.x + child.scaledWidth / 2, child.y + child.scaledHeight / 2, parent.x + parent.scaledWidth / 2, parent.y + parent.scaledHeight / 2)
+        }
+
         HudLayer.render(graphics, true, mouseX, mouseY)
+
+        if (linking) selected?.let {
+            val text = "Click a HUD to link ${it.name} to"
+            graphics.text(font, text, (width - font.width(text)) / 2, 6, LINK_COLOR, true)
+        }
 
         val since = System.currentTimeMillis() - swappedTime
         if (since < DISPLAY_TIME) {
@@ -190,6 +210,15 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
             val y = (height - font.lineHeight) / 2 - 20
             graphics.text(font, text, (x / 1.5f).toInt(), (y / 1.5f).toInt(), alpha shl 24 or 0xFFFFFF, true)
             pose.popMatrix()
+        }
+    }
+
+    private fun drawLink(g: GuiGraphicsExtractor, x0: Int, y0: Int, x1: Int, y1: Int) {
+        val steps = maxOf(kotlin.math.abs(x1 - x0), kotlin.math.abs(y1 - y0)) / 3
+        for (i in 0..steps) {
+            val px = x0 + (x1 - x0) * i / maxOf(steps, 1)
+            val py = y0 + (y1 - y0) * i / maxOf(steps, 1)
+            g.fill(px, py, px + 1, py + 1, LINK_COLOR)
         }
     }
 
@@ -228,6 +257,7 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         private const val GRID = 20
         private const val GRID_COLOR = 0xFF004444.toInt()
         private const val HIGHLIGHT = 0x99FFFFFF.toInt()
+        private const val LINK_COLOR = 0xFF55FFFF.toInt()
         private const val WHITE = -1
         private const val MARGIN = 2
         private const val MOVE_STEP = 2
@@ -235,11 +265,11 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         private const val KEY_SCALE_STEP = 0.1f
         private const val DISPLAY_TIME = 1250
 
-        private val KEYS = arrayOf("t + ctrl", "r", "r + ctrl + shift", "g + ctrl", "s", "h + ctrl", "v + ctrl", "tab", "scroll / + -")
+        private val KEYS = arrayOf("t + ctrl", "r", "r + ctrl + shift", "g + ctrl", "s", "h + ctrl", "v + ctrl", "tab", "l", "scroll / + -")
         private val INFO = arrayOf(
             "toggle category", "reset component", "reset all editable components", "toggle grid",
             "snap to closest grid", "center selected horizontally", "center selected vertically",
-            "cycle selected component", "scale selected component",
+            "cycle selected component", "link / unlink selected", "scale selected component",
         )
     }
 }

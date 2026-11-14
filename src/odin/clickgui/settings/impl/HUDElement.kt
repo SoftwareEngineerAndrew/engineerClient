@@ -21,26 +21,71 @@ open class HudElement(
     private var px = x
     private var py = y
 
+    /** Module/setting name, set by its HUDSetting; how other HUDs link to this one. */
+    var id = ""
+
+    /** The HUD this one is linked to: it then sits at an offset from it and moves with it. */
+    var link: String? = null
+        private set
+    private var lx = 0
+    private var ly = 0
+    private var resolving = false
+
+    fun parent(): HudElement? {
+        val id = link ?: return null
+        if (resolving) return null
+        return resolve(id)
+    }
+
+    private inline fun <T> guarded(block: () -> T): T {
+        resolving = true
+        try { return block() } finally { resolving = false }
+    }
+
+    fun linkTo(other: HudElement): Boolean {
+        var p: HudElement? = other
+        var depth = 0
+        while (p != null && depth++ < 64) {
+            if (p === this) return false
+            p = p.parent()
+        }
+        val cx = x; val cy = y
+        link = other.id
+        lx = cx - other.x
+        ly = cy - other.y
+        return true
+    }
+
+    fun unlink() {
+        val cx = x; val cy = y
+        link = null
+        x = cx; y = cy
+    }
+
     private fun screen(): Pair<Int, Int>? = runCatching { mc.window.guiScaledWidth to mc.window.guiScaledHeight }.getOrNull()?.takeIf { it.first > 0 && it.second > 0 }
 
     var x: Int
         get() {
+            parent()?.let { p -> return guarded { p.x } + lx }
             val (w, _) = screen() ?: return px
             if (fx.isNaN()) fx = px.toDouble() / w
             return Math.round(fx * w).toInt()
         }
         set(value) {
+            parent()?.let { p -> lx = value - guarded { p.x }; return }
             px = value
             fx = screen()?.let { value.toDouble() / it.first } ?: Double.NaN
         }
 
     var y: Int
         get() {
+            parent()?.let { p -> return guarded { p.y } + ly }
             val (_, h) = screen() ?: return py
             if (fy.isNaN()) fy = py.toDouble() / h
             return Math.round(fy * h).toInt()
         }
         set(value) {
+            parent()?.let { p -> ly = value - guarded { p.y }; return }
             py = value
             fy = screen()?.let { value.toDouble() / it.second } ?: Double.NaN
         }
@@ -72,6 +117,7 @@ open class HudElement(
             if (!fy.isNaN()) addProperty("fy", fy)
             addProperty("scale", scale)
             addProperty("enabled", enabled)
+            link?.let { addProperty("link", it); addProperty("lx", lx); addProperty("ly", ly) }
         }
 
     fun read(element: JsonElement, toggleable: Boolean) {
@@ -83,9 +129,13 @@ open class HudElement(
         element.get("fy")?.asDouble?.let { fy = it }
         scale = element.get("scale")?.asFloat ?: scale
         enabled = !toggleable || element.get("enabled")?.asBoolean ?: enabled
+        link = element.get("link")?.asString
+        lx = element.get("lx")?.asInt ?: 0
+        ly = element.get("ly")?.asInt ?: 0
     }
 
     companion object {
+        var resolve: (String) -> HudElement? = { null }
         const val MIN_SCALE = 0.5f
         const val MAX_SCALE = 5f
     }

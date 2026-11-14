@@ -113,6 +113,7 @@ abstract class Module(
      */
     fun <K : Setting<*>> registerSetting(setting: K): K {
         settings[setting.name] = setting
+        if (setting is com.odtheking.odin.clickgui.settings.impl.HUDSetting && setting !in ModuleManager.hudSettingsCache) ModuleManager.hudSettingsCache.add(setting)
         return setting
     }
 

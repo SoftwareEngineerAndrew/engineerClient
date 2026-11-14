@@ -55,6 +55,10 @@ object ModuleManager {
     val keybindSettingsCache: ArrayList<KeybindSetting> = arrayListOf()
     val hudSettingsCache: ArrayList<HUDSetting> = arrayListOf()
 
+    init {
+        com.odtheking.odin.clickgui.settings.impl.HudElement.resolve = { id -> hudSettingsCache.firstOrNull { it.hud.id == id }?.hud }
+    }
+
     private val HUD_LAYER: Identifier = fromNamespaceAndPath(OdinMod.MOD_ID, "odin_hud")
 
     init {
@@ -116,7 +120,7 @@ object ModuleManager {
             for ((_, setting) in module.settings) {
                 when (setting) {
                     is KeybindSetting -> keybindSettingsCache.add(setting)
-                    is HUDSetting -> hudSettingsCache.add(setting)
+                    is HUDSetting -> if (setting !in hudSettingsCache) hudSettingsCache.add(setting)
                 }
             }
         }
