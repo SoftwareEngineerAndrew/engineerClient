@@ -88,8 +88,29 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         if (!dragging) return true
         hud.x = event.x().toInt() - grabX
         hud.y = event.y().toInt() - grabY
+        snap(hud)
         hud.clampToScreen()
         return true
+    }
+
+    /** Pulls [hud] onto the nearest edge of another HUD within the snap distance, on each axis. */
+    private fun snap(hud: HudElement) {
+        val reach = com.odtheking.odin.features.impl.render.ClickGUIModule.hudSnap
+        if (reach <= 0) return
+        val w = hud.scaledWidth
+        val h = hud.scaledHeight
+        var bestX: Int? = null
+        var bestY: Int? = null
+        for (other in huds) {
+            val o = other.hud
+            if (o === hud || o.scaledWidth == 0) continue
+            for (c in intArrayOf(o.x, o.x + o.scaledWidth, o.x - w, o.x + o.scaledWidth - w))
+                if (kotlin.math.abs(c - hud.x) <= reach && (bestX == null || kotlin.math.abs(c - hud.x) < kotlin.math.abs(bestX - hud.x))) bestX = c
+            for (c in intArrayOf(o.y, o.y + o.scaledHeight, o.y - h, o.y + o.scaledHeight - h))
+                if (kotlin.math.abs(c - hud.y) <= reach && (bestY == null || kotlin.math.abs(c - hud.y) < kotlin.math.abs(bestY - hud.y))) bestY = c
+        }
+        bestX?.let { hud.x = it }
+        bestY?.let { hud.y = it }
     }
 
     override fun mouseReleased(event: MouseButtonEvent): Boolean {
