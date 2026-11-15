@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.LevelLoadingScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -21,7 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class SkipLoadingScreenMixin {
     @Inject(method = "startWaitingForNewLevel", at = @At("TAIL"))
     private void ec$skipLoadingScreen(LocalPlayer player, ClientLevel level, LevelLoadingScreen.Reason reason, CallbackInfo ci) {
-        if (!RandomStuff.INSTANCE.skipsLoadingScreen()) return;
+        if (!Visibility.INSTANCE.skipsLoadingScreen()) return;
         if (Minecraft.getInstance().gui.screen() instanceof LevelLoadingScreen screen) screen.onClose();
     }
 }

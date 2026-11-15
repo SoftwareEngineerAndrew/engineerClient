@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.layouts.FrameLayout;
 import net.minecraft.client.gui.layouts.GridLayout;
@@ -32,7 +32,7 @@ public abstract class PauseMenuMixin extends Screen {
 
     @Inject(method = "createPauseMenu", at = @At("HEAD"), cancellable = true)
     private void ec$cleanPauseMenu(CallbackInfo ci) {
-        if (!RandomStuff.INSTANCE.cleansMenus()) return;
+        if (!Visibility.INSTANCE.cleansMenus()) return;
         ci.cancel();
         Screen self = this;
         GridLayout grid = new GridLayout();
@@ -44,10 +44,10 @@ public abstract class PauseMenuMixin extends Screen {
         }).width(204).build(), 2);
         Button.Builder options = Button.builder(Component.translatable("menu.options"),
             b -> minecraft.gui.setScreen(new OptionsScreen(self, minecraft.options)));
-        Screen mods = RandomStuff.INSTANCE.modsScreen(self);
+        Screen mods = Visibility.INSTANCE.modsScreen(self);
         if (mods != null) {
             helper.addChild(options.width(98).build());
-            helper.addChild(Button.builder(Component.literal("Mods"), b -> minecraft.gui.setScreen(RandomStuff.INSTANCE.modsScreen(self))).width(98).build());
+            helper.addChild(Button.builder(Component.literal("Mods"), b -> minecraft.gui.setScreen(Visibility.INSTANCE.modsScreen(self))).width(98).build());
         } else {
             helper.addChild(options.width(204).build(), 2);
         }

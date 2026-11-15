@@ -1,7 +1,7 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.misc.ItemHighlight;
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.render.Visibility;
 import com.engineerclient.skyblock.Arrows;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
@@ -26,6 +26,6 @@ public class OwnArrowsHideMixin {
         if (entity instanceof AbstractArrow arrow
             && Arrows.INSTANCE.hidesOwnArrow(arrow, ((ArrowInGroundInvoker) arrow).ec$isInGround())) cir.setReturnValue(false);
         if (entity instanceof ItemEntity item && ItemHighlight.INSTANCE.hides(item)) cir.setReturnValue(false);
-        if (entity instanceof Sheep && RandomStuff.INSTANCE.hidesSheep()) cir.setReturnValue(false);
+        if (entity instanceof Sheep && Visibility.INSTANCE.hidesSheep()) cir.setReturnValue(false);
     }
 }

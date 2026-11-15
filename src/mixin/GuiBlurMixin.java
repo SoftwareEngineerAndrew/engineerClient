@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.Gui;
 import org.spongepowered.asm.mixin.Mixin;
@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * {@link RandomStuff}'s "Blur In GUI": the window in which the frame's GUI is built, so
+ * {@link Visibility}'s "Blur In GUI": the window in which the frame's GUI is built, so
  * {@code GuiRenderStateBlurMixin} knows which resets of the GUI state to put the blur line after.
  *
  * <p>26.x builds the GUI as a list of strata and {@code blurBeforeThisStratum} splits that list
@@ -31,11 +31,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class GuiBlurMixin {
     @Inject(method = "extractRenderState(Lnet/minecraft/client/DeltaTracker;ZZ)V", at = @At("HEAD"))
     private void ec$openBlurWindow(DeltaTracker deltaTracker, boolean renderLevel, boolean renderGui, CallbackInfo ci) {
-        RandomStuff.INSTANCE.setBuildingGui(true);
+        Visibility.INSTANCE.setBuildingGui(true);
     }
 
     @Inject(method = "extractRenderState(Lnet/minecraft/client/DeltaTracker;ZZ)V", at = @At("RETURN"))
     private void ec$closeBlurWindow(DeltaTracker deltaTracker, boolean renderLevel, boolean renderGui, CallbackInfo ci) {
-        RandomStuff.INSTANCE.setBuildingGui(false);
+        Visibility.INSTANCE.setBuildingGui(false);
     }
 }

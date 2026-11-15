@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.gui.screens.inventory.AbstractRecipeBookScreen;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -11,6 +11,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class HideRecipeBookScreenMixin {
     @Inject(method = "initButton", at = @At("HEAD"), cancellable = true)
     private void ec$hideRecipeButton(CallbackInfo ci) {
-        if (RandomStuff.INSTANCE.hidesRecipeBook()) ci.cancel();
+        if (Visibility.INSTANCE.hidesRecipeBook()) ci.cancel();
     }
 }

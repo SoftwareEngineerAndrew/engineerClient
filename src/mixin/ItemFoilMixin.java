@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.item.CuboidItemModelWrapper;
 import net.minecraft.client.renderer.item.ItemModelResolver;
@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
  * Drops the enchantment glint from item rendering for the No Enchant Glint setting in
- * {@link RandomStuff}.
+ * {@link Visibility}.
  *
  * <p>These two {@code ItemModel} implementations are the only things in the game that call
  * {@code LayerRenderState.setFoilType}, and both reach it the same way: {@code stack.hasFoil()}
@@ -57,7 +57,7 @@ public class ItemFoilMixin {
         ItemOwner owner,
         int seed
     ) {
-        if (RandomStuff.INSTANCE.hidesGlint(displayContext)) {
+        if (Visibility.INSTANCE.hidesGlint(displayContext)) {
             renderState.appendModelIdentityElement(EC_GLINT_HIDDEN);
             return false;
         }

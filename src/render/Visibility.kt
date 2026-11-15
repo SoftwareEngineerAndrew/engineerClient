@@ -1,25 +1,39 @@
 package com.engineerclient.render
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.chat.ChatHider
+import com.engineerclient.misc.ScoreboardLines
 import com.engineerclient.mixin.ChatCopyAccessor
+import com.engineerclient.terminals.TerminalUtils
+import com.engineerclient.terminals.sim.TermSimGUI
 import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.ActionSetting
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.EntityEvent
+import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.ParticleEvent
+import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.texture
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
+import net.fabricmc.fabric.api.client.screen.v1.Screens
 import net.minecraft.ChatFormatting
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.gui.components.Button
+import net.minecraft.client.gui.components.FriendsButton
+import net.minecraft.client.gui.components.PlainTextButton
+import net.minecraft.client.gui.screens.Screen
+import net.minecraft.client.gui.screens.TitleScreen
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.client.particle.Particle
 import net.minecraft.client.particle.SmokeParticle
@@ -27,6 +41,7 @@ import net.minecraft.client.particle.TerrainParticle
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.contents.TranslatableContents
 import net.minecraft.resources.Identifier
 import net.minecraft.util.FormattedCharSequence
 import net.minecraft.util.Mth
@@ -37,6 +52,7 @@ import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.InventoryMenu
 import net.minecraft.world.inventory.Slot
+import net.minecraft.world.item.ItemDisplayContext
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.material.FogType
@@ -45,10 +61,10 @@ import java.time.LocalTime
 object Visibility : Module(
     name = "Visibility",
     category = Category.RENDER,
-    description = "Screen effects, clutter, chat and tab list tweaks.",
+    description = "Screen effects, clutter, menus, sidebar, chat and tab list tweaks.",
     key = null,
 ) {
-    private val screenDropdown by DropdownSetting("Screen", desc = "Overlays, fog, light, dark mode and sky time.")
+    private val screenDropdown by DropdownSetting("Screen", desc = "Overlays, fog, light, dark mode, sky and items.")
     private val noVignette by BooleanSetting("No Vignette", false, desc = "No dark screen edges.").withDependency { screenDropdown }
     private val noWaterOverlay by BooleanSetting("No Water Overlay", false, desc = "No underwater screen texture.").withDependency { screenDropdown }
     private val noSuffocationOverlay by BooleanSetting("No Suffocation Overlay", false, desc = "No block texture when your head is inside a block.").withDependency { screenDropdown }
@@ -59,9 +75,6 @@ object Visibility : Module(
     private val noTextShadow by BooleanSetting("No Text Shadow", false, desc = "Text is drawn without its shadow.").withDependency { screenDropdown }
     private val noPaneHighlight by BooleanSetting("No Glass Pane Highlight", false, desc = "No hover highlight on unnamed glass panes in menus.").withDependency { screenDropdown }
     private val hideOffhandBackground by BooleanSetting("Hide Offhand Slot Background", false, desc = "No shield outline in the empty offhand slot.").withDependency { screenDropdown }
-    private val sidebarColors by BooleanSetting("Sidebar Colors", false, desc = "Custom scoreboard background colors.").withDependency { screenDropdown }
-    private val sidebarTitleColor by ColorSetting("Sidebar Title Color", Color(0, 0, 0, 0.4f), true, desc = "Behind the scoreboard title.").withDependency { screenDropdown && sidebarColors }
-    private val sidebarBodyColor by ColorSetting("Sidebar Body Color", Color(0, 0, 0, 0.3f), true, desc = "Behind the scoreboard lines.").withDependency { screenDropdown && sidebarColors }
     private val darkMode by BooleanSetting("Dark Mode", false, desc = "Darkens the screen.").withDependency { screenDropdown }
     private val darkOpacity by NumberSetting("Dark Mode Opacity", 25, 1..80, 1, desc = "Strength of the dark tint.", unit = "%").withDependency { screenDropdown && darkMode }
     private val darkTintHud by BooleanSetting("Dark Mode Tint HUD", false, desc = "The tint covers the HUD too.").withDependency { screenDropdown && darkMode }
@@ -71,6 +84,11 @@ object Visibility : Module(
     private val timeChanger by BooleanSetting("Time Changer", false, desc = "Changes the time of day the sky shows.").withDependency { screenDropdown }
     private val timeMode by SelectorSetting("Time", Time.NOON, desc = "Time of day to show.").withDependency { screenDropdown && timeChanger }
     private val customTime by NumberSetting("Custom Time", 6000, 0..23999, 100, desc = "World time in ticks.").withDependency { screenDropdown && timeChanger && timeMode == Time.CUSTOM }
+    private val blackSky by BooleanSetting("Black Sky", true, desc = "Black sky and distant fog instead of blue.").withDependency { screenDropdown }
+    private val noGlint by BooleanSetting("No Enchant Glint", true, desc = "No enchantment glint on items, except in terminals.").withDependency { screenDropdown }
+    private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "No item name above the hotbar when you switch items.").withDependency { screenDropdown }
+    private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the whole action bar above the hotbar.").withDependency { screenDropdown }
+    private val noDropAnimation by BooleanSetting("No Drop Animation", false, desc = "In dungeons, a rejected drop leaves the held item raised.").withDependency { screenDropdown }
 
     private val cleanupDropdown by DropdownSetting("Cleanup", desc = "Particles, entities and players that clutter the screen.")
     private val hideBlockBreak by BooleanSetting("Hide Block Break Particles", false, desc = "No block crack and break particles.").withDependency { cleanupDropdown }
@@ -93,8 +111,25 @@ object Visibility : Module(
     private val playersOnlyInDungeons by BooleanSetting("Hide Players Only In Dungeons", false, desc = "Players are only hidden in dungeons.").withDependency { cleanupDropdown && hidePlayers }
     private val hideAllPlayers by BooleanSetting("Hide All Players", false, desc = "Hides players at any distance.").withDependency { cleanupDropdown && hidePlayers }
     private val playerDistance by NumberSetting("Hide Players Distance", 3f, 0..32, .5, "Players this close are hidden.", unit = " blocks").withDependency { cleanupDropdown && hidePlayers && !hideAllPlayers }
+    private val hideSheep by BooleanSetting("Hide Dungeon Sheep", true, desc = "Sheep are not drawn in dungeons.").withDependency { cleanupDropdown }
 
-    private val chatDropdown by DropdownSetting("Chat", desc = "Chat history, stacking and copying.")
+    private val menusDropdown by DropdownSetting("Menus", desc = "Title, Esc, loading and container screens.")
+    private val cleanMenus by BooleanSetting("Clean Menus", true, desc = "Fewer buttons on the title and Esc screens, and a Mods button.").withDependency { menusDropdown }
+    private val skipLoadingScreen by BooleanSetting("Clean Loading Screen", true, desc = "No \"Loading terrain\" screen: the world shows as it loads.").withDependency { menusDropdown }
+    private val hideRecipeBook by BooleanSetting("Hide Recipe Book", false, desc = "No recipe book in the inventory and crafting screens.").withDependency { menusDropdown }
+    private val blurInGui by BooleanSetting("Blur In GUI", false, desc = "Blurs the world behind any open GUI; the HUD stays sharp.").withDependency { menusDropdown }
+    private val blurStrength by NumberSetting("Blur Strength", 4, 1..10, 1, desc = "Blur radius in pixels.").withDependency { menusDropdown && blurInGui }
+
+    private val sidebarDropdown by DropdownSetting("Sidebar", desc = "Scoreboard colors and lines.")
+    private val sidebarColors by BooleanSetting("Sidebar Colors", false, desc = "Custom scoreboard background colors.").withDependency { sidebarDropdown }
+    private val sidebarTitleColor by ColorSetting("Sidebar Title Color", Color(0, 0, 0, 0.4f), true, desc = "Behind the scoreboard title.").withDependency { sidebarDropdown && sidebarColors }
+    private val sidebarBodyColor by ColorSetting("Sidebar Body Color", Color(0, 0, 0, 0.3f), true, desc = "Behind the scoreboard lines.").withDependency { sidebarDropdown && sidebarColors }
+    private val hideSbLines by BooleanSetting("Clean Scoreboard", false, desc = "Hides the noisy sidebar lines; Purse, Bits and teammates stay.").withDependency { sidebarDropdown }
+    private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", true, desc = "Hides The Catacombs location line in dungeons.").withDependency { sidebarDropdown && hideSbLines }
+    private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", false, desc = "Hides the dungeon's Time Elapsed line.").withDependency { sidebarDropdown && hideSbLines }
+    private val hideSbCleared by BooleanSetting("Scoreboard: Hide Cleared %", false, desc = "Hides the dungeon's Cleared % line.").withDependency { sidebarDropdown && hideSbLines }
+
+    private val chatDropdown by DropdownSetting("Chat", desc = "Chat history, stacking, copying and hiding.")
     private val removeLimit by BooleanSetting("Remove Chat Limit", false, desc = "Keeps more than vanilla's 100 chat lines.").withDependency { chatDropdown }
     private val maxMessages by NumberSetting("Max Messages", 10000, 100..100000, 100, desc = "How many lines the chat keeps.").withDependency { chatDropdown && removeLimit }
     private val compactChat by BooleanSetting("Compact Chat", false, desc = "Stacks a repeated message onto the last one with (xN).").withDependency { chatDropdown }
@@ -102,6 +137,9 @@ object Visibility : Module(
     private val compactHoppity by BooleanSetting("Compact Hoppity Messages", true, desc = "Joins the two lines of a Hoppity rabbit find into one.").withDependency { chatDropdown }
     private val copyChat by BooleanSetting("Copy On Right Click", true, desc = "Right click a chat message to copy it, shift for one line.").withDependency { chatDropdown }
     private val copyLineOnly by BooleanSetting("Copy Line Only", false, desc = "Always copies just the clicked line.").withDependency { chatDropdown && copyChat }
+    private val cleanChat by BooleanSetting("Clean Chat", true, desc = "Hides the lines its rules block (config/engineerclient/chat-hider.json).").withDependency { chatDropdown }
+    private val logHidden by BooleanSetting("Log Hidden Lines", false, desc = "Logs each hidden line and its rule to the session log.").withDependency { chatDropdown && cleanChat }
+    private val reloadChatRules by ActionSetting("Reload Rules", desc = "Re-reads the chat rules.") { ChatHider.reload() }.withDependency { chatDropdown && cleanChat }
 
     private val tabDropdown by DropdownSetting("Tab", desc = "Tab list cleanup.")
     private val removePing by BooleanSetting("Remove Tab Ping", false, desc = "Hides the ping bars next to each name.").withDependency { tabDropdown }
@@ -125,6 +163,22 @@ object Visibility : Module(
     private var hoppityRabbit = ""
 
     init {
+        on<TickEvent.End> {
+            ScoreboardLines.hideLines = enabled && hideSbLines
+            ScoreboardLines.hideCatacombsLocation = hideSbCatacombs
+            ScoreboardLines.hideTimeElapsed = hideSbElapsed
+            ScoreboardLines.hideCleared = hideSbCleared
+        }
+        on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
+
+        on<MessageEvent.Overlay> {
+            if (hideActionBar) cancel()
+        }
+
+        ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
+            if (screen is TitleScreen && cleansMenus()) cleanTitleScreen(screen)
+        }
+
         on<ParticleEvent> {
             if (hidePotionHud && particle.type == ParticleTypes.ENTITY_EFFECT) cancel()
         }
@@ -307,4 +361,59 @@ object Visibility : Module(
     fun hidesPing(): Boolean = enabled && removePing
 
     fun hidesHead(texture: Identifier): Boolean = enabled && removeHeads && texture.path == GRAY_SKIN
+
+    fun skipsLoadingScreen(): Boolean = enabled && skipLoadingScreen
+
+    fun cleansMenus(): Boolean = enabled && cleanMenus
+
+    fun cleansChat(): Boolean = enabled && cleanChat
+
+    fun logsHiddenChat(): Boolean = logHidden
+
+    fun blackSkyActive(): Boolean = enabled && blackSky
+
+    fun hidesItemNames(): Boolean = enabled && hideItemNames
+
+    fun hidesRecipeBook(): Boolean = enabled && hideRecipeBook
+
+    fun hidesSheep(): Boolean = enabled && hideSheep && DungeonUtils.inDungeons
+
+    fun hidesDropAnimation(): Boolean = enabled && noDropAnimation
+
+    // In a terminal the glint is how you see what's been clicked; the solvers read the component, not the render.
+    fun hidesGlint(context: ItemDisplayContext): Boolean =
+        enabled && noGlint && !(context == ItemDisplayContext.GUI && (TerminalUtils.currentTerm != null || mc.gui.screen() is TermSimGUI))
+
+    fun hidesArmorGlint(): Boolean = enabled && noGlint
+
+    // Three mixins read this in the same extract pass, so they agree: the game throws if one frame blurs twice.
+    fun blursGui(): Boolean = enabled && blurInGui && mc.gui.screen() != null && mc.level != null
+
+    /** Set by GuiBlurMixin while the frame's GUI is built (render thread only). */
+    var buildingGui = false
+
+    fun blursAfterReset(): Boolean = buildingGui && blursGui()
+
+    fun blurRadius(): Int = blurStrength.toInt()
+
+    /** Mod Menu's mod list over [parent], or null without Mod Menu (the Esc menu's Options then stays full width). */
+    fun modsScreen(parent: Screen): Screen? = runCatching {
+        Class.forName("com.terraformersmc.modmenu.gui.ModsScreen").getConstructor(Screen::class.java).newInstance(parent) as Screen
+    }.getOrNull()
+
+    private val titleIconKeys = setOf("options.language", "options.accessibility", "accessibility.onboarding.accessibility.button")
+
+    private fun cleanTitleScreen(screen: TitleScreen) {
+        val widgets = Screens.getWidgets(screen)
+        val icons = widgets.filter { it is FriendsButton || (it is Button && (it.message.contents as? TranslatableContents)?.key in titleIconKeys) }
+        val row = icons.firstOrNull()?.y ?: return
+        widgets.removeAll(icons)
+        widgets.filter { it.y > row && it !is PlainTextButton }.forEach { it.y -= 24 }
+    }
+
+    // Off, the tick that writes the hider's flag stops, so the sidebar is handed back whole here.
+    override fun onDisable() {
+        super.onDisable()
+        ScoreboardLines.hideLines = false
+    }
 }

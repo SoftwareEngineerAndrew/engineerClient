@@ -44,11 +44,11 @@ object ChatHider {
 
     /** Called from the chat GUI's single add-message funnel. True = do not display. */
     fun shouldHide(message: Component): Boolean {
-        if (!com.engineerclient.misc.RandomStuff.cleansChat()) return false
+        if (!com.engineerclient.render.Visibility.cleansChat()) return false
         if (!loaded) load(announce = false)
         val text = ChatRules.strip(message.string)
         val rule = rules.hides(text) ?: return false
-        if (com.engineerclient.misc.RandomStuff.logsHiddenChat()) EcLog.log("CHAT-HIDE", "$rule ⇐ ${text.replace("\n", "\\n")}")
+        if (com.engineerclient.render.Visibility.logsHiddenChat()) EcLog.log("CHAT-HIDE", "$rule ⇐ ${text.replace("\n", "\\n")}")
         return true
     }
 }

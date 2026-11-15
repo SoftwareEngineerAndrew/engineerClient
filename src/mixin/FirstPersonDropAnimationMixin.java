@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * No Drop Animation in {@link com.engineerclient.misc.RandomStuff}: after a rejected drop the
+ * No Drop Animation in {@link com.engineerclient.render.Visibility}: after a rejected drop the
  * first-person hand keeps the dropped stack drawn fully raised, until the held item or slot changes.
  */
 @Mixin(FirstPersonHandsAndItems.class)

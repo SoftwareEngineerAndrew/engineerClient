@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.renderer.state.gui.GuiRenderState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,6 +18,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class GuiRenderStateBlurMixin {
     @Inject(method = "reset", at = @At("TAIL"))
     private void ec$blurBehindGui(CallbackInfo ci) {
-        if (RandomStuff.INSTANCE.blursAfterReset()) ((GuiRenderState) (Object) this).blurBeforeThisStratum();
+        if (Visibility.INSTANCE.blursAfterReset()) ((GuiRenderState) (Object) this).blurBeforeThisStratum();
     }
 }

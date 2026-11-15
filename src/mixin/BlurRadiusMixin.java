@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.Options;
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -24,7 +24,7 @@ public class BlurRadiusMixin {
 
     @Redirect(method = "extractOptions()V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Options;getMenuBackgroundBlurriness()I"))
     private int ec$blurRadius(Options options) {
-        if (RandomStuff.INSTANCE.blursGui()) return RandomStuff.INSTANCE.blurRadius();
+        if (Visibility.INSTANCE.blursGui()) return Visibility.INSTANCE.blurRadius();
         return options.getMenuBackgroundBlurriness();
     }
 }

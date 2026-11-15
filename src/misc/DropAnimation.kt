@@ -5,7 +5,7 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 
 /**
- * State behind the "No Drop Animation" toggle in [RandomStuff].
+ * State behind the "No Drop Animation" toggle in [com.engineerclient.render.Visibility].
  *
  * Hypixel rejects a dropped dungeon item, so vanilla shows the held item vanish and then rise
  * again. While a drop is remembered here the first-person renderer keeps drawing that item fully
@@ -29,7 +29,7 @@ object DropAnimation {
 
     /** True while the module is on, the toggle is on and you are in a dungeon. */
     @JvmStatic
-    fun shouldProceed(): Boolean = RandomStuff.enabled && RandomStuff.noDropAnimation && DungeonUtils.inDungeons
+    fun shouldProceed(): Boolean = com.engineerclient.render.Visibility.hidesDropAnimation() && DungeonUtils.inDungeons
 
     /** Remembers the dropped stack. Air is ignored, as a drop of nothing has no animation to hide. */
     @JvmStatic

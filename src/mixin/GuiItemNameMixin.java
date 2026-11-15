@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.gui.Hud;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import org.spongepowered.asm.mixin.Mixin;
@@ -14,6 +14,6 @@ public class GuiItemNameMixin {
 
     @Inject(method = "extractSelectedItemName", at = @At("HEAD"), cancellable = true)
     private void ec$hideSelectedItemName(GuiGraphicsExtractor graphics, CallbackInfo ci) {
-        if (RandomStuff.INSTANCE.hidesItemNames()) ci.cancel();
+        if (Visibility.INSTANCE.hidesItemNames()) ci.cancel();
     }
 }

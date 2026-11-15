@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.render.Visibility;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import org.spongepowered.asm.mixin.Mixin;
@@ -25,6 +25,6 @@ public class ScreenBlurMixin {
 
     @Inject(method = "extractBlurredBackground", at = @At("HEAD"), cancellable = true)
     private void ec$skipVanillaBlurMarker(GuiGraphicsExtractor extractor, CallbackInfo ci) {
-        if (RandomStuff.INSTANCE.blursGui()) ci.cancel();
+        if (Visibility.INSTANCE.blursGui()) ci.cancel();
     }
 }
