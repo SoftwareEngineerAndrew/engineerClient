@@ -885,6 +885,23 @@ object ConfigMigration {
             write(odinFile, odin)
         }
 
+        // LCM Style draws in the Dungeon Map's own colours: where it was on, its own ones carry over.
+        if (Files.exists(odinFile)) run {
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val s = module(odin, "Dungeon Map")?.let(::settings) ?: return@run
+            if (!s.has("LCM Normal Room")) return@run
+            val lcmOn = s["LCM Style"]?.asBoolean == true
+            val pairs = listOf("LCM Unopened Room" to "Unknown Room", "LCM Normal Room" to "Normal Room", "LCM Puzzle Room" to "Puzzle Room",
+                "LCM Trap Room" to "Trap Room", "LCM Yellow Room" to "Champion Room", "LCM Blood Room" to "Blood Room", "LCM Entrance Room" to "Entrance Room",
+                "LCM Fairy Room" to "Fairy Room", "LCM Rare Room" to "Rare Room", "LCM Background" to "Background Color", "LCM Border" to "Background Outline",
+                "LCM Border Width" to "Outline Width", "LCM Own Marker" to "Own Marker Color")
+            for ((from, to) in pairs) {
+                val v = s.remove(from) ?: continue
+                if (lcmOn || to == "Rare Room" || to == "Outline Width" || to == "Own Marker Color") s.add(to, v)
+            }
+            write(odinFile, odin)
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)

@@ -119,7 +119,8 @@ fun GuiGraphicsExtractor.renderIcon(pos: IVec2, identifier: Identifier) {
 fun GuiGraphicsExtractor.renderRoomText(room: DungeonRoom) {
     if (room.type.equalsOneOf(RoomType.UNDISCOVERED, RoomType.FAIRY, RoomType.ENTRANCE, RoomType.BLOOD)) return
 
-    if (!room.shouldShowName || (DungeonMap.roomText == DungeonMap.RoomTextOption.ROOM_SECRETS && (room.data?.maxSecrets ?: 0) == 0)) {
+    if (!room.shouldShowName || DungeonMap.roomText == DungeonMap.RoomTextOption.CHECKMARKS ||
+        (DungeonMap.roomText == DungeonMap.RoomTextOption.ROOM_SECRETS && (room.data?.maxSecrets ?: 0) == 0)) {
         when (room.checkmark) {
             MapCheckmark.GREEN -> green
             MapCheckmark.WHITE -> white
@@ -144,6 +145,7 @@ fun GuiGraphicsExtractor.renderRoomText(room: DungeonRoom) {
         DungeonMap.RoomTextOption.BOTH -> "${room.name}$secretsLine"
         DungeonMap.RoomTextOption.ROOM_NAME -> room.name
         DungeonMap.RoomTextOption.ROOM_SECRETS -> secretsLine
+        DungeonMap.RoomTextOption.CHECKMARKS -> null
     }?.trim()?.split(" ") ?: return
     val totalH = (lines.size - 1) * fontH * DungeonMap.textScaling
 
@@ -210,7 +212,7 @@ fun GuiGraphicsExtractor.renderPlayers() {
         }
     } else {
         pose().translate(-0.5f, -0.5f).scale(DungeonMap.playerPointerScale)
-        blit(RenderPipelines.GUI_TEXTURED, marker,-2, -4, 2f, 0f, 5, 7, 8, 8)
+        blit(RenderPipelines.GUI_TEXTURED, marker, -2, -4, 2f, 0f, 5, 7, 8, 8, com.engineerclient.lcm.LcmStyle.ownMarkerColor.value.rgba)
     }
     pose().popMatrix()
 }
@@ -286,6 +288,6 @@ fun roomTypeColor(type: RoomType): Color = when (type) {
     RoomType.ENTRANCE -> DungeonMap.entranceRoomColor
     RoomType.FAIRY    -> DungeonMap.fairyRoomColor
     RoomType.CHAMPION -> DungeonMap.championRoomColor
-    RoomType.RARE     -> DungeonMap.normalRoomColor
+    RoomType.RARE     -> DungeonMap.rareRoomColor
     else              -> Color(60, 60, 60)
 }

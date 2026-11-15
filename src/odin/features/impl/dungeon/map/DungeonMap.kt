@@ -22,12 +22,15 @@ object DungeonMap : Module(
 
     val backgroundOutline by ColorSetting("Background Outline", Colors.BLACK, true, desc = "The color of the background border.")
     val backgroundColor by ColorSetting("Background Color", Colors.BLACK.withAlpha(0.1f), true, desc = "Background color of the map.")
-    val roomText by SelectorSetting("Room Text", RoomTextOption.BOTH, desc = "What to display on the rooms.")
+    val roomText by SelectorSetting("Room Text", RoomTextOption.BOTH, desc = "What opened rooms show: their checkmark, name, secrets or both.")
 
-    enum class RoomTextOption { BOTH, ROOM_NAME, ROOM_SECRETS }
+    enum class RoomTextOption(private val label: String) {
+        CHECKMARKS("Checkmarks"), ROOM_NAME("Name"), ROOM_SECRETS("Secrets"), BOTH("Name & Secrets");
+        override fun toString() = label
+    }
     val textScaling by NumberSetting("Text Scaling", 0.45f, 0.1..1.0, 0.05f, desc = "Scale of room name text.")
 
-    private val playerDropdown by DropdownSetting("Player Settings", desc = "Shows settings for player name labels on the map.")
+    private val playerDropdown by DropdownSetting("Players", desc = "Player names and heads on the map.")
     val playerNamesScaling by NumberSetting("Player Names Scaling", 0.75f, 0.1..2.0, 0.05f, desc = "Scale of player name labels.").withDependency { playerDropdown }
     val playerNameColor by ColorSetting("Player Name Color", Color(70, 70, 70), true, desc = "Color of player name labels.").withDependency { playerDropdown }
     val playerHead by BooleanSetting("Own Player Head", desc = "Shows the player head on the map.").withDependency { playerDropdown }
@@ -35,7 +38,7 @@ object DungeonMap : Module(
     val playerHeadBackgroundScale by NumberSetting("Player Class Color Size",1,0..2, desc = "Scale of rendered player head background").withDependency { playerDropdown && playerHead }
     val playerPointerScale by NumberSetting("Player Pointer Scale",1f,0.5..2.0,0.1, desc = "Scale of rendered player head background").withDependency { playerDropdown && !playerHead }
 
-    private val roomDropdown by DropdownSetting("Room Settings", desc = "Shows color settings for the different room types.")
+    private val roomDropdown by DropdownSetting("Room Colors", desc = "The color of each type of room.")
     val normalRoomColor by ColorSetting("Normal Room", Color(107, 58, 17), true, desc = "Color of normal rooms.").withDependency { roomDropdown }
     val puzzleRoomColor by ColorSetting("Puzzle Room", Color(117, 0, 133), true, desc = "Color of puzzle rooms.").withDependency { roomDropdown }
     val trapRoomColor by ColorSetting("Trap Room", Color(216, 127, 51), true, desc = "Color of trap rooms.").withDependency { roomDropdown }
@@ -43,10 +46,11 @@ object DungeonMap : Module(
     val entranceRoomColor by ColorSetting("Entrance Room", Color(20, 133, 0), true, desc = "Color of entrance rooms.").withDependency { roomDropdown }
     val fairyRoomColor by ColorSetting("Fairy Room", Color(224, 0, 255), true, desc = "Color of fairy rooms.").withDependency { roomDropdown }
     val championRoomColor by ColorSetting("Champion Room", Color(254, 223, 0), true, desc = "Color of champion rooms.").withDependency { roomDropdown }
+    val rareRoomColor by ColorSetting("Rare Room", Color(255, 203, 89), true, desc = "Color of rare rooms.").withDependency { roomDropdown }
     val pendingRoomColor by ColorSetting("Pending Room", Color(55, 65, 90), true, desc = "Color of rooms you have entered that the map scan has not reported yet (no doors or map info).").withDependency { roomDropdown }
     val unknownRoomColor by ColorSetting("Unknown Room", Color(40, 40, 40), true, desc = "Color of unknown rooms hinted by a door with no discovered room on the other side.").withDependency { roomDropdown }
 
-    private val doorDropdown by DropdownSetting("Door Settings", desc = "Shows color settings for the different door types.")
+    private val doorDropdown by DropdownSetting("Door Colors", desc = "The color of each type of door.")
     val normalDoorColor by ColorSetting("Normal Door", Color(107, 58, 17).darker(), true, desc = "Color of normal doors.").withDependency { doorDropdown }
     val witherDoorColor by ColorSetting("Wither Door", Colors.BLACK, true, desc = "Color of wither doors.").withDependency { doorDropdown }
     val bloodDoorColor by ColorSetting("Blood Door", Color(255, 0, 0), true, desc = "Color of blood room doors.").withDependency { doorDropdown }

@@ -55,31 +55,11 @@ import net.minecraft.world.entity.player.PlayerSkin
 object LcmStyle {
 
     private val style = BooleanSetting("LCM Style", false,
-        desc = "Draws the map like LCM's map (dtMap) in its Legit Mode: its colours (changed under LCM Colors), background, doors, room names, check marks, Prince crowns and player heads (yours as its white marker). Room Prediction draws its guesses the same way, with its chances instead of \"?\". Added by engineerClient.")
+        desc = "Draws the map like LCM's map: its doors, room text, Prince crowns and player heads, in the colors below.")
 
-    private val colors = DropdownSetting("LCM Colors",
-        desc = "The colour LCM Style draws each type of room in (a door takes the colour of the room behind it). dtMap's colours to begin with.").withDependency { style.value }
-    private val unopenedColor = colorSetting("Unopened", 0xFF1E1E1E.toInt(), "rooms nobody has opened yet")
-    private val normalColor = colorSetting("Normal", 0xFF6B3A11.toInt(), "normal rooms")
-    private val puzzleColor = colorSetting("Puzzle", 0xFF750085.toInt(), "puzzle rooms")
-    private val trapColor = colorSetting("Trap", 0xFFD87F33.toInt(), "the trap room")
-    private val yellowColor = colorSetting("Yellow", 0xFFFEDF00.toInt(), "the yellow (miniboss) room")
-    private val bloodColor = colorSetting("Blood", 0xFFFF0000.toInt(), "the blood room")
-    private val entranceColor = colorSetting("Entrance", 0xFF148500.toInt(), "the entrance")
-    private val fairyColor = colorSetting("Fairy", 0xFFF4138B.toInt(), "the fairy room")
-    private val rareColor = colorSetting("Rare", 0xFFFFCB59.toInt(), "rare rooms")
-    private val backgroundColor = ColorSetting("LCM Background", Color(0x46000000), true,
-        desc = "LCM Style's colour behind the map (dtMap's translucent black to begin with).").withDependency { style.value && colors.value }
-    private val borderColor = ColorSetting("LCM Border", Color(0x00000000), true,
-        desc = "LCM Style's outline around the map. See-through to begin with, as dtMap has none: raise its alpha to show it.").withDependency { style.value && colors.value }
-    private val borderWidth = NumberSetting("LCM Border Width", 1, 1..5, 1,
-        desc = "How thick LCM Style's outline is, drawn inside the map's edge.").withDependency { style.value && colors.value }
+    internal val borderWidth = NumberSetting("Outline Width", 1, 1..5, 1, desc = "How thick the map's outline is in LCM Style.").withDependency { style.value }
+    internal val ownMarkerColor = ColorSetting("Own Marker Color", Color(0xFFFFFFFF.toInt()), true, desc = "Your own marker on the map, when it isn't your head.")
 
-    private val ownMarkerColor = ColorSetting("LCM Own Marker", Color(0xFFFFFFFF.toInt()), true,
-        desc = "LCM Style's colour for your own marker (dtMap's white to begin with).").withDependency { style.value && colors.value }
-
-    private fun colorSetting(type: String, default: Int, what: String) =
-        ColorSetting("LCM $type Room", Color(default), true, desc = "LCM Style's colour for $what.").withDependency { style.value && colors.value }
 
     private const val ROOM = 16
     private const val TILE = 20
@@ -88,17 +68,17 @@ object LcmStyle {
     private const val DOOR = 9
     private const val DARKEN = 0.4f
 
-    // the room colours (LCM Colors, dtMap's by default) and dtMap's other default colours (C1Map)
-    private val BACKGROUND: Int get() = backgroundColor.value.rgba
-    val UNOPENED: Int get() = unopenedColor.value.rgba
-    val BLOOD: Int get() = bloodColor.value.rgba
-    val NORMAL: Int get() = normalColor.value.rgba
-    val PUZZLE: Int get() = puzzleColor.value.rgba
-    val CHAMPION: Int get() = yellowColor.value.rgba
-    val TRAP: Int get() = trapColor.value.rgba
-    private val ENTRANCE: Int get() = entranceColor.value.rgba
-    val FAIRY: Int get() = fairyColor.value.rgba
-    val RARE: Int get() = rareColor.value.rgba
+    // the Dungeon Map's colours
+    private val BACKGROUND: Int get() = DungeonMap.backgroundColor.rgba
+    val UNOPENED: Int get() = DungeonMap.unknownRoomColor.rgba
+    val BLOOD: Int get() = DungeonMap.bloodRoomColor.rgba
+    val NORMAL: Int get() = DungeonMap.normalRoomColor.rgba
+    val PUZZLE: Int get() = DungeonMap.puzzleRoomColor.rgba
+    val CHAMPION: Int get() = DungeonMap.championRoomColor.rgba
+    val TRAP: Int get() = DungeonMap.trapRoomColor.rgba
+    private val ENTRANCE: Int get() = DungeonMap.entranceRoomColor.rgba
+    val FAIRY: Int get() = DungeonMap.fairyRoomColor.rgba
+    val RARE: Int get() = DungeonMap.rareRoomColor.rgba
     const val WITHER = 0xFF000000.toInt()
     private const val NO_CLASS = 0xB2000000.toInt()
 
@@ -127,8 +107,7 @@ object LcmStyle {
     fun install() {
         DungeonMap.registerSetting(style)
         // right below LCM Style
-        for (s in listOf(colors, unopenedColor, normalColor, puzzleColor, trapColor, yellowColor, bloodColor, entranceColor, fairyColor, rareColor,
-            backgroundColor, borderColor, borderWidth, ownMarkerColor)) DungeonMap.registerSetting(s)
+        for (s in listOf(borderWidth, ownMarkerColor)) DungeonMap.registerSetting(s)
     }
 
     /** True while the map HUD is drawn here instead of by Odin (LcmStyleMixin). */
@@ -218,7 +197,7 @@ object LcmStyle {
 
     /** The LCM Border outline, inside the map's [width] x [height]; nothing while it's fully see-through. */
     private fun border(g: GuiGraphicsExtractor, width: Int, height: Int) {
-        val c = borderColor.value.rgba
+        val c = DungeonMap.backgroundOutline.rgba
         if (c ushr 24 == 0) return
         val w = borderWidth.value.coerceIn(1, minOf(width, height) / 2)
         g.fill(0, 0, width, w, c)
@@ -377,8 +356,16 @@ object LcmStyle {
     private fun drawName(g: GuiGraphicsExtractor, room: DungeonRoom) {
         if (!opened(room) || room.type == RoomType.ENTRANCE || room.type == RoomType.BLOOD || room.type == RoomType.FAIRY || room.type == RoomType.UNDISCOVERED) return
         val (cx, cz) = center(room) ?: return
-        // as dtMap: the name once the room is open (and Odin has scanned it), its check mark before that
-        val name = knownName(room)
+        // Room Text, as on Odin's map: the check mark until the name is known, or when the room has nothing else to show
+        val option = DungeonMap.roomText
+        val maxSecrets = room.data?.maxSecrets ?: 0
+        val known = knownName(room)
+        val name = when (option) {
+            DungeonMap.RoomTextOption.CHECKMARKS -> null
+            DungeonMap.RoomTextOption.ROOM_NAME -> known
+            DungeonMap.RoomTextOption.ROOM_SECRETS -> if (known != null && maxSecrets > 0) "${room.foundSecrets ?: "?"}/$maxSecrets" else null
+            DungeonMap.RoomTextOption.BOTH -> known?.let { if (maxSecrets > 0) "$it ${room.foundSecrets ?: "?"}/$maxSecrets" else it }
+        }
         if (name == null) {
             if (!com.engineerclient.mapicons.MapIcons.showCheckmarks) return
             val icon = when (room.checkmark) {
