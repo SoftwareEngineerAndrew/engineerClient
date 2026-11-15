@@ -144,6 +144,7 @@ object EngineerClient : ClientModInitializer {
         safely("team tp maze") { com.engineerclient.tpmaze.TeamTpMaze.install() }
         safely("water board") { com.engineerclient.waterboard.WaterBoardSolver.install() }
         safely("tic tac toe") { com.engineerclient.dungeon.TicTacToeSolver.install() }
+        safely("freeze report") { com.engineerclient.misc.FreezeReport.install() }
         safely("terminal huds") { com.engineerclient.dungeon.TerminalHuds.install() }
         safely("terminals") { com.engineerclient.terminals.Terminals.install() }
         safely("devices") { com.engineerclient.devices.Devices.install() }
