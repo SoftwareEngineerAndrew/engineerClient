@@ -1,12 +1,14 @@
 package com.engineerclient.misc
 
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.odtheking.odin.events.core.EventBus
+import com.odtheking.odin.features.impl.dungeon.MageBeam
+import net.minecraft.client.Minecraft
 import com.odtheking.odin.utils.alert
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -21,14 +23,12 @@ import net.minecraft.world.entity.boss.wither.WitherBoss
  * hitbox, the same test the game makes before a left click hits an entity. Witherborn withers and the Wither Miners
  * round the arena don't count.
  */
-object LcmMeleeWarning : Module(
-    name = "LCM Melee Warning",
-    category = Category.custom("Engineer Client", 860, 10),
-    description = "Boss only, as Mage: a title while you are in melee range of a wither boss, where your left click melees instead of firing the beam.",
-    key = null,
-) {
-    private val playSound by BooleanSetting("Play Sound", true, desc = "Play the alert sound with the title.")
-    private val repeatTicks by NumberSetting("Repeat Every", 10, 1..60, 1, desc = "While you stay in melee range, the warning shows again this often.", unit = " ticks")
+object LcmMeleeWarning {
+    private val on = BooleanSetting("LCM Melee Warning", false, desc = "As Mage in boss: a title while a wither boss is in melee range.")
+    private val playSoundSetting = BooleanSetting("Melee Warning Sound", true, desc = "Play the alert sound with the title.").withDependency { on.value }
+    private val repeatSetting = NumberSetting("Melee Warning Repeat", 10, 1..60, 1, desc = "How often the warning shows again while in range.", unit = " ticks").withDependency { on.value }
+    private val playSound get() = playSoundSetting.value
+    private val repeatTicks get() = repeatSetting.value
 
     private const val TITLE = "§c§lMELEE RANGE!"
 
@@ -37,12 +37,13 @@ object LcmMeleeWarning : Module(
 
     private fun reset() { sinceAlert = Int.MAX_VALUE }
 
-    init {
+    fun install() {
+        for (s in listOf(on, playSoundSetting, repeatSetting)) MageBeam.registerSetting(s)
         on<LevelEvent.Load> { reset() }
 
         on<TickEvent.End> {
-            val me = mc.player
-            if (me == null || !DungeonUtils.inBoss || DungeonUtils.currentDungeonPlayer.clazz != DungeonClass.MAGE) { reset(); return@on }
+            val me = Minecraft.getInstance().player
+            if (!MageBeam.enabled || !on.value || me == null || !DungeonUtils.inBoss || DungeonUtils.currentDungeonPlayer.clazz != DungeonClass.MAGE) { reset(); return@on }
 
             val eye = me.eyePosition
             val reach = me.entityInteractionRange()
@@ -54,5 +55,6 @@ object LcmMeleeWarning : Module(
             if (sinceAlert < Int.MAX_VALUE) sinceAlert++
             if (near && sinceAlert >= repeatTicks) { alert(TITLE, playSound); sinceAlert = 0 }
         }
+        EventBus.subscribe(this)
     }
 }

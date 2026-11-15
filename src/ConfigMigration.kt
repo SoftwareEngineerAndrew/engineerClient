@@ -832,6 +832,22 @@ object ConfigMigration {
             move("Terminals", listOf("Hide Numbers' Numbers"), listOf("Show Next Numbers"), TERMINAL_SECTIONS.mapNotNull { it.second }, true)
         }
 
+        // LCM Melee Warning is a Mage Beam setting; Mage Beam turns on with it.
+        module(modules, "LCM Melee Warning")?.let { lcm ->
+            if (!Files.exists(odinFile)) return@let
+            val on = lcm["enabled"]?.asBoolean == true
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val beam = module(odin, "Mage Beam") ?: JsonObject().apply { addProperty("name", "Mage Beam"); addProperty("enabled", false) }.also { odin.add(it) }
+            val to = settings(beam)
+            to.addProperty("LCM Melee Warning", on)
+            settings(lcm)["Play Sound"]?.let { to.add("Melee Warning Sound", it) }
+            settings(lcm)["Repeat Every"]?.let { to.add("Melee Warning Repeat", it) }
+            if (on && beam["enabled"]?.asBoolean != true) beam.addProperty("enabled", true)
+            write(odinFile, odin)
+            modules.remove(lcm)
+            changed = true
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)

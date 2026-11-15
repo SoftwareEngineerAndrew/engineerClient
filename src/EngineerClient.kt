@@ -75,7 +75,7 @@ object EngineerClient : ClientModInitializer {
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
             PosePov, com.engineerclient.terminals.Terminals, com.engineerclient.devices.Devices, com.engineerclient.p3sim.P3Sim, ADR, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
-            RandomStuff, com.engineerclient.misc.LcmMeleeWarning, com.engineerclient.misc.CommandAliases,
+            RandomStuff, com.engineerclient.misc.CommandAliases,
             com.engineerclient.misc.BlockInstaclear,
             com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,
@@ -141,6 +141,7 @@ object EngineerClient : ClientModInitializer {
         safely("tic tac toe") { com.engineerclient.dungeon.TicTacToeSolver.install() }
         safely("freeze report") { com.engineerclient.misc.FreezeReport.install() }
         safely("health mana") { com.engineerclient.misc.HealthMana.install() }
+        safely("lcm melee warning") { com.engineerclient.misc.LcmMeleeWarning.install() }
         safely("terminal huds") { com.engineerclient.dungeon.TerminalHuds.install() }
         safely("terminals") { com.engineerclient.terminals.Terminals.install() }
         safely("devices") { com.engineerclient.devices.Devices.install() }
