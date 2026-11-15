@@ -1,15 +1,12 @@
 package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.engineerclient.devices.Devices
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.impl.boss.SimonSays
 import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.playSoundAtPlayer
 import com.odtheking.odin.utils.sendCommand
@@ -22,19 +19,6 @@ import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.ButtonBlock
 
 object OdinSimonSaysAlerts {
-
-    private enum class Target(private val label: String) {
-        PARTY("Party"), SELF("Self");
-        override fun toString() = label
-    }
-
-    private val stageMessages = BooleanSetting("Stage Messages", false, desc = "Sends a message each time a stage is completed. Added by ADM.")
-    private val stageTarget = SelectorSetting("Stage Message To", Target.PARTY, desc = "Party chat or only you.").withDependency { stageMessages.value }
-    private val breakAlert = BooleanSetting("Break Alert", false, desc = "Alerts when the device breaks. Added by ADM.")
-    private val breakParty = BooleanSetting("Party Message", true, desc = "Sends SS Broke! in party chat.").withDependency { breakAlert.value }
-    private val breakTitle = BooleanSetting("Title", true, desc = "Shows SS BROKE! on screen.").withDependency { breakAlert.value }
-    private val breakSound = BooleanSetting("Sound", true, desc = "Plays an anvil sound.").withDependency { breakAlert.value }
-    private val restartMessage = BooleanSetting("Restart Message", false, desc = "Sends SS Started Again! in party chat when it restarts after a break. Added by ADM.")
 
     private const val STAGES = 5
     private const val BREAK_TICKS = 12
@@ -49,16 +33,16 @@ object OdinSimonSaysAlerts {
     private var running = false
     private var wasBroken = false
 
-    private fun active() = SimonSays.enabled && DungeonUtils.getF7Phase() == M7Phases.P3
+    private fun active() = Devices.simonSaysOn && DungeonUtils.getF7Phase() == M7Phases.P3
 
     private fun reset() {
         shown.clear(); roundLength = 0; pendingStage = 0; goneTicks = 0; running = false; wasBroken = false
     }
 
     private fun stageDone(stage: Int) {
-        if (!stageMessages.value) return
+        if (!Devices.stageMessages) return
         val text = "SS $stage/$STAGES"
-        if (stageTarget.value == Target.PARTY) sendCommand("pc $text") else modMessage(text)
+        if (Devices.stageTarget == Devices.Target.PARTY) sendCommand("pc $text") else modMessage(text)
     }
 
     private fun tick() {
@@ -70,7 +54,7 @@ object OdinSimonSaysAlerts {
             pendingStage = 0
             goneTicks = 0
             if (!running) {
-                if (wasBroken && restartMessage.value) sendCommand("pc SS Started Again!")
+                if (wasBroken && Devices.restartMessage) sendCommand("pc SS Started Again!")
                 wasBroken = false
                 running = true
             }
@@ -92,10 +76,10 @@ object OdinSimonSaysAlerts {
         wasBroken = true
         pendingStage = 0
         shown.clear()
-        if (!breakAlert.value) return
-        if (breakParty.value) sendCommand("pc SS Broke!")
-        if (breakTitle.value) setTitle("§c§l§nSS BROKE!")
-        if (breakSound.value) playSoundAtPlayer(SoundEvents.ANVIL_LAND, 5f, 0f)
+        if (!Devices.breakAlert) return
+        if (Devices.breakParty) sendCommand("pc SS Broke!")
+        if (Devices.breakTitle) setTitle("§c§l§nSS BROKE!")
+        if (Devices.breakSound) playSoundAtPlayer(SoundEvents.ANVIL_LAND, 5f, 0f)
     }
 
     // The device's completion ends its last stage, with no next show to confirm it.
@@ -107,7 +91,6 @@ object OdinSimonSaysAlerts {
     }
 
     fun install() {
-        listOf(stageMessages, stageTarget, breakAlert, breakParty, breakTitle, breakSound, restartMessage).forEach { SimonSays.registerSetting(it) }
         on<LevelEvent.Load> { EngineerClient.mc.execute { reset() } }
         on<TickEvent.Server> { EngineerClient.mc.execute { EngineerClient.safely("ss alerts") { tick() } } }
         on<MessageEvent.Chat> {

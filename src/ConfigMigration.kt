@@ -78,6 +78,7 @@ object ConfigMigration {
      *  - Screen Tweaks, Render Cleanup, Chat Tweaks and Tab Tweaks are Visibility.
      *  - Phase Timers, Timers and Odin's Tick Timers (its Fire Freeze Hud and look) are Tick Timers.
      *  - Odin's terminal modules, Term Progress and Terminal Hitboxes are Terminals.
+     *  - Odin's Simon Says, Arrow Align and Arrows Device are Devices.
      *  - Odin's Dungeon Waypoints, Boss Waypoints and Odin's Temporary Waypoints (its From Party Chat) are Waypoints.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
@@ -676,12 +677,43 @@ object ConfigMigration {
             bw?.let { modules.remove(it); changed = true }
         }
 
+        // Odin's Simon Says, Arrow Align and Arrows Device are Devices' sections, each on if its module was.
+        run {
+            if (module(modules, "Devices") != null || !Files.exists(odinFile)) return@run
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val olds = DEVICE_SECTIONS.mapNotNull { (name, switch) -> module(odin, name)?.let { Triple(it, name, switch) } }
+            if (olds.isEmpty()) return@run
+            val to = settings(ensure("Devices"))
+            for ((m, name, switch) in olds) {
+                to.addProperty(switch, m["enabled"]?.asBoolean ?: false)
+                for ((k, v) in settings(m).entrySet()) {
+                    if (k in DEVICE_DROPPED) continue
+                    val key = DEVICE_RENAMES["$name/$k"] ?: k
+                    if (!to.has(key)) to.add(key, v)
+                }
+                odin.remove(m)
+            }
+            write(odinFile, odin)
+            changed = true
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)
         }
         return changed
     }
+
+    /** Odin's device modules and their on/off switch in Devices. */
+    private val DEVICE_SECTIONS = listOf("Simon Says" to "Enable Simon Says", "Arrow Align" to "Enable Arrow Align", "Arrows Device" to "Enable Arrows Device")
+
+    private val DEVICE_RENAMES = mapOf(
+        "Simon Says/Style" to "Box Style", "Simon Says/Party Message" to "Break Party Message", "Simon Says/Title" to "Break Title",
+        "Simon Says/Sound" to "Break Sound", "Arrow Align/Block Wrong Clicks" to "Align Block Wrong Clicks",
+        "Arrows Device/Depth check" to "Depth Check", "Arrows Device/Device complete alert" to "Device Complete Alert",
+    )
+
+    private val DEVICE_DROPPED = setOf("Custom Sounds Dropdown", "Reset")
 
     /** Old module, its on/off switch in Terminals (none: always on), and whether it lived in Odin's config. */
     private val TERMINAL_SECTIONS = listOf<Triple<String, String?, Boolean>>(

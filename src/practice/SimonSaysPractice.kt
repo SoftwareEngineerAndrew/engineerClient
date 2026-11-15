@@ -10,7 +10,6 @@ import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.BlockInteractEvent
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.features.impl.boss.SimonSays
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
@@ -787,17 +786,11 @@ object SimonSaysPractice : Module(
 
     // ------------------------------------------------------------------ the real device's sounds
 
-    // Odin's Simon Says solution: the buttons' lamps in order, and how many of them have been
-    // pressed. Private in Odin, so read reflectively. Your own press counts as soon as you click:
-    // the client presses the button itself before the server answers, and Odin sees that.
-    private val odinOrder by lazy { SimonSays::class.java.getDeclaredField("clickInOrder").apply { isAccessible = true } }
-    private val odinNeeded by lazy { SimonSays::class.java.getDeclaredField("clickNeeded").apply { isAccessible = true } }
-
     /**
      * A right click on F7's real Simon Says in P3: the correct sound for the start button and the
-     * button Odin's solution has next, the wrong one for any other, and for any press Odin's Block
-     * Wrong Clicks stopped ([blocked]: it never reached the device, so it isn't timed either).
-     * Odin's own Custom Click Sounds is turned off so the two don't play together.
+     * button the solution has next (Devices' Simon Says; your own press counts as soon as you click), the wrong one for any
+     * other, and for any press Block Wrong Clicks stopped ([blocked]: it never reached the device, so it isn't timed either).
+     * Devices' Custom Click Sounds is turned off so the two don't play together.
      * The presses also go into the real device's round times ([Real]).
      */
     private fun realClick(pos: BlockPos, blocked: Boolean) {
@@ -807,13 +800,12 @@ object SimonSaysPractice : Module(
         if (!isStart && (pos.x != 110 || pos.y !in 120..123 || pos.z !in 92..95)) return
         val state = mc.level?.getBlockState(pos) ?: return
         if (state.block !is ButtonBlock || state.getValue(BlockStateProperties.POWERED)) return
-        (SimonSays.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
+        (com.engineerclient.devices.Devices.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
         if (blocked) { playSoundSettings(WRONG_SOUND); return }
         if (isStart) { playSoundSettings(CORRECT_SOUND); return }
 
-        @Suppress("UNCHECKED_CAST")
-        val order = odinOrder.get(null) as List<BlockPos>
-        val i = odinNeeded.getInt(null)
+        val order = com.engineerclient.devices.DevSimonSays.clickInOrder
+        val i = com.engineerclient.devices.DevSimonSays.clickNeeded
         val right = order.getOrNull(i) == pos.east()
         playSoundSettings(if (right) CORRECT_SOUND else WRONG_SOUND)
         Real.press(right, last = right && i == order.size - 1, System.currentTimeMillis())
@@ -929,7 +921,7 @@ object SimonSaysPractice : Module(
             val v = view(p, mc.deltaTracker.getGameTimeDeltaPartialTick(false),
                 mc.gameRenderer.mainCamera().position().takeIf { mc.options.cameraType.isFirstPerson })
             EngineerClient.safely("ss practice draw") { draw(p, v, context) }
-            if (!SimonSays.enabled) return@on
+            if (!com.engineerclient.devices.Devices.simonSaysOn) return@on
             if (Inf.on) {
                 for ((i, cell) in Inf.queue.withIndex()) {
                     val lamp = lampAt(cell)

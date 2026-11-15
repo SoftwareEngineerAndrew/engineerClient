@@ -12,8 +12,6 @@
     "HudOnScreenMixin",
     "PersonalBestSimMixin",
     "SecretItemChimeMixin",
-    "SimonSaysBlocksMixin",
-    "SimonSaysTicksMixin",
     "LcmStyleMixin",
     "LcmMapInfoMixin",
     "PaulScoreMixin",

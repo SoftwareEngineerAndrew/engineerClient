@@ -157,12 +157,12 @@ object OdinInternals {
             }),
 
         // ---- P3 device helpers
-        Probe("odin.p3", "ArrowAlign", BOSS + "ArrowAlign", fields(BOSS + "ArrowAlign", "recentClickTimestamps", "clicksRemaining", "currentFrameRotations", "targetSolution")),
-        Probe("odin.p3", "ArrowsDevice", BOSS + "ArrowsDevice", fields(BOSS + "ArrowsDevice", "markedPositions", "targetPosition", "isDeviceComplete", "optimalAimPositions")),
+        Probe("odin.p3", "ArrowAlign", "com.engineerclient.devices.Devices", fields("com.engineerclient.devices.DevArrowAlign", "recentClickTimestamps", "clicksRemaining", "currentFrameRotations", "targetSolution")),
+        Probe("odin.p3", "ArrowsDevice", "com.engineerclient.devices.Devices", fields("com.engineerclient.devices.DevArrows", "markedPositions", "targetPosition", "isDeviceComplete", "optimalAimPositions")),
         // Terminals' Status keeps this state; the line keeps the "InactiveWaypoints" name.
         Probe("odin.p3", "InactiveWaypoints", "com.engineerclient.terminals.TermStatus", fields("com.engineerclient.terminals.TermStatus", "inactive", "section", "terminals", "levers", "device",
             "gate", "isComplete", "firstInSection", "lastCompleted")),
-        Probe("odin.p3", "SimonSays", BOSS + "SimonSays", fields(BOSS + "SimonSays", "clickInOrder", "clickNeeded", "firstPhase", "startClickCounter", "lastLanternTick")),
+        Probe("odin.p3", "SimonSays", "com.engineerclient.devices.Devices", fields("com.engineerclient.devices.DevSimonSays", "clickInOrder", "clickNeeded", "startClickCounter")),
         Probe("odin.p3", "BreakerDisplay", "com.engineerclient.dungeon.Dungeonbreaker", fields("com.engineerclient.dungeon.Dungeonbreaker", "charges", "maxCharges")),
 
         // ---- map: the special column guess's inputs (colorGuessForUnknown is not known to be pure, so it is never called)

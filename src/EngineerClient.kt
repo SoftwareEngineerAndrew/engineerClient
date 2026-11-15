@@ -75,7 +75,7 @@ object EngineerClient : ClientModInitializer {
     /** Every module. */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PosePov, com.engineerclient.terminals.Terminals, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
+            PosePov, com.engineerclient.terminals.Terminals, com.engineerclient.devices.Devices, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
             com.engineerclient.clearbreakdown.ClearBreakdown,
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.LcmMeleeWarning, com.engineerclient.misc.CommandAliases,
             com.engineerclient.misc.BlockInstaclear,
@@ -148,6 +148,7 @@ object EngineerClient : ClientModInitializer {
         safely("tic tac toe") { com.engineerclient.dungeon.TicTacToeSolver.install() }
         safely("terminal huds") { com.engineerclient.dungeon.TerminalHuds.install() }
         safely("terminals") { com.engineerclient.terminals.Terminals.install() }
+        safely("devices") { com.engineerclient.devices.Devices.install() }
         safely("item worth") { com.engineerclient.skyblock.ItemWorth.install() }
         safely("pov in leap menu") { com.engineerclient.pov.PovInLeapMenu.install() }
         safely("creeper beams ding") { com.engineerclient.dungeon.CreeperBeamsDing.install() }

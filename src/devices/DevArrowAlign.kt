@@ -1,15 +1,12 @@
-package com.odtheking.odin.features.impl.boss
+package com.engineerclient.devices
 
-import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
+import com.engineerclient.EngineerClient.mc
 import com.odtheking.odin.clickgui.settings.impl.KeybindSetting.Companion.isDown
 import com.odtheking.odin.events.EntityInteractEvent
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.*
 import com.odtheking.odin.utils.render.drawText
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -18,13 +15,8 @@ import net.minecraft.core.BlockPos
 import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.item.Items
 
-object ArrowAlign : Module(
-    name = "Arrow Align",
-    description = "Shows the solution for the Arrow Align device."
-) {
-    private val blockWrong by BooleanSetting("Block Wrong Clicks", true, desc = "Blocks wrong clicks, shift will override this.")
-    private val preventKey by KeybindSetting("Prevent Blocking", InputConstants.KEY_LSHIFT, desc = "While holding this key, wrong clicks won't be blocked, even if you aren't sneaking.").withDependency { blockWrong }
-    private val invertKey by BooleanSetting("Invert Key", false, desc = "Inverts the behavior of the prevent key. Wrong clicks will be blocked while holding the prevent key, and allowed otherwise.").withDependency { blockWrong }
+/** Arrow Align: how many clicks each frame needs, and wrong clicks blocked. */
+object DevArrowAlign {
 
     private val recentClickTimestamps = mutableMapOf<Int, Long>()
     private val clicksRemaining = mutableMapOf<Int, Int>()
@@ -33,10 +25,10 @@ object ArrowAlign : Module(
     private val frameGridCorner = BlockPos(-2, 120, 75)
     private val centerBlock = BlockPos(0, 120, 77)
 
-    init {
+    fun install() {
         on<TickEvent.Server> {
             mc.execute {
-                if (DungeonUtils.getF7Phase() != M7Phases.P3) return@execute
+                if (!Devices.arrowAlignOn || DungeonUtils.getF7Phase() != M7Phases.P3) return@execute
                 clicksRemaining.clear()
                 if ((mc.player?.blockPosition()?.distSqr(centerBlock) ?: return@execute) > 200) {
                     currentFrameRotations = null
@@ -61,14 +53,14 @@ object ArrowAlign : Module(
         }
 
         on<EntityInteractEvent> {
-            if (DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            if (!Devices.arrowAlignOn || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             if (entity !is ItemFrame || entity.item.item != Items.ARROW) return@on
             val (x, y, z) = entity.blockPosition()
 
             val frameIndex = ((y - frameGridCorner.y) + (z - frameGridCorner.z) * 5)
             if (x != frameGridCorner.x || currentFrameRotations?.get(frameIndex) == -1 || frameIndex !in 0..24) return@on
 
-            val shouldBlock = blockWrong && !(preventKey.isDown() xor invertKey)
+            val shouldBlock = Devices.alignBlockWrong && !(Devices.preventKey.isDown() xor Devices.invertKey)
 
             if (!clicksRemaining.containsKey(frameIndex) && shouldBlock) {
                 cancel()
@@ -82,7 +74,7 @@ object ArrowAlign : Module(
         }
 
         on<RenderExtractEvent> {
-            if (clicksRemaining.isEmpty() || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            if (!Devices.arrowAlignOn || clicksRemaining.isEmpty() || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             clicksRemaining.forEach { (index, clickNeeded) ->
                 val colorCode = when {
                     clickNeeded == 0 -> return@forEach
@@ -97,6 +89,7 @@ object ArrowAlign : Module(
                 )
             }
         }
+        EventBus.subscribe(this)
     }
 
     private fun getFrames(): List<Int> {

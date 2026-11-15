@@ -7,7 +7,8 @@ import com.odtheking.odin.events.PacketEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.impl.boss.SimonSays
+import com.engineerclient.devices.DevSimonSays
+import com.engineerclient.devices.Devices
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
 import net.minecraft.core.BlockPos
@@ -19,10 +20,8 @@ import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 
 /**
- * engineerClient's Simon Says solver, in Odin's Simon Says: Odin keeps drawing the boxes, blocking
- * wrong clicks, announcing and playing its sounds, but the answer it does that from is
- * [SimonSaysSolver]'s. Odin's own working-out (its block and tick listeners) is switched off by
- * `SimonSaysMixin`, and the answer written into its fields here.
+ * The Simon Says solver behind Devices' Simon Says ([com.engineerclient.devices.DevSimonSays]): it draws, blocks and announces
+ * from the answer worked out here by [SimonSaysSolver].
  *
  * Fixes over Odin's: a re-skip after a fail (Odin keeps the stray light, as it only looks for one
  * after a world load - the start button never shows as pressed), a 2-light skip (Odin reverses
@@ -31,9 +30,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
  */
 object OdinSimonSays {
 
-    /** Odin's Simon Says is on: Odin's own working-out is off. Read by SimonSaysMixin. */
     @JvmStatic
-    fun active(): Boolean = SimonSays.enabled
+    fun active(): Boolean = Devices.simonSaysOn
 
     private val solver = SimonSaysSolver<BlockPos>()
 
@@ -53,10 +51,6 @@ object OdinSimonSays {
 
     private val GRID = (120..123).flatMap { y -> (92..95).map { z -> BlockPos(110, y, z) } }
 
-    private val odinOrder by lazy { SimonSays::class.java.getDeclaredField("clickInOrder").apply { isAccessible = true } }
-    private val odinNeeded by lazy { SimonSays::class.java.getDeclaredField("clickNeeded").apply { isAccessible = true } }
-
-    /** Adds the setting to Odin's module; before OdinSplitsLook.install, which re-reads Odin's config. */
     fun install() {
         on<TickEvent.Server> { tick++ }
         on<LevelEvent.Load> { solver.reset(); lampLit.clear(); buttonTick.clear() }
@@ -119,11 +113,9 @@ object OdinSimonSays {
 
     private fun onDevice(pos: BlockPos) = (pos.x == 110 || pos.x == 111) && pos.y in 120..123 && pos.z in 92..95
 
-    /** Odin's boxes, Block Wrong Clicks and announcements read these. */
+    /** The boxes, Block Wrong Clicks and announcements read these. */
     private fun sync() {
-        @Suppress("UNCHECKED_CAST")
-        val order = odinOrder.get(null) as ArrayList<BlockPos>
-        order.clear(); order.addAll(solver.answer)
-        odinNeeded.setInt(null, solver.next)
+        DevSimonSays.clickInOrder.clear(); DevSimonSays.clickInOrder.addAll(solver.answer)
+        DevSimonSays.clickNeeded = solver.next
     }
 }

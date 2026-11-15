@@ -70,7 +70,7 @@ object ModuleManager {
             DungeonMap,
 
             // boss
-            ArrowAlign, MelodyMessage, WitherDragons, SimonSays, ArrowsDevice,
+            MelodyMessage, WitherDragons,
 
             // render
             ClickGUIModule, Camera, Etherwarp, PlayerSize,

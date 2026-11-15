@@ -1,14 +1,10 @@
-package com.odtheking.odin.features.impl.boss
+package com.engineerclient.devices
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.ActionSetting
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.devgineerclient.practice.I4Aims
+import com.engineerclient.EngineerClient.mc
 import com.odtheking.odin.events.*
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Color.Companion.withAlpha
-import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.alert
 import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.render.drawFilledBox
@@ -21,23 +17,16 @@ import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import kotlin.math.abs
 
-object ArrowsDevice : Module(
-    name = "Arrows Device",
-    description = "Shows a solution for the Sharp Shooter puzzle in floor 7."
-) {
-    private val markedPositionColor by ColorSetting("Marked Position", Colors.MINECRAFT_AQUA.withAlpha(0.5f), true, desc = "Color of the marked position.")
-    private val targetPositionColor by ColorSetting("Target Position", Colors.MINECRAFT_LIGHT_PURPLE.withAlpha(0.5f), true, desc = "Color of the target position.")
-    private val depthCheck by BooleanSetting("Depth check", true, desc = "Marked positions show through walls.")
-    private val alertOnDeviceComplete by BooleanSetting("Device complete alert", true, desc = "Send an alert when device is complete.")
-    private val showAimPositions by BooleanSetting("Show Aim Positions", false, desc = "Shows optimal aim positions for hitting marked blocks.")
-    private val firstAimPositionColor by ColorSetting("First Aim Position", Colors.MINECRAFT_GREEN.withAlpha(0.5f), true, desc = "Color of the first aim position.").withDependency { showAimPositions }
-    private val secondAimPositionColor by ColorSetting("Second Aim Position", Colors.MINECRAFT_GOLD.withAlpha(0.5f), true, desc = "Color of the second aim position.").withDependency { showAimPositions }
-    private val thirdAimPositionColor by ColorSetting("Third Aim Position", Colors.MINECRAFT_RED.withAlpha(0.5f), true, desc = "Color of the third aim position.").withDependency { showAimPositions }
-    private val reset by ActionSetting("Reset", desc = "Resets the solver.") {
+/** The Arrows Device (i4): blocks already hit and the one to hit, and where to aim (Terminator cubes). */
+object DevArrows {
+    fun reset() {
         markedPositions.clear()
         targetPosition = null
         optimalAimPositions = emptyList()
     }
+
+    /** A new attempt (the P3 Sim's restore): as reset, and not done. */
+    fun restart() { reset(); isDeviceComplete = false }
 
     private val deviceCompleteRegex = Regex("^(.{1,16}) completed a device! \\((\\d)/(\\d)\\)$")
     private val roomBoundingBox = AABB(20.0, 100.0, 30.0, 89.0, 151.0, 51.0)
@@ -57,34 +46,36 @@ object ArrowsDevice : Module(
         }
     }
 
-    init {
+    private val showAims get() = Devices.showAimPositions && !I4Aims.replacesOdinAims()
+
+    fun install() {
         on<BlockUpdateEvent> {
-            if (DungeonUtils.getF7Phase() != M7Phases.P3 || !devicePositions.contains(pos)) return@on
+            if (!Devices.arrowsOn || DungeonUtils.getF7Phase() != M7Phases.P3 || !devicePositions.contains(pos)) return@on
 
             if (old.block == Blocks.EMERALD_BLOCK && updated.block == Blocks.DYED_TERRACOTTA.pick(DyeColor.BLUE)) {
                 markedPositions.add(pos.immutable())
                 if (targetPosition == pos) targetPosition = null
-                if (showAimPositions) optimalAimPositions = calculateOptimalAimPositions(pos)
+                if (showAims) optimalAimPositions = calculateOptimalAimPositions(pos)
             } else if (old.block == Blocks.DYED_TERRACOTTA.pick(DyeColor.BLUE) && updated.block == Blocks.EMERALD_BLOCK) {
                 markedPositions.remove(pos)
                 targetPosition = pos.immutable()
-                if (showAimPositions) optimalAimPositions = calculateOptimalAimPositions(pos)
+                if (showAims) optimalAimPositions = calculateOptimalAimPositions(pos)
             }
         }
 
         on<RenderExtractEvent> {
-            if (DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            if (!Devices.arrowsOn || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
 
             markedPositions.forEach { position ->
-                drawFilledBox(AABB(position), markedPositionColor, depth = depthCheck)
+                drawFilledBox(AABB(position), Devices.markedColor, depth = Devices.depthCheck)
             }
 
             targetPosition?.let { position ->
-                drawFilledBox(AABB(position), targetPositionColor, depth = depthCheck)
+                drawFilledBox(AABB(position), Devices.targetColor, depth = Devices.depthCheck)
             }
 
-            if (showAimPositions) {
-                val colors = listOf(firstAimPositionColor, secondAimPositionColor, thirdAimPositionColor)
+            if (showAims) {
+                val colors = listOf(Devices.firstAimColor, Devices.secondAimColor, Devices.thirdAimColor)
                 optimalAimPositions.take(3).forEachIndexed { index, aimPos ->
                     drawFilledBox(AABB.unitCubeFromLowerCorner(aimPos.position.add(-0.5, -0.5, -0.1)), colors[index], true)
                 }
@@ -99,20 +90,21 @@ object ArrowsDevice : Module(
         }
 
         on<MessageEvent.Chat> {
-            if (DungeonUtils.getF7Phase() != M7Phases.P3 || !isPlayerInRoom || isDeviceComplete) return@on
+            if (!Devices.arrowsOn || DungeonUtils.getF7Phase() != M7Phases.P3 || !isPlayerInRoom || isDeviceComplete) return@on
             if (deviceCompleteRegex.find(message)?.groupValues?.get(1) == mc.player?.name?.string) onComplete("Chat")
         }
 
         on<EntityEvent.SetData> {
-            if (DungeonUtils.getF7Phase() != M7Phases.P3 || !isPlayerInRoom || isDeviceComplete) return@on
+            if (!Devices.arrowsOn || DungeonUtils.getF7Phase() != M7Phases.P3 || !isPlayerInRoom || isDeviceComplete) return@on
             if (entity.name.string == "Active") onComplete("Entity")
         }
+        EventBus.subscribe(this)
     }
 
     private fun onComplete(method: String) {
         isDeviceComplete = true
 
-        if (alertOnDeviceComplete) {
+        if (Devices.completeAlert) {
             modMessage("§aSharp shooter device complete §7($method)")
             alert("§aDevice Complete")
         }
