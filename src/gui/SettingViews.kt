@@ -301,16 +301,18 @@ class KeybindView(override val setting: KeybindSetting) : SettingView(setting) {
 
     override fun height() = Theme.ROW
 
+    fun bindMouse(button: Int) {
+        setting.value = InputConstants.Type.MOUSE.getOrCreate(button)
+        AdmClickGui.unfocus()
+    }
+
     override fun draw(ui: Ui, x: Int, y: Int) {
         label(ui, x, y, Theme.ROW)
         val name = if (listening) "..." else setting.value.displayName.string
         val pill = ui.pill(name, x + RIGHT, y + 3, Theme.ROW - 6, if (listening) Colors.MINECRAFT_YELLOW.rgba else Theme.WHITE, hover)
         ui.hit(pill.x0, pill.y0, pill.x1, pill.y1, owner = this) { button, _, _ ->
             when {
-                listening -> {
-                    setting.value = InputConstants.Type.MOUSE.getOrCreate(button)
-                    AdmClickGui.unfocus()
-                }
+                listening -> bindMouse(button)
                 button == InputConstants.MOUSE_BUTTON_LEFT -> AdmClickGui.focus(this)
                 else -> return@hit false
             }

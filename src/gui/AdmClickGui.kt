@@ -137,6 +137,8 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     }
 
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
+        // A keybind waiting for its key takes any mouse button, wherever it's pressed.
+        (focus as? KeybindView)?.let { if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) { it.bindMouse(event.button()); return true } }
         val x = event.x() / scale
         val y = event.y() / scale
         panels.lastOrNull { it.bounds.contains(x, y) }?.let { if (panels.last() !== it) { panels.remove(it); panels.add(it) } }
