@@ -80,6 +80,7 @@ object ConfigMigration {
      *  - Odin's terminal modules, Term Progress and Terminal Hitboxes are Terminals.
      *  - Odin's Simon Says, Arrow Align and Arrows Device, and SS Practice, are Devices.
      *  - Odin's Dungeon Waypoints, Boss Waypoints and Odin's Temporary Waypoints (its From Party Chat) are Waypoints.
+     *  - Odin's Secret Clicked, Waypoints' Secret Waypoints, Item Highlight and Close Chest On Key are Secrets.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -706,12 +707,51 @@ object ConfigMigration {
             changed = true
         }
 
+        // Secret Clicked is Secrets, on if it, Item Highlight, Close Chest On Key or Waypoints' Secret Waypoints was; each folded
+        // one's switch is whether it was on. With Secrets on, what was off goes off, so nothing shows up that wasn't. The old
+        // entries go, so this runs once.
+        run {
+            if (!Files.exists(odinFile)) return@run
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            if (module(odin, "Secrets") != null) return@run
+            fun on(m: JsonObject?) = m?.get("enabled")?.asBoolean == true
+            val sc = module(odin, "Secret Clicked")
+            val ih = module(modules, "Item Highlight")
+            val cc = module(modules, "Close Chest On Key")
+            val wp = module(odin, "Waypoints")
+            val sw = wp?.let(::settings)?.let { w -> SECRET_WAYPOINT_KEYS.filter(w::has).associateWith { w.remove(it) } }.orEmpty()
+            if (sc == null && ih == null && cc == null && sw.isEmpty()) return@run
+            val swOn = on(wp) && sw["Secret Waypoints"]?.let { it.isJsonPrimitive && it.asBoolean } == true
+            val anyOn = on(sc) || on(ih) || on(cc) || swOn
+            val secrets = sc ?: JsonObject().apply { add("settings", JsonObject()) }.also { odin.add(it) }
+            secrets.addProperty("name", "Secrets")
+            secrets.addProperty("enabled", anyOn)
+            val to = settings(secrets)
+            to.remove("Secret Boxes Dropdown")
+            to.remove("Secret Chime Dropdown")
+            if (anyOn && !on(sc)) { to.addProperty("Secret Boxes", false); to.addProperty("Secret Chime", false) }
+            for ((k, v) in sw) if (k != "Secret Waypoint Settings" && !to.has(k)) to.add(k, v)
+            if (anyOn && !swOn && sw.isNotEmpty()) to.addProperty("Secret Waypoints", false)
+            to.addProperty("Item Highlight", on(ih))
+            ih?.let(::settings)?.let { s -> for (k in ITEM_HIGHLIGHT_KEYS) s[k]?.let { if (!to.has(k)) to.add(k, it) } }
+            to.addProperty("Close Chest On Key", on(cc))
+            write(odinFile, odin)
+            listOfNotNull(ih, cc).forEach { modules.remove(it); changed = true }
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)
         }
         return changed
     }
+
+    private val SECRET_WAYPOINT_KEYS = listOf(
+        "Secret Waypoint Settings", "Secret Waypoints", "Chest Color", "Item Color", "Essence Color", "Bat Color", "Redstone Key Color",
+        "Lever Color", "Secret Text", "Hide Collected", "Secret Through Walls",
+    )
+
+    private val ITEM_HIGHLIGHT_KEYS = listOf("Far Color", "Fresh Color", "Ready Color")
 
     /** Odin's device modules and their on/off switch in Devices. */
     private val DEVICE_SECTIONS = listOf("Simon Says" to "Enable Simon Says", "Arrow Align" to "Enable Arrow Align", "Arrows Device" to "Enable Arrows Device")
