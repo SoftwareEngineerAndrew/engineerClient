@@ -125,6 +125,12 @@ object SecretWaypoints {
 
     private fun active() = SecretClicked.enabled && show.value && DungeonUtils.inClear
 
+    /** Where [room]'s secret chests are (empty until the rooms pack is in). */
+    fun chestSpots(room: DungeonRoom): List<BlockPos> {
+        val pack = roomsPack ?: return emptyList<BlockPos>().also { load() }
+        return spotsOf(room, pack).filter { it.kind == Kind.CHEST }.map { it.pos }
+    }
+
     private fun load() {
         if (loading) return
         loading = true
