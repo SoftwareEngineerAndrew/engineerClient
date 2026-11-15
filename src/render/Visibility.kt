@@ -41,6 +41,7 @@ import net.minecraft.client.particle.SmokeParticle
 import net.minecraft.client.particle.TerrainParticle
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.client.multiplayer.chat.GuiMessage
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.contents.TranslatableContents
 import net.minecraft.resources.Identifier
@@ -151,7 +152,7 @@ object Visibility : Module(
     private val chatDropdown by DropdownSetting("Chat", desc = "Chat history, stacking, copying and hiding.")
     private val removeLimit by BooleanSetting("Remove Chat Limit", false, desc = "Keeps more than vanilla's 100 chat lines.").withDependency { chatDropdown }
     private val maxMessages by NumberSetting("Max Messages", 10000, 100..100000, 100, desc = "How many lines the chat keeps.").withDependency { chatDropdown && removeLimit }
-    private val compactChat by BooleanSetting("Compact Chat", false, desc = "Stacks a repeated message onto the last one with (xN).").withDependency { chatDropdown }
+    private val compactChat by BooleanSetting("Compact Chat", false, desc = "A message repeated within the last 100 replaces its older copy, with a count.").withDependency { chatDropdown }
     private val hideEmpty by BooleanSetting("Hide Empty Messages", false, desc = "Drops chat lines with nothing but spaces.").withDependency { chatDropdown }
     private val compactHoppity by BooleanSetting("Compact Hoppity Messages", true, desc = "Joins the two lines of a Hoppity rabbit find into one.").withDependency { chatDropdown }
     private val copyChat by BooleanSetting("Copy On Right Click", true, desc = "Right click a chat message to copy it, shift for one line.").withDependency { chatDropdown }
@@ -173,9 +174,8 @@ object Visibility : Module(
     // The gray placeholder skin Hypixel gives every non-player tab entry.
     private const val GRAY_SKIN = "skins/f712b3a0a04da402d569cc02f3fcbc9228b2303a"
 
-    private var lastKey: String? = null
-    private var lastShown: Component? = null
-    private var count = 1
+    private const val STACK_RANGE = 100
+    private val stacks = LinkedHashMap<String, Pair<Component, Int>>()
 
     private val hoppityName = Regex("^§D§LHOPPITY'S HUNT §7You found (.+) §.\\(.+\\)!$", RegexOption.IGNORE_CASE)
     private val hoppityInfo = Regex("^(§.§.)(DUPLICATE|NEW) RABBIT! (.+)")
@@ -334,26 +334,42 @@ object Visibility : Module(
 
     fun chatLimit(vanilla: Int): Int = if (enabled && removeLimit) maxMessages else vanilla
 
-    fun hides(contents: Component): Boolean = enabled && hideEmpty && contents.string.isBlank()
+    fun hides(contents: Component): Boolean = enabled && hideEmpty && blank(contents.string)
+
+    private val INVISIBLE = Regex("§.|[\\s\u00A0\u200B-\u200D\u2800\uFEFF]")
+    private fun blank(s: String) = INVISIBLE.replace(s, "").isEmpty()
+
+    /** A message's wrapped lines without the blank ones (the gaps inside Hypixel's multi-line messages). */
+    @JvmStatic
+    fun dropBlankLines(lines: List<FormattedCharSequence>): List<FormattedCharSequence> {
+        if (!enabled || !hideEmpty || lines.size < 2) return lines
+        val kept = lines.filter { l -> val sb = StringBuilder(); appendPlain(sb, l); !blank(sb.toString()) }
+        return kept.ifEmpty { lines }
+    }
 
     fun compactOn(): Boolean = enabled && compactChat
 
-    fun compact(contents: Component, top: Component?): Component {
+    /**
+     * A message seen within the last [STACK_RANGE] messages: the older copy goes and this one says how many there have been,
+     * so spam stays one line.
+     */
+    fun compact(contents: Component, all: MutableList<GuiMessage>, lines: MutableList<GuiMessage.Line>): Component {
         val key = ChatFormatting.stripFormatting(contents.string) ?: ""
-        if (key.isBlank()) {
-            lastKey = null
-            return contents
+        if (blank(key)) return contents
+        val prev = stacks.remove(key)
+        var count = 1
+        if (prev != null) {
+            val i = (0 until minOf(STACK_RANGE, all.size)).firstOrNull { all[it].content() === prev.first }
+            if (i != null) {
+                val old = all.removeAt(i)
+                lines.removeIf { it.parent() === old }
+                count = prev.second + 1
+            }
         }
-        if (top != null && top === lastShown && key == lastKey) {
-            count++
-            val out = contents.copy().append(Component.literal(" (x$count)").withStyle(ChatFormatting.GRAY))
-            lastShown = out
-            return out
-        }
-        lastKey = key
-        lastShown = contents
-        count = 1
-        return contents
+        val out = if (count > 1) contents.copy().append(Component.literal(" ($count)").withStyle(ChatFormatting.GRAY)) else contents
+        stacks[key] = out to count
+        if (stacks.size > STACK_RANGE) stacks.remove(stacks.keys.first())
+        return out
     }
 
     fun copyChat(event: MouseButtonEvent) {

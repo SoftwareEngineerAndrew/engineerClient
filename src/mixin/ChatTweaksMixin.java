@@ -7,6 +7,8 @@ import net.minecraft.client.multiplayer.chat.GuiMessageSource;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MessageSignature;
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
+import net.minecraft.util.FormattedCharSequence;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -46,12 +48,11 @@ public class ChatTweaksMixin {
     )
     private Component ec$compact(Component contents) {
         if (contents == null || !Visibility.INSTANCE.compactOn()) return contents;
-        GuiMessage top = allMessages.isEmpty() ? null : allMessages.get(0);
-        Component out = Visibility.INSTANCE.compact(contents, top == null ? null : top.content());
-        if (out != contents && top != null) {
-            allMessages.remove(0);
-            while (!trimmedMessages.isEmpty() && trimmedMessages.get(0).parent() == top) trimmedMessages.remove(0);
-        }
-        return out;
+        return Visibility.INSTANCE.compact(contents, allMessages, trimmedMessages);
+    }
+
+    @ModifyExpressionValue(method = "addMessageToDisplayQueue", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/chat/GuiMessage;splitLines(Lnet/minecraft/client/gui/Font;I)Ljava/util/List;"))
+    private List<FormattedCharSequence> ec$dropBlankLines(List<FormattedCharSequence> lines) {
+        return Visibility.dropBlankLines(lines);
     }
 }
