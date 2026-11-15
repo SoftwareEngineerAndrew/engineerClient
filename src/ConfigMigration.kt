@@ -82,6 +82,7 @@ object ConfigMigration {
      *  - Odin's Dungeon Waypoints, Boss Waypoints and Odin's Temporary Waypoints (its From Party Chat) are Waypoints.
      *  - Odin's Secret Clicked, Waypoints' Secret Waypoints, Item Highlight and Close Chest On Key are Secrets.
      *  - Odin's Map Info and Extra Stats, Score Time, Room Alerts and Clear Breakdown are Clear Info.
+     *  - Random Stuff's visibility settings are Visibility's, and Hide Numbers' Numbers and Show Next Numbers are Terminals'.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -801,6 +802,36 @@ object ConfigMigration {
             changed = true
         }
 
+        // Random Stuff's visibility settings are Visibility's, its terminal numbers settings Terminals'. Its switches go off where it
+        // was off; a target that was off comes on only for a switch that was on, with its own switches off, so nothing shows up that
+        // wasn't. The keys go, so this runs once.
+        module(modules, "Random Stuff")?.let { rs ->
+            val from = settings(rs)
+            val rsOn = rs["enabled"]?.asBoolean == true
+            fun move(name: String, switches: List<String>, others: List<String>, ownSwitches: List<String>, defaultOn: Boolean) {
+                if ((switches + others).none(from::has)) return
+                val existing = module(modules, name)
+                val wasOn = existing?.get("enabled")?.asBoolean ?: defaultOn
+                val target = existing ?: JsonObject().apply { addProperty("name", name); addProperty("enabled", wasOn); add("settings", JsonObject()) }.also { modules.add(it) }
+                val to = settings(target)
+                var anyOn = false
+                for (k in switches) {
+                    val v = from.remove(k) ?: continue
+                    val on = rsOn && v.isJsonPrimitive && v.asJsonPrimitive.isBoolean && v.asBoolean
+                    anyOn = anyOn || on
+                    if (!to.has(k)) to.add(k, if (rsOn) v else com.google.gson.JsonPrimitive(false))
+                }
+                for (k in others) from.remove(k)?.let { if (!to.has(k)) to.add(k, it) }
+                if (anyOn && !wasOn) {
+                    target.addProperty("enabled", true)
+                    for (k in ownSwitches) to.addProperty(k, false)
+                }
+                changed = true
+            }
+            move("Visibility", RS_VISIBILITY_SWITCHES, RS_VISIBILITY_OTHERS, VISIBILITY_SWITCHES.values.flatten(), false)
+            move("Terminals", listOf("Hide Numbers' Numbers"), listOf("Show Next Numbers"), TERMINAL_SECTIONS.mapNotNull { it.second }, true)
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)
@@ -866,6 +897,15 @@ object ConfigMigration {
         ),
         "Chat Tweaks" to listOf("Remove Chat Limit", "Compact Chat", "Hide Empty Messages", "Compact Hoppity Messages", "Copy On Right Click"),
         "Tab Tweaks" to listOf("Remove Tab Ping", "Remove Useless Tab Heads"),
+    )
+
+    private val RS_VISIBILITY_SWITCHES = listOf(
+        "Hide Dungeon Sheep", "Hide Item Names", "Hide Recipe Book", "Hide Action Bar", "Black Sky", "Blur In GUI", "No Enchant Glint",
+        "No Drop Animation", "Clean Menus", "Clean Loading Screen", "Clean Scoreboard", "Clean Chat",
+    )
+
+    private val RS_VISIBILITY_OTHERS = listOf(
+        "Blur Strength", "Scoreboard: Hide Catacombs Location", "Scoreboard: Hide Time Elapsed", "Scoreboard: Hide Cleared %", "Log Hidden Lines",
     )
 
     private val PHASE_TIMERS_SWITCHES = listOf("Maxor Tick Timer", "Storm Timer", "Term Start Timer", "Goldor Timer")
