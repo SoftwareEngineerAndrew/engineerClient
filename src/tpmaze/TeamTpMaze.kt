@@ -1,6 +1,7 @@
 package com.engineerclient.tpmaze
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.pov.PoseShare
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -47,7 +48,7 @@ import net.minecraft.world.phys.Vec3
  * Every pad pair anyone learns goes into a shared [MazeMap] in pad numbers, which are the same on every client however the room is
  * turned ([MazePads]): your own teleports (the pad you stood on, the pad you landed beside, and where the landing turned you to
  * look, which is always at the final pad), teammates' teleports seen in the world (a guess until their own client says), and the
- * maps of teammates who run this too, over Odin's websocket.
+ * maps of teammates who run this too, over ADM's party link ([com.engineerclient.party.OdinLink]) and Odin's websocket for the rest.
  * The socket is Odin's lobby channel, a second one beside Odin's map
  * sync like [com.engineerclient.clearbreakdown.OdinSync]: the messages carry none of the fields Odin's map or Melody read, so their
  * handlers drop them. Each message is the sender's whole map (at most 15 pairs), sent when it changes; a client that comes in asks
@@ -237,14 +238,16 @@ object TeamTpMaze {
         plan = MazePlan.plan(map, w)
         // The websocket: say hello once it's open (everyone answers with their map), then our map whenever it changes.
         if (connected && !socket.connected && ++waiting > RETRY) connect()
-        if (connected && socket.connected) {
-            waiting = 0
-            if (!helloSent) { helloSent = socket.send(message(hello = true)); if (helloSent) dirty = false }
+        // Through the party link first (OdinLink), so it works with the socket down.
+        val linked = PoseShare.linkedCount > 0
+        if (connected && (socket.connected || linked)) {
+            if (socket.connected) waiting = 0
+            if (!helloSent) { helloSent = socket.send(message(hello = true)) || linked; if (helloSent) dirty = false }
             if (cooldown > 0) cooldown--
             else if (dirty) {
                 // Nothing to tell (a hello we can't add to): stay quiet.
                 if (map.links(sureOnly = true).isEmpty() && map.exit == null && map.looks().isEmpty()) dirty = false
-                else if (socket.send(message(hello = false))) { dirty = false; cooldown = 4 }
+                else if (socket.send(message(hello = false)) || linked) { dirty = false; cooldown = 4 }
             }
         }
     }
