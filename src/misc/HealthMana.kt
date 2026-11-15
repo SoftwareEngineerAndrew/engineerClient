@@ -3,11 +3,10 @@ package com.engineerclient.misc
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.HUDSetting
 import com.odtheking.odin.clickgui.settings.impl.HudElement
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.Color.Companion.withAlpha
@@ -22,42 +21,41 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  * Each bar is its own HUD so it can be placed and toggled on its own; unlike the text, a bar stays
  * up at 0 as an empty bar.
  */
-object HealthMana : Module(
-    name = "Health & Mana",
-    category = Category.custom("Engineer Client", 860, 10),
-    description = "Health and mana bars in Odin's Player Display colours, and hiding Odin's Health/Mana HUDs until the stat runs low.",
-    key = null,
-) {
-    private val hideUnlessLow by BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides Odin's Health HUD and Mana HUD, and the Health/Mana Bar HUDs below, unless the stat drops below the threshold below.")
-    private val threshold by NumberSetting("Threshold", 50, 1..100, 1, desc = "Only show the Health/Mana HUDs once the stat drops below this percent of max.", unit = "%").withDependency { hideUnlessLow }
+object HealthMana {
+    private val dropdown = DropdownSetting("Health & Mana Bars", desc = "Shows settings for the health and mana bars.")
+    private val hideUnlessLowSetting = BooleanSetting("Hide Health/Mana Above %", false, desc = "Hides the health and mana HUDs and bars until the stat drops below the threshold.").withDependency { dropdown.value }
+    private val thresholdSetting = NumberSetting("Threshold", 50, 1..100, 1, desc = "Shown once the stat drops below this percent of max.", unit = "%").withDependency { dropdown.value && hideUnlessLowSetting.value }
+    private val hideUnlessLow get() = hideUnlessLowSetting.value
+    private val threshold get() = thresholdSetting.value
 
-    private val healthBarHud by HUD("Health Bar HUD", "Your health as a filled bar, in Odin's Player Display Health Color.", true, 434, 501, 1.6f) { example ->
+    private val healthBar = PlayerDisplay.HUD("Health Bar HUD", "Your health as a filled bar, in Odin's Player Display Health Color.", true, 434, 501, 1.6f) { example ->
         val (current, max) = when {
             example -> 3000 to 4000
             !LocationUtils.isInSkyblock || ActionBarListener.maxHealth == 0 -> return@HUD 0 to 0
             aboveThreshold(ActionBarListener.currentHealth, ActionBarListener.maxHealth) -> return@HUD 0 to 0
             else -> ActionBarListener.currentHealth to ActionBarListener.maxHealth
         }
-        statBar(current, max, playerDisplayColor("Health Color", Colors.MINECRAFT_RED), healthBarWidth, healthBarHeight)
-    }
-    private val healthBarWidth by NumberSetting("Health Bar Width", 60, 20..200, 5, desc = "Width of the health bar.")
-    private val healthBarHeight by NumberSetting("Health Bar Height", 8, 2..30, 1, desc = "Height of the health bar.")
+        statBar(current, max, playerDisplayColor("Health Color", Colors.MINECRAFT_RED), healthBarWidth.value, healthBarHeight.value)
+    }.withDependency { dropdown.value }
+    private val healthBarWidth = NumberSetting("Health Bar Width", 60, 20..200, 5, desc = "Width of the health bar.").withDependency { dropdown.value }
+    private val healthBarHeight = NumberSetting("Health Bar Height", 8, 2..30, 1, desc = "Height of the health bar.").withDependency { dropdown.value }
 
-    private val manaBarHud by HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.", true, 434, 480, 1.6f) { example ->
+    private val manaBar = PlayerDisplay.HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.", true, 434, 480, 1.6f) { example ->
         val (current, max) = when {
             example -> 2000 to 20000
             !LocationUtils.isInSkyblock || ActionBarListener.maxMana == 0 -> return@HUD 0 to 0
             aboveThreshold(ActionBarListener.currentMana, ActionBarListener.maxMana) -> return@HUD 0 to 0
             else -> ActionBarListener.currentMana to ActionBarListener.maxMana
         }
-        statBar(current, max, playerDisplayColor("Mana Color", Colors.MINECRAFT_AQUA), manaBarWidth, manaBarHeight)
-    }
-    private val manaBarWidth by NumberSetting("Mana Bar Width", 60, 20..200, 5, desc = "Width of the mana bar.")
-    private val manaBarHeight by NumberSetting("Mana Bar Height", 8, 2..30, 1, desc = "Height of the mana bar.")
+        statBar(current, max, playerDisplayColor("Mana Color", Colors.MINECRAFT_AQUA), manaBarWidth.value, manaBarHeight.value)
+    }.withDependency { dropdown.value }
+    private val manaBarWidth = NumberSetting("Mana Bar Width", 60, 20..200, 5, desc = "Width of the mana bar.").withDependency { dropdown.value }
+    private val manaBarHeight = NumberSetting("Mana Bar Height", 8, 2..30, 1, desc = "Height of the mana bar.").withDependency { dropdown.value }
 
-    init {
-        // Off until switched on (in this menu or Edit HUD); Odin's HUD flag would also take their toggle away.
-        healthBarHud.enabled = false; manaBarHud.enabled = false
+    /** Adds the bars and the low-stat hiding to Odin's Player Display. */
+    fun install() {
+        healthBar.value.enabled = false; manaBar.value.enabled = false
+        for (s in listOf(dropdown, hideUnlessLowSetting, thresholdSetting, healthBar, healthBarWidth, healthBarHeight, manaBar, manaBarWidth, manaBarHeight)) PlayerDisplay.registerSetting(s)
     }
 
     /**
@@ -66,7 +64,7 @@ object HealthMana : Module(
      * those two are ever skipped.
      */
     fun hidesOdinHud(hud: HudElement): Boolean {
-        if (!enabled || !hideUnlessLow) return false
+        if (!PlayerDisplay.enabled || !hideUnlessLow) return false
         return when {
             hud === (PlayerDisplay.settings["Health HUD"] as? HUDSetting)?.value -> aboveThreshold(ActionBarListener.currentHealth, ActionBarListener.maxHealth)
             hud === (PlayerDisplay.settings["Mana HUD"] as? HUDSetting)?.value -> aboveThreshold(ActionBarListener.currentMana, ActionBarListener.maxMana)

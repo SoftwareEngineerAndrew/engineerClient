@@ -782,6 +782,25 @@ object ConfigMigration {
             changed = true
         }
 
+        // Health & Mana is a section of Odin's Player Display; its bars and hiding stay off where the module was off.
+        module(modules, "Health & Mana")?.let { hm ->
+            if (!Files.exists(odinFile)) return@let
+            val on = hm["enabled"]?.asBoolean == true
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val pd = module(odin, "Player Display") ?: JsonObject().apply { addProperty("name", "Player Display"); addProperty("enabled", on) }.also { odin.add(it) }
+            val to = settings(pd)
+            for ((k, v) in settings(hm).entrySet()) {
+                if (k == "Keybind" || to.has(k)) continue
+                val copy = v.deepCopy()
+                if (!on && copy.isJsonObject) copy.asJsonObject.addProperty("enabled", false)
+                if (!on && k == "Hide Health/Mana Above %") to.addProperty(k, false) else to.add(k, copy)
+            }
+            if (on && pd["enabled"]?.asBoolean != true) pd.addProperty("enabled", true)
+            write(odinFile, odin)
+            modules.remove(hm)
+            changed = true
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)
