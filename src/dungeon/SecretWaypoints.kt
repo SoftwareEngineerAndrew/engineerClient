@@ -57,6 +57,7 @@ object SecretWaypoints {
     private val text = BooleanSetting("Secret Text", false, desc = "Names each secret.").withDependency { dropdown.value && show.value }
     private val hideCollected = BooleanSetting("Hide Collected", true, desc = "Removes a secret once it is taken.").withDependency { dropdown.value && show.value }
     private val throughWalls = BooleanSetting("Secret Through Walls", true, desc = "Draws them through walls.").withDependency { dropdown.value && show.value }
+    private val currentRoomOnly = BooleanSetting("Current Room Only", true, desc = "Only the secrets of the room you're in.").withDependency { dropdown.value && show.value }
 
     private enum class Kind(val label: String) { CHEST("Chest"), ITEM("Item"), ESSENCE("Essence"), BAT("Bat"), KEY("Redstone Key"), LEVER("Lever") }
 
@@ -74,17 +75,23 @@ object SecretWaypoints {
     private var lastChest: BlockPos? = null
     private var lastChestAt = 0L
     private var ticks = 0
+    private var lastRoom: DungeonRoom? = null
 
     fun install() {
-        for (s in listOf(dropdown, show, chestColor, itemColor, essenceColor, batColor, keyColor, leverColor, text, hideCollected, throughWalls))
+        for (s in listOf(dropdown, show, chestColor, itemColor, essenceColor, batColor, keyColor, leverColor, text, hideCollected, throughWalls, currentRoomOnly))
             SecretClicked.registerSetting(s)
 
-        on<LevelEvent.Load> { placed.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null }
+        on<LevelEvent.Load> { placed.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null; lastRoom = null }
 
         on<TickEvent.End> {
-            if (!active() || ++ticks % 10 != 0) return@on
+            if (!active()) return@on
+            // A new room is shown at once; otherwise every 10 ticks, as rooms are found and turned.
+            val room = DungeonUtils.currentRoom
+            if (++ticks % 10 != 0 && room === lastRoom) return@on
+            lastRoom = room
             val pack = roomsPack ?: return@on load()
-            EngineerClient.safely("secret waypoints") { spots = DungeonScan.rooms.distinct().flatMap { spotsOf(it, pack) } }
+            val rooms = if (currentRoomOnly.value) listOfNotNull(room) else DungeonScan.rooms.distinct()
+            EngineerClient.safely("secret waypoints") { spots = rooms.flatMap { spotsOf(it, pack) } }
         }
 
         on<SecretPickupEvent.Interact> {
