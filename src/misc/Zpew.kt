@@ -117,7 +117,7 @@ object Zpew {
             return
         }
         val oldest = queue.oldestCounting()
-        if (queue.teleport(doubleArrayOf(x, y, z), serverTicks.get())) {
+        if (queue.teleport(doubleArrayOf(x, y, z), ticks)) {
             if (queue.lastMatch < 0 && oldest != null) miss(if (queue.lastExpected == null) "law-refused" else "wrong-landing", oldest, queue.lastExpected, doubleArrayOf(x, y, z))
             val e = queue.lastExpected
             val off = e?.let { Math.sqrt((it[0] - x) * (it[0] - x) + (it[1] - y) * (it[1] - y) + (it[2] - z) * (it[2] - z)) }
@@ -270,12 +270,12 @@ object Zpew {
             if (!live()) return@on
             blockClick = null
             ticks++
-            // A teleport the server hasn't made within your ping + 50 ms isn't coming: the camera goes back to you.
+            // A teleport the server hasn't made within your ping + 100 ms isn't coming: the camera goes back to you.
             val ping = com.odtheking.odin.utils.ServerUtils.averagePing.takeIf { it > 0 } ?: 250
-            if (queue.expire(serverTicks.get(), ticks, System.currentTimeMillis(), ping + 50L)) sync("expire")
+            if (queue.expire(serverTicks.get(), ticks, System.currentTimeMillis(), ping + 100L)) sync("expire")
             queue.oldestCounting()?.let { c ->
-                // an AOTE/AOTV's line and its move can reach us a server tick apart
-                if (queue.settleBlocked(serverTicks.get()) { if (it.witherImpact) 4 else 1 }) {
+                // Hypixel sends no server ticks in dungeons, so the blocked line is timed in client ticks
+                if (queue.settleBlocked(ticks)) {
                     // the law warped you but the server said blocks in the way: a miss to learn from
                     c.from?.let { from -> if (capture) land(from, c)?.let { miss("server-refused", c, it, null) } }
                     sync("blocked")
@@ -328,7 +328,7 @@ object Zpew {
         if (!enabled) return
         if (!queue.isEmpty && REFUSALS.any { message.contains(it) }) { log("REFUSED $message"); queue.refuse(); sync("refuse") }
         if (!queue.isEmpty && message.contains("There are blocks in the way!")) {
-            val mark = { log("BLOCKED"); queue.blocked(serverTicks.get()) }
+            val mark = { log("BLOCKED"); queue.blocked(ticks) }
             if (mc.isSameThread) mark() else mc.execute { mark() }
         }
     }

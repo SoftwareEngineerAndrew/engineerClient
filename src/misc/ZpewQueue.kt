@@ -10,7 +10,7 @@ package com.engineerclient.misc
  * (the ones before it were dropped by the server); when none does, the law missed and the oldest is taken. Either way the
  * chain is worked out again from the real landing.
  *
- * A dropped click can't be told from the others, so a click waiting longer than your ping + 50 ms stops counting. It can
+ * A dropped click can't be told from the others, so a click waiting longer than your ping + 100 ms stops counting. It can
  * still be matched for a while ([KEEP] server ticks, [HARD] client ticks), in case it was late.
  */
 class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleArray?) {
@@ -96,7 +96,7 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
 
     /**
      * "There are blocks in the way!" came at [tick]. It also comes just before a blink cut short by a wall that still moves you
-     * (alldata #items.blink-refusal: in the move's tick, or up to 4 ticks earlier for a Hyperion), so it is only marked here;
+     * (alldata #items.blink-refusal: in the move's tick or just before it), so it is only marked here;
      * [settleBlocked] refuses the click once no move followed.
      */
     fun blocked(tick: Long) {
@@ -104,12 +104,12 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         waiting.firstOrNull { it.counts && it.blockedAt < 0 }?.blockedAt = tick
     }
 
-    /** Refuses the oldest counting click whose blocked line wasn't followed by its move within [early] ticks. True when one was. */
-    fun settleBlocked(tick: Long, early: (C) -> Int): Boolean {
+    /** Refuses the oldest counting click whose blocked line wasn't followed by its move within a tick. True when one was. */
+    fun settleBlocked(tick: Long): Boolean {
         val i = waiting.indexOfFirst { it.counts }
         if (i < 0) return false
         val w = waiting[i]
-        if (w.blockedAt < 0 || tick - w.blockedAt <= early(w.click)) return false
+        if (w.blockedAt < 0 || tick - w.blockedAt <= 1) return false
         waiting.removeAt(i)
         rechain()
         return true
