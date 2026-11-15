@@ -902,6 +902,15 @@ object ConfigMigration {
             write(odinFile, odin)
         }
 
+        // Legit Zpew's In Ice Fill is In Puzzles.
+        if (Files.exists(odinFile)) run {
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val s = module(odin, "Etherwarp")?.let(::settings) ?: return@run
+            val v = s.remove("In Ice Fill") ?: return@run
+            if (!s.has("In Puzzles")) s.add("In Puzzles", v)
+            write(odinFile, odin)
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)
