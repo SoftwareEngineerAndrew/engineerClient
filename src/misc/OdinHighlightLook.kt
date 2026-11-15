@@ -78,6 +78,8 @@ object OdinHighlightLook {
 
     private val found = HashMap<Int, Pair<Entity, Kind>>()
     private val claimedTags = HashSet<Int>()
+    /** Each found mob's tag: a mob that unloads frees its tag, so the pair is matched again when they load back in. */
+    private val tagOf = HashMap<Int, Int>()
     private val pending = HashMap<Int, Pair<ArmorStand, Kind>>()
 
     private val mc: Minecraft get() = Minecraft.getInstance()
@@ -124,7 +126,7 @@ object OdinHighlightLook {
                 val kind = e.customName?.string?.let(::kindOf)
                 if (kind == null) { pending.remove(e.id); return }
                 val mob = mc.level?.let { mobUnder(it, e, offsetOf(e, kind)) }
-                if (mob == null) pending[e.id] = e to kind else { claimedTags += e.id; found[mob.id] = mob to kind; pending.remove(e.id) }
+                if (mob == null) pending[e.id] = e to kind else { claim(e, mob, kind); pending.remove(e.id) }
             }
             is Player -> if (isShadowAssassin(e)) found[e.id] = e to Kind.ASSASSIN
             is Bat -> if (DungeonUtils.inClear && e.health in BAT_HEALTHS) found[e.id] = e to Kind.BAT
@@ -135,6 +137,19 @@ object OdinHighlightLook {
 
     private fun offsetOf(tag: ArmorStand, kind: Kind) = if (kind == Kind.TANK && "withermancer" in (tag.customName?.string ?: "").lowercase()) 3 else 1
 
+    private fun claim(tag: ArmorStand, mob: Entity, kind: Kind) {
+        claimedTags += tag.id
+        tagOf[mob.id] = tag.id
+        found[mob.id] = mob to kind
+    }
+
+    /** A mob that unloaded (not one that died: its tag still floats there a moment) gives its tag back. */
+    private fun unclaim(id: Int, mob: Entity) {
+        val tag = tagOf.remove(id) ?: return
+        if (mob is LivingEntity && mob.isDeadOrDying) return
+        claimedTags.remove(tag)
+    }
+
     private fun match() {
         val level = mc.level ?: return
         val it = pending.values.iterator()
@@ -142,11 +157,10 @@ object OdinHighlightLook {
             val (tag, kind) = it.next()
             if (tag.isRemoved) { it.remove(); continue }
             val mob = mobUnder(level, tag, offsetOf(tag, kind)) ?: continue
-            claimedTags += tag.id
-            found[mob.id] = mob to kind
+            claim(tag, mob, kind)
             it.remove()
         }
-        found.values.removeIf { (e, _) -> !e.isAlive || e.isRemoved }
+        found.entries.removeIf { (id, v) -> (!v.first.isAlive || v.first.isRemoved).also { if (it) unclaim(id, v.first) } }
     }
 
     /** Adds the settings to Odin's Highlight; before OdinSplitsLook.install, which re-reads Odin's config. */
@@ -164,6 +178,11 @@ object OdinHighlightLook {
         on<EntityEvent.Add> { if (active()) consider(entity) }
         on<EntityEvent.SetData> { if (active()) consider(entity) }
         on<EntityEvent.SetItemSlot> { if (entity is Player && active()) consider(entity) }
+        on<EntityEvent.Remove> {
+            val id = entity.id
+            if (entity is ArmorStand) { claimedTags.remove(id); pending.remove(id) }
+            else if (found.remove(id) != null) unclaim(id, entity)
+        }
 
         on<RenderExtractEvent> {
             if (!active()) return@on
@@ -180,7 +199,7 @@ object OdinHighlightLook {
             }
         }
 
-        on<LevelEvent.Load> { found.clear(); claimedTags.clear(); pending.clear() }
+        on<LevelEvent.Load> { found.clear(); claimedTags.clear(); pending.clear(); tagOf.clear() }
         EventBus.subscribe(this)
     }
 }
