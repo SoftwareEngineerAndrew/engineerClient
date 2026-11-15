@@ -36,11 +36,12 @@ object SplitFormat {
     /** Plain seconds to two places: `14.00s`. */
     fun seconds(ms: Long): String = String.format(Locale.ROOT, "%.2f", ms / 1000.0) + "s"
 
-    /** Minutes and seconds to one place, for Pace and Enter: `3m 8.2s`. */
+    /** Minutes and seconds to one place, for Pace and Enter: `3m 8.2s`, or `48.2s` under a minute. */
     fun minutes(ms: Long): String {
         // Rounded to the tenth before splitting, so 119.97 s carries to 2m 0.0s, not 1m 60.0s.
         val tenths = Math.round(ms / 100.0)
-        return "${tenths / 600}m " + String.format(Locale.ROOT, "%.1f", tenths % 600 / 10.0) + "s"
+        val secs = String.format(Locale.ROOT, "%.1f", tenths % 600 / 10.0) + "s"
+        return if (tenths < 600) secs else "${tenths / 600}m $secs"
     }
 }
 
