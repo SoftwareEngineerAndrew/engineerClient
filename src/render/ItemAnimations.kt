@@ -172,13 +172,11 @@ object ItemAnimations : Module(
 
     private fun rad(d: Float) = Math.toRadians(d.toDouble()).toFloat()
 
-    // 1.8.9's chain after the arm transform: transformFirstPersonItem, doBlockTransformations, the old sword display,
-    // then today's handheld display undone since it is applied after this.
-    private val BLOCK_RIGHT: Matrix4f = Matrix4f()
-        .rotateY(rad(45f)).scale(0.4f)
-        .translate(-0.5f, 0.2f, 0f).rotateY(rad(30f)).rotateX(rad(-80f)).rotateY(rad(60f))
-        .translate(0f, 4f / 16f, 2f / 16f).rotateY(rad(-135f)).rotateZ(rad(25f)).scale(1.7f)
-        .mul(Matrix4f().translate(1.13f / 16f, 3.2f / 16f, 1.13f / 16f).rotateY(rad(-90f)).rotateZ(rad(25f)).scale(0.68f).invert())
+    // The block pose today's sword blocking mods use after the arm transform: the blade held up and across the view.
+    private fun block(side: Float): Matrix4f = Matrix4f()
+        .translate(side * -0.14142136f, 0.08f, 0.14142136f)
+        .rotateX(rad(-102.25f)).rotateY(rad(side * 13.365f)).rotateZ(rad(side * 78.05f))
 
-    private val BLOCK_LEFT: Matrix4f = Matrix4f().scale(-1f, 1f, 1f).mul(BLOCK_RIGHT).scale(-1f, 1f, 1f)
+    private val BLOCK_RIGHT: Matrix4f = block(1f)
+    private val BLOCK_LEFT: Matrix4f = block(-1f)
 }
