@@ -88,10 +88,7 @@ object ModuleManager {
         // hashmap, but would need to keep track when setting values change
         on<InputEvent> {
             for (setting in keybindSettingsCache) {
-                if (setting.boundKey != InputConstants.UNKNOWN && setting.boundKey == key) {
-                    com.engineerclient.rotation.EcLog.log("KEYS", "${key.name} -> ${setting.name}")
-                    setting.onPress?.invoke()
-                }
+                if (setting.boundKey != InputConstants.UNKNOWN && setting.boundKey == key) setting.onPress?.invoke()
             }
         }
 

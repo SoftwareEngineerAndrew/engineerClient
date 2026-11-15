@@ -22,7 +22,7 @@ object OdinCustomKeybinds {
         for (i in 1..SLOTS) {
             val previous = slots.lastOrNull()
             val shown = { previous == null || previous.used() }
-            val command = StringSetting("Custom Command $i", "", 100, desc = "Sent when Custom Key $i is pressed; no slash sends it as chat.", placeholder = "/command")
+            val command = StringSetting("Custom Command $i", "", 100, desc = "Run when Custom Key $i is pressed, with or without the slash.", placeholder = "/command")
             val key = KeybindSetting("Custom Key $i", InputConstants.UNKNOWN, "Sends Custom Command $i.").onPress { send(command.value) }
             key.withDependency(shown)
             command.withDependency(shown)
@@ -31,10 +31,9 @@ object OdinCustomKeybinds {
     }
 
     private fun send(text: String) {
-        com.engineerclient.rotation.EcLog.log("KEYS", "custom key: on=${CommandKeybinds.enabled} command=\"$text\"")
         if (!CommandKeybinds.enabled || text.isBlank()) return
-        val connection = Minecraft.getInstance().player?.connection ?: return
-        if (text.startsWith("/")) sendCommand(text.substring(1).trim()) else connection.sendChat(text)
+        if (Minecraft.getInstance().player == null) return
+        sendCommand(text.trim().removePrefix("/").trim())
     }
 
     fun install() {
