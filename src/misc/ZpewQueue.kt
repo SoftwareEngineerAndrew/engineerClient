@@ -13,7 +13,7 @@ package com.engineerclient.misc
  * A dropped click can't be told from the others, so a click waiting longer than the round trip plus its spread
  * (measured from answered clicks, like TCP) stops counting. It can still be matched for a while, in case it was late.
  * Ticks are the server's as they reach us, so a lag spike (no ticks arriving) doesn't run the clock out, and the burst
- * after one doesn't either: as many client ticks ([wall]) must pass too. [HARD] client ticks is the cap if the server never answers.
+ * after one doesn't either: as many client ticks ([wall]) must pass too. [HARD] client ticks is the cap if the server never answers; [MAX] keeps a dropped click from holding the camera past a second.
  */
 class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleArray?) {
     /** [from]: where the server has you for this click when no earlier waiting click moves you. */
@@ -161,8 +161,8 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     private companion object {
         const val GRACE = 4
         const val FIRST = 20
-        const val MAX = 60
+        const val MAX = 20
         const val KEEP = 60
-        const val HARD = 200
+        const val HARD = 40
     }
 }
