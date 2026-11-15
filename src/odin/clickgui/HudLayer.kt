@@ -80,10 +80,10 @@ object HudLayer {
     fun DrawnHudContent(hud: HudElement, example: Boolean, block: GuiGraphicsExtractor.(example: Boolean) -> Pair<Int, Int>) {
         Canvas(size = { hud.width.coerceAtLeast(1) to hud.height.coerceAtLeast(1) }) { graphics ->
             graphics.pose().pushMatrix()
-            graphics.pose().translate(x.toFloat(), y.toFloat())
+            graphics.pose().translate((x + hud.centerOffset).toFloat(), y.toFloat())
             val (width, height) = graphics.block(example)
             graphics.pose().popMatrix()
-            hud.onMeasured(width, height)
+            hud.onMeasured(width, height, example)
         }
     }
 

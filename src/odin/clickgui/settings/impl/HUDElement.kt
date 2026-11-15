@@ -99,8 +99,18 @@ open class HudElement(
     val scaledWidth: Int get() = (width * scale).toInt()
     val scaledHeight: Int get() = (height * scale).toInt()
 
-    fun onMeasured(measuredWidth: Int, measuredHeight: Int) {
-        width = measuredWidth
+    /** What the content drew this frame; [width] is the widest it has been (the example's in Edit HUD), so text centres in it. */
+    var contentWidth: Int = 0
+        private set
+    private var box = 0
+
+    /** How far right the content goes to sit in the middle of [width]. */
+    val centerOffset: Int get() = ((width - contentWidth) / 2).coerceAtLeast(0)
+
+    fun onMeasured(measuredWidth: Int, measuredHeight: Int, example: Boolean = false) {
+        contentWidth = measuredWidth
+        box = if (example) measuredWidth else maxOf(box, measuredWidth)
+        width = if (measuredWidth == 0) 0 else box
         height = measuredHeight
     }
 
