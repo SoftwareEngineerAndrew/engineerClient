@@ -8,11 +8,9 @@ import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.render.BoxStyle
 import com.odtheking.odin.utils.render.drawStyledBox
-import com.odtheking.odin.utils.render.drawText
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.world.phys.AABB
-import net.minecraft.world.phys.Vec3
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import java.util.PriorityQueue
 import java.util.concurrent.ConcurrentHashMap
@@ -20,7 +18,7 @@ import java.util.concurrent.Executors
 
 // Cells are the 7x6 boulder grid (x 6..24, z 9..24, step 3), bit i = column i % 7, row i / 7.
 // Players walk on the ground between boulders: a strip north of row 0 they drop into, a strip south of row 5 that leads to the chest.
-// A click on a face centre pushes that boulder 3 away from the face, deleting any boulder it lands on.
+// A click on a face centre (the button) pushes that boulder 3 away from the face, deleting any boulder it lands on.
 object BoulderSolver {
     enum class Mode(private val label: String) { CLICKS("Least Clicks"), MOVEMENT("Least Movement"); override fun toString() = label }
 
@@ -100,11 +98,7 @@ object BoulderSolver {
         val room = room ?: return
         if (DungeonUtils.currentRoomName != "Boulder" || plan.isEmpty()) return
         val steps = if (showAllBoulderClicks) plan else plan.take(1)
-        steps.forEachIndexed { i, step ->
-            val pos = room.getRealCoords(facePos(step))
-            event.drawStyledBox(AABB(pos), boulderColor, boulderStyle, false)
-            if (showAllBoulderClicks) event.drawText((i + 1).toString(), Vec3.atCenterOf(pos), 1f, false)
-        }
+        for (step in steps) event.drawStyledBox(AABB(room.getRealCoords(facePos(step))), boulderColor, boulderStyle, false)
     }
 
     fun reset() {
@@ -119,7 +113,7 @@ object BoulderSolver {
     private fun facePos(step: Step): BlockPos {
         val x = 6 + 3 * (step.cell % 7)
         val z = 9 + 3 * (step.cell / 7)
-        return BlockPos(x - 2 * step.dc, 65, z - 2 * step.dr)
+        return BlockPos(x - step.dc, 65, z - step.dr)
     }
 
     private fun readBoard(room: DungeonRoom): Long? {
