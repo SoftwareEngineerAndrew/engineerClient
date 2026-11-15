@@ -23,7 +23,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 object SecretClicked : Module(
     name = "Secrets",
-    description = "Clicked secret boxes and chime, secret waypoints, dropped item boxes and chest closing."
+    description = "Clicked secret boxes and chime, secret waypoints, dropped item boxes and chest closing.",
+    key = null
 ) {
     private val clickedDropdown by DropdownSetting("Clicked", desc = "Boxes and a chime for clicked secrets.")
     private val boxes by BooleanSetting("Secret Boxes", true, desc = "Whether or not to render boxes around clicked secrets.").withDependency { clickedDropdown }
