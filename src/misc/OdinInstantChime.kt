@@ -18,7 +18,8 @@ object OdinInstantChime {
         (SecretClicked.settings["Clicked"] as? DropdownSetting)?.value == true && (SecretClicked.settings["Secret Chime"] as? BooleanSetting)?.value == true
     }
 
-    private const val PICKUP_DELAY = 10
+    /** Secret items can be picked up 5 ticks after they spawn, not the usual 10. */
+    private const val PICKUP_DELAY = 5
     private val chimed = HashSet<Int>()
 
     @Suppress("UNCHECKED_CAST")
@@ -40,9 +41,11 @@ object OdinInstantChime {
             val player = EngineerClient.mc.player ?: return@on
             val level = EngineerClient.mc.level ?: return@on
             val reach = player.boundingBox.inflate(1.0, 0.5, 1.0)
+            // The item reached us half a ping after the server spawned it: it's that much older there.
+            val ready = (PICKUP_DELAY - com.odtheking.odin.utils.ServerUtils.averagePing / 100).coerceAtLeast(0)
             for (entity in level.entitiesForRendering()) {
                 if (entity !is ItemEntity || entity.isRemoved || entity.id in chimed) continue
-                if (entity.tickCount < PICKUP_DELAY || !reach.intersects(entity.boundingBox) || !ItemHighlight.wanted(entity)) continue
+                if (entity.tickCount < ready || !reach.intersects(entity.boundingBox) || !ItemHighlight.wanted(entity)) continue
                 chimed.add(entity.id)
                 playSoundSettings(soundSettings())
             }
