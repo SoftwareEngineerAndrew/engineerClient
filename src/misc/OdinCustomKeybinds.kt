@@ -31,6 +31,7 @@ object OdinCustomKeybinds {
     }
 
     private fun send(text: String) {
+        com.engineerclient.rotation.EcLog.log("KEYS", "custom key: on=${CommandKeybinds.enabled} command=\"$text\"")
         if (!CommandKeybinds.enabled || text.isBlank()) return
         val connection = Minecraft.getInstance().player?.connection ?: return
         if (text.startsWith("/")) sendCommand(text.substring(1).trim()) else connection.sendChat(text)
