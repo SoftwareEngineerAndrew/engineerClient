@@ -44,7 +44,8 @@ object ClearInfo : Module(
     val roomAlerts by BooleanSetting("Enable Room Alerts", true, desc = "Titles for the room you are in.").withDependency { roomDrop }
     val cleared by BooleanSetting("Cleared", true, desc = "When your room gets its checkmark.").withDependency { roomDrop && roomAlerts }
     val secretsDone by BooleanSetting("Secrets Done", true, desc = "When your cleared room turns green.").withDependency { roomDrop && roomAlerts }
-    val displayTime by NumberSetting("Display Time", 0.5, 0.1..3.0, 0.1, desc = "How long the title stays.", unit = "s").withDependency { roomDrop && roomAlerts }
+    val alertStyle by SelectorSetting("Alert Style", RoomAlerts.Style.TITLE, desc = "A title, or the screen's edges glowing in the alert's color.").withDependency { roomDrop && roomAlerts }
+    val displayTime by NumberSetting("Display Time", 0.5, 0.1..3.0, 0.1, desc = "How long the alert stays.", unit = "s").withDependency { roomDrop && roomAlerts }
     val keyRooms by SelectorSetting("Key Rooms", RoomAlerts.Rush.NOT, desc = "Key rooms are the ones next to a wither or blood door.").withDependency { roomDrop && roomAlerts }
     val noBlood by BooleanSetting("No Blood Room", false, desc = "No alert for the blood room.").withDependency { roomDrop && roomAlerts }
     internal val roomSound = SoundOption(this, "block.note_block.pling", prefix = "Room Alert ") { roomDrop && roomAlerts }

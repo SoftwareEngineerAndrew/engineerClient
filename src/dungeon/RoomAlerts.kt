@@ -1,6 +1,11 @@
 package com.engineerclient.dungeon
 
+import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
+import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.resources.Identifier
 import com.odtheking.odin.events.CheckmarkUpdateEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.core.EventBus
@@ -14,8 +19,17 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import java.util.Collections
 import java.util.IdentityHashMap
 
-/** Clear Info's Room Alerts: a title when the room you are in is cleared or has all its secrets. */
+/** Clear Info's Room Alerts: a title or a vignette when the room you are in is cleared or has all its secrets. */
 object RoomAlerts {
+    enum class Style(private val label: String) {
+        TITLE("Title"), VIGNETTE("Vignette");
+        override fun toString() = label
+    }
+
+    private var vignetteColor = 0
+    private var vignetteStart = 0L
+    private var vignetteMs = 0L
+
     enum class Rush(private val label: String) {
         ANY("Always"), ONLY("Only Key Rooms"), NOT("Not Key Rooms");
         override fun toString() = label
@@ -31,6 +45,9 @@ object RoomAlerts {
         }
         on<LevelEvent.Load> { marks.clear() }
         EventBus.subscribe(this)
+        HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "room_alert_vignette")) { gfx, _ ->
+            EngineerClient.safely("room alert vignette") { drawVignette(gfx) }
+        }
     }
 
     private fun onMark(room: DungeonRoom, before: MapCheckmark?, mark: MapCheckmark) {
@@ -46,8 +63,31 @@ object RoomAlerts {
             mark == MapCheckmark.GREEN && !wasCleared && ClearInfo.cleared -> "&aRoom Cleared!"
             else -> return
         }
-        showTitle(text, ClearInfo.displayTime)
+        if (ClearInfo.alertStyle == Style.VIGNETTE) {
+            vignetteColor = when (text[1]) { 'b' -> 0x55FFFF; 'a' -> 0x55FF55; else -> 0xFFFFFF }
+            vignetteStart = System.currentTimeMillis()
+            vignetteMs = (ClearInfo.displayTime * 1000).toLong()
+        } else showTitle(text, ClearInfo.displayTime)
         ClearInfo.roomSound.play()
+    }
+
+    /** The screen's edges in the alert's color, fading out over the display time. */
+    private fun drawVignette(gfx: GuiGraphicsExtractor) {
+        val left = vignetteMs - (System.currentTimeMillis() - vignetteStart)
+        if (left <= 0) return
+        val strength = left.toFloat() / vignetteMs
+        val w = gfx.guiWidth(); val h = gfx.guiHeight()
+        val band = minOf(w, h) / 5
+        val steps = 16
+        for (i in 0 until steps) {
+            val alpha = (strength * 140 * (steps - i) / steps).toInt().coerceIn(0, 255)
+            val c = (alpha shl 24) or vignetteColor
+            val a = band * i / steps; val b = band * (i + 1) / steps
+            gfx.fill(a, b, a + (b - a), h - b, c)
+            gfx.fill(w - b, b, w - a, h - b, c)
+            gfx.fill(a, a, w - a, b, c)
+            gfx.fill(a, h - b, w - a, h - a, c)
+        }
     }
 
     private fun keyRoom(room: DungeonRoom) = DungeonScan.doors.values.any { door ->
