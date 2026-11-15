@@ -25,6 +25,7 @@ public abstract class EntityRendererMixin<T extends Entity> {
                 PuzzleSolvers.shouldHideBlaze(entity) ||
                 Highlight.hidesTag(entity) ||
                 com.engineerclient.render.ScoreboardNametags.hidesMobDialogue(entity) ||
+                com.engineerclient.render.Visibility.hidesDamageNumber(entity) ||
                 !Visibility.INSTANCE.shouldRenderPlayer(entity) ||
                 shouldHideDyingArmorStand(entity)
         ) cir.setReturnValue(false);

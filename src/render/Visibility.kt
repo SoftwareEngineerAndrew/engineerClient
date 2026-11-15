@@ -121,6 +121,7 @@ object Visibility : Module(
     private val playersOnlyInDungeons by BooleanSetting("Hide Players Only In Dungeons", false, desc = "Players are only hidden in dungeons.").withDependency { cleanupDropdown && hidePlayers }
     private val hideAllPlayers by BooleanSetting("Hide All Players", false, desc = "Hides players at any distance.").withDependency { cleanupDropdown && hidePlayers }
     private val playerDistance by NumberSetting("Hide Players Distance", 3f, 0..32, .5, "Players this close are hidden.", unit = " blocks").withDependency { cleanupDropdown && hidePlayers && !hideAllPlayers }
+    private val hideDamageNumbers by BooleanSetting("Hide Damage Numbers", false, desc = "Hides the damage numbers that pop out of mobs.").withDependency { cleanupDropdown }
     private val hideSheep by BooleanSetting("Hide Dungeon Sheep", true, desc = "Sheep are not drawn in dungeons.").withDependency { cleanupDropdown }
 
     private val menusDropdown by DropdownSetting("Menus", desc = "Title, Esc, loading and container screens.")
@@ -268,6 +269,15 @@ object Visibility : Module(
 
     fun noVignette() = enabled && noVignette
     @JvmStatic fun hidesPortalOverlay() = enabled && hidePortalOverlay
+
+    // "1,234", "✧1,234✧" and crits like "✯1,234✯", with Hypixel's separators and icons around them.
+    private val DAMAGE = Regex("""^[^\p{L}]*\d[\d,.]*[kKmMbB]?[^\p{L}]*$""")
+
+    @JvmStatic fun hidesDamageNumber(entity: Entity): Boolean {
+        if (!enabled || !hideDamageNumbers || entity !is net.minecraft.world.entity.decoration.ArmorStand || !entity.isInvisible) return false
+        val name = entity.customName?.string ?: return false
+        return '❤' !in name && DAMAGE.matches(name)
+    }
     @JvmStatic fun lavaAsWater() = enabled && lavaAsWater
     private var lavaShown = false
     fun noWaterOverlay() = enabled && noWaterOverlay
