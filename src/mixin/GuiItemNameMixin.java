@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Random Stuff's Hide Item Names: the name that pops up over the hotbar when you switch items, not drawn. */
+/** The name that pops up over the hotbar when you switch items: hidden, or drawn by Visibility's Item Name HUD. */
 @Mixin(Hud.class)
 public class GuiItemNameMixin {
 

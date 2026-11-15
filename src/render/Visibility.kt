@@ -1,5 +1,8 @@
 package com.engineerclient.render
 
+import net.minecraft.util.ARGB
+import net.minecraft.core.component.DataComponents
+import com.engineerclient.mixin.HudItemNameAccessor
 import com.engineerclient.EngineerClient
 import com.engineerclient.chat.ChatHider
 import com.engineerclient.misc.ScoreboardLines
@@ -89,6 +92,9 @@ object Visibility : Module(
     private val blackSky by BooleanSetting("Black Sky", true, desc = "Black sky and distant fog instead of blue.").withDependency { screenDropdown }
     private val noGlint by BooleanSetting("No Enchant Glint", true, desc = "No enchantment glint on items, except in terminals.").withDependency { screenDropdown }
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "No item name above the hotbar when you switch items.").withDependency { screenDropdown }
+    private val itemNameHud by HUD("Item Name HUD", "Moves the name shown when you switch items. Off: it stays above the hotbar.", true, 380, 400, 1f) { example ->
+        drawItemName(this, example)
+    }.withDependency { screenDropdown && !hideItemNames }
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the whole action bar above the hotbar.").withDependency { screenDropdown }
     private val noDropAnimation by BooleanSetting("No Drop Animation", false, desc = "In dungeons, a rejected drop leaves the held item raised.").withDependency { screenDropdown }
     private val hidePortalOverlay by BooleanSetting("Hide Portal Overlay", false, desc = "No purple overlay inside a nether portal.").withDependency { screenDropdown }
@@ -409,7 +415,28 @@ object Visibility : Module(
 
     fun blackSkyActive(): Boolean = enabled && blackSky
 
-    fun hidesItemNames(): Boolean = enabled && hideItemNames
+    fun hidesItemNames(): Boolean = enabled && (hideItemNames || itemNameHud.enabled)
+
+    private const val ITEM_NAME_WIDTH = 200
+
+    private fun drawItemName(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
+        val hud = mc.gui.hud as HudItemNameAccessor
+        val stack = hud.`ec$lastToolHighlight`()
+        val timer = hud.`ec$toolHighlightTimer`()
+        val shown = !hideItemNames && timer > 0 && stack != null && !stack.isEmpty
+        val name: Component = when {
+            shown -> Component.empty().append(stack.hoverName).withStyle(stack.rarity.color())
+                .let { if (stack.has(DataComponents.CUSTOM_NAME)) it.withStyle(ChatFormatting.ITALIC) else it }
+            example -> Component.literal("Item Name")
+            else -> return ITEM_NAME_WIDTH to 12
+        }
+        val alpha = if (shown) minOf(timer * 256 / 10, 255) else 255
+        if (alpha > 0) {
+            val w = mc.font.width(name)
+            g.textWithBackdrop(mc.font, name, (ITEM_NAME_WIDTH - w) / 2, 2, w, ARGB.white(alpha))
+        }
+        return ITEM_NAME_WIDTH to 12
+    }
 
     fun hidesRecipeBook(): Boolean = enabled && hideRecipeBook
 
