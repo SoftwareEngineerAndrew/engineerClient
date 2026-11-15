@@ -13,7 +13,10 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
+import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import java.util.PriorityQueue
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 // Cells are the 7x6 boulder grid (x 6..24, z 9..24, step 3), bit i = column i % 7, row i / 7.
 // Players walk on the ground between boulders: a strip north of row 0 they drop into, a strip south of row 5 that leads to the chest.
@@ -41,30 +44,56 @@ object BoulderSolver {
     private var planMode: Mode? = null
     private var plan = listOf<Step>()
 
+    /** Plans by board and mode, worked out off the game thread: the known layouts from the entrance as soon as one is needed. */
+    private val plans = ConcurrentHashMap<Pair<Long, Mode>, List<Step>>()
+    private val solving = ConcurrentHashMap.newKeySet<Pair<Long, Mode>>()
+    private val worker = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-boulder").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
+    private var precomputed = false
+
+    private fun precompute() {
+        if (precomputed) return
+        precomputed = true
+        for (layout in LAYOUTS) for (mode in Mode.entries) solveLater(layout, NORTH + 3, mode)
+    }
+
+    private fun solveLater(b: Long, from: Int, mode: Mode) {
+        val key = b to mode
+        if (plans.containsKey(key) || !solving.add(key)) return
+        worker.execute {
+            try { plans[key] = solve(b, from, mode) ?: emptyList() } catch (_: Throwable) {} finally { solving.remove(key) }
+        }
+    }
+
     fun onRoomEnter(event: RoomEnterEvent) {
-        reset()
+        precompute()
         if (event.room?.data?.name == "Boulder") room = event.room
     }
 
+    /** The Boulder room as soon as the map knows it and has its turn, before anyone walks in. */
+    private fun findRoom(): DungeonRoom? =
+        room ?: DungeonScan.rooms.firstOrNull { it.data?.name == "Boulder" && it.clayPos != null }?.also { room = it }
+
     fun onTick(mode: Mode) {
-        val room = room ?: return
-        if (DungeonUtils.currentRoomName != "Boulder") return
+        val room = findRoom() ?: return
         val read = readBoard(room) ?: return
         if (read != seen) { seen = read; stableTicks = 0; return }
         // a push reaches the client as one packet per chunk section, so wait for the board to settle
         if (++stableTicks < 2 || (read == board && mode == planMode)) return
 
+        if (mode == planMode && board != -1L) {
+            val done = plan.indexOfFirst { it.after == read }
+            if (done != -1) { board = read; plan = plan.drop(done + 1); return }
+        }
+        // Worked out off the game thread: until the plan is in, this tick comes back.
+        val key = read to mode
+        val ready = plans[key]
+        if (ready == null) { solveLater(read, playerNode(room, read), mode); return }
         val first = board == -1L
         board = read
-        if (mode == planMode) {
-            val done = plan.indexOfFirst { it.after == read }
-            if (done != -1) { plan = plan.drop(done + 1); return }
-        }
         if (first && read !in LAYOUTS && !solved(read)) modMessage("§eBoulder has already been moved, solving from where it is.")
         planMode = mode
-        plan = solve(read, playerNode(room, read), mode) ?: emptyList<Step>().also {
-            if (!solved(read)) modMessage("§cBoulder: no solve found from here.")
-        }
+        plan = ready
+        if (ready.isEmpty() && !solved(read)) modMessage("§cBoulder: no solve found from here.")
     }
 
     fun onRenderWorld(event: RenderExtractEvent, showAllBoulderClicks: Boolean, boulderStyle: BoxStyle, boulderColor: Color) {
