@@ -256,7 +256,7 @@ object TeleportLaw {
     private val CHEST = Regex("^(chest|trapped_chest|ender_chest)$")
 
     private fun stops(id: String, top: Double) = (STOPS_ANYWAY.containsMatchIn(id) || top > 0.0) && !NEVER_STOPS.containsMatchIn(id)
-    private fun free(id: String, top: Double) = top <= 0.0 || CHEST.containsMatchIn(id)
+    private fun free(id: String, top: Double) = top <= 0.0
 
     /**
      * Hypixel 1.8 materials that aren't solid (alldata query/world.mjs NOT_SOLID), by block id without "minecraft:".
