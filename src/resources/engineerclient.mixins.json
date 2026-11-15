@@ -116,8 +116,6 @@
     "DungeonbreakerMixin",
     "DungeonbreakerDelayMixin",
     "BossBarTextMixin",
-    "WorldBorderClickMixin",
-    "WorldBorderUseMixin",
     "ItemAnimationsRendererMixin",
     "ItemAnimationsSwingMixin",
     "ItemAnimationsEquipMixin",
