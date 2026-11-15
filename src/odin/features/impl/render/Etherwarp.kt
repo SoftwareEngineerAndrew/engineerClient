@@ -61,6 +61,7 @@ object Etherwarp : Module(
     val zpewIceFill by BooleanSetting("In Ice Fill", false, desc = "Also in the Ice Fill puzzle.").withDependency { legitZpew }
     val zpewDebug by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera jump to config/engineerclient/zpew-debug.log, for checking the predictions.").withDependency { legitZpew }
     val zpewCapture by BooleanSetting("Capture Misses", false, desc = "When a prediction is wrong (warps where the server refuses, lands elsewhere, or refuses where the server warps), saves the click and the blocks around it to config/engineerclient/zpew-misses.txt, to fix the law from.").withDependency { legitZpew }
+    val zpewCaptureHits by BooleanSetting("Capture Hits", false, desc = "Also saves every right prediction to zpew-misses.txt.").withDependency { legitZpew && zpewCapture }
 
     private var etherPos: EtherPos? = null
 

@@ -43,6 +43,8 @@ object Zpew {
     private val hyperion get() = Etherwarp.zpewHyperion
     private val debug get() = Etherwarp.zpewDebug
     private val capture get() = Etherwarp.zpewCapture
+    private val captureHits get() = Etherwarp.zpewCaptureHits
+    private var lastTeleportMs = 0L
     private var wasEnabled = false
 
     private var logOut: java.io.Writer? = null
@@ -67,6 +69,8 @@ object Zpew {
         val eye get() = if (swimming) TeleportLaw.SWIM_EYE else if (ether || sneaking) TeleportLaw.SNEAK_EYE else TeleportLaw.STAND_EYE
         var from: DoubleArray? = null
         var cells: String? = null
+        var player: DoubleArray? = null
+        var sinceTeleport = -1L
     }
 
     private val queue = ZpewQueue<Click>(::land)
@@ -121,6 +125,9 @@ object Zpew {
             if (queue.lastMatch < 0 && oldest != null) miss(if (queue.lastExpected == null) "law-refused" else "wrong-landing", oldest, queue.lastExpected, doubleArrayOf(x, y, z))
             val e = queue.lastExpected
             val off = e?.let { Math.sqrt((it[0] - x) * (it[0] - x) + (it[1] - y) * (it[1] - y) + (it[2] - z) * (it[2] - z)) }
+            val answered = queue.lastAnswered
+            if (captureHits && queue.lastMatch >= 0 && answered != null) miss("hit", answered, doubleArrayOf(x, y, z), doubleArrayOf(x, y, z))
+            lastTeleportMs = System.currentTimeMillis()
             log("TP to=${fmt(doubleArrayOf(x, y, z))} expected=${fmt(e)} off=${off?.let { "%.3f".format(it) } ?: "-"} match=${queue.lastMatch} waiting=$waited left=${queue.size}")
             sync("tp")
         } else log("TP-UNASKED to=${fmt(doubleArrayOf(x, y, z))}")
@@ -139,8 +146,9 @@ object Zpew {
     }
 
     /**
-     * Capture Misses: one line per wrong prediction, tab-separated: kind, ether|blink, sneaking, distance, from, yaw pitch, predicted,
-     * actual, then the blocks around the ray as "x y z id top state" joined by ';'. The law's tests read these (test/resources/zpew-misses).
+     * Capture Misses: one line per wrong prediction (and per right one, "hit", with Capture Hits), tab-separated: kind, ether|blink,
+     * sneaking, distance, from, yaw pitch, predicted, actual, the blocks around the ray as "x y z id top state" joined by ';', ms since
+     * the last teleport, and where you were (from is the chain's start).
      */
     private fun miss(kind: String, c: Click, predicted: DoubleArray?, actual: DoubleArray?) {
         if (!capture) return
@@ -150,9 +158,9 @@ object Zpew {
             val f = mc.gameDirectory.toPath().resolve("config/engineerclient/zpew-misses.txt")
             java.nio.file.Files.createDirectories(f.parent)
             val p = { a: DoubleArray? -> a?.joinToString(",") { it.toString() } ?: "-" }
-            val line = listOf(kind, if (c.ether) "ether" else "blink", c.sneaking, c.distance, p(from), "${c.yaw} ${c.pitch}", p(predicted), p(actual), cells).joinToString(TAB)
+            val line = listOf(kind, if (c.ether) "ether" else "blink", c.sneaking, c.distance, p(from), "${c.yaw} ${c.pitch}", p(predicted), p(actual), cells, c.sinceTeleport, p(c.player)).joinToString(TAB)
             java.nio.file.Files.writeString(f, line + NL, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
-            mc.player?.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7Legit Zpew: saved a $kind miss to zpew-misses.txt"))
+            if (kind != "hit") mc.player?.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7Legit Zpew: saved a $kind miss to zpew-misses.txt"))
         } catch (_: Throwable) {}
     }
 
@@ -307,6 +315,8 @@ object Zpew {
                 val from = camera?.let { doubleArrayOf(it.x, it.y, it.z) } ?: doubleArrayOf(p.x, p.y, p.z)
                 c.from = from
                 c.cells = snapshot(from, c)
+                c.player = doubleArrayOf(p.x, p.y, p.z)
+                c.sinceTeleport = System.currentTimeMillis() - lastTeleportMs
             }
             val sound = when {
                 c.ether -> EtherSound.Kind.ETHER.takeIf { Etherwarp.zpewSound }

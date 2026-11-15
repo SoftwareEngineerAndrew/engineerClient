@@ -71,6 +71,9 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         private set
     var lastExpected: DoubleArray? = null
         private set
+    /** The click the last [teleport] answered. */
+    var lastAnswered: C? = null
+        private set
 
     /** [counts]: the server should cast it; false still lets a teleport match it. */
     /** [player]: where you are as the click goes out (the server's position: your last move packet). */
@@ -87,6 +90,7 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         lastMatch = i
         lastExpected = waiting.firstOrNull { it.counts }?.let { predict(it.from, it.click) }
         if (i < 0) i = waiting.indexOfFirst { it.counts }
+        lastAnswered = waiting.getOrNull(i)?.click
         repeat(i + 1) { waiting.removeFirst() }
         // the clicks still waiting went out before this landing reached us: the server casts them from it
         for (w in waiting) w.from = to
