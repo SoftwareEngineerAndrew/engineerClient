@@ -10,22 +10,18 @@ package com.engineerclient.misc
  * (the ones before it were dropped by the server); when none does, the law missed and the oldest is taken. Either way the
  * chain is worked out again from the real landing.
  *
- * A dropped click can't be told from the others, so a click waiting longer than the round trip plus its spread
- * (measured from answered clicks, like TCP) stops counting. It can still be matched for a while, in case it was late.
- * Ticks are the server's as they reach us, so a lag spike (no ticks arriving) doesn't run the clock out, and the burst
- * after one doesn't either: as many client ticks ([wall]) must pass too. [HARD] client ticks is the cap if the server never answers; [MAX] keeps a dropped click from holding the camera past a second.
+ * A dropped click can't be told from the others, so a click waiting longer than your ping + 50 ms stops counting. It can
+ * still be matched for a while ([KEEP] server ticks, [HARD] client ticks), in case it was late.
  */
 class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleArray?) {
     /** [from]: where the server has you for this click when no earlier waiting click moves you. */
-    private class Waiting<C>(val click: C, val tick: Long, val wall: Long, var counts: Boolean, var from: DoubleArray) {
+    private class Waiting<C>(val click: C, val tick: Long, val wall: Long, var counts: Boolean, var from: DoubleArray, val ms: Long = System.currentTimeMillis()) {
         /** The server tick a "There are blocks in the way!" line came for this click, or -1. */
         var blockedAt = -1L
     }
 
     private val waiting = ArrayDeque<Waiting<C>>()
-    private var roundTrip = Double.NaN
     private var lastTeleportTick = -1L
-    private var spread = 0.0
 
     /** Where the camera goes (feet), or null: at the player. */
     var camera: DoubleArray? = null
@@ -90,7 +86,7 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         var i = answers(to)
         lastMatch = i
         lastExpected = waiting.firstOrNull { it.counts }?.let { predict(it.from, it.click) }
-        if (i >= 0) sample((tick - waiting[i].tick).toDouble()) else i = waiting.indexOfFirst { it.counts }
+        if (i < 0) i = waiting.indexOfFirst { it.counts }
         repeat(i + 1) { waiting.removeFirst() }
         // the clicks still waiting went out before this landing reached us: the server casts them from it
         for (w in waiting) w.from = to
@@ -127,11 +123,10 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         rechain()
     }
 
-    /** Clicks waiting too long stop counting, and go after [KEEP]. True when the camera moved. */
-    fun expire(tick: Long, wall: Long = tick): Boolean {
-        val limit = if (roundTrip.isNaN()) FIRST.toDouble() else minOf(MAX.toDouble(), roundTrip + maxOf(GRACE.toDouble(), 4 * spread))
+    /** Clicks waiting longer than [limitMs] stop counting, and go after [KEEP]. True when the camera moved. */
+    fun expire(tick: Long, wall: Long, now: Long, limitMs: Long): Boolean {
         var changed = false
-        for (w in waiting) if (w.counts && ((tick - w.tick >= limit && wall - w.wall >= limit) || wall - w.wall >= HARD)) { w.counts = false; changed = true; onDrop?.invoke(w.click) }
+        for (w in waiting) if (w.counts && now - w.ms >= limitMs) { w.counts = false; changed = true; onDrop?.invoke(w.click) }
         while (waiting.isNotEmpty() && (tick - waiting.first().tick >= KEEP || wall - waiting.first().wall >= HARD + KEEP)) waiting.removeFirst()
         if (!changed) return false
         rechain()
@@ -141,12 +136,6 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     fun clear() {
         waiting.clear()
         camera = null
-    }
-
-    private fun sample(wait: Double) {
-        if (roundTrip.isNaN()) { roundTrip = wait; spread = wait / 2; return }
-        spread = spread * 0.75 + kotlin.math.abs(wait - roundTrip) * 0.25
-        roundTrip = roundTrip * 0.875 + wait * 0.125
     }
 
     private fun rechain() {
@@ -159,10 +148,7 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     private fun same(a: DoubleArray?, b: DoubleArray) = a != null && (0..2).all { kotlin.math.abs(a[it] - b[it]) < 1e-6 }
 
     private companion object {
-        const val GRACE = 4
-        const val FIRST = 20
-        const val MAX = 20
         const val KEEP = 60
-        const val HARD = 40
+        const val HARD = 200
     }
 }

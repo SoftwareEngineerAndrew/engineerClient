@@ -96,16 +96,7 @@ object Zpew {
     )
 
     /** Feet; ZpewCameraMixin adds the eye height. */
-    /** Where you were when the camera last moved to a landing: your walking since then moves the view too. */
-    private var anchor: Vec3? = null
-
-    @JvmStatic fun cameraPos(): Vec3? {
-        val c = camera ?: return null
-        if (!enabled) return null
-        val p = mc.player ?: return c
-        val a = anchor ?: return c
-        return c.add(p.getPosition(mc.deltaTracker.getGameTimeDeltaPartialTick(true)).subtract(a))
-    }
+    @JvmStatic fun cameraPos(): Vec3? = if (enabled) camera else null
 
     /** ZpewTeleportMixin: the game has just moved you for a server teleport. */
     /** Where you were just before the server's position packet ([ZpewTeleportMixin] HEAD), or null. */
@@ -138,7 +129,6 @@ object Zpew {
     private fun sync(why: String = "") {
         val old = camera
         camera = queue.camera?.let { Vec3(it[0], it[1], it[2]) }
-        anchor = if (camera == null) null else mc.player?.position()
         if (debug) {
             // where the view was and is: the player when there's no camera
             val p = mc.player?.position()
@@ -280,7 +270,9 @@ object Zpew {
             if (!live()) return@on
             blockClick = null
             ticks++
-            if (queue.expire(serverTicks.get(), ticks)) sync("expire")
+            // A teleport the server hasn't made within your ping + 50 ms isn't coming: the camera goes back to you.
+            val ping = com.odtheking.odin.utils.ServerUtils.averagePing.takeIf { it > 0 } ?: 250
+            if (queue.expire(serverTicks.get(), ticks, System.currentTimeMillis(), ping + 50L)) sync("expire")
             queue.oldestCounting()?.let { c ->
                 // an AOTE/AOTV's line and its move can reach us a server tick apart
                 if (queue.settleBlocked(serverTicks.get()) { if (it.witherImpact) 4 else 1 }) {
