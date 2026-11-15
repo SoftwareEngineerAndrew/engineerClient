@@ -14,6 +14,7 @@ import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.PersonalBest
 import com.odtheking.odin.utils.createSoundSettings
 import com.odtheking.odin.utils.modMessage
+import net.minecraft.world.inventory.Slot
 
 /** Every P3 terminal feature, one section each; the logic lives in the section objects ([TermSolver], [TermTimes], ...). */
 object Terminals : Module(
@@ -36,6 +37,8 @@ object Terminals : Module(
     val rubixMode by SelectorSetting("Rubix Mode", RubixMode.FEWEST_CLICKS, desc = "Fewest Clicks mixes in right clicks; the left only modes never ask for one. Least Movement marks the next pane on the shortest mouse path (Rubix 1).").withDependency { solverDrop }
     val melodySolver by BooleanSetting("Melody Solver", true, desc = "Solves melody too.").withDependency { solverDrop }
     val numberText by BooleanSetting("Number Text", true, desc = "Numbers: each pane's number on it.").withDependency { solverDrop }
+    private val hideNumbers by BooleanSetting("Hide Numbers' Numbers", false, desc = "Numbers: hides the 1-10, leaving only the order colours (/termsim too).").withDependency { solverDrop }
+    private val numbersShown by NumberSetting("Show Next Numbers", 0, 0..14, 1, desc = "The next this many panes still show their number (0: none).").withDependency { solverDrop && hideNumbers }
     val clickLimit by BooleanSetting("Click Limit", true, desc = "Hypixel takes 5 terminal clicks per 500 ms; one it would drop isn't sent.").withDependency { solverDrop }
     val resyncTimeout by NumberSetting("Resync Timeout", 0, 0..1000, 25, desc = "A click Hypixel hasn't answered after this long is undone (0: from your ping).", unit = "ms").withDependency { solverDrop }
 
@@ -143,6 +146,21 @@ object Terminals : Module(
     val statusOn get() = enabled && status
     val titlesOn get() = enabled && titles
     val hitboxesOn get() = enabled && hitboxes
+
+    @JvmStatic
+    fun hidesTerminalNumbers(): Boolean = enabled && hideNumbers
+
+    /** Only the terminal's own slots: the inventory below keeps its stack sizes. */
+    @JvmStatic
+    fun hidesTerminalNumber(slot: Slot): Boolean {
+        if (!hidesTerminalNumbers()) return false
+        val term = TerminalUtils.currentTerm ?: return false
+        return term.type == TerminalTypes.NUMBERS && slot.index < term.type.windowSize && !showsTerminalNumber(slot.index, term.solution)
+    }
+
+    /** Whether [slotIndex] is one of the next Show Next Numbers clicks in [solution]. */
+    @JvmStatic
+    fun showsTerminalNumber(slotIndex: Int, solution: List<Int>): Boolean = solution.indexOf(slotIndex) in 0 until numbersShown
 
     enum class Style(private val label: String) {
         CUSTOM("Custom"), VANILLA("Vanilla");

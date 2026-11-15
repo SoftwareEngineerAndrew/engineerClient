@@ -1,6 +1,5 @@
 package com.engineerclient.terminals
 
-import com.engineerclient.misc.RandomStuff
 import com.odtheking.odin.utils.hasGlint
 import net.minecraft.core.component.DataComponents
 import net.minecraft.core.registries.BuiltInRegistries
@@ -48,7 +47,7 @@ class NumbersHandler : TerminalHandler(TerminalTypes.NUMBERS) {
     override fun look(slot: Int): Look? {
         val at = order.indexOf(slot)
         if (at < 0) return null
-        val text = if (!Terminals.numberText || orderOverride?.invoke() != null || (RandomStuff.hidesTerminalNumbers() && !RandomStuff.showsTerminalNumber(slot, order))) null
+        val text = if (!Terminals.numberText || orderOverride?.invoke() != null || (Terminals.hidesTerminalNumbers() && !Terminals.showsTerminalNumber(slot, order))) null
             else shown[slot].toString()
         return Look(if (at < 4) NUMBER_1 + at else NONE, text)
     }

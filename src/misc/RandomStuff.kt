@@ -16,7 +16,6 @@ import com.odtheking.odin.features.Module
 import com.engineerclient.terminals.sim.TermSimGUI
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.engineerclient.terminals.TerminalTypes
 import com.engineerclient.terminals.TerminalUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
@@ -30,7 +29,6 @@ import net.fabricmc.fabric.api.client.screen.v1.Screens
 import net.minecraft.network.chat.contents.TranslatableContents
 import net.minecraft.client.multiplayer.ServerData
 import net.minecraft.client.multiplayer.resolver.ServerAddress
-import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemDisplayContext
 
 /**
@@ -44,18 +42,6 @@ object RandomStuff : Module(
     description = "A collection of small unrelated QoL toggles.",
     key = null,
 ) {
-    /**
-     * The inverse of the "Show Numbers" option older Odin versions had on Terminal Solver.
-     * With it on the numbers terminal ("Click in order!") is drawn without its 1-10, so the only
-     * thing to go on is the solver's three order colours - you click the colour, not the number.
-     *
-     * Two places draw those numbers, so two read this: [com.engineerclient.mixin.NumbersHandlerMixin]
-     * for the text Odin itself draws (every render type, and the practice sim), and
-     * [com.engineerclient.mixin.TerminalNumberMixin] for the vanilla stack count, which the Normal
-     * render type still shows on the slots Odin hands back to vanilla.
-     */
-    private val hideTermNumbers by BooleanSetting("Hide Numbers' Numbers", false, desc = "In the numbers terminal (\"Click in order!\"), hides the numbers 1-10 so only the solver's order colours are left to go on. Odin's old Show Numbers, inverted. Applies to /termsim as well.")
-    private val termNumbersShown by NumberSetting("Show Next Numbers", 0, 0..14, 1, desc = "With Hide Numbers' Numbers: the numbers still show on this many of the next panes to click (0 hides them all). Applies to /termsim as well.").withDependency { hideTermNumbers }
     private val termCursorReset by BooleanSetting("Force Cursor Reset", false, desc = "Opening a terminal always puts the cursor in the middle of the screen. On Linux (Xwayland) the game sometimes leaves it where it was; this moves it again. Terminals (and /termsim) only, no other menu.")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
 
@@ -226,33 +212,6 @@ object RandomStuff : Module(
         // solvers read the glint component rather than the render, so they are unaffected either way
         // - this is purely so a human can still tell.
         return !(context == ItemDisplayContext.GUI && inTerminal())
-    }
-
-    /** True while the numbers terminal's 1-10 should not be drawn at all. */
-    @JvmStatic
-    fun hidesTerminalNumbers(): Boolean = enabled && hideTermNumbers
-
-    /**
-     * The same question for one slot of the open screen, so the vanilla count is only ever dropped
-     * on the terminal's own slots - your inventory below it keeps its stack sizes.
-     */
-    @JvmStatic
-    fun hidesTerminalNumber(slot: Slot): Boolean {
-        if (!hidesTerminalNumbers()) return false
-        val term = TerminalUtils.currentTerm ?: return false
-        return term.type == TerminalTypes.NUMBERS && slot.index < term.type.windowSize && !showsTerminalNumber(slot.index, term.solution)
-    }
-
-    /**
-     * Whether Show Next Numbers keeps [slotIndex]'s number despite Hide Numbers' Numbers: it is one of the next
-     * (setting) slots in [solution], the clicks left in order.
-     */
-    @JvmStatic
-    fun showsTerminalNumber(slotIndex: Int, solution: List<Int>): Boolean {
-        val n = termNumbersShown
-        if (n <= 0) return false
-        val at = solution.indexOf(slotIndex)
-        return at in 0 until n
     }
 
     fun hidesSheep(): Boolean = enabled && hideSheep && com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils.inDungeons

@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.engineerclient.misc.RandomStuff;
+import com.engineerclient.terminals.Terminals;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * The other half of Hide Terminal Numbers: the stack count vanilla draws in a slot's corner.
+ * The other half of Terminals' Hide Numbers' Numbers: the stack count vanilla draws in a slot's corner.
  *
  * In the numbers terminal the 1-10 are the panes' stack sizes, so any slot left to vanilla shows its
  * number whatever Odin does. Odin's own render type takes every terminal slot off vanilla, but the
@@ -48,7 +48,7 @@ public class TerminalNumberMixin {
     private void ec$hideTerminalCount(GuiGraphicsExtractor graphics, Font font, ItemStack itemStack, int x, int y, String countText) {
         try {
             Slot slot = ec$slot;
-            if (slot != null && RandomStuff.hidesTerminalNumber(slot)) return;
+            if (slot != null && Terminals.hidesTerminalNumber(slot)) return;
         } catch (Throwable t) {
             // never cost someone their inventory counts over this
         }
