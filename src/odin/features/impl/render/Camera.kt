@@ -21,7 +21,6 @@ object Camera : Module(
     private val fixRidingCamera by BooleanSetting("Fix Riding Camera", false, desc = "The camera no longer lags behind while riding (MC-259512).")
     private val ridingInputFix by BooleanSetting("Riding Input Delay Fix", false, desc = "No mouse input delay while riding (MC-206540).")
     private val doubleSneakFix by BooleanSetting("Double Sneak Fix", false, desc = "The server can't change your own sneak pose.")
-    private val hidePortalOverlay by BooleanSetting("Hide Portal Overlay", false, desc = "No purple overlay inside a nether portal.")
 
     // Entity data slot 6 is the pose.
     private const val POSE_ID = 6
@@ -42,7 +41,6 @@ object Camera : Module(
     @JvmStatic fun instantSneak() = enabled && instantSneak
     @JvmStatic fun noHurtCamera() = enabled && noHurtCamera
     @JvmStatic fun fixRidingCamera(entity: Entity) = enabled && fixRidingCamera && entity === mc.player && entity.isPassenger
-    @JvmStatic fun hidePortalOverlay() = enabled && hidePortalOverlay
 
     @JvmStatic
     fun onPassengerTurned(passenger: Entity, vehicleYaw: Float) {

@@ -14,6 +14,7 @@ import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
@@ -89,6 +90,7 @@ object Visibility : Module(
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "No item name above the hotbar when you switch items.").withDependency { screenDropdown }
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the whole action bar above the hotbar.").withDependency { screenDropdown }
     private val noDropAnimation by BooleanSetting("No Drop Animation", false, desc = "In dungeons, a rejected drop leaves the held item raised.").withDependency { screenDropdown }
+    private val hidePortalOverlay by BooleanSetting("Hide Portal Overlay", false, desc = "No purple overlay inside a nether portal.").withDependency { screenDropdown }
 
     private val cleanupDropdown by DropdownSetting("Cleanup", desc = "Particles, entities and players that clutter the screen.")
     private val hideBlockBreak by BooleanSetting("Hide Block Break Particles", false, desc = "No block crack and break particles.").withDependency { cleanupDropdown }
@@ -120,14 +122,31 @@ object Visibility : Module(
     private val blurInGui by BooleanSetting("Blur In GUI", false, desc = "Blurs the world behind any open GUI; the HUD stays sharp.").withDependency { menusDropdown }
     private val blurStrength by NumberSetting("Blur Strength", 4, 1..10, 1, desc = "Blur radius in pixels.").withDependency { menusDropdown && blurInGui }
 
-    private val sidebarDropdown by DropdownSetting("Sidebar", desc = "Scoreboard colors and lines.")
-    private val sidebarColors by BooleanSetting("Sidebar Colors", false, desc = "Custom scoreboard background colors.").withDependency { sidebarDropdown }
-    private val sidebarTitleColor by ColorSetting("Sidebar Title Color", Color(0, 0, 0, 0.4f), true, desc = "Behind the scoreboard title.").withDependency { sidebarDropdown && sidebarColors }
-    private val sidebarBodyColor by ColorSetting("Sidebar Body Color", Color(0, 0, 0, 0.3f), true, desc = "Behind the scoreboard lines.").withDependency { sidebarDropdown && sidebarColors }
-    private val hideSbLines by BooleanSetting("Clean Scoreboard", false, desc = "Hides the noisy sidebar lines; Purse, Bits and teammates stay.").withDependency { sidebarDropdown }
-    private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", true, desc = "Hides The Catacombs location line in dungeons.").withDependency { sidebarDropdown && hideSbLines }
-    private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", false, desc = "Hides the dungeon's Time Elapsed line.").withDependency { sidebarDropdown && hideSbLines }
-    private val hideSbCleared by BooleanSetting("Scoreboard: Hide Cleared %", false, desc = "Hides the dungeon's Cleared % line.").withDependency { sidebarDropdown && hideSbLines }
+    private val scoreboardDropdown by DropdownSetting("Scoreboard", desc = "Position, colors, lines and server id.")
+    internal val scoreboardHud by HUD("Scoreboard HUD", "Moves and scales the scoreboard. Off: it stays where the game puts it.", true, 400, 100, 1f) { example ->
+        ScoreboardNametags.hud(this, example)
+    }.withDependency { scoreboardDropdown }
+    internal val customOpacity by BooleanSetting("Custom Opacity", false, desc = "Uses your own scoreboard background opacity.").withDependency { scoreboardDropdown }
+    internal val opacity by NumberSetting("Background Opacity", 30, 0..100, 5, desc = "Opacity of the scoreboard background.", unit = "%").withDependency { scoreboardDropdown && customOpacity }
+    private val sidebarColors by BooleanSetting("Sidebar Colors", false, desc = "Custom scoreboard background colors.").withDependency { scoreboardDropdown }
+    private val sidebarTitleColor by ColorSetting("Sidebar Title Color", Color(0, 0, 0, 0.4f), true, desc = "Behind the scoreboard title.").withDependency { scoreboardDropdown && sidebarColors }
+    private val sidebarBodyColor by ColorSetting("Sidebar Body Color", Color(0, 0, 0, 0.3f), true, desc = "Behind the scoreboard lines.").withDependency { scoreboardDropdown && sidebarColors }
+    private val hideSbLines by BooleanSetting("Clean Scoreboard", false, desc = "Hides the noisy sidebar lines; Purse, Bits and teammates stay.").withDependency { scoreboardDropdown }
+    private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", true, desc = "Hides The Catacombs location line in dungeons.").withDependency { scoreboardDropdown && hideSbLines }
+    private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", false, desc = "Hides the dungeon's Time Elapsed line.").withDependency { scoreboardDropdown && hideSbLines }
+    private val hideSbCleared by BooleanSetting("Scoreboard: Hide Cleared %", false, desc = "Hides the dungeon's Cleared % line.").withDependency { scoreboardDropdown && hideSbLines }
+    internal val serverIdHider by BooleanSetting("Server ID Hider", false, desc = "Hides the server id and lobby address on the sidebar.").withDependency { scoreboardDropdown }
+    internal val serverReplacement by StringSetting("Server Text", "m1A", 16, desc = "Shown instead of the server id.", placeholder = "").withDependency { scoreboardDropdown && serverIdHider }
+    internal val ipReplacement by StringSetting("Address Text", "", 32, desc = "Shown instead of the lobby address; empty hides it.", placeholder = "").withDependency { scoreboardDropdown && serverIdHider }
+    internal val hideIp by BooleanSetting("Hide Address", true, desc = "Also replace www.hypixel.net.").withDependency { scoreboardDropdown && serverIdHider }
+
+    private val nametagsDropdown by DropdownSetting("Nametags", desc = "Nametags, and a fake name for yours.")
+    internal val showOwn by BooleanSetting("Show Own Nametag", false, desc = "Draws your own nametag above your head.").withDependency { nametagsDropdown }
+    internal val noBackground by BooleanSetting("Hide Nametag Background", false, desc = "Removes the black box behind nametags.").withDependency { nametagsDropdown }
+    internal val shadow by BooleanSetting("Shadowed Nametag", false, desc = "Draws nametag text with a shadow.").withDependency { nametagsDropdown }
+    internal val hideDinnerbone by BooleanSetting("Hide Dinnerbone Nametag", false, desc = "Hides the nametag of anything named Dinnerbone.").withDependency { nametagsDropdown }
+    internal val nameChanger by BooleanSetting("Name Changer", false, desc = "Shows a fake name instead of yours everywhere text is drawn.").withDependency { nametagsDropdown }
+    internal val fakeName by StringSetting("Fake Name", "Player", 16, desc = "The name shown instead of yours.", placeholder = "").withDependency { nametagsDropdown && nameChanger }
 
     private val chatDropdown by DropdownSetting("Chat", desc = "Chat history, stacking, copying and hiding.")
     private val removeLimit by BooleanSetting("Remove Chat Limit", false, desc = "Keeps more than vanilla's 100 chat lines.").withDependency { chatDropdown }
@@ -168,6 +187,7 @@ object Visibility : Module(
             ScoreboardLines.hideCatacombsLocation = hideSbCatacombs
             ScoreboardLines.hideTimeElapsed = hideSbElapsed
             ScoreboardLines.hideCleared = hideSbCleared
+            ScoreboardNametags.moving = enabled && scoreboardHud.enabled
         }
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
 
@@ -238,6 +258,7 @@ object Visibility : Module(
     }
 
     fun noVignette() = enabled && noVignette
+    @JvmStatic fun hidesPortalOverlay() = enabled && hidePortalOverlay
     fun noWaterOverlay() = enabled && noWaterOverlay
     fun noSuffocationOverlay() = enabled && noSuffocationOverlay
     fun hidePotionHud() = enabled && hidePotionHud
@@ -415,5 +436,6 @@ object Visibility : Module(
     override fun onDisable() {
         super.onDisable()
         ScoreboardLines.hideLines = false
+        ScoreboardNametags.moving = false
     }
 }

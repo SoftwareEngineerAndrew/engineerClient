@@ -848,6 +848,34 @@ object ConfigMigration {
             changed = true
         }
 
+        // Scoreboard and Nametags is Visibility's Scoreboard and Nametags sections; its switches stay off where it was off.
+        module(modules, "Scoreboard and Nametags")?.let { sn ->
+            val on = sn["enabled"]?.asBoolean == true
+            val vis = ensure("Visibility")
+            val to = settings(vis)
+            for ((k, v) in settings(sn).entrySet()) {
+                if (k == "Keybind" || k == "Scoreboard" || k == "Names" || k == "Server ID" || k == "Nametags") continue
+                val copy = v.deepCopy()
+                if (!on && copy.isJsonObject) copy.asJsonObject.addProperty("enabled", false)
+                if (!on && copy.isJsonPrimitive && copy.asJsonPrimitive.isBoolean && k != "Hide Address") to.addProperty(k, false) else to.add(k, copy)
+            }
+            if (on && vis["enabled"]?.asBoolean != true) vis.addProperty("enabled", true)
+            modules.remove(sn)
+            changed = true
+        }
+
+        // Hide Portal Overlay is Visibility's.
+        if (Files.exists(odinFile)) run {
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val cam = module(odin, "Camera") ?: return@run
+            val s = settings(cam)
+            val v = s["Hide Portal Overlay"] ?: return@run
+            settings(ensure("Visibility")).addProperty("Hide Portal Overlay", cam["enabled"]?.asBoolean == true && v.asBoolean)
+            s.remove("Hide Portal Overlay")
+            write(odinFile, odin)
+            changed = true
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)

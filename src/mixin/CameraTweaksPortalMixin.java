@@ -12,6 +12,6 @@ public class CameraTweaksPortalMixin {
 
     @Inject(method = "extractPortalOverlay", at = @At("HEAD"), cancellable = true)
     private void ec$hidePortalOverlay(GuiGraphicsExtractor graphics, float alpha, CallbackInfo ci) {
-        if (com.odtheking.odin.features.impl.render.Camera.hidePortalOverlay()) ci.cancel();
+        if (com.engineerclient.render.Visibility.hidesPortalOverlay()) ci.cancel();
     }
 }

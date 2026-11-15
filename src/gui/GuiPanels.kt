@@ -35,7 +35,7 @@ object Placement {
         "F7/M7 Boss" to listOf("Terminals", "Devices", "EE Highlight", "Recore", "Tick Timers", "Melody Message", "Positional Messages", "Invincibility Timer", "Wither Dragons", "Relics", "Spring Boots", "Explosive Shot", "Agro Sphere", "Highlight Levers", "i4 Aim", "Term Info", "ADS", "Termsim"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
         "Skyblock" to listOf("Arrows", "Chat Commands", "Coffee Random Stuff", "Command Aliases", "Enchant Colors", "Etherwarp", "Fast Launch", "Gyro Wand", "Item Protection", "Item Tweaks", "No Cursor Reset", "Player Display", "Ragnarock", "Random Stuff", "Sound Collector", "Sound Editor", "Menu Keybinds"),
-        "Render" to listOf("Search Bar", "Slot Binds", "Sounds", "Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Performance", "Player Size", "Render Tweaks", "Scoreboard and Nametags", "Scrollable Tooltip", "Visibility"),
+        "Render" to listOf("Search Bar", "Slot Binds", "Sounds", "Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Performance", "Player Size", "Render Tweaks", "Scrollable Tooltip", "Visibility"),
     )
 
     private val byName: Map<String, String> = lists.flatMap { (panel, names) -> names.map { it to panel } }.toMap()

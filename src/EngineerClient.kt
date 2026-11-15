@@ -85,7 +85,6 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.EnchantColors,
             com.engineerclient.skyblock.ItemProtection,
             com.engineerclient.skyblock.RunsLogger,
-            com.engineerclient.render.ScoreboardNametags,
             com.engineerclient.render.BossBar,
             com.engineerclient.skyblock.Arrows,
             com.engineerclient.skyblock.SearchBar,
