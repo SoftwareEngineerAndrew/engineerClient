@@ -3,7 +3,11 @@ package com.engineerclient.render
 import com.engineerclient.mixin.HudSidebarInvoker
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.network.chat.Style
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.decoration.ArmorStand
+import java.util.Optional
 import net.minecraft.world.scores.Objective
 
 /** The scoreboard and nametag parts of [Visibility]: its settings, this state and the hooks the mixins call. */
@@ -21,6 +25,22 @@ object ScoreboardNametags {
 
     fun showsOwn(entity: Entity): Boolean = enabled && v.showOwn && entity === mc.player
     fun hidesDinnerbone(entity: Entity): Boolean = enabled && v.hideDinnerbone && entity.customName?.string.equals("Dinnerbone", ignoreCase = true)
+    private val DIALOGUE_END = Regex("[?!.]$")
+
+    /** Mobs' gold lines ("What was that?"), bosses' bold dark red ones, and "JERRY! RUN!" / "???" over fleeing mobs. */
+    @JvmStatic
+    fun hidesMobDialogue(entity: Entity): Boolean {
+        if (!enabled || !v.hideMobDialogue || entity !is ArmorStand || !DungeonUtils.inDungeons) return false
+        val name = entity.customName ?: return false
+        val text = name.string
+        if (text == "JERRY! RUN!" || text == "???") return true
+        var style: Style? = null
+        name.visit({ s, part -> if (part.isNotBlank()) Optional.of(s) else Optional.empty() }, Style.EMPTY).ifPresent { style = it }
+        val color = style?.color?.serialize() ?: return false
+        return color == "gold" && style?.isBold != true && (DIALOGUE_END.containsMatchIn(text) || text == "Oh") ||
+            color == "dark_red" && style?.isBold == true && text.any { it.isLetter() }
+    }
+
     fun background(color: Int): Int = if (enabled && v.noBackground) 0 else color
     fun shadow(original: Boolean): Boolean = original || (enabled && v.shadow)
 

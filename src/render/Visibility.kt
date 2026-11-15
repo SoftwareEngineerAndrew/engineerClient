@@ -152,6 +152,7 @@ object Visibility : Module(
     internal val noBackground by BooleanSetting("Hide Nametag Background", false, desc = "Removes the black box behind nametags.").withDependency { nametagsDropdown }
     internal val shadow by BooleanSetting("Shadowed Nametag", false, desc = "Draws nametag text with a shadow.").withDependency { nametagsDropdown }
     internal val hideDinnerbone by BooleanSetting("Hide Dinnerbone Nametag", false, desc = "Hides the nametag of anything named Dinnerbone.").withDependency { nametagsDropdown }
+    internal val hideMobDialogue by BooleanSetting("Hide Mob Dialogue", false, desc = "Hides what mobs and bosses say over their heads in dungeons.").withDependency { nametagsDropdown }
     internal val nameChanger by BooleanSetting("Name Changer", false, desc = "Shows a fake name instead of yours everywhere text is drawn.").withDependency { nametagsDropdown }
     internal val fakeName by StringSetting("Fake Name", "Player", 16, desc = "The name shown instead of yours.", placeholder = "").withDependency { nametagsDropdown && nameChanger }
 
