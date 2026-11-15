@@ -152,6 +152,7 @@ object EngineerClient : ClientModInitializer {
         safely("pov in leap menu") { com.engineerclient.pov.PovInLeapMenu.install() }
         safely("creeper beams ding") { com.engineerclient.dungeon.CreeperBeamsDing.install() }
         safely("puzzle overlay") { com.engineerclient.misc.PuzzleOverlay.install() }
+        safely("secret waypoints") { com.engineerclient.dungeon.SecretWaypoints.install() }
         safely("map configs") { ModuleManager.loadConfigurations() }
         runCatching { com.engineerclient.misc.LaunchStats.install() }
         runCatching { com.engineerclient.misc.UpdateCheck.install() }
