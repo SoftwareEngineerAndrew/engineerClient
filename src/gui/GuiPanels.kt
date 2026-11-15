@@ -21,7 +21,7 @@ object Placement {
     /** Kept out of the panels; opened on their own instead. */
     val HIDDEN = setOf("Command Keybinds", "POV Previews")
 
-    val PANELS = listOf("Dungeons", "Clear", "Boss", "Terminals", "Crimson Isle", "Skyblock", "Render", "AscentClient", "Coffee Client", "Devgineer Client")
+    val PANELS = listOf("Dungeons", "Clear", "F7/M7 Boss", "Crimson Isle", "Skyblock", "Render", "AscentClient", "Coffee Client", "Devgineer Client")
 
     /** Where a panel starts: six to a row. */
     fun home(name: String): Pair<Int, Int> {
@@ -30,10 +30,9 @@ object Placement {
     }
 
     private val byName: Map<String, String> = mapOf(
-        "Dungeons" to listOf("ADR", "Boss Bar", "Highlights", "Waypoints", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers2", "Leap Menu", "Blessing Display", "Dungeon Queue", "Pre-Requeue", "Lag Warning", "Croesus", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay"),
+        "Dungeons" to listOf("ADR", "Boss Bar", "Highlights", "Waypoints", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers2", "Leap Menu", "Blessing Display", "Dungeon Queue", "Pre-Requeue", "Lag Warning", "Croesus", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay", "Spring Boots", "Livid Solver", "Maxor Crystals", "Spirit Bear", "Terracotta Timer"),
         "Clear" to listOf("Block Instaclear", "Dungeon Map", "Blood Camp", "BR Roles", "Clear Info", "Door Highlight", "Mimic", "Puzzles", "Secrets"),
-        "Boss" to listOf("Spring Boots", "Agro Sphere", "Explosive Shot", "LCM Melee Warning", "Livid Solver", "Maxor Crystals", "Spirit Bear", "Terracotta Timer", "Invincibility Timer", "Tick Timers", "Wither Dragons", "Relics"),
-        "Terminals" to listOf("Terminals", "Devices", "EE Highlight", "Positional Messages", "Highlight Levers", "i4 Aim", "Melody Message", "Recore", "Term Info", "ADS", "Termsim"),
+        "F7/M7 Boss" to listOf("Tick Timers", "Relics", "Wither Dragons", "Invincibility Timer", "LCM Melee Warning", "Explosive Shot", "Agro Sphere", "Terminals", "Devices", "EE Highlight", "Positional Messages", "Highlight Levers", "i4 Aim", "Melody Message", "Recore", "Term Info", "ADS", "Termsim"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
         "Skyblock" to listOf("Arrows", "Chat Commands", "Coffee Random Stuff", "Command Aliases", "Enchant Colors", "Etherwarp", "Fast Launch", "Gyro Wand", "Item Protection", "Item Tweaks", "No Cursor Reset", "Player Display", "Ragnarock", "Random Stuff", "Sound Collector", "Sound Editor", "Menu Keybinds"),
         "Render" to listOf("Search Bar", "Slot Binds", "Sounds", "Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Performance", "Player Size", "Render Tweaks", "Scoreboard and Nametags", "Scrollable Tooltip", "Visibility"),
@@ -48,7 +47,7 @@ object Placement {
         byName[module.name]?.let { return it }
         return when (module.category) {
             Category.DUNGEON -> "Clear"
-            Category.BOSS -> "Boss"
+            Category.BOSS -> "Dungeons"
             Category.NETHER -> "Crimson Isle"
             Category.RENDER -> "Render"
             else -> "Skyblock"
