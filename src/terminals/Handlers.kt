@@ -208,7 +208,15 @@ class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
         if (column >= 0) { out += column; out += column + 36 }
         if (aligned()) out += button
         BUTTONS.indexOf(button).takeIf { it >= 0 && column >= 0 }?.let { rowColumns[it] = column % 9 }
+        if (pointer >= 0) {
+            if (lastPointer >= 0 && pointer / 9 == lastPointer / 9 && pointer != lastPointer) direction = if (pointer % 9 > lastPointer % 9) 1 else -1
+            lastPointer = pointer
+        }
     }
+
+    /** Which way the pane is going (1 right, -1 left): a staircase follows it, down to the right and back. */
+    private var direction = 1
+    private var lastPointer = -1
 
     /** Each row's answer column as it was shown, for the staircase. */
     private val rowColumns = IntArray(BUTTONS.size) { -1 }
@@ -218,7 +226,7 @@ class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
         if (!aligned()) return false
         val row = BUTTONS.indexOf(button)
         val col = column % 9
-        return if (row == 0) col == FIRST_SLOT else row > 0 && rowColumns[row - 1] >= 0 && col == rowColumns[row - 1] + 1
+        return if (row == 0) col == FIRST_SLOT else row > 0 && rowColumns[row - 1] >= 0 && col == rowColumns[row - 1] + direction
     }
 
     private fun aligned() = pointer >= 0 && column >= 0 && button >= 0 && pointer % 9 == column % 9

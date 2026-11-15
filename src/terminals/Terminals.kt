@@ -92,6 +92,8 @@ object Terminals : Module(
     val completeSounds by BooleanSetting("Complete Sounds", false, desc = "A sound when you finish a terminal.").withDependency { soundsDrop }
     val completeSound = createSoundSettings("Completion Sound", "entity.experience_orb.pickup") { soundsDrop && completeSounds }
     val melodyAlert by BooleanSetting("Melody Click Alert", false, desc = "A sound while melody's pane lines up: row 1 slot 1, and each row one slot right of the last.").withDependency { soundsDrop }
+    val melodyVignette by BooleanSetting("Melody Alert Vignette", true, desc = "The screen's edges glow while the alert plays.").withDependency { soundsDrop && melodyAlert }
+    val melodyVignetteColor by ColorSetting("Melody Vignette Color", Colors.MINECRAFT_GREEN.withAlpha(0.55f), true, desc = "The glow's color and strength.").withDependency { soundsDrop && melodyAlert && melodyVignette }
     val melodyRepeat by NumberSetting("Melody Alert Repeat", 2, 1..10, 1, desc = "While it can be clicked, the sound plays again this often.", unit = " ticks").withDependency { soundsDrop && melodyAlert }
     val melodySound = createSoundSettings("Melody Alert Sound", "block.note_block.pling") { soundsDrop && melodyAlert }
 

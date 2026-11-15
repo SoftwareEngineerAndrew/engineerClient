@@ -75,19 +75,7 @@ object RoomAlerts {
     private fun drawVignette(gfx: GuiGraphicsExtractor) {
         val left = vignetteMs - (System.currentTimeMillis() - vignetteStart)
         if (left <= 0) return
-        val strength = left.toFloat() / vignetteMs
-        val w = gfx.guiWidth(); val h = gfx.guiHeight()
-        val band = minOf(w, h) / 5
-        val steps = 16
-        for (i in 0 until steps) {
-            val alpha = (strength * 140 * (steps - i) / steps).toInt().coerceIn(0, 255)
-            val c = (alpha shl 24) or vignetteColor
-            val a = band * i / steps; val b = band * (i + 1) / steps
-            gfx.fill(a, b, a + (b - a), h - b, c)
-            gfx.fill(w - b, b, w - a, h - b, c)
-            gfx.fill(a, a, w - a, b, c)
-            gfx.fill(a, h - b, w - a, h - a, c)
-        }
+        com.engineerclient.render.Vignette.draw(gfx, vignetteColor, (140f * left / vignetteMs).toInt())
     }
 
     private fun keyRoom(room: DungeonRoom) = DungeonScan.doors.values.any { door ->

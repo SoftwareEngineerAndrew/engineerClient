@@ -2,6 +2,7 @@ package com.engineerclient.terminals
 
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
@@ -29,6 +30,19 @@ object TermSounds {
             val m = TerminalUtils.currentTerm as? MelodyHandler
             if (m == null || !Terminals.melodyAlert || !m.alerting()) { melodyTicks = 0; return@on }
             if (melodyTicks++ % Terminals.melodyRepeat == 0) playSoundSettings(Terminals.melodySound())
+        }
+
+        // Once per screen: a resize inits it again.
+        val glowing = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Any, Boolean>())
+        ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
+            if (!glowing.add(screen)) return@register
+            ScreenEvents.afterExtract(screen).register { _, graphics, _, _, _ ->
+                val m = TerminalUtils.currentTerm as? MelodyHandler ?: return@register
+                if (Terminals.melodyAlert && Terminals.melodyVignette && m.alerting()) {
+                    val c = Terminals.melodyVignetteColor
+                    com.engineerclient.render.Vignette.draw(graphics, c.rgba, (c.alphaFloat * 255).toInt())
+                }
+            }
         }
 
         on<TerminalEvent.Solve> {
