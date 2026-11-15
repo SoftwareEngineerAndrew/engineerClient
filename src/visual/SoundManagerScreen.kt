@@ -82,6 +82,10 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
                 is Header -> {
                     graphics.fill(viewX, y, viewX + viewW, y + ROW_H, 0x05FFFFFF)
                     graphics.centeredText(font, "§l${row.name}", viewX + viewW / 2, y + 9, ACCENT)
+                    val bx = viewX + viewW - MUTE_W - 8
+                    val hovered = mouseX in bx..bx + MUTE_W && mouseY in y + 6..y + 21
+                    graphics.fill(bx, y + 6, bx + MUTE_W, y + 21, if (hovered) 0x6455AAFF else 0x12FFFFFF)
+                    graphics.centeredText(font, if (allMuted(i)) "Reset" else "Mute all", bx + MUTE_W / 2, y + 10, if (hovered) -1 else 0xFFC0C0C0.toInt())
                 }
                 is Sound -> drawSound(graphics, row, y, mouseX, mouseY)
             }
@@ -141,6 +145,12 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
         if (resetScroll) scroll = 0
     }
 
+    /** The sounds listed under the header at [index]. */
+    private fun section(index: Int): List<Sound> =
+        rows.drop(index + 1).takeWhile { it is Sound }.filterIsInstance<Sound>()
+
+    private fun allMuted(index: Int) = section(index).let { s -> s.isNotEmpty() && s.all { Sounds.getVolumePercent(it.id) == 0 } }
+
     private fun clampScroll() {
         scroll = scroll.coerceIn(0, max(0, rows.size * ROW_H - viewH))
     }
@@ -170,6 +180,16 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
         if (mx in viewX until viewX + viewW && my in viewY until viewY + viewH) {
             val index = (my - viewY + scroll) / ROW_H
             val row = rows.getOrNull(index)
+            if (row is Header) {
+                val y = viewY - scroll + index * ROW_H
+                val bx = viewX + viewW - MUTE_W - 8
+                if (mx in bx..bx + MUTE_W && my in y + 6..y + 21) {
+                    val to = if (allMuted(index)) 100 else 0
+                    for (s in section(index)) Sounds.setVolumePercent(s.id, to)
+                    Sounds.playPreview(SoundEvents.UI_BUTTON_CLICK.value())
+                    return true
+                }
+            }
             if (row is Sound) {
                 val y = viewY - scroll + index * ROW_H
                 val playX = viewX + viewW - PLAY_W - 8
@@ -235,6 +255,7 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
         const val ROW_H = 26
         const val SLIDER_W = 140
         const val PLAY_W = 34
+        const val MUTE_W = 50
         const val ACCENT = 0xFF55AAFF.toInt()
     }
 }
