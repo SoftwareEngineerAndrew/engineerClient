@@ -42,7 +42,6 @@ object Zpew {
     private val aotv get() = Etherwarp.zpewAotv
     private val hyperion get() = Etherwarp.zpewHyperion
     private val debug get() = Etherwarp.zpewDebug
-    private val zeroPingSound get() = Etherwarp.zpewSound
     private val capture get() = Etherwarp.zpewCapture
     private var wasEnabled = false
 
@@ -307,9 +306,14 @@ object Zpew {
                 c.from = from
                 c.cells = snapshot(from, c)
             }
-            if (zeroPingSound && counts && c.ether) {
+            val sound = when {
+                c.ether -> EtherSound.Kind.ETHER.takeIf { Etherwarp.zpewSound }
+                c.witherImpact -> EtherSound.Kind.HYPE.takeIf { Etherwarp.zpewHypeSound }
+                else -> EtherSound.Kind.AOTV.takeIf { Etherwarp.zpewAotvSound }
+            }
+            if (sound != null && counts) {
                 val from = camera?.let { doubleArrayOf(it.x, it.y, it.z) } ?: doubleArrayOf(p.x, p.y, p.z)
-                if (land(from, c) != null) EtherSound.played()
+                if (land(from, c) != null) EtherSound.played(sound)
             }
             queue.click(c, serverTicks.get(), doubleArrayOf(p.x, p.y, p.z), counts, ticks)
             log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking}${if (c.swimming) " swim" else ""} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.odtheking.odin.utils.ServerUtils.currentPing}")
