@@ -32,7 +32,7 @@ object Placement {
     private val lists = listOf(
         "Dungeons" to listOf("Refill", "ADR", "Boss Bar", "Highlights", "Waypoints", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers2", "Leap Menu", "Blessing Display", "Dungeon Queue", "Pre-Requeue", "Lag Warning", "Croesus", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay", "Livid Solver", "Maxor Crystals", "Spirit Bear", "Terracotta Timer"),
         "Clear" to listOf("BR Roles", "Dungeon Map", "Clear Info", "Secrets", "Puzzles", "Door Highlight", "Block Instaclear", "Mimic", "Blood Camp"),
-        "F7/M7 Boss" to listOf("Spring Boots", "Tick Timers", "Relics", "Wither Dragons", "Invincibility Timer", "Explosive Shot", "Agro Sphere", "Terminals", "Devices", "EE Highlight", "Positional Messages", "Highlight Levers", "i4 Aim", "Melody Message", "Recore", "Term Info", "ADS", "Termsim"),
+        "F7/M7 Boss" to listOf("Terminals", "Devices", "EE Highlight", "Recore", "Tick Timers", "Melody Message", "Positional Messages", "Invincibility Timer", "Wither Dragons", "Relics", "Spring Boots", "Explosive Shot", "Agro Sphere", "Highlight Levers", "i4 Aim", "Term Info", "ADS", "Termsim"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
         "Skyblock" to listOf("Arrows", "Chat Commands", "Coffee Random Stuff", "Command Aliases", "Enchant Colors", "Etherwarp", "Fast Launch", "Gyro Wand", "Item Protection", "Item Tweaks", "No Cursor Reset", "Player Display", "Ragnarock", "Random Stuff", "Sound Collector", "Sound Editor", "Menu Keybinds"),
         "Render" to listOf("Search Bar", "Slot Binds", "Sounds", "Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Performance", "Player Size", "Render Tweaks", "Scoreboard and Nametags", "Scrollable Tooltip", "Visibility"),
@@ -41,7 +41,7 @@ object Placement {
     private val byName: Map<String, String> = lists.flatMap { (panel, names) -> names.map { it to panel } }.toMap()
 
     /** Panels listed in their own order rather than widest name first. */
-    private val ORDERED = setOf("Clear")
+    private val ORDERED = setOf("Clear", "F7/M7 Boss")
 
     /** Where [module] sits in its panel: its place in an ordered panel's list (unlisted last), else 0 (widest name first decides). */
     fun rank(module: Module): Int {
