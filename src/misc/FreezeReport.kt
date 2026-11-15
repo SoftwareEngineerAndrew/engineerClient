@@ -1,28 +1,34 @@
 package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
+import com.odtheking.odin.events.PacketEvent
+import com.odtheking.odin.events.core.EventBus
+import com.odtheking.odin.events.core.on
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 
-/** When the game stops ticking for [STALL_MS], every thread's stack goes to the log once, so a freeze can be traced. */
+/** When the game stops ticking or packets stop coming for [STALL_MS], every thread's stack goes to the log once, so a freeze can be traced. */
 object FreezeReport {
     @Volatile private var lastTick = System.currentTimeMillis()
+    @Volatile private var lastPacket = System.currentTimeMillis()
     @Volatile private var reported = false
+    @Volatile private var packetReported = false
 
     fun install() {
-        ClientTickEvents.END_CLIENT_TICK.register { lastTick = System.currentTimeMillis(); reported = false }
+        ClientTickEvents.END_CLIENT_TICK.register { lastTick = System.currentTimeMillis(); reported = false; if (EngineerClient.mc.connection == null) lastPacket = lastTick }
+        on<PacketEvent.Receive> { lastPacket = System.currentTimeMillis(); packetReported = false }
+        EventBus.subscribe(this)
         Thread({
             while (true) {
                 try { Thread.sleep(1000) } catch (_: InterruptedException) { return@Thread }
-                val stalled = System.currentTimeMillis() - lastTick
-                if (stalled < STALL_MS || reported) continue
-                reported = true
-                EngineerClient.safely("freeze report") { report(stalled) }
+                val now = System.currentTimeMillis()
+                if (now - lastTick >= STALL_MS && !reported) { reported = true; EngineerClient.safely("freeze report") { report("game not ticking", now - lastTick) } }
+                if (now - lastPacket >= STALL_MS && now - lastTick < STALL_MS && !packetReported) { packetReported = true; EngineerClient.safely("freeze report") { report("no packets", now - lastPacket) } }
             }
         }, "engineerclient-freeze-report").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }.start()
     }
 
-    private fun report(stalled: Long) {
-        val out = StringBuilder("[ec] game not ticking for ${stalled / 1000}s, threads:\n")
+    private fun report(what: String, stalled: Long) {
+        val out = StringBuilder("[ec] $what for ${stalled / 1000}s, threads:\n")
         val all = Thread.getAllStackTraces().entries.sortedBy { (t, _) -> if (t.name == "Render thread") 0 else 1 }
         for ((t, stack) in all) {
             if (stack.isEmpty()) continue
