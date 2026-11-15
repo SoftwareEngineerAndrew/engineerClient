@@ -3,7 +3,6 @@ package com.engineerclient.party
 import com.engineerclient.EngineerClient
 import com.engineerclient.clearbreakdown.OdinSync
 import com.engineerclient.pov.PoseShare
-import com.engineerclient.tpmaze.TeamTpMaze
 import com.google.gson.JsonParser
 import com.odtheking.odin.features.impl.boss.MelodyMessage
 import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
@@ -13,7 +12,7 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
 /**
- * Websocket messages (melody progress, map sync, Team TP Maze) over ADM's party link first, the way Pose POV shares: straight
+ * Websocket messages (melody progress, map sync) over ADM's party link first, the way Pose POV shares: straight
  * to teammates over TURN, `[14][channel][JSON]`. Odin's socket still carries them to anyone the link didn't reach, plain Odin
  * users included, and whatever comes either way goes to the same handlers, which take repeats fine.
  */
@@ -29,7 +28,6 @@ object OdinLink {
         listOf(
             Channel(MelodyMessage.melodyWebSocket, "username"),
             Channel(DungeonMap.syncSocket, "playerName", listOf(OdinSync.socket)),
-            Channel(TeamTpMaze.socket, "from"),
         )
     }
 
