@@ -44,6 +44,24 @@ object ActionBarListener {
     private var skipNextSecrets = false
     private var lastSecretsMax: Int? = null
 
+    /** The room's "found/total Secrets"; Secret Counter hands it over here before taking it off the action bar. */
+    fun secrets(message: String) {
+        val (found, max) = SECRETS_REGEX.find(message)?.destructured ?: return
+        val maxSecrets = max.toIntOrNull() ?: return
+        val sameMax = maxSecrets == lastSecretsMax
+        lastSecretsMax = maxSecrets
+        if (skipNextSecrets && sameMax) {
+            skipNextSecrets = false
+            return
+        }
+        skipNextSecrets = false
+        val room = DungeonUtils.currentRoom ?: return
+        val updated = found.toIntOrNull() ?: return
+        if (room.data?.maxSecrets != maxSecrets || (room.foundSecrets ?: -1) >= updated) return
+        room.foundSecrets = updated
+        SecretsUpdateEvent(room, updated).postAndCatch()
+    }
+
     init {
         on<RoomEnterEvent> { skipNextSecrets = true }
 
@@ -53,21 +71,7 @@ object ActionBarListener {
         }
 
         on<MessageEvent.Overlay> {
-            SECRETS_REGEX.find(message)?.destructured?.let { (found, max) ->
-                val maxSecrets = max.toIntOrNull() ?: return@let
-                val sameMax = maxSecrets == lastSecretsMax
-                lastSecretsMax = maxSecrets
-                if (skipNextSecrets && sameMax) {
-                    skipNextSecrets = false
-                    return@let
-                }
-                skipNextSecrets = false
-                val room = DungeonUtils.currentRoom ?: return@let
-                val updated = found.toIntOrNull() ?: return@let
-                if (room.data?.maxSecrets != maxSecrets || (room.foundSecrets ?: -1) >= updated) return@let
-                room.foundSecrets = updated
-                SecretsUpdateEvent(room, updated).postAndCatch()
-            }
+            secrets(message)
 
             HEALTH_REGEX.find(message)?.destructured?.let { (_, maxHp) ->
                 maxHealth = maxHp.replace(",", "").toIntOrNull() ?: maxHealth

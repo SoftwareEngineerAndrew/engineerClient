@@ -121,6 +121,7 @@ object EngineerClient : ClientModInitializer {
         safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
         safely("door outline") { com.engineerclient.misc.OdinDoorOutline.install() }
         safely("instant chime") { com.engineerclient.misc.OdinInstantChime.install() }
+        safely("secret counter") { com.engineerclient.dungeon.SecretCounter.install() }
         safely("ss alerts") { com.engineerclient.misc.OdinSimonSaysAlerts.install() }
         safely("custom keybinds") { com.engineerclient.misc.OdinCustomKeybinds.install() }
         safely("odin link") { com.engineerclient.party.OdinLink.install() }
