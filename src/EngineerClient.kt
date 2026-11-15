@@ -96,7 +96,6 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.render.Visibility,
             com.engineerclient.render.ScrollableTooltip,
             com.engineerclient.render.BlockOverlay,
-            com.engineerclient.dungeon.SuperboomGhostBlock,
             com.engineerclient.dungeon.Dungeonbreaker,
             com.engineerclient.dungeon.ShadowAssassin,
             com.engineerclient.dungeon.DungeonQueue,
