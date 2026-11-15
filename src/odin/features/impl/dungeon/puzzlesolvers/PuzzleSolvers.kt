@@ -21,7 +21,6 @@ import net.minecraft.network.chat.HoverEvent
 import net.minecraft.network.chat.Style
 import net.minecraft.network.protocol.game.ClientboundBlockEventPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
-import net.minecraft.world.InteractionHand
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.monster.Blaze
 import net.minecraft.world.level.block.Blocks
@@ -86,6 +85,7 @@ object PuzzleSolvers : Module(
 
     private val boulderDropDown by DropdownSetting("Boulder", desc = "Shows settings for the boulder puzzle solver.")
     private val boulderSolver by BooleanSetting("Boulder Solver", true, desc = "Solver for the boulder puzzle.").withDependency { boulderDropDown }
+    private val boulderMode by SelectorSetting("Boulder Mode", BoulderSolver.Mode.CLICKS, desc = "Solve for the fewest clicks or the least walking.").withDependency { boulderDropDown && boulderSolver }
     private val showAllBoulderClicks by BooleanSetting("Show All Boulder Clicks", false, desc = "Shows all the clicks or only the first.").withDependency { boulderDropDown && boulderSolver }
     private val boulderStyle by SelectorSetting("Boulder Style", BoxStyle.OUTLINE, desc = "Whether or not the box should be filled.").withDependency { boulderDropDown && boulderSolver }
     private val boulderColor by ColorSetting("Boulder Color", Colors.MINECRAFT_GREEN, true, desc = "The color of the box.").withDependency { boulderDropDown && boulderSolver }
@@ -205,9 +205,9 @@ object PuzzleSolvers : Module(
             }.takeIf { !it } ?: onPuzzleComplete(room.data?.name ?: return@onReceive)
         }
 
-        on<UseItemOnPostEvent> {
-            if (!DungeonUtils.inClear || this.hand == InteractionHand.OFF_HAND) return@on
-            if (boulderSolver) BoulderSolver.playerInteract(this)
+        on<TickEvent.End> {
+            if (!DungeonUtils.inClear) return@on
+            if (boulderSolver) BoulderSolver.onTick(boulderMode)
         }
 
         on<RenderExtractEvent> {

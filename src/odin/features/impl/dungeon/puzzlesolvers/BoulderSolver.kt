@@ -3,50 +3,205 @@ package com.odtheking.odin.features.impl.dungeon.puzzlesolvers
 import com.odtheking.odin.OdinMod.mc
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.RoomEnterEvent
-import com.odtheking.odin.events.UseItemOnPostEvent
+import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.JsonResourceLoader
+import com.odtheking.odin.utils.modMessage
 import com.odtheking.odin.utils.render.BoxStyle
 import com.odtheking.odin.utils.render.drawStyledBox
+import com.odtheking.odin.utils.render.drawText
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
-import net.minecraft.resources.Identifier
 import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
+import java.util.PriorityQueue
 
+// Cells are the 7x6 boulder grid (x 6..24, z 9..24, step 3), bit i = column i % 7, row i / 7.
+// Players walk on the ground between boulders: a strip north of row 0 they drop into, a strip south of row 5 that leads to the chest.
+// A click on a face centre pushes that boulder 3 away from the face, deleting any boulder it lands on.
 object BoulderSolver {
-    private data class BoxPosition(val render: AABB, val click: BlockPos)
-    private var currentPositions = mutableListOf<BoxPosition>()
-    private var solutions: Map<String, List<List<Int>>> = JsonResourceLoader.loadJson(Identifier.fromNamespaceAndPath("odin", "puzzles/boulder-solutions.json")) ?: emptyMap()
+    enum class Mode(private val label: String) { CLICKS("Least Clicks"), MOVEMENT("Least Movement"); override fun toString() = label }
 
-    fun onRoomEnter(event: RoomEnterEvent) = with(event.room) {
-        if (this?.data?.name != "Boulder") return@with reset()
-        var str = ""
-        for (z in 24 downTo 9 step 3) {
-            for (x in 24 downTo 6 step 3) {
-                str += if (mc.level?.getBlockState(getRealCoords(BlockPos(x, 66, z)))?.isAir == true) "0" else "1"
-            }
+    data class Step(val cell: Int, val dc: Int, val dr: Int, val after: Long)
+
+    private const val NORTH = 42
+    private const val SOUTH = 49
+    private const val DONE = 63
+    private const val CHEST = SOUTH + 3
+    private const val MAX_STATES = 200_000
+    private val PUSHES = arrayOf(intArrayOf(0, -1), intArrayOf(0, 1), intArrayOf(-1, 0), intArrayOf(1, 0))
+    private val LAYOUTS = longArrayOf(
+        0x105E94E0B87L, 0x20F7BB8EE80L, 0x31DDA33F8C1L, 0x24A228A8A22L,
+        0x7E94E0B86L, 0x3E448BF80L, 0x5754D0500L, 0x25202A7D555L
+    )
+
+    private var room: DungeonRoom? = null
+    private var board = -1L
+    private var seen = -1L
+    private var stableTicks = 0
+    private var planMode: Mode? = null
+    private var plan = listOf<Step>()
+
+    fun onRoomEnter(event: RoomEnterEvent) {
+        reset()
+        if (event.room?.data?.name == "Boulder") room = event.room
+    }
+
+    fun onTick(mode: Mode) {
+        val room = room ?: return
+        if (DungeonUtils.currentRoomName != "Boulder") return
+        val read = readBoard(room) ?: return
+        if (read != seen) { seen = read; stableTicks = 0; return }
+        // a push reaches the client as one packet per chunk section, so wait for the board to settle
+        if (++stableTicks < 2 || (read == board && mode == planMode)) return
+
+        val first = board == -1L
+        board = read
+        if (mode == planMode) {
+            val done = plan.indexOfFirst { it.after == read }
+            if (done != -1) { plan = plan.drop(done + 1); return }
         }
-        currentPositions = solutions[str]?.map { sol ->
-            val render = getRealCoords(BlockPos(sol[0], 65, sol[1]))
-            val click = getRealCoords(BlockPos(sol[2], 65, sol[3]))
-            BoxPosition(AABB(render), click)
-        }?.toMutableList() ?: return@with
+        if (first && read !in LAYOUTS && !solved(read)) modMessage("§eBoulder has already been moved, solving from where it is.")
+        planMode = mode
+        plan = solve(read, playerNode(room, read), mode) ?: emptyList<Step>().also {
+            if (!solved(read)) modMessage("§cBoulder: no solve found from here.")
+        }
     }
 
     fun onRenderWorld(event: RenderExtractEvent, showAllBoulderClicks: Boolean, boulderStyle: BoxStyle, boulderColor: Color) {
-        if (DungeonUtils.currentRoomName != "Boulder" || currentPositions.isEmpty()) return
-        if (showAllBoulderClicks) currentPositions.forEach {
-            event.drawStyledBox(it.render, boulderColor, boulderStyle, false)
-        } else currentPositions.firstOrNull()?.let {
-            event.drawStyledBox(it.render, boulderColor, boulderStyle, false)
+        val room = room ?: return
+        if (DungeonUtils.currentRoomName != "Boulder" || plan.isEmpty()) return
+        val steps = if (showAllBoulderClicks) plan else plan.take(1)
+        steps.forEachIndexed { i, step ->
+            val pos = room.getRealCoords(facePos(step))
+            event.drawStyledBox(AABB(pos), boulderColor, boulderStyle, false)
+            if (showAllBoulderClicks) event.drawText((i + 1).toString(), Vec3.atCenterOf(pos), 1f, false)
         }
     }
 
-    fun playerInteract(event: UseItemOnPostEvent) {
-        currentPositions.remove(currentPositions.firstOrNull { it.click == event.hitResult.blockPos })
+    fun reset() {
+        room = null
+        board = -1L
+        seen = -1L
+        stableTicks = 0
+        planMode = null
+        plan = emptyList()
     }
 
-    fun reset() {
-        currentPositions = mutableListOf()
+    private fun facePos(step: Step): BlockPos {
+        val x = 6 + 3 * (step.cell % 7)
+        val z = 9 + 3 * (step.cell / 7)
+        return BlockPos(x - 2 * step.dc, 65, z - 2 * step.dr)
+    }
+
+    private fun readBoard(room: DungeonRoom): Long? {
+        val level = mc.level ?: return null
+        var b = 0L
+        for (i in 0 until 42) {
+            val pos = room.getRealCoords(BlockPos(6 + 3 * (i % 7), 65, 9 + 3 * (i / 7)))
+            if (!level.isLoaded(pos)) return null
+            if (!level.getBlockState(pos).isAir) b = b or (1L shl i)
+        }
+        return b
+    }
+
+    private fun playerNode(room: DungeonRoom, b: Long): Int {
+        val pos = room.getRelativeCoords(mc.player?.blockPosition() ?: return NORTH + 3)
+        val col = ((pos.x - 5) / 3).coerceIn(0, 6)
+        if (pos.y >= 67 || pos.z < 8) return NORTH + col
+        if (pos.z > 25) return SOUTH + col
+        val cell = col + 7 * ((pos.z - 8) / 3).coerceIn(0, 5)
+        return if (b shr cell and 1L == 0L) cell else NORTH + col
+    }
+
+    private fun neighbours(n: Int, b: Long, out: IntArray): Int {
+        var k = 0
+        fun add(m: Int) { out[k++] = m }
+        fun open(cell: Int) = b shr cell and 1L == 0L
+        when {
+            n < NORTH -> {
+                val c = n % 7
+                val r = n / 7
+                if (c > 0 && open(n - 1)) add(n - 1)
+                if (c < 6 && open(n + 1)) add(n + 1)
+                if (r > 0 && open(n - 7)) add(n - 7)
+                if (r < 5 && open(n + 7)) add(n + 7)
+                if (r == 0) add(NORTH + c)
+                if (r == 5) add(SOUTH + c)
+            }
+            n < SOUTH -> {
+                val c = n - NORTH
+                if (c > 0) add(n - 1)
+                if (c < 6) add(n + 1)
+                if (open(c)) add(c)
+            }
+            else -> {
+                val c = n - SOUTH
+                if (c > 0) add(n - 1)
+                if (c < 6) add(n + 1)
+                if (open(35 + c)) add(35 + c)
+            }
+        }
+        return k
+    }
+
+    private fun distances(from: Int, b: Long): IntArray {
+        val dist = IntArray(SOUTH + 7) { -1 }
+        val queue = IntArray(SOUTH + 7)
+        val nb = IntArray(4)
+        var head = 0
+        var tail = 0
+        dist[from] = 0
+        queue[tail++] = from
+        while (head < tail) {
+            val n = queue[head++]
+            for (j in 0 until neighbours(n, b, nb)) {
+                val m = nb[j]
+                if (dist[m] != -1) continue
+                dist[m] = dist[n] + 1
+                queue[tail++] = m
+            }
+        }
+        return dist
+    }
+
+    private fun solved(b: Long) = distances(NORTH, b)[CHEST] != -1
+
+    private class Node(val cost: Long, val board: Long, val pos: Int, val parent: Node?, val step: Step?)
+
+    // Dijkstra over (board, where the player stands). Each push costs a click plus the walk to its face; finishing costs the walk to the chest.
+    private fun solve(start: Long, from: Int, mode: Mode): List<Step>? {
+        fun cost(clicks: Int, walk: Int): Long = if (mode == Mode.CLICKS) clicks * 1000L + walk else walk * 1000L + clicks
+        val queue = PriorityQueue<Node>(compareBy { it.cost })
+        val closed = HashSet<Long>()
+        queue.add(Node(0, start, from, null, null))
+        while (queue.isNotEmpty()) {
+            val node = queue.poll()
+            if (node.pos == DONE) return generateSequence(node) { it.parent }.mapNotNull { it.step }.toList().reversed()
+            if (!closed.add(node.board shl 6 or node.pos.toLong())) continue
+            if (closed.size > MAX_STATES) return null
+            val dist = distances(node.pos, node.board)
+            if (dist[CHEST] != -1) queue.add(Node(node.cost + cost(0, dist[CHEST]), node.board, DONE, node, null))
+            for (cell in 0 until 42) {
+                if (node.board shr cell and 1L == 0L) continue
+                val c = cell % 7
+                val r = cell / 7
+                for ((dc, dr) in PUSHES) {
+                    val tc = c + dc
+                    val tr = r + dr
+                    if (tc !in 0..6 || tr !in 0..5) continue
+                    val fc = c - dc
+                    val fr = r - dr
+                    val front = when {
+                        fc in 0..6 && fr in 0..5 -> fc + 7 * fr
+                        fr == -1 -> NORTH + fc
+                        else -> continue
+                    }
+                    if (dist[front] == -1) continue
+                    val after = node.board and (1L shl cell).inv() or (1L shl (tc + 7 * tr))
+                    queue.add(Node(node.cost + cost(1, dist[front]), after, front, node, Step(cell, dc, dr, after)))
+                }
+            }
+        }
+        return null
     }
 }
