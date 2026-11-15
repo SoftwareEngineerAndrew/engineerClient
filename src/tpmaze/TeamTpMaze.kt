@@ -109,50 +109,62 @@ object TeamTpMaze {
         replaceOdinSettings(listOf(dropdown, on, tracer, labels, nextColor, finalColor, usedColor, mateColor))
         on<LevelEvent.Load> { EngineerClient.safely("team tp maze reset") { reset() } }
         on<RoomEnterEvent> { EngineerClient.safely("team tp maze room") { room?.takeIf { it.data?.name == ROOM }?.let { enter(it) } } }
-        // Teleports arrive on the network thread, before the game moves anyone: where they stood is read now, the rest on the client thread.
+        // These arrive on the network thread: the world is only read on the client thread, where this runs before the packet moves anyone.
         onReceive<ClientboundPlayerPositionPacket> {
             if (!active()) return@onReceive
-            val p = mc.player ?: return@onReceive
-            val c = change
-            val x = if (Relative.X in relatives) p.x + c.position.x else c.position.x
-            val y = if (Relative.Y in relatives) p.y + c.position.y else c.position.y
-            val z = if (Relative.Z in relatives) p.z + c.position.z else c.position.z
-            val yaw = if (Relative.Y_ROT in relatives) p.yRot + c.yRot else c.yRot
-            val fromX = p.x; val fromZ = p.z
-            mc.execute { EngineerClient.safely("team tp maze teleport") { teleport(fromX, fromZ, x, y, z, yaw.toDouble(), exact = true) } }
+            val c = change; val rel = relatives
+            onClient {
+                EngineerClient.safely("team tp maze teleport") {
+                    val p = mc.player ?: return@safely
+                    val x = if (Relative.X in rel) p.x + c.position.x else c.position.x
+                    val y = if (Relative.Y in rel) p.y + c.position.y else c.position.y
+                    val z = if (Relative.Z in rel) p.z + c.position.z else c.position.z
+                    val yaw = if (Relative.Y_ROT in rel) p.yRot + c.yRot else c.yRot
+                    teleport(p.x, p.z, x, y, z, yaw.toDouble(), exact = true)
+                }
+            }
         }
-        // A teammate's teleport, seen in the world: one of these two packets, depending on how the server sends it.
         onReceive<ClientboundTeleportEntityPacket> {
-            val e = teammate(id) ?: return@onReceive
-            val c = change
-            val x = if (Relative.X in relatives) e.x + c.position.x else c.position.x
-            val y = if (Relative.Y in relatives) e.y + c.position.y else c.position.y
-            val z = if (Relative.Z in relatives) e.z + c.position.z else c.position.z
-            val yaw = if (Relative.Y_ROT in relatives) e.yRot + c.yRot else c.yRot
-            seen(e, x, y, z, yaw)
+            if (!active()) return@onReceive
+            val eid = id; val c = change; val rel = relatives
+            onClient {
+                EngineerClient.safely("team tp maze teammate") {
+                    val e = teammate(eid) ?: return@safely
+                    val from = e.positionCodec.base
+                    val x = if (Relative.X in rel) from.x + c.position.x else c.position.x
+                    val y = if (Relative.Y in rel) from.y + c.position.y else c.position.y
+                    val z = if (Relative.Z in rel) from.z + c.position.z else c.position.z
+                    val yaw = if (Relative.Y_ROT in rel) e.yRot + c.yRot else c.yRot
+                    teleport(from.x, from.z, x, y, z, yaw.toDouble(), exact = false)
+                }
+            }
         }
         onReceive<ClientboundEntityPositionSyncPacket> {
-            if (!hasPosition() || !hasRotation()) return@onReceive
-            val e = teammate(id) ?: return@onReceive
-            val to = position.endPosition()
-            seen(e, to.x, to.y, to.z, yRot)
+            if (!hasPosition() || !hasRotation() || !active()) return@onReceive
+            val eid = id; val to = position.endPosition(); val yaw = yRot
+            onClient {
+                EngineerClient.safely("team tp maze teammate") {
+                    val e = teammate(eid) ?: return@safely
+                    val from = e.positionCodec.base
+                    teleport(from.x, from.z, to.x, to.y, to.z, yaw.toDouble(), exact = false)
+                }
+            }
         }
         on<TickEvent.End> { EngineerClient.safely("team tp maze tick") { tick() } }
         on<RenderExtractEvent> { EngineerClient.safely("team tp maze render") { render(this) } }
         EventBus.subscribe(this)
     }
 
-    /** A teammate (not us) by entity id, while this is on. */
+    /** Now when already on the client thread (a bundled packet), else queued ahead of the packet's own handling. */
+    private inline fun onClient(crossinline block: () -> Unit) {
+        if (mc.isSameThread) block() else mc.execute { block() }
+    }
+
+    /** A teammate (not us) by entity id, while this is on. Client thread only. */
     private fun teammate(id: Int): Player? {
         if (!active()) return null
         val e = mc.level?.getEntity(id) as? Player ?: return null
         return e.takeIf { it !== mc.player && DungeonUtils.dungeonTeammatesNoSelf.any { t -> t.name == it.name.string } }
-    }
-
-    /** A teammate's teleport from where the server last had them (the entity itself may still be drawn easing there) to (x, y, z). */
-    private fun seen(e: Player, x: Double, y: Double, z: Double, yaw: Float) {
-        val from = e.positionCodec.base
-        mc.execute { EngineerClient.safely("team tp maze teammate") { teleport(from.x, from.z, x, y, z, yaw.toDouble(), exact = false) } }
     }
 
     /** Odin's TP Maze settings, whose solver is switched off (TpMazeRenderMixin): ours go in their place in Puzzle Solvers. */

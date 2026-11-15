@@ -198,7 +198,7 @@ class MazeMap {
 
 /**
  * Where each player should go next, the same on every client that knows the same: players in a cell split its unused pads between
- * them (by name, so nobody needs to agree on anything), a pad known to lead toward the final pad wins over exploring, and a player
+ * them (by name, so nobody needs to agree on anything), pads the looks still allow come first, then a known way to them, and a player
  * with nothing left to try in their cell goes by known pads to the nearest cell that has some.
  */
 object MazePlan {
@@ -221,28 +221,30 @@ object MazePlan {
         val fin = map.final
         val finCells = map.finalCells()
         val claimed = HashSet<Int>()
-        // First, everyone with a fixed answer: the corridor, the final pad, a known way to it.
+        val maybe = map.candidates().toSet()
+        // First, everyone with a fixed answer: the corridor, the final pad.
         val open = ArrayList<Pair<String, Int>>()
         for ((name, r) in where) {
             when {
                 r == MazePads.START_AREA -> out[name] = Advice(MazePads.START, Kind.START, 1)
                 r !in 0 until 7 -> {}
                 fin != null && MazePads.cell(fin) == r -> out[name] = Advice(fin, Kind.FINAL, 1)
-                else -> {
-                    val route = if (finCells.size == 1 && r !in finCells) route(map, r) { it in finCells } else null
-                    if (route != null) out[name] = Advice(route.pad, Kind.ROUTE, route.steps + 1) else open += name to r
-                }
+                else -> open += name to r
             }
         }
-        // Then the unused pads, split in each cell by name.
+        // Then, in each cell by name: the pads the looks still allow, a known way to their cells, the pads nobody has tried.
         val needDetour = ArrayList<Pair<String, Int>>()
         for ((cell, names) in open.groupBy({ it.second }, { it.first }).toSortedMap()) {
-            // A pad that may be the final pad first: stepping on it either ends the maze or explores like any other.
-            val maybe = map.candidates().toSet()
-            val fresh = MazePads.padsOf(cell).filter { !map.known(it) }.sortedBy { if (it in maybe) 0 else 1 }
-            for ((i, name) in names.sorted().withIndex()) {
-                if (i < fresh.size) { out[name] = Advice(fresh[i], Kind.EXPLORE, 1); claimed += fresh[i] }
-                else needDetour += name to cell
+            val here = MazePads.padsOf(cell).filter { it in maybe }.toMutableList()
+            val route = if (finCells.any { it != cell }) route(map, cell) { it in finCells } else null
+            val fresh = MazePads.padsOf(cell).filter { !map.known(it) && it !in maybe }.toMutableList()
+            for (name in names.sorted()) {
+                when {
+                    here.isNotEmpty() -> here.removeAt(0).let { out[name] = Advice(it, Kind.EXPLORE, 1); claimed += it }
+                    route != null -> out[name] = Advice(route.pad, Kind.ROUTE, route.steps + 1)
+                    fresh.isNotEmpty() -> fresh.removeAt(0).let { out[name] = Advice(it, Kind.EXPLORE, 1); claimed += it }
+                    else -> needDetour += name to cell
+                }
             }
         }
         // Whoever is left over goes by known pads to the nearest cell with an unused pad nobody is taking yet.
