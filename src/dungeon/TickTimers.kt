@@ -104,7 +104,7 @@ object TickTimers : Module(
     private val hideGigaTitle: Boolean by BooleanSetting("Hide Giga Title", true, desc = "Hides Storm's countdown title while Giga Lightning shows.").withDependency { stormDropdown && gigaHud.enabled }
     private val stormDeathHud by HUD("Storm Death Time", "At \"Storm is enraged!\", how long Storm took to die, in chat and here for 2 s.", true, 10, 145, 1.5f) { example ->
         if (!example && (!enabled || stormShownUntil - serverTicks <= 0)) return@HUD 0 to 0
-        draw("§bStorm died at: §f" + time(if (example) 31 * 20 + 7 else stormDiedTicks))
+        draw("§5" + String.format(java.util.Locale.ROOT, "%.2f", (if (example) 31 * 20 + 7 else stormDiedTicks) / 20.0))
     }.withDependency { stormDropdown }
 
     private val termsDropdown by DropdownSetting("Terminals", desc = "Term Start and Section Time.")
@@ -353,7 +353,7 @@ object TickTimers : Module(
                 if (stormDeathHud.enabled && start != null && !stormDead) {
                     stormDiedTicks = serverTicks - start - 1
                     stormShownUntil = serverTicks + STORM_SHOW
-                    EngineerClient.chat("Storm died at: ${time(stormDiedTicks)}")
+                    EngineerClient.chat("§aStorm died at: §e" + String.format(java.util.Locale.ROOT, "%.2f", stormDiedTicks / 20.0) + "s§a.")
                 }
             }
             message in STORM_LIGHTNING -> if (stormStart != null && lightningAt == null) lightningAt = serverTicks
