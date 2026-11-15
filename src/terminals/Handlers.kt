@@ -59,8 +59,8 @@ class NumbersHandler : TerminalHandler(TerminalTypes.NUMBERS) {
 }
 
 class RubixHandler(
-    private val leftOnly: () -> Boolean = { Terminals.rubixMode != Terminals.RubixMode.FEWEST_CLICKS },
-    private val leastMovement: () -> Boolean = { Terminals.rubixMode == Terminals.RubixMode.LEFT_LEAST_MOVEMENT },
+    private val leftOnly: () -> Boolean = { Terminals.rubixMode == Terminals.RubixMode.LEFT_CLICKS_ONLY || Terminals.rubixMode == Terminals.RubixMode.LEFT_LEAST_MOVEMENT },
+    private val leastMovement: () -> Boolean = { Terminals.rubixMode == Terminals.RubixMode.LEAST_MOVEMENT || Terminals.rubixMode == Terminals.RubixMode.LEFT_LEAST_MOVEMENT },
 ) : TerminalHandler(TerminalTypes.RUBIX) {
     private var target = -1
 

@@ -34,7 +34,7 @@ object Terminals : Module(
     val roundness by NumberSetting("Roundness", 4f, 0.0..12.0, 1.0, desc = "Corner roundness of the custom grid.").withDependency { solverDrop && style == Style.CUSTOM }
     val vanillaScale by NumberSetting("Vanilla Scale", 3, 1..6, 1, desc = "GUI scale while a terminal is open (6 is auto).").withDependency { solverDrop && style == Style.VANILLA }
     val hideItems by BooleanSetting("Hide Items", true, desc = "Vanilla: only the slots to click are drawn.").withDependency { solverDrop && style == Style.VANILLA }
-    val rubixMode by SelectorSetting("Rubix Mode", RubixMode.FEWEST_CLICKS, desc = "Fewest Clicks mixes in right clicks; the left only modes never ask for one. Least Movement marks the next pane on the shortest mouse path (Rubix 1).").withDependency { solverDrop }
+    val rubixMode by SelectorSetting("Rubix Mode", RubixMode.FEWEST_CLICKS, desc = "Fewest Clicks and Least Movement mix in right clicks; Least Movement marks the next pane on the shortest mouse path.").withDependency { solverDrop }
     val melodySolver by BooleanSetting("Melody Solver", true, desc = "Solves melody too.").withDependency { solverDrop }
     val numberText by BooleanSetting("Number Text", true, desc = "Numbers: each pane's number on it.").withDependency { solverDrop }
     private val hideNumbers by BooleanSetting("Hide Numbers' Numbers", false, desc = "Numbers: hides the 1-10, leaving only the order colours (/termsim too).").withDependency { solverDrop }
@@ -168,7 +168,7 @@ object Terminals : Module(
     }
 
     enum class RubixMode(private val label: String) {
-        FEWEST_CLICKS("Fewest Clicks"), LEFT_CLICKS_ONLY("Left Clicks Only"), LEFT_LEAST_MOVEMENT("Left Clicks, Least Movement");
+        FEWEST_CLICKS("Fewest Clicks"), LEFT_CLICKS_ONLY("Left Clicks Only"), LEAST_MOVEMENT("Least Movement"), LEFT_LEAST_MOVEMENT("Left Clicks, Least Movement");
         override fun toString() = label
     }
 

@@ -75,6 +75,13 @@ object TermSolver {
 
     private fun mouseButton(button: Int) = if (button == InputConstants.MOUSE_BUTTON_RIGHT) RIGHT else LEFT
 
+    /** Ctrl and the drop key held: a vanilla-style slot click that is Ctrl + Q. */
+    private fun ctrlDrop(): Boolean {
+        val drop = InputConstants.getKey(mc.options.keyDrop.saveString())
+        return drop.type == InputConstants.Type.KEYBOARD && InputConstants.isKeyDown(drop.value) &&
+            (InputConstants.isKeyDown(InputConstants.KEY_LCONTROL) || InputConstants.isKeyDown(InputConstants.KEY_RCONTROL))
+    }
+
     private fun customActive() = Terminals.style == Terminals.Style.CUSTOM && term != null && mc.gui.screen() is AbstractContainerScreen<*>
 
     fun install() {
@@ -94,7 +101,8 @@ object TermSolver {
             },
             key = fun ScreenEvent.KeyPress.(): Any {
                 if (!mc.options.keyDrop.matches(input) && mc.options.keyHotbarSlots.none { it.matches(input) }) return false
-                term?.takeIf { hovered >= 0 }?.click(hovered, LEFT)
+                // Ctrl + drop is a right click, as Ctrl + Q throws the whole stack.
+                term?.takeIf { hovered >= 0 }?.click(hovered, if (mc.options.keyDrop.matches(input) && input.hasControlDownWithQuirk()) RIGHT else LEFT)
                 return true
             },
         ))
@@ -119,7 +127,7 @@ object TermSolver {
         on<GuiEvent.SlotClick> {
             val t = term ?: return@on
             if (Terminals.style != Terminals.Style.VANILLA) return@on
-            t.click(slotIndex, mouseButton(button))
+            t.click(slotIndex, if (ctrlDrop()) RIGHT else mouseButton(button))
             cancel()
         }
 
