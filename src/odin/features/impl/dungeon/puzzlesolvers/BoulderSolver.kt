@@ -43,19 +43,20 @@ object BoulderSolver {
     private var plan = listOf<Step>()
 
     /** Plans by board and mode, worked out off the game thread: the known layouts from the entrance as soon as one is needed. */
-    private val plans = ConcurrentHashMap<Pair<Long, Mode>, List<Step>>()
-    private val solving = ConcurrentHashMap.newKeySet<Pair<Long, Mode>>()
+    private val plans = ConcurrentHashMap<Triple<Long, Int, Mode>, List<Step>>()
+    private val solving = ConcurrentHashMap.newKeySet<Triple<Long, Int, Mode>>()
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-boulder").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
     private var precomputed = false
+    private var asked: Triple<Long, Int, Mode>? = null
 
     private fun precompute() {
         if (precomputed) return
         precomputed = true
-        for (layout in LAYOUTS) for (mode in Mode.entries) solveLater(layout, NORTH + 3, mode)
+        for (layout in LAYOUTS) for (mode in Mode.entries) for (c in 0 until 7) solveLater(layout, NORTH + c, mode)
     }
 
     private fun solveLater(b: Long, from: Int, mode: Mode) {
-        val key = b to mode
+        val key = Triple(b, from, mode)
         if (plans.containsKey(key) || !solving.add(key)) return
         worker.execute {
             try { plans[key] = solve(b, from, mode) ?: emptyList() } catch (_: Throwable) {} finally { solving.remove(key) }
@@ -83,9 +84,11 @@ object BoulderSolver {
             if (done != -1) { board = read; plan = plan.drop(done + 1); return }
         }
         // Worked out off the game thread: until the plan is in, this tick comes back.
-        val key = read to mode
+        // Where you stood when this board was first read: walking on doesn't start the solve over.
+        if (asked?.first != read || asked?.third != mode) asked = Triple(read, playerNode(room, read), mode)
+        val key = asked!!
         val ready = plans[key]
-        if (ready == null) { solveLater(read, playerNode(room, read), mode); return }
+        if (ready == null) { solveLater(read, key.second, mode); return }
         val first = board == -1L
         board = read
         if (first && read !in LAYOUTS && !solved(read)) modMessage("§eBoulder has already been moved, solving from where it is.")
@@ -108,6 +111,7 @@ object BoulderSolver {
         stableTicks = 0
         planMode = null
         plan = emptyList()
+        asked = null
     }
 
     private fun facePos(step: Step): BlockPos {
