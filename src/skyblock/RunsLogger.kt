@@ -19,7 +19,7 @@ import java.time.LocalDate
 object RunsLogger : Module(
     name = "Runs Logger",
     category = Category.DUNGEON,
-    description = "Saves every finished run; /runslog <floor> shows your stats.",
+    description = "Saves every finished run; /runslog <floor> shows your stats, /runslog today reads today's from your ADR recordings.",
     key = null,
 ) {
     data class Run(
@@ -76,6 +76,7 @@ object RunsLogger : Module(
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(literal("runslog")
                 .executes { show(DungeonUtils.floor?.name ?: runs.lastOrNull()?.floor ?: "F7", false); 1 }
+                .then(literal("today").executes { show(DungeonUtils.floor?.name ?: runs.lastOrNull()?.floor ?: "F7", true); 1 })
                 .then(argument("floor", StringArgumentType.word())
                     .executes { show(StringArgumentType.getString(it, "floor").uppercase(), false); 1 }
                     .then(literal("today").executes { show(StringArgumentType.getString(it, "floor").uppercase(), true); 1 })))
@@ -101,8 +102,16 @@ object RunsLogger : Module(
         mutableListOf()
     }
 
+    /** All time from the log; today from ADR's recordings, read off the game thread. */
     private fun show(floor: String, today: Boolean) {
-        val list = runs.filter { it.floor == floor && (!today || it.date == LocalDate.now().toString()) }
+        if (!today) return summarize(floor, false, runs.filter { it.floor == floor })
+        Thread({
+            val list = AdrDayRuns.today().filter { it.floor == floor }
+            EngineerClient.mc.execute { summarize(floor, true, list) }
+        }, "engineerclient-runslog").apply { isDaemon = true }.start()
+    }
+
+    private fun summarize(floor: String, today: Boolean, list: List<Run>) {
         if (list.isEmpty()) return EngineerClient.msg("§7no logged $floor runs${if (today) " today" else ""}.")
         val sPlus = list.count { it.rank == "S+" }
         val s = list.count { it.rank == "S" }
