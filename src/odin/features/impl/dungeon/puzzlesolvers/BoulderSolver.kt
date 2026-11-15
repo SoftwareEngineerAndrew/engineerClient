@@ -193,12 +193,13 @@ object BoulderSolver {
 
     private fun solved(b: Long) = distances(NORTH, b)[CHEST] != -1
 
-    private class Node(val cost: Long, val board: Long, val pos: Int, val parent: Node?, val step: Step?)
+    /** [lean]: how far right its pushes are, so of two equal plans the one on your left (east, as you drop in facing south) wins. */
+    private class Node(val cost: Long, val board: Long, val pos: Int, val parent: Node?, val step: Step?, val lean: Int = 0)
 
     // Dijkstra over (board, where the player stands). Each push costs a click plus the walk to its face; finishing costs the walk to the chest.
     private fun solve(start: Long, from: Int, mode: Mode): List<Step>? {
         fun cost(clicks: Int, walk: Int): Long = if (mode == Mode.CLICKS) clicks * 1000L + walk else walk * 1000L + clicks
-        val queue = PriorityQueue<Node>(compareBy { it.cost })
+        val queue = PriorityQueue<Node>(compareBy<Node> { it.cost }.thenBy { it.lean })
         val closed = HashSet<Long>()
         queue.add(Node(0, start, from, null, null))
         while (queue.isNotEmpty()) {
@@ -207,7 +208,7 @@ object BoulderSolver {
             if (!closed.add(node.board shl 6 or node.pos.toLong())) continue
             if (closed.size > MAX_STATES) return null
             val dist = distances(node.pos, node.board)
-            if (dist[CHEST] != -1) queue.add(Node(node.cost + cost(0, dist[CHEST]), node.board, DONE, node, null))
+            if (dist[CHEST] != -1) queue.add(Node(node.cost + cost(0, dist[CHEST]), node.board, DONE, node, null, node.lean))
             for (cell in 0 until 42) {
                 if (node.board shr cell and 1L == 0L) continue
                 val c = cell % 7
@@ -225,7 +226,7 @@ object BoulderSolver {
                     }
                     if (dist[front] == -1) continue
                     val after = node.board and (1L shl cell).inv() or (1L shl (tc + 7 * tr))
-                    queue.add(Node(node.cost + cost(1, dist[front]), after, front, node, Step(cell, dc, dr, after)))
+                    queue.add(Node(node.cost + cost(1, dist[front]), after, front, node, Step(cell, dc, dr, after), node.lean + 6 - c))
                 }
             }
         }
