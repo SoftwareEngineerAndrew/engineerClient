@@ -66,7 +66,7 @@ object Refill : Module(
     private fun refillAll() {
         val picked = items.filter { it.enabled.value }
         if (picked.isEmpty()) return EngineerClient.msg("§7Nothing picked in Refill.")
-        if (picked.none { refill(it, it.amount.value, false) }) EngineerClient.msg("§7Everything is already full.")
+        if (picked.map { refill(it, it.amount.value, false) }.none { it }) EngineerClient.msg("§7Everything is already full.")
     }
 
     /** Queues the sack command for what's missing; false if nothing is. */
