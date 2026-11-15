@@ -113,7 +113,11 @@ object TeamTpMaze {
         on<RoomEnterEvent> { EngineerClient.safely("team tp maze room") { room?.takeIf { it.data?.name == ROOM }?.let { enter(it) } } }
         // Our own teleport: read on the client thread, where this runs before the packet moves us.
         onReceive<ClientboundPlayerPositionPacket> {
-            if (!inMaze()) return@onReceive
+            if (!inMaze()) {
+                if (kotlin.math.abs(change.position.y - LANDING_Y) < 0.01 && DungeonUtils.inDungeons)
+                    log("skipped: room ${DungeonUtils.currentRoomName}, maze ${mazeRoom != null}, active ${active()}")
+                return@onReceive
+            }
             val c = change; val rel = relatives
             onClient {
                 EngineerClient.safely("team tp maze teleport") {
@@ -203,14 +207,19 @@ object TeamTpMaze {
      * and turns you to look at a pad, or into the end. [exact]: our own; a teammate's seen from outside is a guess.
      */
     private fun teleport(fromX: Double, fromZ: Double, x: Double, y: Double, z: Double, yaw: Double, exact: Boolean) {
-        val f = frame ?: return
+        val f = frame ?: return log("no frame: to %.2f %.2f %.2f".format(x, y, z))
         if (kotlin.math.abs(y - LANDING_Y) > 0.01) return
         val (rx, rz) = f.toRoom(x, z).let { it[0] to it[1] }
         val land = MazePads.landingAt(rx, rz)
-        if (land < 0) return
         val (ox, oz) = f.toRoom(fromX, fromZ).let { it[0] to it[1] }
-        if (map.teleport(ox, oz, land, f.yawToRoom(yaw), exact, REACH)) dirty = true
+        if (land < 0) return log("no landing: room %.2f %.2f from %.2f %.2f".format(rx, rz, ox, oz))
+        val changed = map.teleport(ox, oz, land, f.yawToRoom(yaw), exact, REACH)
+        log("${if (exact) "own" else "mate"} %s -> %s yaw %.1f from %.2f %.2f: %s".format(
+            MazePads.padUnder(ox, oz, REACH).let { if (it >= 0) MazePads.label(it) else "?" }, MazePads.label(land), f.yawToRoom(yaw), ox, oz, if (changed) "recorded" else "nothing new"))
+        if (changed) dirty = true
     }
+
+    private fun log(s: String) = com.engineerclient.rotation.EcLog.log("TPMAZE", s)
 
     private fun tick() {
         if (!active()) { if (connected && DungeonUtils.inDungeons && Puzzle.TP_MAZE.status == PuzzleStatus.Completed) disconnect(); return }
