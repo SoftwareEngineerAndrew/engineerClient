@@ -1,6 +1,7 @@
 package com.engineerclient.dungeon
 
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
@@ -20,7 +21,9 @@ import java.util.Optional
 /** Secrets' counter: the room's found/total as a HUD, red to yellow to green, in place of the action bar's. */
 object SecretCounter {
     private val dropdown = DropdownSetting("Counter", desc = "The room's secret count as a HUD.")
-    private val hud = SecretClicked.HUD("Secret Counter", "The room's secrets found and total; the action bar's count goes while it's on.", true, 470, 300, 1.5f) { example ->
+    private val show = BooleanSetting("Show Counter", true, desc = "The room's secrets found and total; the action bar's count goes while it's on.").withDependency { dropdown.value }
+    private val hud = SecretClicked.HUD("Secret Counter", "Where the counter sits.", false, 470, 300, 1.5f) { example ->
+        if (!show.value) return@HUD 0 to 0
         val (found, max) = if (example) 3 to 5 else count?.takeIf { DungeonUtils.inClear } ?: return@HUD 0 to 0
         val color = when {
             found >= max -> "§a"
@@ -33,10 +36,11 @@ object SecretCounter {
     private val SECRETS = Regex("""\s*\d+/\d+ Secrets""")
     private var count: Pair<Int, Int>? = null
 
-    private fun on() = SecretClicked.enabled && hud.value.enabled && DungeonUtils.inDungeons
+    private fun on() = SecretClicked.enabled && show.value && DungeonUtils.inDungeons
 
     fun install() {
         SecretClicked.registerSetting(dropdown)
+        SecretClicked.registerSetting(show)
         SecretClicked.registerSetting(hud)
         on<LevelEvent.Load> { count = null }
         on<RoomEnterEvent> { count = null }
