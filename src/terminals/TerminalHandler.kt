@@ -39,6 +39,8 @@ abstract class TerminalHandler(val type: TerminalTypes) {
     private val pending = ArrayList<Pending>()
     private var seq = 0
     private var filling = false
+    /** The slot clicked last, -1 before any. */
+    protected var lastClicked = -1
     private val received = BooleanArray(area)
     private var lastSlots: List<Slot>? = null
 
@@ -154,6 +156,7 @@ abstract class TerminalHandler(val type: TerminalTypes) {
 
     /** The click shown as done until the server answers it. */
     internal fun predict(slot: Int, button: Int) {
+        lastClicked = slot
         if (type != TerminalTypes.MELODY) pending += Pending(slot, button, System.nanoTime(), seq++)
         lastClickTime = System.currentTimeMillis()
         recompute()

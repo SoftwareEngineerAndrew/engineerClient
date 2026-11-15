@@ -33,7 +33,7 @@ object Terminals : Module(
     val roundness by NumberSetting("Roundness", 4f, 0.0..12.0, 1.0, desc = "Corner roundness of the custom grid.").withDependency { solverDrop && style == Style.CUSTOM }
     val vanillaScale by NumberSetting("Vanilla Scale", 3, 1..6, 1, desc = "GUI scale while a terminal is open (6 is auto).").withDependency { solverDrop && style == Style.VANILLA }
     val hideItems by BooleanSetting("Hide Items", true, desc = "Vanilla: only the slots to click are drawn.").withDependency { solverDrop && style == Style.VANILLA }
-    val rubixMode by SelectorSetting("Rubix Mode", RubixMode.FEWEST_CLICKS, desc = "Fewest clicks mixes in right clicks; Left Clicks Only never asks for one.").withDependency { solverDrop }
+    val rubixMode by SelectorSetting("Rubix Mode", RubixMode.FEWEST_CLICKS, desc = "Fewest Clicks mixes in right clicks; the left only modes never ask for one. Least Movement marks the next pane on the shortest mouse path (Rubix 1).").withDependency { solverDrop }
     val melodySolver by BooleanSetting("Melody Solver", true, desc = "Solves melody too.").withDependency { solverDrop }
     val numberText by BooleanSetting("Number Text", true, desc = "Numbers: each pane's number on it.").withDependency { solverDrop }
     val clickLimit by BooleanSetting("Click Limit", true, desc = "Hypixel takes 5 terminal clicks per 500 ms; one it would drop isn't sent.").withDependency { solverDrop }
@@ -150,7 +150,7 @@ object Terminals : Module(
     }
 
     enum class RubixMode(private val label: String) {
-        FEWEST_CLICKS("Fewest Clicks"), LEFT_CLICKS_ONLY("Left Clicks Only");
+        FEWEST_CLICKS("Fewest Clicks"), LEFT_CLICKS_ONLY("Left Clicks Only"), LEFT_LEAST_MOVEMENT("Left Clicks, Least Movement");
         override fun toString() = label
     }
 

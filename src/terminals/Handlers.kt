@@ -59,7 +59,10 @@ class NumbersHandler : TerminalHandler(TerminalTypes.NUMBERS) {
     }
 }
 
-class RubixHandler(private val leftOnly: () -> Boolean = { Terminals.rubixMode == Terminals.RubixMode.LEFT_CLICKS_ONLY }) : TerminalHandler(TerminalTypes.RUBIX) {
+class RubixHandler(
+    private val leftOnly: () -> Boolean = { Terminals.rubixMode != Terminals.RubixMode.FEWEST_CLICKS },
+    private val leastMovement: () -> Boolean = { Terminals.rubixMode == Terminals.RubixMode.LEFT_LEAST_MOVEMENT },
+) : TerminalHandler(TerminalTypes.RUBIX) {
     private var target = -1
 
     override fun key(item: ItemStack): Int {
@@ -74,14 +77,51 @@ class RubixHandler(private val leftOnly: () -> Boolean = { Terminals.rubixMode =
         return if (forward > 2 && !leftOnly()) forward - ORDER.size else forward
     }
 
-    /** Fewest clicks; then fewest right clicks; then fewest panes touched. */
+    private val route = ArrayList<Int>()
+
+    /** Fewest clicks; then fewest right clicks; then fewest panes touched. With left clicks only no two colors ever tie (9 panes). */
     override fun onReady() {
         val panes = (0 until area).filter { keys[it] >= 0 }
         if (panes.isEmpty()) return
-        target = ORDER.indices.minBy { t ->
-            val c = panes.map { clicks(keys[it], t) }
-            c.sumOf { abs(it) } * 10_000 + c.filter { it < 0 }.sumOf { -it } * 100 + c.count { it != 0 }
+        target = ORDER.indices.minWith(compareBy<Int>(
+            { t -> panes.sumOf { abs(clicks(keys[it], t)) } },
+            { t -> panes.sumOf { -minOf(0, clicks(keys[it], t)) } },
+            { t -> panes.count { clicks(keys[it], t) != 0 } },
+        ))
+    }
+
+    /**
+     * Least Movement: the order to click [slots] in for the shortest mouse path, from the pane last clicked (first if it still
+     * needs clicks) or, before any click, from whichever pane makes it shortest. Exact, over subsets (9 panes at most).
+     */
+    private fun shortestRoute(slots: List<Int>, from: Int): List<Int> {
+        if (slots.size <= 1) return slots
+        val nodes = if (from >= 0 && from !in slots) listOf(from) + slots else slots
+        val n = nodes.size
+        fun dist(a: Int, b: Int) = Math.hypot((nodes[a] % 9 - nodes[b] % 9).toDouble(), (nodes[a] / 9 - nodes[b] / 9).toDouble())
+        val best = Array(1 shl n) { DoubleArray(n) { Double.MAX_VALUE } }
+        val prev = Array(1 shl n) { IntArray(n) { -1 } }
+        val starts = if (from >= 0) listOf(nodes.indexOf(from)) else nodes.indices.toList()
+        for (i in starts) best[1 shl i][i] = 0.0
+        for (mask in 1 until (1 shl n)) for (last in 0 until n) {
+            val d = best[mask][last]
+            if (d == Double.MAX_VALUE) continue
+            for (next in 0 until n) if (mask and (1 shl next) == 0) {
+                val m = mask or (1 shl next)
+                if (d + dist(last, next) < best[m][next]) { best[m][next] = d + dist(last, next); prev[m][next] = last }
+            }
         }
+        val full = (1 shl n) - 1
+        var last = (0 until n).minBy { best[full][it] }
+        var mask = full
+        val order = ArrayList<Int>()
+        while (last >= 0) {
+            order.add(0, nodes[last])
+            val p = prev[mask][last]
+            mask = mask and (1 shl last).inv()
+            last = p
+        }
+        return order.filter { it in slots }
     }
 
     private fun need(slot: Int) = if (target < 0 || shown[slot] < 0) 0 else clicks(shown[slot], target)
@@ -92,12 +132,15 @@ class RubixHandler(private val leftOnly: () -> Boolean = { Terminals.rubixMode =
     }
 
     override fun buildSolution(out: ArrayList<Int>) {
+        route.clear()
+        if (leastMovement()) route += shortestRoute((0 until area).filter { need(it) != 0 }, lastClicked)
         for (i in 0 until area) repeat(abs(need(i))) { out += i }
     }
 
     override fun look(slot: Int): Look? {
         val n = need(slot)
         if (n == 0) return null
+        if (route.isNotEmpty()) return Look(if (route[0] == slot) RUBIX_1 else RUBIX_2, n.toString())
         return Look(when (n) { 1 -> RUBIX_1; 2 -> RUBIX_2; -1 -> RUBIX_M1; -2 -> RUBIX_M2; else -> if (n > 0) RUBIX_2 else RUBIX_M2 }, n.toString())
     }
 
