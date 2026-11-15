@@ -99,7 +99,7 @@ object TeamTpMaze {
     private val heard = HashSet<String>()
 
     internal val socket = webSocket {
-        onMessage { text -> mc.execute { EngineerClient.safely("team tp maze message") { receive(text) } } }
+        onMessage { text -> mc.execute { EngineerClient.safely("team tp maze message") { this@TeamTpMaze.receive(text) } } }
     }
 
     private val self: String get() = mc.player?.name?.string ?: ""
