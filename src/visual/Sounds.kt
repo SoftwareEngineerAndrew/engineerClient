@@ -48,6 +48,8 @@ object Sounds : Module(
     private val muteWitherborn by BooleanSetting("Mute Witherborn Sound", false, desc = "Mutes the Witherborn wither exploding.")
     private val muteExplosions by BooleanSetting("Mute Explosions", false, desc = "Mutes every explosion sound.")
     private val keepHype by BooleanSetting("Keep Hyperion Explosions", true, desc = "Hyperion's Implosion still plays.").withDependency { muteExplosions }
+    private val muteAotv by BooleanSetting("Mute AOTV Sounds", false, desc = "Mutes the Aspect of the End and Aspect of the Void teleport sound.")
+    private val muteBlessing by BooleanSetting("Mute Blessing Jingle", false, desc = "Mutes the rising harp notes in dungeons.")
     private val muteBonzoStaff by BooleanSetting("Mute Bonzo Staff Sound", false, desc = "Mutes the Bonzo Staff's ghast scream; the firework boom stays.")
     private val lastBreath by BooleanSetting("Last Breath Pull Sound", false, desc = "Ticking sound while drawing a Last Breath, like Spring Boots.")
     private val lastBreathVolume by NumberSetting("Last Breath Volume", 1f, 0.0..5.0, 0.1f, desc = "Volume of the ticking.").withDependency { lastBreath }
@@ -63,6 +65,8 @@ object Sounds : Module(
     private val wolfDeath by lazy { SoundEvents.WOLF_SOUNDS[WolfSoundVariants.SoundSet.CLASSIC]!!.adultSounds().deathSound().value() }
     private val howl = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("engineerclient", "wolf-howl"))
 
+    private fun holdingAotv() = holding("Aspect of the End") || holding("Aspect of the Void")
+    fun mutesAotv() = enabled && muteAotv && holdingAotv()
     private fun holding(name: String) = mc.player?.mainHandItem?.hoverName?.string?.contains(name) == true
 
     interface MonoChannel {
@@ -100,6 +104,14 @@ object Sounds : Module(
         }
         onReceive<ClientboundSoundPacket> { event ->
             val s = sound.value()
+            if (muteBlessing && s == SoundEvents.NOTE_BLOCK_HARP.value() && volume == 0.7f && DungeonUtils.inDungeons) {
+                event.cancel()
+                return@onReceive
+            }
+            if (muteAotv && s == SoundEvents.ENDERMAN_TELEPORT && volume == 1f && pitch == 1f && holdingAotv()) {
+                event.cancel()
+                return@onReceive
+            }
             // Implosion is the only explosion Hypixel plays at volume 1, pitch 1.
             if (muteExplosions && s == SoundEvents.GENERIC_EXPLODE.value() && !(keepHype && volume == 1f && pitch == 1f)) {
                 event.cancel()
