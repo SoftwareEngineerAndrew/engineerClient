@@ -876,6 +876,15 @@ object ConfigMigration {
             changed = true
         }
 
+        // Puzzles' Draft prompt is Draft (Prompt or Auto).
+        if (Files.exists(odinFile)) run {
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val s = module(odin, "Puzzles")?.let(::settings) ?: return@run
+            val v = s.remove("Draft prompt") ?: return@run
+            if (!s.has("Draft")) s.add("Draft", v)
+            write(odinFile, odin)
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)

@@ -91,9 +91,9 @@ object PuzzleOverlay {
     }
 
     fun install() {
-        PuzzleSolvers.insertSettings("Boulder Color") {
-            for (s in listOf(dropdown, hud, beforeStartSetting, duringClearSetting, styleSetting, playerNamesSetting)) PuzzleSolvers.registerSetting(s)
-        }
+        // Last of Puzzles' additions: the solvers, then timers and draft, then this.
+        PuzzleSolvers.moveToEnd(listOf("Puzzle Timers", "Draft", "Draft Mode"))
+        for (s in listOf(dropdown, hud, beforeStartSetting, duringClearSetting, styleSetting, playerNamesSetting)) PuzzleSolvers.registerSetting(s)
         on<LevelEvent.Load> { started = false; section = null }
         on<MessageEvent.Chat> { if (message.contains(MORT_START)) started = true }
         on<TickEvent.End> { section = if (PuzzleSolvers.enabled && hud.value.enabled && DungeonUtils.inDungeons) TabPuzzles.read() else null }

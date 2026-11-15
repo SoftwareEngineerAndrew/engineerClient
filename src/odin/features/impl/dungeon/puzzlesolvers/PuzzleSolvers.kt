@@ -91,11 +91,22 @@ object PuzzleSolvers : Module(
     private val boulderColor by ColorSetting("Boulder Color", Colors.MINECRAFT_GREEN, true, desc = "The color of the box.").withDependency { boulderDropDown && boulderSolver }
 
     private val puzzleTimers by BooleanSetting("Puzzle Timers", true, desc = "Shows the time it took to solve each puzzle.")
-    private val draftPrompt by BooleanSetting("Draft prompt", true, desc = "Automatically gets architect's draft when failing a puzzle room.")
+    private val draft by BooleanSetting("Draft", true, desc = "Architect's First Draft when a puzzle is failed.")
+    private val draftMode by SelectorSetting("Draft Mode", DraftMode.PROMPT, desc = "Prompt: a chat line to click. Auto: fetched from your sacks at once.").withDependency { draft }
+
+    private enum class DraftMode(private val label: String) { PROMPT("Prompt"), AUTO("Auto"); override fun toString() = label }
     private val failRegex = Regex("^PUZZLE FAIL! (\\w{1,16}) .+$|^\\[STATUE] Oruo the Omniscient: (\\w{1,16}) chose the wrong answer! I shall never forget this moment of misrememberance\\.$")
     private val puzzleTimersMap = hashMapOf<String, PuzzleTimer>()
     private data class PuzzleTimer(val timeEntered: Long = System.currentTimeMillis(), var sentMessage: Boolean = false)
     private val weirdosRegex = Regex("\\[NPC] (.+): (.+).?")
+
+    private const val DRAFT_COMMAND = "gfs architect's first draft 1"
+
+    /** Moves the settings named [names] to the end, in that order. */
+    fun moveToEnd(names: List<String>) {
+        val moved = names.mapNotNull { n -> settings.remove(n)?.let { n to it } }
+        for ((n, s) in moved) settings[n] = s
+    }
 
     /** Registers what [add] adds straight after the setting named [after]. */
     fun insertSettings(after: String, add: () -> Unit) {
@@ -170,9 +181,10 @@ object PuzzleSolvers : Module(
 
         on<MessageEvent.Chat> {
             if (!DungeonUtils.inClear) return@on
-            if (draftPrompt && isInPuzzle) failRegex.find(message)?.destructured?.let {
-                modMessage("§7Click §ehere §7to fetch architect's draft", chatStyle = Style.EMPTY
-                    .withClickEvent(ClickEvent.RunCommand("gfs architect's first draft 1"))
+            if (draft && isInPuzzle) failRegex.find(message)?.let {
+                if (draftMode == DraftMode.AUTO) sendCommand(DRAFT_COMMAND)
+                else modMessage("§7Click §ehere §7to fetch architect's draft", chatStyle = Style.EMPTY
+                    .withClickEvent(ClickEvent.RunCommand(DRAFT_COMMAND))
                     .withHoverEvent(HoverEvent.ShowText(Component.literal("Click to fetch the architect's draft"))))
             }
             if (weirdosSolver) weirdosRegex.find(message)?.destructured?.let { (npc, message) -> WeirdosSolver.onNPCMessage(npc, message) }
