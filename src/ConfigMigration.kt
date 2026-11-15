@@ -81,6 +81,7 @@ object ConfigMigration {
      *  - Odin's Simon Says, Arrow Align and Arrows Device, and SS Practice, are Devices.
      *  - Odin's Dungeon Waypoints, Boss Waypoints and Odin's Temporary Waypoints (its From Party Chat) are Waypoints.
      *  - Odin's Secret Clicked, Waypoints' Secret Waypoints, Item Highlight and Close Chest On Key are Secrets.
+     *  - Odin's Map Info and Extra Stats, Score Time, Room Alerts and Clear Breakdown are Clear Info.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
      */
@@ -744,6 +745,41 @@ object ConfigMigration {
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
             val old = module(odin, "Mob Highlight")
             if (old != null && module(odin, "Highlights") == null) { old.addProperty("name", "Highlights"); write(odinFile, odin) }
+        }
+
+        // Odin's Map Info and Extra Stats, Score Time, Room Alerts and Clear Breakdown are Clear Info's sections, each switch on if its
+        // module was. Map Info's Full Hud is its Map Info HUD; the two sounds and Score Time's Alert get the section's name.
+        run {
+            if (module(modules, "Clear Info") != null) return@run
+            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else JsonArray()
+            val mi = module(odin, "Map Info")
+            val es = module(odin, "Extra Stats")
+            val st = module(modules, "Score Time")
+            val ra = module(modules, "Room Alerts")
+            val cb = module(modules, "Clear Breakdown")
+            if (listOf(mi, es, st, ra, cb).all { it == null }) return@run
+            fun on(m: JsonObject?) = m?.get("enabled")?.asBoolean == true
+            val to = settings(ensure("Clear Info"))
+            fun copy(m: JsonObject?, keys: Map<String, String>) {
+                val from = m?.let(::settings) ?: return
+                for ((k, key) in keys) from[k]?.let { if (!to.has(key)) to.add(key, it) }
+            }
+            fun sound(prefix: String) = listOf("Sound", "Sound Id", "Sound Pitch", "Sound Volume").associateWith { prefix + it }
+            to.addProperty("Enable Map Info", on(mi))
+            copy(mi, mapOf("Full Hud" to "Map Info HUD", "Disable in boss" to "Disable in boss", "300 Score Alert" to "300 Score Alert",
+                "Highlight Portal" to "Highlight Portal", "Paul Score" to "Paul Score"))
+            to.addProperty("Enable Score Time", on(st))
+            copy(st, mapOf("S Score" to "S Score", "Min Secrets" to "Min Secrets", "Alert" to "Score Time Title") + sound("Score Time "))
+            to.addProperty("Enable Room Alerts", on(ra))
+            copy(ra, listOf("Cleared", "Secrets Done", "Display Time", "Key Rooms", "No Blood Room").associateWith { it } + sound("Room Alert "))
+            to.addProperty("Enable Extra Stats", on(es))
+            copy(es, listOf("Show Bits", "Show Class EXP", "Show Combat Stats", "Show Team Stats", "Show Teammates").associateWith { it })
+            to.addProperty("Enable Clear Breakdown", on(cb))
+            to.addProperty("Secrets Counter", on(cb) && cb?.let(::settings)?.get("Secrets Counter")?.let { it.isJsonPrimitive && it.asBoolean } == true)
+            module(modules, "Clear Info")?.addProperty("enabled", listOf(mi, es, st, ra, cb).any(::on))
+            listOfNotNull(st, ra, cb).forEach { modules.remove(it) }
+            if (mi != null || es != null) { listOfNotNull(mi, es).forEach { odin.remove(it) }; write(odinFile, odin) }
+            changed = true
         }
 
         if (changed) {
