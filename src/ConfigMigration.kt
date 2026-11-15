@@ -739,6 +739,13 @@ object ConfigMigration {
             listOfNotNull(ih, cc).forEach { modules.remove(it); changed = true }
         }
 
+        // Mob Highlight is Highlights.
+        if (Files.exists(odinFile)) {
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val old = module(odin, "Mob Highlight")
+            if (old != null && module(odin, "Highlights") == null) { old.addProperty("name", "Highlights"); write(odinFile, odin) }
+        }
+
         if (changed) {
             Files.createDirectories(file.parent)
             write(file, modules)
