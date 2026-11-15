@@ -91,11 +91,11 @@ object PuzzleOverlay {
     }
 
     fun install() {
-        PuzzleSolvers.insertSettings("Draft prompt") {
+        PuzzleSolvers.insertSettings("Boulder Color") {
             for (s in listOf(dropdown, hud, beforeStartSetting, duringClearSetting, styleSetting, playerNamesSetting)) PuzzleSolvers.registerSetting(s)
         }
         on<LevelEvent.Load> { started = false; section = null }
-        on<MessageEvent> { if (message.contains(MORT_START)) started = true }
+        on<MessageEvent.Chat> { if (message.contains(MORT_START)) started = true }
         on<TickEvent.End> { section = if (PuzzleSolvers.enabled && hud.value.enabled && DungeonUtils.inDungeons) TabPuzzles.read() else null }
         EventBus.subscribe(this)
     }
