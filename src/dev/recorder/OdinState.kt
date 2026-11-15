@@ -159,7 +159,7 @@ object OdinState {
         j.safe("inDungeons") { it.append(DungeonUtils.inDungeons) }
         j.safe("inBoss") { it.append(DungeonListener.inBoss) }
         j.safe("inClear") { it.append(DungeonUtils.inClear) }
-        // The real mayor Paul (Odin's field), not Map Info's Paul Score override; the override goes in togglePaul.
+        // The real mayor Paul (Odin's field), not Clear Info's Paul Score override; the override goes in togglePaul.
         j.safe("paul") { it.append(com.engineerclient.lcm.PaulScore.real()?.toString() ?: "null") }
         j.safe("togglePaul") { OdinJs.str(it, com.engineerclient.lcm.PaulScore.label()) }
         j.safe("f7Phase") { OdinJs.str(it, DungeonUtils.getF7Phase().name) }

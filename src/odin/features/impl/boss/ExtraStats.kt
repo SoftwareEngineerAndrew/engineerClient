@@ -1,34 +1,24 @@
 package com.odtheking.odin.features.impl.boss
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.engineerclient.dungeon.ClearInfo
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.*
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent
 
-object ExtraStats : Module(
-    name = "Extra Stats",
-    description = "Shows additional dungeon stats at the end of the run in chat."
-) {
-    private val showBits by BooleanSetting("Show Bits", true, desc = "Show bits earned.")
-    private val showClassEXP by BooleanSetting("Show Class EXP", true, desc = "Show class experience.")
-    private val showCombatStats by BooleanSetting("Show Combat Stats", true, desc = "Show damage, enemy kills and healing.")
-    private val teamStats by SelectorSetting("Show Team Stats", TeamStats.BOTH, desc = "Toggle how show team stats.")
-
+/** Clear Info's Extra Stats: Hypixel's end of run stats as one message. */
+object ExtraStats {
     enum class TeamStats(val personal: Boolean = false, val team: Boolean = false) {
         OFF,
         PERSONAL(personal = true),
         TEAM(team = true),
         BOTH(personal = true, team = true)
     }
-
-    private val showTeammates by BooleanSetting("Show Teammates", false, desc = "Show teammates.")
 
     private val extraStats = PostDungeonStats()
 
@@ -62,9 +52,9 @@ object ExtraStats : Module(
         Regex("^\\s*Enemies Killed: \\d+\\s?(?:\\(NEW RECORD!\\))?$")
     )
 
-    init {
+    fun install() {
         on<MessageEvent.Chat> {
-            if (!DungeonUtils.inDungeons) return@on
+            if (!DungeonUtils.inDungeons || !ClearInfo.extraStatsOn) return@on
 
             if (extraStatsRegex.matches(message)) return@on sendCommand("showextrastats")
             if (cancelRegexes.any { it.matches(message) }) cancel()
@@ -115,15 +105,15 @@ object ExtraStats : Module(
 
             deathsRegex.find(message)?.let {
                 extraStats.deaths = it.groupValues[2].toIntOrNull() ?: 0
-                if (teamStats.personal) extraStats.skillStats.add("§c${it.groupValues[1]}")
+                if (ClearInfo.teamStats.personal) extraStats.skillStats.add("§c${it.groupValues[1]}")
                 return@on
             }
 
             secretsRegex.find(message)?.let {
                 extraStats.secretsFound = it.groupValues[2].toIntOrNull() ?: 0
-                if (teamStats.personal) extraStats.skillStats.add(0, "§b${it.groupValues[1]}")
-                if (teamStats == TeamStats.BOTH) extraStats.skillStats.add("")
-                if (teamStats.team) {
+                if (ClearInfo.teamStats.personal) extraStats.skillStats.add(0, "§b${it.groupValues[1]}")
+                if (ClearInfo.teamStats == TeamStats.BOTH) extraStats.skillStats.add("")
+                if (ClearInfo.teamStats.team) {
                     extraStats.skillStats.add("§bTeam Secrets Found: ${DungeonUtils.secretCount}")
                     extraStats.skillStats.add("§6Crypt: ${DungeonUtils.cryptCount}")
                     extraStats.skillStats.add("§cTeam Deaths: ${DungeonUtils.deathCount}")
@@ -136,6 +126,7 @@ object ExtraStats : Module(
         on<LevelEvent.Load> {
             extraStats.reset()
         }
+        EventBus.subscribe(this)
     }
 
     private fun printEndStats() {
@@ -148,10 +139,10 @@ object ExtraStats : Module(
             .append("\n\n")
             .append(getCenteredText(defeatedText))
             .append("\n")
-            .append(getCenteredText("§aScore: §6${extraStats.score} §a(§b${extraStats.scoreLetter}§a)${if (extraStats.scorePB) " §d§l(NEW RECORD!)" else ""}${if (extraStats.bits != null && showBits) "    §b${extraStats.bits}" else ""}"))
+            .append(getCenteredText("§aScore: §6${extraStats.score} §a(§b${extraStats.scoreLetter}§a)${if (extraStats.scorePB) " §d§l(NEW RECORD!)" else ""}${if (extraStats.bits != null && ClearInfo.showBits) "    §b${extraStats.bits}" else ""}"))
             .append("\n")
 
-        val xpText = "${extraStats.xp.firstOrNull() ?: ""}${if (showClassEXP) "  ${extraStats.xp.getOrNull(1) ?: ""}" else ""}"
+        val xpText = "${extraStats.xp.firstOrNull() ?: ""}${if (ClearInfo.showClassEXP) "  ${extraStats.xp.getOrNull(1) ?: ""}" else ""}"
         message.append(
             Component.literal(getCenteredText(xpText)).withStyle {
                 it.withClickEvent(ClickEvent.SuggestCommand(extraStats.xp.joinToString("\n")))
@@ -159,7 +150,7 @@ object ExtraStats : Module(
             }
         ).append("\n")
 
-        if (showCombatStats) {
+        if (ClearInfo.showCombatStats) {
             message.append(
                 Component.literal(getCenteredText("§e${extraStats.damage}§r-§b${extraStats.enemyKill}§r-§a${extraStats.heal}")).withStyle {
                     it.withClickEvent(ClickEvent.SuggestCommand(extraStats.combatStats.joinToString("\n")))
@@ -168,8 +159,8 @@ object ExtraStats : Module(
             ).append("\n")
         }
 
-        if (teamStats != TeamStats.OFF) {
-            val statsText = when (teamStats) {
+        if (ClearInfo.teamStats != TeamStats.OFF) {
+            val statsText = when (ClearInfo.teamStats) {
                 TeamStats.PERSONAL -> "§b${extraStats.secretsFound}§r-§c${extraStats.deaths}"
                 TeamStats.TEAM -> "§b${DungeonUtils.secretCount}§r-§6${DungeonUtils.cryptCount}§r-§c${DungeonUtils.deathCount}"
                 TeamStats.BOTH -> "§b${extraStats.secretsFound}§r-§c${extraStats.deaths} §r/ §b${DungeonUtils.secretCount}§r-§6${DungeonUtils.cryptCount}§r-§c${DungeonUtils.deathCount}"
@@ -183,7 +174,7 @@ object ExtraStats : Module(
             ).append("\n")
         }
 
-        if (showTeammates) {
+        if (ClearInfo.showTeammates) {
             message.append(
                 getCenteredText(
                     if (DungeonUtils.dungeonTeammatesNoSelf.isNotEmpty())

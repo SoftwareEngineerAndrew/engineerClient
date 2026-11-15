@@ -75,12 +75,11 @@ object EngineerClient : ClientModInitializer {
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
             PosePov, com.engineerclient.terminals.Terminals, com.engineerclient.devices.Devices, com.engineerclient.p3sim.P3Sim, ADR, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
-            com.engineerclient.clearbreakdown.ClearBreakdown,
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.LcmMeleeWarning, com.engineerclient.misc.CommandAliases,
             com.engineerclient.misc.BlockInstaclear,
             com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,
-            com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.LagWarning, com.engineerclient.dungeon.ExplosiveShot,
+            com.engineerclient.dungeon.ClearInfo, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.LagWarning, com.engineerclient.dungeon.ExplosiveShot,
             com.engineerclient.dungeon.TickTimers, com.engineerclient.dungeon.PositionalMessages, com.engineerclient.dungeon.Relics,
             com.engineerclient.skyblock.ItemTweaks,
             com.engineerclient.skyblock.EnchantColors,
@@ -129,12 +128,10 @@ object EngineerClient : ClientModInitializer {
         safely("splits look") { OdinSplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }
-        // Room Prediction and LCM Style (with LCM Colors): settings on Odin's own Dungeon Map, and Map Info's LCM Style
+        // Room Prediction and LCM Style (with LCM Colors): settings on Odin's own Dungeon Map
         // (from Ascent Client, same names, so saved values carry over); Odin's configs are read again so they apply
         // (reading never writes the file).
         safely("lcm style") { com.engineerclient.lcm.LcmStyle.install() }
-        safely("lcm map info") { com.engineerclient.lcm.LcmMapInfo.install() }
-        safely("paul score") { com.engineerclient.lcm.PaulScore.install() }
         safely("map prediction") { com.engineerclient.mappred.OdinMapPrediction.install() }
         safely("map icons") { com.engineerclient.mapicons.MapIcons.install() }
         safely("map sizes") { com.engineerclient.mapicons.MapSizes.install() }
@@ -146,6 +143,7 @@ object EngineerClient : ClientModInitializer {
         safely("terminal huds") { com.engineerclient.dungeon.TerminalHuds.install() }
         safely("terminals") { com.engineerclient.terminals.Terminals.install() }
         safely("devices") { com.engineerclient.devices.Devices.install() }
+        safely("clear info") { com.engineerclient.dungeon.ClearInfo.install() }
         safely("item worth") { com.engineerclient.skyblock.ItemWorth.install() }
         safely("pov in leap menu") { com.engineerclient.pov.PovInLeapMenu.install() }
         safely("creeper beams ding") { com.engineerclient.dungeon.CreeperBeamsDing.install() }

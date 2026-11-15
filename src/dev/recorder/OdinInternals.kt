@@ -320,7 +320,7 @@ object OdinInternals {
         } catch (u: Reflect.Unavailable) { missing("WebSocketConnection", u.field) }
         val c = runCatching { socket.connected }.getOrNull()
         if (c != null && c != lastConnected) { lastConnected = c; Rec.emit("odin.sync.state", "\"connected\":$c") }
-        // The real mayor Paul, not Map Info's Paul Score override.
+        // The real mayor Paul, not Clear Info's Paul Score override.
         val paul = com.engineerclient.lcm.PaulScore.real()
         if (paul != null && paul != lastPaul) { lastPaul = paul; Rec.emit("odin.paul", "\"paul\":$paul") }
     }

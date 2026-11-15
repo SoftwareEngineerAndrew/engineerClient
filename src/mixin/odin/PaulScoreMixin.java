@@ -8,8 +8,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Map Info's Paul Score (On / Off) overrides Odin's Paul check, which its score, needed secrets and Full Hud all
- * read (DungeonUtils.isPaul and Map Info call DungeonListener.getPaul). Auto leaves Odin's mayor check.
+ * Clear Info's Paul Score (On / Off) overrides Odin's Paul check, which its score and needed secrets
+ * read (DungeonUtils.isPaul calls DungeonListener.getPaul). Auto leaves Odin's mayor check.
  */
 @Pseudo
 @Mixin(targets = "com.odtheking.odin.utils.skyblock.dungeon.DungeonListener", remap = false)

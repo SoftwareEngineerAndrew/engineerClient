@@ -13,7 +13,6 @@
     "PersonalBestSimMixin",
     "SecretItemChimeMixin",
     "LcmStyleMixin",
-    "LcmMapInfoMixin",
     "PaulScoreMixin",
     "MapPathHintsMixin",
     "MapIconsMixin",

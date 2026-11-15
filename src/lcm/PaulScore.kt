@@ -1,12 +1,11 @@
 package com.engineerclient.lcm
 
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.features.impl.dungeon.MapInfo
+import com.engineerclient.dungeon.ClearInfo
 
 /**
- * Map Info's "Paul Score": whether Paul's +10 bonus counts. Odin (0.3.6+) goes by the mayor alone with no way to
+ * Clear Info's "Paul Score": whether Paul's +10 bonus counts. Odin (0.3.6+) goes by the mayor alone with no way to
  * force it; Auto keeps that, On / Off override it. `PaulScoreMixin` applies it at Odin's DungeonListener.getPaul,
- * which every Paul check goes through: Odin's score, its needed secrets, its Full Hud, and LCM Style's score.
+ * which every Paul check goes through: Odin's score, its needed secrets and Map Info's score.
  */
 object PaulScore {
 
@@ -15,16 +14,9 @@ object PaulScore {
         override fun toString() = label
     }
 
-    private val mode = SelectorSetting("Paul Score", Mode.AUTO,
-        desc = "Whether Paul's +10 bonus score counts in Map Info's score and secrets needed for 300. Auto: when Paul is mayor (Odin's own check). On / Off: always / never. Added by engineerClient.")
-
-    fun install() {
-        MapInfo.registerSetting(mode)
-    }
-
     /** The setting's label (Auto / On / Off), for the recorder. */
     @JvmStatic
-    fun label(): String = mode.value.toString()
+    fun label(): String = ClearInfo.paulScore.toString()
 
     private val paulField by lazy {
         runCatching {
@@ -38,7 +30,7 @@ object PaulScore {
 
     /** The forced Paul value, or null to leave Odin's mayor check. */
     @JvmStatic
-    fun forced(): Boolean? = when (mode.value) {
+    fun forced(): Boolean? = when (ClearInfo.paulScore) {
         Mode.ON -> true
         Mode.OFF -> false
         else -> null

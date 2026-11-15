@@ -29,12 +29,9 @@ package com.engineerclient.lcm
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.OdinCompat
+import com.engineerclient.dungeon.ClearInfo
 import com.engineerclient.mappred.FloorRules
 import com.odtheking.odin.OdinMod.mc
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.HUDSetting
-import com.odtheking.odin.features.impl.dungeon.MapInfo
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -45,12 +42,12 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 /**
- * LCM Style for Odin's Map Info: its Full Hud drawn the way LCM's map, dtMap, draws its score (Score Calculation),
+ * Clear Info's Map Info HUD, drawn the way LCM's map, dtMap, draws its score (Score Calculation),
  * worked out by dtMap's score calculator in its Legit Mode with its default score settings, from the tab list
  * stats Odin reads:
  *
  * - secrets found (aqua), the secrets still missing for 300 (yellow; the bonus score so far and Paul's +10 count,
- *   as in Odin's own Full Hud and dtMap's "Missing secrets calculate paul") and
+ *   as in Odin's needed secrets and dtMap's "Missing secrets calculate paul") and
  *   the total (red), then the unknown secrets (the total less the rooms someone has walked into: yours, and your
  *   teammates' from Odin's map websocket; green while at least the 300 needs, else gold - dtMap shows it only when
  *   solo clearing) and the score: red under 270, yellow under 300, green from 300
@@ -59,41 +56,26 @@ import kotlin.math.floor
  *   crypts (up to 5)
  * - one line when it's narrower than the map, else the score's line over the bonus's, centred
  *
- * `LcmMapInfoMixin` hands the Full Hud to [render]; Odin's Disable in boss still applies.
+ * Disable in boss applies.
  */
 object LcmMapInfo {
 
-    private val style = BooleanSetting("LCM Style", false,
-        desc = "Draws the Full Hud like LCM's map (dtMap) draws its score, with dtMap's score calculator: secrets found, missing and total, the unknown secrets (in rooms nobody in the party has walked into yet, teammates' from Odin's map websocket), the score, then what's still missing from the bonus (deaths, Mimic, Prince, bats, crypts). Added by engineerClient.")
-        .withDependency { (MapInfo.settings["Full Hud"] as? HUDSetting)?.value?.enabled ?: true }
-
     private var failed = false
 
-    fun install() {
-        MapInfo.registerSetting(style)
-    }
-
-    /** True while the Full Hud is drawn here instead of by Odin (LcmMapInfoMixin). */
-    @JvmStatic
-    fun active(): Boolean = style.value
-
-    /** Draws the Full Hud; its size, or null to leave this frame to Odin (it couldn't be drawn). */
-    @JvmStatic
-    fun render(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int>? {
-        if (!example && (!DungeonUtils.inDungeons || (disableInBoss() && DungeonUtils.inBoss))) return 0 to 0
+    /** Draws the HUD and returns its size. */
+    fun render(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
+        if (!example && (!DungeonUtils.inDungeons || (ClearInfo.disableInBoss && DungeonUtils.inBoss))) return 0 to 0
         return try {
             if (example) centred(g, listOf("§b10§7-§e49§7-§c55     §a300", "§7D: §c1  §7M: §c✖  §7P: §c✖  §7B: §c✖  §c0§7/§a5"), 2, LcmStyle.mapWidth(true))
             else centred(g, lines(), 0, LcmStyle.mapWidth(false))
         } catch (t: Throwable) {
             if (!failed) {
                 failed = true
-                EngineerClient.logger.error("[ec] dtMap score failed, Odin draws its Full Hud", t)
+                EngineerClient.logger.error("[ec] dtMap score failed", t)
             }
-            null
+            0 to 0
         }
     }
-
-    private fun disableInBoss(): Boolean = (MapInfo.settings["Disable in boss"] as? BooleanSetting)?.value ?: true
 
     /** dtMap's score text (its Score.actualRender): one line if it's narrower than the map, else two. */
     private fun lines(): List<String> {
@@ -181,7 +163,7 @@ object LcmMapInfo {
     private fun calculateBonusScoreNoPaul(): Int =
         (if (DungeonUtils.mimicKilled) 2 else 0) + (if (DungeonUtils.princeKilled) 1 else 0) + OdinCompat.batsKilled().coerceAtMost(5) + DungeonUtils.cryptCount.coerceAtMost(5)
 
-    /** Paul's +10: Odin's Paul check, which Map Info's Paul Score (Auto / On / Off) overrides ([PaulScore]). */
+    /** Paul's +10: Odin's Paul check, which Clear Info's Paul Score (Auto / On / Off) overrides ([PaulScore]). */
     private fun calculatePaulScore(): Int = if (DungeonUtils.isPaul) 10 else 0
 
     /**

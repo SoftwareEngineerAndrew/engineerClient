@@ -1,13 +1,10 @@
 package com.engineerclient.dungeon
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.engineerclient.EngineerClient.mc
 import com.odtheking.odin.events.CheckmarkUpdateEvent
 import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.DoorType
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
@@ -17,50 +14,40 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import java.util.Collections
 import java.util.IdentityHashMap
 
-object RoomAlerts : Module(
-    name = "Room Alerts",
-    category = Category.DUNGEON,
-    description = "A title when the room you are in is cleared or has all its secrets.",
-    key = null,
-) {
+/** Clear Info's Room Alerts: a title when the room you are in is cleared or has all its secrets. */
+object RoomAlerts {
     enum class Rush(private val label: String) {
         ANY("Always"), ONLY("Only Key Rooms"), NOT("Not Key Rooms");
         override fun toString() = label
     }
 
-    private val cleared by BooleanSetting("Cleared", true, desc = "When your room gets its checkmark.")
-    private val secretsDone by BooleanSetting("Secrets Done", true, desc = "When your cleared room turns green.")
-    private val displayTime by NumberSetting("Display Time", 0.5, 0.1..3.0, 0.1, desc = "How long the title stays.", unit = "s")
-    private val rush by SelectorSetting("Key Rooms", Rush.NOT, desc = "Key rooms are the ones next to a wither or blood door.")
-    private val noBlood by BooleanSetting("No Blood Room", false, desc = "No alert for the blood room.")
-    private val sound = SoundOption(this, "block.note_block.pling")
-
     private val marks: MutableMap<DungeonRoom, MapCheckmark> = Collections.synchronizedMap(IdentityHashMap())
 
-    init {
+    fun install() {
         on<CheckmarkUpdateEvent> {
             val room = room; val mark = checkmark
             val before = marks.put(room, mark)
             mc.execute { onMark(room, before, mark) }
         }
         on<LevelEvent.Load> { marks.clear() }
+        EventBus.subscribe(this)
     }
 
     private fun onMark(room: DungeonRoom, before: MapCheckmark?, mark: MapCheckmark) {
-        if (!DungeonUtils.inClear || DungeonUtils.currentRoom !== room) return
+        if (!ClearInfo.roomAlertsOn || !DungeonUtils.inClear || DungeonUtils.currentRoom !== room) return
         if (room.type == RoomType.FAIRY || room.type == RoomType.ENTRANCE) return
-        if (noBlood && room.type == RoomType.BLOOD) return
+        if (ClearInfo.noBlood && room.type == RoomType.BLOOD) return
         val key = keyRoom(room)
-        if ((rush == Rush.ONLY && !key) || (rush == Rush.NOT && key)) return
+        if ((ClearInfo.keyRooms == Rush.ONLY && !key) || (ClearInfo.keyRooms == Rush.NOT && key)) return
         val wasCleared = before == MapCheckmark.WHITE || before == MapCheckmark.GREEN
         val text = when {
-            mark == MapCheckmark.WHITE && !wasCleared && cleared -> "&fRoom Cleared!"
-            mark == MapCheckmark.GREEN && before == MapCheckmark.WHITE && secretsDone && (room.data?.maxSecrets ?: 0) > 0 -> "&bSecrets Done!"
-            mark == MapCheckmark.GREEN && !wasCleared && cleared -> "&aRoom Cleared!"
+            mark == MapCheckmark.WHITE && !wasCleared && ClearInfo.cleared -> "&fRoom Cleared!"
+            mark == MapCheckmark.GREEN && before == MapCheckmark.WHITE && ClearInfo.secretsDone && (room.data?.maxSecrets ?: 0) > 0 -> "&bSecrets Done!"
+            mark == MapCheckmark.GREEN && !wasCleared && ClearInfo.cleared -> "&aRoom Cleared!"
             else -> return
         }
-        showTitle(text, displayTime)
-        sound.play()
+        showTitle(text, ClearInfo.displayTime)
+        ClearInfo.roomSound.play()
     }
 
     private fun keyRoom(room: DungeonRoom) = DungeonScan.doors.values.any { door ->

@@ -3,11 +3,11 @@ package com.engineerclient.clearbreakdown
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.adr.OnlineLink
+import com.engineerclient.dungeon.ClearInfo
 import com.engineerclient.p3sim.P3Sim
 import com.engineerclient.p3sim.Practice
 import com.engineerclient.splits.SplitTracker
 import com.odtheking.odin.OdinMod
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.events.BlockInteractEvent
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.CheckmarkUpdateEvent
@@ -16,10 +16,9 @@ import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.SecretsUpdateEvent
 import com.odtheking.odin.events.TickEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
@@ -60,15 +59,10 @@ import kotlin.math.floor
  * Only a run that is won posts (Hypixel's end line and the "☠ Defeated" line, [RunGate]), the moment
  * it is; one that ends any other way posts nothing, and a world load starts over. The API totals
  * are asked for through the boss, where nobody finds secrets, so the post never waits on them.
+ *
+ * Clear Info's Clear Breakdown section, with Odin's Secrets Counter.
  */
-object ClearBreakdown : Module(
-    name = "Clear Breakdown",
-    category = Category.custom("Engineer Client", 860, 10),
-    description = "At the end of a finished run, everyone's rooms (cleared alone - cleared) and secrets; hover for the rooms in order and the secrets room by room.",
-    key = null,
-) {
-    private val secretsCounter by BooleanSetting("Secrets Counter", false, desc = "Odin's per-teammate secret lines at the end of every run.")
-
+object ClearBreakdown {
     private val CONTROL_CODES = Regex("§.")
     /** Rooms that don't count as clears: fairy rooms and the green start room. */
     private val NOT_CLEARS = setOf(RoomType.FAIRY, RoomType.ENTRANCE)
@@ -117,9 +111,9 @@ object ClearBreakdown : Module(
 
     init {
         on<LevelEvent.Load> { EngineerClient.safely("clear breakdown reset") { reset(); closeSync(); SecretsCounter.reset() } }
-        on<MessageEvent.Chat> { if (secretsCounter) SecretsCounter.onChat(message) }
+        on<MessageEvent.Chat> { if (ClearInfo.secretsCounterOn) SecretsCounter.onChat(message) }
         // Odin posts this one (and checkmarks) from the network thread: over to the client thread.
-        on<FloorEnterEvent> { mc.execute { EngineerClient.safely("clear breakdown sync") { OdinSync.connect(); syncOpen = true } } }
+        on<FloorEnterEvent> { if (ClearInfo.clearBreakdownOn) mc.execute { EngineerClient.safely("clear breakdown sync") { OdinSync.connect(); syncOpen = true } } }
 
         // Chat straight off the network, as Splits takes it: a chat cleaner can't hide the run's lines.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
@@ -188,11 +182,7 @@ object ClearBreakdown : Module(
         }
     }
 
-    override fun onDisable() {
-        super.onDisable()
-        reset()
-        closeSync()
-    }
+    fun install() = EventBus.subscribe(this)
 
     private fun reset() {
         clears = ClearCredit(); secrets = SecretCredit()
@@ -206,7 +196,7 @@ object ClearBreakdown : Module(
     }
 
     private fun onChat(text: String) {
-        if (!DungeonUtils.inDungeons) return
+        if (!ClearInfo.clearBreakdownOn || !DungeonUtils.inDungeons) return
         // A P3 Sim practice is no run.
         if (P3Sim.inSim && Practice.active) return
         if (text == SplitTracker.MORT) start()
@@ -229,6 +219,7 @@ object ClearBreakdown : Module(
     }
 
     private fun tick() {
+        if (!ClearInfo.clearBreakdownOn && (active || syncOpen)) { reset(); closeSync() }
         if (!active || !DungeonUtils.inDungeons) return
         // Teammates the tab list hadn't listed yet at Mort.
         for (p in DungeonUtils.dungeonTeammates) join(p)
