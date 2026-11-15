@@ -78,7 +78,7 @@ object ConfigMigration {
      *  - Screen Tweaks, Render Cleanup, Chat Tweaks and Tab Tweaks are Visibility.
      *  - Phase Timers, Timers and Odin's Tick Timers (its Fire Freeze Hud and look) are Tick Timers.
      *  - Odin's terminal modules, Term Progress and Terminal Hitboxes are Terminals.
-     *  - Odin's Simon Says, Arrow Align and Arrows Device are Devices.
+     *  - Odin's Simon Says, Arrow Align and Arrows Device, and SS Practice, are Devices.
      *  - Odin's Dungeon Waypoints, Boss Waypoints and Odin's Temporary Waypoints (its From Party Chat) are Waypoints.
      * Each only happens while its target is still missing, so it runs once. [odinDir] is
      * config/odin. True if the file was rewritten.
@@ -677,9 +677,18 @@ object ConfigMigration {
             bw?.let { modules.remove(it); changed = true }
         }
 
+        // SS Practice is Devices' SS Practice section, on if it was (its Size is Practice Size).
+        module(modules, "SS Practice")?.let { ssp ->
+            val to = settings(ensure("Devices"))
+            if (!to.has("Enable SS Practice")) to.addProperty("Enable SS Practice", ssp["enabled"]?.asBoolean ?: true)
+            for ((k, v) in settings(ssp).entrySet()) { val key = if (k == "Size") "Practice Size" else k; if (!to.has(key)) to.add(key, v) }
+            modules.remove(ssp)
+            changed = true
+        }
+
         // Odin's Simon Says, Arrow Align and Arrows Device are Devices' sections, each on if its module was.
         run {
-            if (module(modules, "Devices") != null || !Files.exists(odinFile)) return@run
+            if (settings(module(modules, "Devices") ?: JsonObject()).has("Enable Simon Says") || !Files.exists(odinFile)) return@run
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
             val olds = DEVICE_SECTIONS.mapNotNull { (name, switch) -> module(odin, name)?.let { Triple(it, name, switch) } }
             if (olds.isEmpty()) return@run

@@ -3,10 +3,9 @@ package com.engineerclient.practice
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.mixin.MinecraftAccessor
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.engineerclient.devices.DevSimonSays
+import com.engineerclient.devices.Devices
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.events.BlockInteractEvent
 import com.odtheking.odin.events.BlockUpdateEvent
 import com.odtheking.odin.events.LevelEvent
@@ -25,8 +24,7 @@ import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.odtheking.odin.events.core.EventBus
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos
@@ -41,7 +39,6 @@ import net.minecraft.world.level.block.ButtonBlock
 import net.minecraft.world.level.block.Rotation
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.BlockHitResult
-import com.mojang.blaze3d.platform.InputConstants
 import java.util.Locale
 
 /**
@@ -65,19 +62,7 @@ import java.util.Locale
  *    Oct 2026 update removed round 5) that is the device done. Practice: a wrong press restarts the run
  *    at once, with the same start presses as the last run.
  */
-object SimonSaysPractice : Module(
-    name = "SS Practice",
-    category = Category.custom("Engineer Client", 860, 10),
-    description = "Summons F7's first device (Simon Says) in front of you to practice it anywhere. Client side only: the blocks and your clicks never reach the server.",
-    key = null,
-) {
-    private val summonKey by KeybindSetting("Summon Keybind", InputConstants.UNKNOWN, "Summons the device in front of you, and takes it away again. With Infinileap in your hand: /termsim inf instead, the numbers that never ends.").onPress { if (!LeapNumbersSim.open()) summonOrRemove() }
-    private val showSpeed by NumberSetting("Show Speed", 1.0, 1.0..3.0, 0.25, desc = "How fast the lights are shown (1x = the game's 8 ticks each). Only the lights: the buttons still come back 10 ticks after the last light's tick (on a skip, on the first show's), as in the game.").withDependency { !instantShow }
-    private val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown (the solver still marks it). Only the show: the buttons still come back 10 ticks after it (on a skip, after the first show), as in the game. Times are as at 1x.")
-    private val fullBlockHitboxes by BooleanSetting("Full Block Hitboxes", false, desc = "On the practice device, each button clicks as the whole face of its block (still a button's depth), and the solver boxes cover the whole face too.")
-    private val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only (never the real one): presses the button under your crosshair the moment it's the one to press next.")
-    private val follow by BooleanSetting("Follow You", false, desc = "The device stays the same distance in front of you as you move, and turns around when you do (more than 100 degrees from it): to the side it stays where it is. Off: it stays where you summoned it.")
-    private val size by NumberSetting("Size", 1.0, 1.0..3.0, 0.5, desc = "How big the device is drawn, and as many times farther away (2x: twice as big, twice as far), so it looks the same from where you summoned it. Clicks reach it as they would at 1x.", unit = "x")
+object SimonSaysPractice {
 
     /** Odin's Simon Says click sounds, always on: here and on the real device in P3. */
     private val CORRECT_SOUND = Triple("entity.experience_orb.pickup", 1f, 1f)
@@ -222,7 +207,7 @@ object SimonSaysPractice : Module(
      * Show Speed: lamp j of a show at 8j / speed, rounded from the show's start (not per gap) so the pace is
      * right on average; the buttons still come 10 ticks after the last lamp's tick.
      */
-    private fun showTick(j: Int) = if (instantShow) 0 else Math.round(8 * j / showSpeed).toInt()
+    private fun showTick(j: Int) = if (Devices.instantShow) 0 else Math.round(8 * j / Devices.showSpeed).toInt()
 
     private val rng = java.util.Random()
     private val buttonUp = BooleanArray(16)
@@ -304,7 +289,7 @@ object SimonSaysPractice : Module(
     private fun rngButton(level: Int) = BlockPos(110, 121 + level, 96)
 
     /** Full Block Hitboxes: the grid's buttons click as the whole face of their block (still a button's depth). */
-    private val fullBlock: Boolean get() = fullBlockHitboxes
+    private val fullBlock: Boolean get() = Devices.fullBlockHitboxes
     /** The grid buttons' world positions while placed, for [fullBlockShape]. */
     private var gridCells: Set<BlockPos> = emptySet()
 
@@ -591,7 +576,7 @@ object SimonSaysPractice : Module(
         if (firstLight == 0L) return
         // As at 1x: the time Show Speed saved added back.
         val total = (tick + shownFaster - firstLight) / 20.0
-        val speed = if (instantShow) " §8(instant, as at 1x)" else if (showSpeed != 1.0) " §8(${fmt(showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
+        val speed = if (Devices.instantShow) " §8(instant, as at 1x)" else if (Devices.showSpeed != 1.0) " §8(${fmt(Devices.showSpeed).trimEnd('0').trimEnd('.')}x, as at 1x)" else ""
         report(total, rounds, splits, (if (fails > 0) " §c$fails wrong" else "") + speed)
     }
 
@@ -675,12 +660,12 @@ object SimonSaysPractice : Module(
      */
     private fun view(p: Placement, partialTicks: Float, eye: Vec3? = null): View {
         val player = mc.player
-        if (!follow || player == null) return View(p, p.eye, 0, size)
+        if (!Devices.followYou || player == null) return View(p, p.eye, 0, Devices.practiceSize)
         // It only turns around: once you face more than [TURN_AROUND] degrees away from it, it goes behind
         // you, in front again (past 90, so looking along its side doesn't flip it back and forth).
         val facing = Direction.from2DDataValue(p.forward.get2DDataValue() + turned)
         if (Math.abs(net.minecraft.util.Mth.wrapDegrees(player.yRot - facing.toYRot())) > TURN_AROUND) turned = (turned + 2) % 4
-        return View(p, eye ?: player.getEyePosition(partialTicks), turned, size)
+        return View(p, eye ?: player.getEyePosition(partialTicks), turned, Devices.practiceSize)
     }
 
     /** Follow You: quarter turns the device has made from how it was summoned (0, or 2 once turned around). */
@@ -705,7 +690,7 @@ object SimonSaysPractice : Module(
         val out = context.submitNodeCollector()
         val cam = mc.gameRenderer.mainCamera().position()
         val level = p.level
-        val lightPos = if (follow) v.lightPos else p.lightPos
+        val lightPos = if (Devices.followYou) v.lightPos else p.lightPos
         val light = net.minecraft.util.LightCoordsUtil.getLightCoords(level, lightPos)
         fun at(pos: BlockPos, draw: () -> Unit) {
             val w = v.toWorld(Vec3(pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble()))
@@ -800,12 +785,12 @@ object SimonSaysPractice : Module(
         if (!isStart && (pos.x != 110 || pos.y !in 120..123 || pos.z !in 92..95)) return
         val state = mc.level?.getBlockState(pos) ?: return
         if (state.block !is ButtonBlock || state.getValue(BlockStateProperties.POWERED)) return
-        (com.engineerclient.devices.Devices.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
+        (Devices.settings["Custom Click Sounds"] as? BooleanSetting)?.let { if (it.value) it.value = false }
         if (blocked) { playSoundSettings(WRONG_SOUND); return }
         if (isStart) { playSoundSettings(CORRECT_SOUND); return }
 
-        val order = com.engineerclient.devices.DevSimonSays.clickInOrder
-        val i = com.engineerclient.devices.DevSimonSays.clickNeeded
+        val order = DevSimonSays.clickInOrder
+        val i = DevSimonSays.clickNeeded
         val right = order.getOrNull(i) == pos.east()
         playSoundSettings(if (right) CORRECT_SOUND else WRONG_SOUND)
         Real.press(right, last = right && i == order.size - 1, System.currentTimeMillis())
@@ -903,9 +888,22 @@ object SimonSaysPractice : Module(
     @JvmStatic
     fun blocksContinueAttack(): Boolean = target() != null
 
-    init {
+    /** The section was on last tick: switching it off takes the device away. */
+    private var wasOn = false
+
+    /** The Summon Keybind: puts the device up, or takes it away. With Infinileap in your hand: /termsim inf. */
+    fun summonKey() {
+        if (!Devices.ssPracticeOn) return
+        if (!LeapNumbersSim.open()) summonOrRemove()
+    }
+
+    fun install() {
         on<TickEvent.End> {
-            if (triggerBot) EngineerClient.safely("ss trigger bot") { trigger() }
+            val on = Devices.ssPracticeOn
+            if (wasOn && !on) remove()
+            wasOn = on
+            if (!on) return@on
+            if (Devices.triggerBot) EngineerClient.safely("ss trigger bot") { trigger() }
             tick++
             if (jobs.isNotEmpty()) {
                 val due = jobs.filter { it.at <= tick }
@@ -921,7 +919,7 @@ object SimonSaysPractice : Module(
             val v = view(p, mc.deltaTracker.getGameTimeDeltaPartialTick(false),
                 mc.gameRenderer.mainCamera().position().takeIf { mc.options.cameraType.isFirstPerson })
             EngineerClient.safely("ss practice draw") { draw(p, v, context) }
-            if (!com.engineerclient.devices.Devices.simonSaysOn) return@on
+            if (!Devices.simonSaysOn) return@on
             if (Inf.on) {
                 for ((i, cell) in Inf.queue.withIndex()) {
                     val lamp = lampAt(cell)
@@ -942,9 +940,9 @@ object SimonSaysPractice : Module(
         // The real device: the same sounds as here, right or wrong, read off Odin's solution. After
         // Odin's own listener (priority -1) and even when it cancelled the press (ignoreCancelled
         // here means "skip cancelled ones"), so a press Block Wrong Clicks stopped still sounds wrong.
-        on<BlockInteractEvent>(priority = -1) { EngineerClient.safely("ss real sounds") { realClick(pos, isCancelled) } }
+        on<BlockInteractEvent>(priority = -1) { if (Devices.ssPracticeOn) EngineerClient.safely("ss real sounds") { realClick(pos, isCancelled) } }
         on<BlockUpdateEvent> {
-            if (placed != null || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            if (!Devices.ssPracticeOn || placed != null || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             EngineerClient.safely("ss real times") { Real.block(pos, old, updated) }
         }
         on<LevelEvent.Load> { Real.reset() }
@@ -957,10 +955,6 @@ object SimonSaysPractice : Module(
         }
         // A new world has none of it: nothing to put back.
         on<LevelEvent.Unload> { placed = null; hit = null; gen++; jobs.clear(); device.clear(); running = false }
-    }
-
-    override fun onDisable() {
-        super.onDisable()
-        remove()
+        EventBus.subscribe(this)
     }
 }

@@ -4,7 +4,6 @@ import com.engineerclient.adr.ADR
 import com.engineerclient.misc.AgroSphere
 import com.engineerclient.misc.RandomStuff
 import com.engineerclient.rotation.EcLog
-import com.engineerclient.practice.SimonSaysPractice
 import com.engineerclient.pov.PosePov
 
 import com.engineerclient.splits.DungeonSplits
@@ -75,7 +74,7 @@ object EngineerClient : ClientModInitializer {
     /** Every module. */
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
-            PosePov, com.engineerclient.terminals.Terminals, com.engineerclient.devices.Devices, com.engineerclient.p3sim.P3Sim, ADR, SimonSaysPractice, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
+            PosePov, com.engineerclient.terminals.Terminals, com.engineerclient.devices.Devices, com.engineerclient.p3sim.P3Sim, ADR, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
             com.engineerclient.clearbreakdown.ClearBreakdown,
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.LcmMeleeWarning, com.engineerclient.misc.CommandAliases,
             com.engineerclient.misc.BlockInstaclear,
@@ -163,7 +162,7 @@ object EngineerClient : ClientModInitializer {
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
-            for (m in listOf(AgroSphere, com.engineerclient.practice.Recore, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.dungeon.TickTimers, ADR, SimonSaysPractice)) if (!m.enabled) m.toggle()
+            for (m in listOf(AgroSphere, com.engineerclient.practice.Recore, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.dungeon.TickTimers, ADR)) if (!m.enabled) m.toggle()
             ModuleManager.saveConfigurations()
         }
 

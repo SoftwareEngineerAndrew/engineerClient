@@ -1,5 +1,6 @@
 package com.engineerclient.devices
 
+import com.engineerclient.practice.SimonSaysPractice
 import com.mojang.blaze3d.platform.InputConstants
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.*
@@ -10,12 +11,12 @@ import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.createSoundSettings
 import com.odtheking.odin.utils.render.BoxStyle
 
-/** The P3 device solvers, one section each; the logic lives in the section objects ([DevSimonSays], [DevArrowAlign], [DevArrows]). */
+/** The P3 device solvers and SS Practice, one section each; the logic lives in the section objects ([DevSimonSays], [SimonSaysPractice], [DevArrowAlign], [DevArrows]). */
 object Devices : Module(
     name = "Devices",
     key = null,
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Floor 7 devices: Simon Says, Arrow Align and the Arrows Device (i4).",
+    description = "Floor 7 devices: Simon Says (and SS Practice), Arrow Align and the Arrows Device (i4).",
     toggled = true,
 ) {
     // ------------------------------------------------------------------ Simon Says
@@ -40,6 +41,17 @@ object Devices : Module(
     val breakSound by BooleanSetting("Break Sound", true, desc = "An anvil sound.").withDependency { ssDrop && breakAlert }
     val restartMessage by BooleanSetting("Restart Message", false, desc = "SS Started Again! in party chat after a break.").withDependency { ssDrop }
 
+    // ------------------------------------------------------------------ SS Practice
+    private val ssPracticeDrop by DropdownSetting("SS Practice", false, desc = "A client side Simon Says to practice anywhere.")
+    val ssPractice by BooleanSetting("Enable SS Practice", true, desc = "Summons F7's Simon Says in front of you; the blocks and clicks never reach the server.").withDependency { ssPracticeDrop }
+    private val summonKey by KeybindSetting("Summon Keybind", InputConstants.UNKNOWN, "Summons the device in front of you, and takes it away again (Infinileap in hand: /termsim inf).").onPress { SimonSaysPractice.summonKey() }.withDependency { ssPracticeDrop }
+    val showSpeed by NumberSetting("Show Speed", 1.0, 1.0..3.0, 0.25, desc = "How fast the lights are shown (1x is the game's speed).").withDependency { ssPracticeDrop }
+    val instantShow by BooleanSetting("Instant Show", false, desc = "The whole sequence at once, no lights shown.").withDependency { ssPracticeDrop }
+    val fullBlockHitboxes by BooleanSetting("Full Block Hitboxes", false, desc = "Each practice button clicks as its whole block face.").withDependency { ssPracticeDrop }
+    val triggerBot by BooleanSetting("Trigger Bot", false, desc = "Practice device only: presses the button under your crosshair when it's next.").withDependency { ssPracticeDrop }
+    val followYou by BooleanSetting("Follow You", false, desc = "The device stays in front of you as you move.").withDependency { ssPracticeDrop }
+    val practiceSize by NumberSetting("Practice Size", 1.0, 1.0..3.0, 0.5, desc = "How big (and as many times farther) the device is drawn.").withDependency { ssPracticeDrop }
+
     // ------------------------------------------------------------------ Arrow Align
     private val alignDrop by DropdownSetting("Arrow Align", false, desc = "The Arrow Align device (S3).")
     val arrowAlign by BooleanSetting("Enable Arrow Align", true, desc = "Shows how many clicks each frame needs.").withDependency { alignDrop }
@@ -63,6 +75,7 @@ object Devices : Module(
     val simonSaysOn get() = enabled && simonSays
     val arrowAlignOn get() = enabled && arrowAlign
     val arrowsOn get() = enabled && arrowsDevice
+    val ssPracticeOn get() = enabled && ssPractice
 
     enum class Target(private val label: String) {
         PARTY("Party"), SELF("Self");
@@ -73,5 +86,6 @@ object Devices : Module(
         DevSimonSays.install()
         DevArrowAlign.install()
         DevArrows.install()
+        SimonSaysPractice.install()
     }
 }
