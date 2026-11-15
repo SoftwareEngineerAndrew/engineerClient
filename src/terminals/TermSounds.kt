@@ -38,7 +38,10 @@ object TermSounds {
         }
 
         onReceive<ClientboundSoundPacket> {
-            if (replacing && sound.value() == SoundEvents.NOTE_BLOCK_PLING.value() && volume == 8f && pitch == 4.047619f) it.cancel()
+            if (!replacing) return@onReceive
+            // Hypixel's own click sound (the orb), and its completion pling.
+            if (sound.value() == SoundEvents.EXPERIENCE_ORB_PICKUP ||
+                sound.value() == SoundEvents.NOTE_BLOCK_PLING.value() && volume == 8f && pitch == 4.047619f) it.cancel()
         }
 
         on<MessageEvent.Chat> {
