@@ -17,6 +17,9 @@ import com.odtheking.odin.utils.render.drawWireFrameBox
 import com.odtheking.odin.utils.renderBoundingBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.Minecraft
+import net.minecraft.client.multiplayer.ClientLevel
+import net.minecraft.world.entity.LivingEntity
+import kotlin.math.abs
 import net.minecraft.world.effect.MobEffects
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.ambient.Bat
@@ -32,8 +35,9 @@ import net.minecraft.world.phys.AABB
 /**
  * Blade Addons' Mob Highlight, as the only mob highlight: it lives in Odin's Highlight module, saved with it. Each kind
  * in its own colour, filled, outlined or both: starred mobs, tanks, minibosses, Fels, Shadow Assassins, secret
- * bats and boss withers. A mob is found from its name tag by entity id - the mob is spawned just before its tag, so it
- * is the tag's id less one (three for a Withermancer) - so a mob in a crowd is never mixed up with its neighbour.
+ * bats and boss withers. A mob is found from its name tag: by entity id first (the mob is spawned just before its tag, one
+ * id less, three for a Withermancer), checked to stand under the tag, else the nearest mob under it. Boxes are depth tested,
+ * so only what you can see is drawn.
  * Shadow Assassins have no tag: they are the fake players holding "Silent Death" in leather boots.
  */
 object OdinHighlightLook {
@@ -47,6 +51,7 @@ object OdinHighlightLook {
     private val hideInvisible = BooleanSetting("Don't Highlight Invisible", true, desc = "No box on an invisible Shadow Assassin, and only the head of an invisible Fel.").withDependency { mobHighlight.value }
     private val notWhileBlind = BooleanSetting("Not While Blind", true, desc = "No boxes while you have Blindness.").withDependency { mobHighlight.value }
     private val witherWidth = NumberSetting("Wither Extra Width", 0.0, 0.0..3.0, 0.1, desc = "Widens the boss withers' boxes.").withDependency { mobHighlight.value }
+    private val starWidth = NumberSetting("Starred Extra Width", 0.0, 0.0..3.0, 0.1, desc = "Widens starred mobs' boxes.").withDependency { mobHighlight.value }
 
     private class Colours(kind: String, fill: Int, outline: Int) {
         val fill = ColorSetting("$kind Fill", Color(fill), true, desc = "$kind filled colour.").withDependency { mobHighlight.value && style.value != Style.OUTLINE }
@@ -68,6 +73,8 @@ object OdinHighlightLook {
     private val TANKS = listOf("Zombie Commander", "Zombie Lord", "Skeleton Lord", "Withermancer", "Super Archer")
     private val MINIS = listOf("Lost Adventurer", "Angry Archaeologist", "Frozen Adventurer")
 
+    private val STARRED = setOf(Kind.STAR, Kind.TANK, Kind.MINI, Kind.FEL)
+
     private val found = HashMap<Int, Pair<Entity, Kind>>()
     private val claimedTags = HashSet<Int>()
 
@@ -86,12 +93,22 @@ object OdinHighlightLook {
         p.uuid.version() == 2 && p.mainHandItem.customName?.string == "Silent Death" &&
             p.getItemBySlot(EquipmentSlot.FEET).`is`(Items.LEATHER_BOOTS)
 
-    private fun box(e: Entity): AABB {
+    private fun box(e: Entity, kind: Kind): AABB {
         var box = e.renderBoundingBox
         if (e is Enderman && e.isInvisible && hideInvisible.value) box = box.inflate(0.0, -1.8, 0.0).move(0.0, -1.2, 0.0)
         if (e is Zombie && e.isBaby) box = box.inflate(0.15, 0.2, 0.15)
         if (e is WitherBoss) box = box.inflate(witherWidth.value, 0.0, witherWidth.value)
+        if (kind in STARRED) box = box.inflate(starWidth.value, 0.0, starWidth.value)
         return box
+    }
+
+    private fun under(tag: Entity, m: Entity?): Boolean =
+        m is LivingEntity && m !is ArmorStand && m.isAlive && abs(m.x - tag.x) < 1.5 && abs(m.z - tag.z) < 1.5 && tag.y - m.y in -1.0..4.5
+
+    private fun mobUnder(level: ClientLevel, tag: ArmorStand, offset: Int): Entity? {
+        level.getEntity(tag.id - offset)?.takeIf { under(tag, it) }?.let { return it }
+        for (o in 1..6) if (o != offset) level.getEntity(tag.id - o)?.takeIf { under(tag, it) && it.id !in found }?.let { return it }
+        return level.getEntities(tag, tag.boundingBox.inflate(1.5, 4.5, 1.5)) { under(tag, it) && it.id !in found }.minByOrNull { it.distanceToSqr(tag) }
     }
 
     private fun active(): Boolean = Highlight.enabled && mobHighlight.value && DungeonUtils.inDungeons
@@ -105,10 +122,9 @@ object OdinHighlightLook {
                     if (e.id in claimedTags) continue
                     val name = e.customName?.string ?: continue
                     val kind = kindOf(name) ?: continue
-                    val offset = if ("withermancer" in name.lowercase()) 3 else 1
-                    val mob = level.getEntity(e.id - offset) ?: continue
+                    // Not claimed until its mob is: the mob can come in, or under its tag, a tick later.
+                    val mob = mobUnder(level, e, if ("withermancer" in name.lowercase()) 3 else 1) ?: continue
                     claimedTags += e.id
-                    if (mob is ArmorStand || !mob.isAlive) continue
                     found[mob.id] = mob to kind
                 }
                 is Player -> if (e.id !in found && isShadowAssassin(e)) found[e.id] = e to Kind.ASSASSIN
@@ -122,7 +138,7 @@ object OdinHighlightLook {
 
     /** Adds the settings to Odin's Highlight; before OdinSplitsLook.install, which re-reads Odin's config. */
     fun install() {
-        val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth) + colours.values.flatMap { listOf(it.fill, it.outline) }
+        val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth, starWidth) + colours.values.flatMap { listOf(it.fill, it.outline) }
         for (s in all) Highlight.registerSetting(s)
 
         on<TickEvent.End> {
@@ -138,7 +154,7 @@ object OdinHighlightLook {
                 if (!e.isAlive) continue
                 if (hideInvisible.value && e is Player && e.isInvisible) continue
                 val c = colours.getValue(kind)
-                val b = box(e)
+                val b = box(e, kind)
                 if (filled) drawFilledBox(b, c.fill.value, depth = true)
                 if (outlined) drawWireFrameBox(b, c.outline.value, outlineWidth.value.toFloat(), depth = true)
             }
