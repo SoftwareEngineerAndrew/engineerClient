@@ -48,7 +48,7 @@ object Sounds : Module(
     private val muteWitherborn by BooleanSetting("Mute Witherborn Sound", false, desc = "Mutes the Witherborn wither exploding.")
     private val muteExplosions by BooleanSetting("Mute Explosions", false, desc = "Mutes every explosion sound.")
     private val keepHype by BooleanSetting("Keep Hyperion Explosions", true, desc = "Hyperion's Implosion still plays.").withDependency { muteExplosions }
-    private val muteBonzoStaff by BooleanSetting("Mute Bonzo Staff Sound", false, desc = "Mutes the Bonzo Staff's firework blasts and ghast shriek.")
+    private val muteBonzoStaff by BooleanSetting("Mute Bonzo Staff Sound", false, desc = "Mutes the Bonzo Staff's ghast scream; the firework boom stays.")
     private val lastBreath by BooleanSetting("Last Breath Pull Sound", false, desc = "Ticking sound while drawing a Last Breath, like Spring Boots.")
     private val lastBreathVolume by NumberSetting("Last Breath Volume", 1f, 0.0..5.0, 0.1f, desc = "Volume of the ticking.").withDependency { lastBreath }
     private val lastBreathThreshold by NumberSetting("Last Breath Threshold", 9, 0..21, 1, desc = "Ticks of drawing before the sound changes (21 never).").withDependency { lastBreath }
@@ -75,7 +75,6 @@ object Sounds : Module(
 
     private var pullTicks = 0
     private val cooldownMessage = Regex("^This ability is on cooldown for \\d+s\\.$")
-    private val bonzoBlasts = setOf(SoundEvents.FIREWORK_ROCKET_BLAST.location(), SoundEvents.FIREWORK_ROCKET_BLAST_FAR.location())
 
     private fun inF7Boss() = DungeonUtils.inBoss && DungeonUtils.isFloor(7)
 
@@ -107,7 +106,7 @@ object Sounds : Module(
                 return@onReceive
             }
             if (muteWitherborn && s == SoundEvents.WITHER_DEATH && volume == 1f && abs(pitch - 1.1904762f) < 0.0001f ||
-                muteBonzoStaff && s == SoundEvents.GHAST_AMBIENT && volume == 1f && pitch in 1.39f..1.8f) {
+                muteBonzoStaff && volume == 1f && (s == SoundEvents.GHAST_AMBIENT && pitch in 1.39f..1.8f || s.location().path == "mob.ghast.affectionate_scream")) {
                 event.cancel()
                 return@onReceive
             }
@@ -152,10 +151,6 @@ object Sounds : Module(
                 (s == SoundEvents.ZOMBIE_VILLAGER_CURE && abs(pitch - 2f) < 0.01f)) event.cancel()
         }
     }
-
-    @JvmStatic
-    fun muteClientSound(sound: SoundInstance): Boolean =
-        enabled && muteBonzoStaff && sound.identifier in bonzoBlasts
 
     @JvmStatic
     fun monoActive(): Boolean = enabled && monoAudio
