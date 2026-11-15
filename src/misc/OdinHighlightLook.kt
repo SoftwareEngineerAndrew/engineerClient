@@ -5,6 +5,7 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.events.EntityEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
@@ -77,6 +78,7 @@ object OdinHighlightLook {
 
     private val found = HashMap<Int, Pair<Entity, Kind>>()
     private val claimedTags = HashSet<Int>()
+    private val pending = HashMap<Int, Pair<ArmorStand, Kind>>()
 
     private val mc: Minecraft get() = Minecraft.getInstance()
 
@@ -113,25 +115,32 @@ object OdinHighlightLook {
 
     private fun active(): Boolean = Highlight.enabled && mobHighlight.value && DungeonUtils.inDungeons
 
-    private fun scan() {
-        val level = mc.level ?: return
-        for (e in level.entitiesForRendering()) {
-            when (e) {
-                is ArmorStand -> {
-                    // Not judged once: a tag's ✯ can come in a later name update than its first.
-                    if (e.id in claimedTags) continue
-                    val name = e.customName?.string ?: continue
-                    val kind = kindOf(name) ?: continue
-                    // Not claimed until its mob is: the mob can come in, or under its tag, a tick later.
-                    val mob = mobUnder(level, e, if ("withermancer" in name.lowercase()) 3 else 1) ?: continue
-                    claimedTags += e.id
-                    found[mob.id] = mob to kind
-                }
-                is Player -> if (e.id !in found && isShadowAssassin(e)) found[e.id] = e to Kind.ASSASSIN
-                is Bat -> if (e.id !in found && DungeonUtils.inClear && e.health in BAT_HEALTHS) found[e.id] = e to Kind.BAT
-                is WitherBoss -> if (e.id !in found && DungeonUtils.inBoss && e.health != 300f) found[e.id] = e to Kind.WITHER
-                else -> {}
+    /** One entity, when it comes in or its name, health or gear changes: starred tags wait in [pending] for their mob. */
+    private fun consider(e: Entity) {
+        if (e.id in found) return
+        when (e) {
+            is ArmorStand -> {
+                if (e.id in claimedTags) return
+                val kind = e.customName?.string?.let(::kindOf)
+                if (kind == null) pending.remove(e.id) else pending[e.id] = e to kind
             }
+            is Player -> if (isShadowAssassin(e)) found[e.id] = e to Kind.ASSASSIN
+            is Bat -> if (DungeonUtils.inClear && e.health in BAT_HEALTHS) found[e.id] = e to Kind.BAT
+            is WitherBoss -> if (DungeonUtils.inBoss && e.health != 300f) found[e.id] = e to Kind.WITHER
+            else -> {}
+        }
+    }
+
+    private fun match() {
+        val level = mc.level ?: return
+        val it = pending.values.iterator()
+        while (it.hasNext()) {
+            val (tag, kind) = it.next()
+            if (tag.isRemoved) { it.remove(); continue }
+            val mob = mobUnder(level, tag, if (kind == Kind.TANK && "withermancer" in (tag.customName?.string ?: "").lowercase()) 3 else 1) ?: continue
+            claimedTags += tag.id
+            found[mob.id] = mob to kind
+            it.remove()
         }
         found.values.removeIf { (e, _) -> !e.isAlive || e.isRemoved }
     }
@@ -141,9 +150,16 @@ object OdinHighlightLook {
         val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth, starWidth) + colours.values.flatMap { listOf(it.fill, it.outline) }
         for (s in all) Highlight.registerSetting(s)
 
+        // Each entity is judged as it changes; once a second, everything again, for what came in before the dungeon or boss was known.
+        var ticks = 0
         on<TickEvent.End> {
-            if (active()) scan()
+            if (!active()) return@on
+            if (++ticks % 20 == 0) mc.level?.entitiesForRendering()?.forEach(::consider)
+            if (pending.isNotEmpty() || found.isNotEmpty()) match()
         }
+        on<EntityEvent.Add> { if (active()) consider(entity) }
+        on<EntityEvent.SetData> { if (active()) consider(entity) }
+        on<EntityEvent.SetItemSlot> { if (entity is Player && active()) consider(entity) }
 
         on<RenderExtractEvent> {
             if (!active()) return@on
@@ -160,7 +176,7 @@ object OdinHighlightLook {
             }
         }
 
-        on<LevelEvent.Load> { found.clear(); claimedTags.clear() }
+        on<LevelEvent.Load> { found.clear(); claimedTags.clear(); pending.clear() }
         EventBus.subscribe(this)
     }
 }
