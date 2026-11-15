@@ -1,0 +1,82 @@
+package com.engineerclient.dungeon
+
+import com.engineerclient.EngineerClient
+import com.mojang.brigadier.arguments.IntegerArgumentType
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.NumberSetting
+import com.odtheking.odin.features.Category
+import com.odtheking.odin.features.Module
+import com.odtheking.odin.utils.itemId
+import com.odtheking.odin.utils.sendCommand
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
+
+object Refill : Module(
+    name = "Refill",
+    category = Category.DUNGEON,
+    description = "/adm refill tops up the items picked here from your sacks; /adm ep, sl, sb, ij, dd, tap, twap one at a time.",
+    key = null,
+) {
+    private class Item(val command: String, val name: String, val id: String, val sack: String, val max: Int, on: Boolean) {
+        val enabled = BooleanSetting("Refill $name", on, desc = "/adm refill tops up your $name.")
+        val amount = NumberSetting("$name Amount", max, 1..max, 1, desc = "How many $name to have.").withDependency { enabled.value }
+    }
+
+    private val items = listOf(
+        Item("ep", "Ender Pearls", "ENDER_PEARL", "ender_pearl", 16, true),
+        Item("sl", "Spirit Leaps", "SPIRIT_LEAP", "spirit_leap", 16, true),
+        Item("sb", "Superboom TNT", "SUPERBOOM_TNT", "superboom_tnt", 64, true),
+        Item("ij", "Inflatable Jerrys", "INFLATABLE_JERRY", "inflatable_jerry", 64, false),
+        Item("dd", "Decoys", "DUNGEON_DECOY", "dungeon_decoy", 64, false),
+        Item("tap", "Toxic Arrow Poison", "TOXIC_ARROW_POISON", "toxic_arrow_poison", 64, false),
+        Item("twap", "Twilight Arrow Poison", "TWILIGHT_ARROW_POISON", "twilight_arrow_poison", 64, false),
+    )
+
+    /** Hypixel drops commands sent too close together: one every [GAP] ticks. */
+    private const val GAP = 10
+    private val queue = ArrayDeque<String>()
+    private var wait = 0
+
+    init {
+        for (i in items) { registerSetting(i.enabled); registerSetting(i.amount) }
+
+        ClientTickEvents.END_CLIENT_TICK.register {
+            if (wait > 0) wait--
+            else queue.removeFirstOrNull()?.let { sendCommand(it); wait = GAP }
+        }
+
+        ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
+            for (name in EngineerClient.COMMANDS) {
+                var root = literal(name).then(literal("refill").executes { EngineerClient.mc.schedule { refillAll() }; 1 })
+                for (i in items) root = root.then(literal(i.command)
+                    .executes { EngineerClient.mc.schedule { refill(i, i.amount.value, true) }; 1 }
+                    .then(argument("amount", IntegerArgumentType.integer(1, i.max)).executes { ctx ->
+                        val n = IntegerArgumentType.getInteger(ctx, "amount")
+                        EngineerClient.mc.schedule { refill(i, n, true) }; 1
+                    }))
+                dispatcher.register(root)
+            }
+        }
+        EngineerClient.HELP += "§f /adm refill§7 — top up your Refill items; §f/adm ep§7, §fsl§7, §fsb§7, §fij§7, §fdd§7, §ftap§7, §ftwap§7 [amount]"
+    }
+
+    private fun refillAll() {
+        val picked = items.filter { it.enabled.value }
+        if (picked.isEmpty()) return EngineerClient.msg("§7Nothing picked in Refill.")
+        if (picked.none { refill(it, it.amount.value, false) }) EngineerClient.msg("§7Everything is already full.")
+    }
+
+    /** Queues the sack command for what's missing; false if nothing is. */
+    private fun refill(item: Item, amount: Int, say: Boolean): Boolean {
+        val inv = EngineerClient.mc.player?.inventory ?: return false
+        var have = 0
+        for (i in 0 until inv.containerSize) inv.getItem(i).takeIf { it.itemId == item.id }?.let { have += it.count }
+        if (have >= amount) { if (say) EngineerClient.msg("§7Already have $have ${item.name}."); return false }
+        val cmd = "gfs ${item.sack} ${amount - have}"
+        if (cmd !in queue) queue += cmd
+        return true
+    }
+}

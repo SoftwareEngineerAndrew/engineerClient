@@ -75,7 +75,7 @@ object EngineerClient : ClientModInitializer {
     val MODULES: List<com.odtheking.odin.features.Module> by lazy {
         listOf(
             PosePov, com.engineerclient.terminals.Terminals, com.engineerclient.devices.Devices, com.engineerclient.p3sim.P3Sim, ADR, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
-            RandomStuff, com.engineerclient.misc.CommandAliases,
+            RandomStuff, com.engineerclient.misc.CommandAliases, com.engineerclient.dungeon.Refill,
             com.engineerclient.misc.BlockInstaclear,
             com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,

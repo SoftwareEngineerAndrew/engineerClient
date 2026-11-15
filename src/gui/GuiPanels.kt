@@ -30,7 +30,7 @@ object Placement {
     }
 
     private val lists = listOf(
-        "Dungeons" to listOf("ADR", "Boss Bar", "Highlights", "Waypoints", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers2", "Leap Menu", "Blessing Display", "Dungeon Queue", "Pre-Requeue", "Lag Warning", "Croesus", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay", "Livid Solver", "Maxor Crystals", "Spirit Bear", "Terracotta Timer"),
+        "Dungeons" to listOf("Refill", "ADR", "Boss Bar", "Highlights", "Waypoints", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers2", "Leap Menu", "Blessing Display", "Dungeon Queue", "Pre-Requeue", "Lag Warning", "Croesus", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay", "Livid Solver", "Maxor Crystals", "Spirit Bear", "Terracotta Timer"),
         "Clear" to listOf("BR Roles", "Dungeon Map", "Clear Info", "Secrets", "Puzzles", "Door Highlight", "Block Instaclear", "Mimic", "Blood Camp"),
         "F7/M7 Boss" to listOf("Spring Boots", "Tick Timers", "Relics", "Wither Dragons", "Invincibility Timer", "Explosive Shot", "Agro Sphere", "Terminals", "Devices", "EE Highlight", "Positional Messages", "Highlight Levers", "i4 Aim", "Melody Message", "Recore", "Term Info", "ADS", "Termsim"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
