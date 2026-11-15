@@ -46,6 +46,8 @@ object Sounds : Module(
     private val muteAboveCap by BooleanSetting("Mute Sounds Above Cap", false, desc = "Also mutes F7/M7 boss sounds louder than normal (volume over 1).").withDependency { muteF7 }
     private val capF7 by BooleanSetting("Cap F7 Boss Sounds", false, desc = "Plays F7/M7 boss sounds louder than normal at normal volume instead.").withDependency { muteF7 }
     private val muteWitherborn by BooleanSetting("Mute Witherborn Sound", false, desc = "Mutes the Witherborn wither exploding.")
+    private val muteExplosions by BooleanSetting("Mute Explosions", false, desc = "Mutes every explosion sound.")
+    private val keepHype by BooleanSetting("Keep Hyperion Explosions", true, desc = "Hyperion's Implosion still plays.").withDependency { muteExplosions }
     private val muteBonzoStaff by BooleanSetting("Mute Bonzo Staff Sound", false, desc = "Mutes the Bonzo Staff's firework blasts and ghast shriek.")
     private val lastBreath by BooleanSetting("Last Breath Pull Sound", false, desc = "Ticking sound while drawing a Last Breath, like Spring Boots.")
     private val lastBreathVolume by NumberSetting("Last Breath Volume", 1f, 0.0..5.0, 0.1f, desc = "Volume of the ticking.").withDependency { lastBreath }
@@ -99,6 +101,11 @@ object Sounds : Module(
         }
         onReceive<ClientboundSoundPacket> { event ->
             val s = sound.value()
+            // Implosion is the only explosion Hypixel plays at volume 1, pitch 1.
+            if (muteExplosions && s == SoundEvents.GENERIC_EXPLODE.value() && !(keepHype && volume == 1f && pitch == 1f)) {
+                event.cancel()
+                return@onReceive
+            }
             if (muteWitherborn && s == SoundEvents.WITHER_DEATH && volume == 1f && abs(pitch - 1.1904762f) < 0.0001f ||
                 muteBonzoStaff && s == SoundEvents.GHAST_AMBIENT && volume == 1f && pitch in 1.39f..1.8f) {
                 event.cancel()
