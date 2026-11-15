@@ -1,7 +1,6 @@
 package com.engineerclient.misc
 
 import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.StringSetting
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
@@ -18,10 +17,6 @@ object CommandAliases : Module(
     private class Slot(val alias: StringSetting, val command: StringSetting) {
         fun used() = alias.value.isNotBlank() || command.value.isNotBlank()
     }
-
-    private val floorAliases by BooleanSetting("Floor Aliases", true, desc = "/e, /f1-/f7 and /m1-/m7 join that floor.")
-    private val FLOOR = Regex("^(e|[fm][1-7])$", RegexOption.IGNORE_CASE)
-    private val NUMBERS = listOf("one", "two", "three", "four", "five", "six", "seven")
 
     private val slots = ArrayList<Slot>()
     private var running = false
@@ -40,18 +35,11 @@ object CommandAliases : Module(
         ClientSendMessageEvents.ALLOW_COMMAND.register { typed -> !(enabled && !running && run(typed)) }
     }
 
-    private fun floor(word: String): String? {
-        if (!floorAliases || !FLOOR.matches(word)) return null
-        val w = word.lowercase()
-        if (w == "e") return "joininstance catacombs_entrance"
-        return "joininstance ${if (w[0] == 'm') "master_" else ""}catacombs_floor_${NUMBERS[w[1] - '1']}"
-    }
-
     private fun run(typed: String): Boolean {
         val word = typed.substringBefore(' ')
         val rest = typed.substringAfter(' ', "")
-        val slot = slots.firstOrNull { it.alias.value.trim().removePrefix("/").equals(word, ignoreCase = true) && it.command.value.isNotBlank() }
-        val target = slot?.command?.value?.trim()?.removePrefix("/") ?: floor(word) ?: return false
+        val slot = slots.firstOrNull { it.alias.value.trim().removePrefix("/").equals(word, ignoreCase = true) && it.command.value.isNotBlank() } ?: return false
+        val target = slot.command.value.trim().removePrefix("/")
         // An alias whose command is itself an alias would loop.
         running = true
         try { mc.player?.connection?.sendCommand(if (rest.isBlank()) target else "$target $rest") } finally { running = false }

@@ -265,6 +265,12 @@ object EngineerClient : ClientModInitializer {
             // /adr online: ADR Online in your browser, signed in.
             for (name in listOf("adr", "ADR")) dispatcher.register(literal(name).executes { ADR.myRunsLink(); 1 }
                 .then(literal("online").executes { com.engineerclient.adr.OnlineLink.openPage(); 1 }))
+            // /e, /f1-/f7, /m1-/m7: join that floor, like /od f7.
+            val numbers = listOf("one", "two", "three", "four", "five", "six", "seven")
+            val floors = mapOf("e" to "catacombs_entrance") + (1..7).flatMap { n ->
+                listOf("f$n" to "catacombs_floor_${numbers[n - 1]}", "m$n" to "master_catacombs_floor_${numbers[n - 1]}")
+            }
+            for ((name, instance) in floors) dispatcher.register(literal(name).executes { mc.schedule { com.odtheking.odin.utils.sendCommand("joininstance $instance") }; 1 })
             // /edt: #EndDungeonsToxicity in party chat.
             dispatcher.register(literal("edt").executes { mc.schedule { com.odtheking.odin.utils.sendCommand("pc #EndDungeonsToxicity") }; 1 })
             // /termsim [ping], /termsim <terminal> [ping], /termsim inf.
