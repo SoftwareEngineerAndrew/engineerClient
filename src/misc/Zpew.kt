@@ -262,14 +262,8 @@ object Zpew {
 
         on<LevelEvent.Load> { if (live()) { reset(); EtherSound.clear() } }
 
-        on<MessageEvent> {
-            if (!enabled) return@on
-            if (!queue.isEmpty && REFUSALS.any { message.contains(it) }) { log("REFUSED $message"); queue.refuse(); sync("refuse") }
-            if (!queue.isEmpty && message.contains("There are blocks in the way!")) {
-                val mark = { log("BLOCKED"); queue.blocked(serverTicks.get()) }
-                if (mc.isSameThread) mark() else mc.execute { mark() }
-            }
-        }
+        on<MessageEvent.Chat> { refused(message) }
+        on<MessageEvent.Overlay> { refused(message) }
 
         on<TickEvent.Server> { if (enabled) serverTicks.incrementAndGet() }
 
@@ -322,5 +316,14 @@ object Zpew {
             sync("click")
         }
         EventBus.subscribe(this)
+    }
+
+    private fun refused(message: String) {
+        if (!enabled) return
+        if (!queue.isEmpty && REFUSALS.any { message.contains(it) }) { log("REFUSED $message"); queue.refuse(); sync("refuse") }
+        if (!queue.isEmpty && message.contains("There are blocks in the way!")) {
+            val mark = { log("BLOCKED"); queue.blocked(serverTicks.get()) }
+            if (mc.isSameThread) mark() else mc.execute { mark() }
+        }
     }
 }
