@@ -190,7 +190,7 @@ class StartsWithHandler(private val letter: String) : TerminalHandler(TerminalTy
     }
 }
 
-/** Melody: lanes in rows 1-3 (columns 1-5), a button at column 7 of each; the column to hit is the one marked in rows 0 and 4. */
+/** Melody: lanes in rows 1-3 (columns 1-5), a button at column 7 of each, the column to hit marked in rows 0 and 4. */
 class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
     private var column = -1
     private var pointer = -1
@@ -215,11 +215,10 @@ class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
     override fun look(slot: Int): Look? {
         val row = slot / 9
         val col = slot % 9
-        val activeRow = if (pointer >= 0) pointer / 9 else if (button >= 0) button / 9 else -1
         return when {
+            (row == 0 || row == 4) && col == column -> Look(MELODY_COLUMN)
             slot == pointer -> Look(MELODY_POINTER)
-            slot == button -> Look(if (aligned()) MELODY_POINTER else MELODY_LANE)
-            row in 1..3 && col in 1..5 -> Look(if (row == activeRow && col == column) MELODY_COLUMN else MELODY_LANE)
+            slot == button && aligned() -> Look(MELODY_POINTER)
             else -> null
         }
     }

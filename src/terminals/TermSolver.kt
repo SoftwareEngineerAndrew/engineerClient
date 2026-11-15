@@ -64,9 +64,9 @@ object TermSolver {
     private fun grid(screen: AbstractContainerScreen<*>, t: TerminalHandler): Grid {
         val melody = t.type == TerminalTypes.MELODY
         val scale = if (melody) Terminals.melodySize else Terminals.customSize
-        val top = if (melody) 1 else t.top
+        val top = if (melody) 0 else t.top
         val left = if (melody) 1 else t.left
-        val rows = if (melody) 3 else t.rows
+        val rows = if (melody) 5 else t.rows
         val cols = if (melody) 7 else t.cols
         val w = cols * CELL + (cols - 1) * Terminals.gap
         val h = rows * CELL + (rows - 1) * Terminals.gap
@@ -140,6 +140,12 @@ object TermSolver {
         g.pose().translate(grid.x, grid.y)
         g.pose().scale(grid.scale)
         g.roundedRect(-2, -2, grid.w + 2, grid.h + 2, Terminals.backgroundColor.rgba, radius)
+        // Melody: the lanes and the buttons as two plain blocks, with only the column marks, the moving pane and a lined up button on them.
+        if (t.type == TerminalTypes.MELODY) {
+            val lanes = Terminals.melodyBackground.rgba
+            g.roundedRect(0, grid.step, 5 * grid.step - Terminals.gap, 4 * grid.step - Terminals.gap, lanes, radius)
+            g.roundedRect(6 * grid.step, grid.step, 6 * grid.step + CELL, 4 * grid.step - Terminals.gap, lanes, radius)
+        }
         if (t.ready) for (r in 0 until grid.rows) for (c in 0 until grid.cols) {
             val slot = (grid.top + r) * 9 + grid.left + c
             val look = t.look(slot) ?: continue

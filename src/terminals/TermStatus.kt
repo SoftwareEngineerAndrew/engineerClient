@@ -139,10 +139,12 @@ object TermStatus {
         on<LevelEvent.Load> { inactive.clear(); shouldRender = false; resetState() }
 
         on<RenderExtractEvent> {
-            if (!Terminals.statusOn || inactive.isEmpty() || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            if (inactive.isEmpty() || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            // Set back every frame, so turning Status or Hide Default Names off shows Hypixel's names again at once.
+            val hide = Terminals.statusOn && Terminals.hideDefaultNames
             inactive.forEach { (stand, kind) ->
-                stand.isCustomNameVisible = !Terminals.hideDefaultNames
-                if (!Terminals.waypoints) return@forEach
+                stand.isCustomNameVisible = !hide
+                if (!Terminals.statusOn || !Terminals.waypoints) return@forEach
                 val label = kind.label?.takeIf { kind.shown } ?: return@forEach
                 val look = Terminals.waypointStyle
                 if (look.box) {

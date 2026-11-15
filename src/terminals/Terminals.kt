@@ -55,9 +55,9 @@ object Terminals : Module(
     val numbers2 by ColorSetting("Numbers 2", Colors.MINECRAFT_GREEN.darker(0.5f), true, desc = "The one after.").withDependency { colors() }
     val numbers3 by ColorSetting("Numbers 3", Colors.MINECRAFT_GREEN.darker(0.5f).darker(0.5f), true, desc = "Third.").withDependency { colors() }
     val numbers4 by ColorSetting("Numbers 4", Colors.MINECRAFT_GREEN.darker(0.5f).darker(0.5f).darker(0.5f), true, desc = "Fourth.").withDependency { colors() }
-    val melodyColumn by ColorSetting("Melody Column", Colors.MINECRAFT_DARK_PURPLE, true, desc = "The column to click in.").withDependency { colors() }
+    val melodyColumn by ColorSetting("Melody Column", Colors.MINECRAFT_DARK_PURPLE, true, desc = "The marks above and below the column to click in.").withDependency { colors() }
     val melodyPointer by ColorSetting("Melody Pointer", Colors.MINECRAFT_GREEN, true, desc = "The moving pane, and the button when it lines up.").withDependency { colors() }
-    val melodyBackground by ColorSetting("Melody Background", Colors.gray38, true, desc = "The rest of the lanes.").withDependency { colors() }
+    val melodyBackground by ColorSetting("Melody Background", Colors.gray38, true, desc = "The lanes and the buttons.").withDependency { colors() }
 
     // ------------------------------------------------------------------ Times
     private val timesDrop by DropdownSetting("Times", false, desc = "Terminal times and section splits.")
