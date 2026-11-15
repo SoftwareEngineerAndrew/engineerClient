@@ -78,14 +78,13 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.clearbreakdown.ClearBreakdown,
             RandomStuff, com.engineerclient.misc.HealthMana, com.engineerclient.misc.LcmMeleeWarning, com.engineerclient.misc.CommandAliases,
             com.engineerclient.misc.BlockInstaclear,
-            com.engineerclient.misc.ItemHighlight, com.engineerclient.culling.ChunkCulling,
+            com.engineerclient.culling.ChunkCulling,
             com.engineerclient.misc.OdinColors,
             com.engineerclient.dungeon.RoomAlerts, com.engineerclient.dungeon.BoxIcedMobs, com.engineerclient.dungeon.ScoreTime, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.LagWarning, com.engineerclient.dungeon.ExplosiveShot,
             com.engineerclient.dungeon.TickTimers, com.engineerclient.dungeon.PositionalMessages, com.engineerclient.dungeon.Relics,
             com.engineerclient.skyblock.ItemTweaks,
             com.engineerclient.skyblock.EnchantColors,
             com.engineerclient.skyblock.ItemProtection,
-            com.engineerclient.skyblock.CloseChestOnKey,
             com.engineerclient.skyblock.RunsLogger,
             com.engineerclient.render.ScoreboardNametags,
             com.engineerclient.render.BossBar,
@@ -153,6 +152,8 @@ object EngineerClient : ClientModInitializer {
         safely("creeper beams ding") { com.engineerclient.dungeon.CreeperBeamsDing.install() }
         safely("puzzle overlay") { com.engineerclient.misc.PuzzleOverlay.install() }
         safely("secret waypoints") { com.engineerclient.dungeon.SecretWaypoints.install() }
+        safely("item highlight") { com.engineerclient.misc.ItemHighlight.install() }
+        safely("close chest on key") { com.engineerclient.skyblock.CloseChestOnKey.install() }
         safely("map configs") { ModuleManager.loadConfigurations() }
         runCatching { com.engineerclient.misc.LaunchStats.install() }
         runCatching { com.engineerclient.misc.UpdateCheck.install() }

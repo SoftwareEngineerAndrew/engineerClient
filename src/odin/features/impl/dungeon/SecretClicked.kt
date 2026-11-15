@@ -22,23 +22,22 @@ import net.minecraft.world.phys.AABB
 import java.util.concurrent.CopyOnWriteArrayList
 
 object SecretClicked : Module(
-    name = "Secret Clicked",
-    description = "Provides both audio and visual feedback when a secret is clicked."
+    name = "Secrets",
+    description = "Clicked secret boxes and chime, secret waypoints, dropped item boxes and chest closing."
 ) {
-    private val boxesDropdown by DropdownSetting("Secret Boxes Dropdown", desc = "Shows settings for the boxes drawn around clicked secrets.")
-    private val boxes by BooleanSetting("Secret Boxes", true, desc = "Whether or not to render boxes around clicked secrets.").withDependency { boxesDropdown }
-    private val style by SelectorSetting("Box style", BoxStyle.FILLED_OUTLINE, desc = "The style of the box.").withDependency { boxesDropdown && boxes }
-    private val color by ColorSetting("Box color", Colors.MINECRAFT_GOLD.withAlpha(.8f), true, desc = "The color of the box.").withDependency { boxesDropdown && boxes }
-    private val depthCheck by BooleanSetting("Depth check", false, desc = "Boxes show through walls.").withDependency { boxesDropdown && boxes }
-    private val lockedColor by ColorSetting("Locked Color", Colors.MINECRAFT_RED.withAlpha(.8f), true, desc = "The color of the box when the chest is locked.").withDependency { boxesDropdown && boxes }
-    private val timeToStay by NumberSetting("Time To Stay", 7, 1..120, 0.5, desc = "The time the chests should remain highlighted.", unit = "s").withDependency { boxesDropdown && boxes }
-    private val boxInBoss by BooleanSetting("Box In Boss", false, desc = "Highlight clicks in boss.").withDependency { boxesDropdown && boxes }
-    private val toggleItems by BooleanSetting("Item Boxes", true, desc = "Render boxes for collected items.").withDependency { boxesDropdown && boxes }
+    private val clickedDropdown by DropdownSetting("Clicked", desc = "Boxes and a chime for clicked secrets.")
+    private val boxes by BooleanSetting("Secret Boxes", true, desc = "Whether or not to render boxes around clicked secrets.").withDependency { clickedDropdown }
+    private val style by SelectorSetting("Box style", BoxStyle.FILLED_OUTLINE, desc = "The style of the box.").withDependency { clickedDropdown && boxes }
+    private val color by ColorSetting("Box color", Colors.MINECRAFT_GOLD.withAlpha(.8f), true, desc = "The color of the box.").withDependency { clickedDropdown && boxes }
+    private val depthCheck by BooleanSetting("Depth check", false, desc = "Boxes show through walls.").withDependency { clickedDropdown && boxes }
+    private val lockedColor by ColorSetting("Locked Color", Colors.MINECRAFT_RED.withAlpha(.8f), true, desc = "The color of the box when the chest is locked.").withDependency { clickedDropdown && boxes }
+    private val timeToStay by NumberSetting("Time To Stay", 7, 1..120, 0.5, desc = "The time the chests should remain highlighted.", unit = "s").withDependency { clickedDropdown && boxes }
+    private val boxInBoss by BooleanSetting("Box In Boss", false, desc = "Highlight clicks in boss.").withDependency { clickedDropdown && boxes }
+    private val toggleItems by BooleanSetting("Item Boxes", true, desc = "Render boxes for collected items.").withDependency { clickedDropdown && boxes }
 
-    private val chimeDropdownSetting by DropdownSetting("Secret Chime Dropdown", desc = "Shows settings for the sound played when a secret is clicked.")
-    private val chime by BooleanSetting("Secret Chime", true, desc = "Whether or not to play a sound when a secret is clicked.").withDependency { chimeDropdownSetting }
-    private val soundSettings = createSoundSettings("Chime Sound", "entity.blaze.hurt") { chimeDropdownSetting && chime }
-    private val chimeInBoss by BooleanSetting("Chime In Boss", false, desc = "Prevent playing the sound if in boss room.").withDependency { chimeDropdownSetting && chime }
+    private val chime by BooleanSetting("Secret Chime", true, desc = "Whether or not to play a sound when a secret is clicked.").withDependency { clickedDropdown }
+    private val soundSettings = createSoundSettings("Chime Sound", "entity.blaze.hurt") { clickedDropdown && chime }
+    private val chimeInBoss by BooleanSetting("Chime In Boss", false, desc = "Prevent playing the sound if in boss room.").withDependency { clickedDropdown && chime }
 
     private data class Secret(val aabb: AABB, var locked: Boolean = false)
     private val clickedSecretsList = CopyOnWriteArrayList<Secret>()

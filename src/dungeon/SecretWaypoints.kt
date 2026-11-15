@@ -25,7 +25,7 @@ import com.odtheking.odin.events.SecretPickupEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
+import com.odtheking.odin.features.impl.dungeon.SecretClicked
 import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
 import com.odtheking.odin.features.impl.dungeon.map.WorldScan
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
@@ -46,7 +46,7 @@ import java.util.concurrent.CompletableFuture
 import kotlin.math.abs
 
 object SecretWaypoints {
-    private val dropdown = DropdownSetting("Secret Waypoint Settings", desc = "Shows settings for secret waypoints.")
+    private val dropdown = DropdownSetting("Waypoints", desc = "Boxes every secret in the clear.")
     private val show = BooleanSetting("Secret Waypoints", false, desc = "Boxes every secret in the clear.").withDependency { dropdown.value }
     private val chestColor = ColorSetting("Chest Color", Color(255, 170, 0), true, desc = "Chests.").withDependency { dropdown.value && show.value }
     private val itemColor = ColorSetting("Item Color", Color(85, 85, 255), true, desc = "Items.").withDependency { dropdown.value && show.value }
@@ -77,7 +77,7 @@ object SecretWaypoints {
 
     fun install() {
         for (s in listOf(dropdown, show, chestColor, itemColor, essenceColor, batColor, keyColor, leverColor, text, hideCollected, throughWalls))
-            DungeonWaypoints.registerSetting(s)
+            SecretClicked.registerSetting(s)
 
         on<LevelEvent.Load> { placed.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null }
 
@@ -116,7 +116,7 @@ object SecretWaypoints {
         EventBus.subscribe(this)
     }
 
-    private fun active() = DungeonWaypoints.enabled && show.value && DungeonUtils.inClear
+    private fun active() = SecretClicked.enabled && show.value && DungeonUtils.inClear
 
     private fun load() {
         if (loading) return

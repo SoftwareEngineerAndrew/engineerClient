@@ -1,24 +1,27 @@
 package com.engineerclient.skyblock
 
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
+import com.odtheking.odin.features.impl.dungeon.SecretClicked
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 
-object CloseChestOnKey : Module(
-    name = "Close Chest On Key",
-    category = Category.DUNGEON,
-    description = "Closes a secret chest when you press a movement or sneak key.",
-    key = null,
-) {
-    init {
+/** Secrets' Chests section. */
+object CloseChestOnKey {
+    private val dropdown = DropdownSetting("Chests", desc = "Closing secret chests.")
+    private val on = BooleanSetting("Close Chest On Key", false, desc = "Closes a secret chest when you press a movement or sneak key.").withDependency { dropdown.value }
+
+    fun install() {
+        SecretClicked.registerSetting(dropdown)
+        SecretClicked.registerSetting(on)
         ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
             if (screen !is AbstractContainerScreen<*>) return@register
             ScreenKeyboardEvents.allowKeyPress(screen).register { s, key ->
-                if (!enabled || !DungeonUtils.inDungeons) return@register true
+                if (!SecretClicked.enabled || !on.value || !DungeonUtils.inDungeons) return@register true
                 val title = s.title.string
                 if (title != "Chest" && title != "Large Chest") return@register true
                 val o = Minecraft.getInstance().options

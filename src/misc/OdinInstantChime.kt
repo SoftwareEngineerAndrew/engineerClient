@@ -1,7 +1,9 @@
 package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
+import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
+import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.EventBus
@@ -12,7 +14,9 @@ import net.minecraft.world.entity.item.ItemEntity
 
 object OdinInstantChime {
 
-    private val instant = BooleanSetting("Instant Item Chime", false, desc = "Secret items chime as soon as they can be picked up, not when the server confirms it. Added by ADM.")
+    private val instant = BooleanSetting("Instant Item Chime", false, desc = "Secret items chime as soon as they can be picked up, not when the server confirms it. Added by ADM.").withDependency {
+        (SecretClicked.settings["Clicked"] as? DropdownSetting)?.value == true && (SecretClicked.settings["Secret Chime"] as? BooleanSetting)?.value == true
+    }
 
     private const val PICKUP_DELAY = 10
     private val chimed = HashSet<Int>()

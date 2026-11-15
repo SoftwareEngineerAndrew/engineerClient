@@ -14,7 +14,7 @@ import net.minecraft.world.level.block.Blocks
  * Termsim (the name only - nothing to do with terminals): where new things go, each its own
  * toggle with its settings under it.
  *
- *  - Lever Clicks: left clicking a lever in a dungeon gets Odin's Secret Clicked chime and box, as
+ *  - Lever Clicks: left clicking a lever in a dungeon gets the Secrets chime and box, as
  *    a right click does - its own (private) chime and box, so its settings and its on/off apply.
  */
 object Termsim : Module(
@@ -23,7 +23,7 @@ object Termsim : Module(
     category = Category.custom("Coffee Client", 860, 10),
     description = "Where new things go: Lever Clicks.",
 ) {
-    private val leverClicks by BooleanSetting("Lever Clicks", true, desc = "Left clicking a lever in a dungeon plays Odin's Secret Clicked chime and draws its box, the same as right clicking it. Uses Secret Clicked's settings (and needs it on).")
+    private val leverClicks by BooleanSetting("Lever Clicks", true, desc = "Left clicking a lever in a dungeon plays the Secrets chime and draws its box, the same as right clicking it. Uses Secrets' settings (and needs it on).")
 
     private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
 
