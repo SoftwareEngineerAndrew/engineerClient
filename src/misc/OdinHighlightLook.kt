@@ -84,9 +84,9 @@ object OdinHighlightLook {
 
     private fun kindOf(name: String): Kind? = when {
         "King Midas" in name -> Kind.MINI
+        "❤" in name && MINIS.any { it in name } -> Kind.MINI
         "✯ " !in name -> null
         "Fel" in name -> Kind.FEL
-        MINIS.any { it in name } -> Kind.MINI
         TANKS.any { it in name } -> Kind.TANK
         else -> Kind.STAR
     }
@@ -105,7 +105,7 @@ object OdinHighlightLook {
     }
 
     private fun under(tag: Entity, m: Entity?): Boolean =
-        m is LivingEntity && m !is ArmorStand && m.isAlive && (m !is Player || m.uuid.version() == 2) && abs(m.x - tag.x) < 1.5 && abs(m.z - tag.z) < 1.5 && tag.y - m.y in -1.0..4.5
+        m is LivingEntity && m !is ArmorStand && m.isAlive && (m !is Player || m !== mc.player && DungeonUtils.dungeonTeammates.none { it.name == m.name.string }) && abs(m.x - tag.x) < 1.5 && abs(m.z - tag.z) < 1.5 && tag.y - m.y in -1.0..4.5
 
     private fun mobUnder(level: ClientLevel, tag: ArmorStand, offset: Int): Entity? {
         level.getEntity(tag.id - offset)?.takeIf { under(tag, it) }?.let { return it }
