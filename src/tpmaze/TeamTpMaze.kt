@@ -18,7 +18,6 @@ import com.odtheking.odin.events.RoomEnterEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
 import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
 import com.odtheking.odin.features.impl.render.ClickGUIModule
@@ -111,25 +110,6 @@ object TeamTpMaze {
         replaceOdinSettings(listOf(dropdown, on, tracer, labels, nextColor, finalColor, usedColor, mateColor))
         on<LevelEvent.Load> { EngineerClient.safely("team tp maze reset") { reset() } }
         on<RoomEnterEvent> { EngineerClient.safely("team tp maze room") { room?.takeIf { it.data?.name == ROOM }?.let { enter(it) } } }
-        // Our own teleport: read on the client thread, where this runs before the packet moves us.
-        onReceive<ClientboundPlayerPositionPacket> {
-            if (!inMaze()) {
-                if (kotlin.math.abs(change.position.y - LANDING_Y) < 0.01 && DungeonUtils.inDungeons)
-                    log("skipped: room ${DungeonUtils.currentRoomName}, maze ${mazeRoom != null}, active ${active()}")
-                return@onReceive
-            }
-            val c = change; val rel = relatives
-            onClient {
-                EngineerClient.safely("team tp maze teleport") {
-                    val p = mc.player ?: return@safely
-                    val x = if (Relative.X in rel) p.x + c.position.x else c.position.x
-                    val y = if (Relative.Y in rel) p.y + c.position.y else c.position.y
-                    val z = if (Relative.Z in rel) p.z + c.position.z else c.position.z
-                    val yaw = if (Relative.Y_ROT in rel) p.yRot + c.yRot else c.yRot
-                    teleport(p.x, p.z, x, y, z, yaw.toDouble(), exact = true)
-                }
-            }
-        }
         // A teammate's: every server position of theirs comes through here, so the last one is where they stood.
         on<EntityEvent.Move> {
             if (!inMaze()) return@on
@@ -143,9 +123,20 @@ object TeamTpMaze {
         EventBus.subscribe(this)
     }
 
-    /** Now when already on the client thread (a bundled packet), else queued ahead of the packet's own handling. */
-    private inline fun onClient(crossinline block: () -> Unit) {
-        if (mc.isSameThread) block() else mc.execute { block() }
+    /** TpMazeTeleportMixin: our own teleport, on the client thread just before the game moves us, so where we stood is still known. */
+    @JvmStatic
+    fun ownTeleport(packet: ClientboundPlayerPositionPacket) {
+        val p = mc.player ?: return
+        val c = packet.change; val rel = packet.relatives
+        val x = if (Relative.X in rel) p.x + c.position.x else c.position.x
+        val y = if (Relative.Y in rel) p.y + c.position.y else c.position.y
+        val z = if (Relative.Z in rel) p.z + c.position.z else c.position.z
+        if (!inMaze()) {
+            if (kotlin.math.abs(y - LANDING_Y) < 0.01 && DungeonUtils.inDungeons) log("skipped: room ${DungeonUtils.currentRoomName}, maze ${mazeRoom != null}, active ${active()}")
+            return
+        }
+        val yaw = if (Relative.Y_ROT in rel) p.yRot + c.yRot else c.yRot
+        EngineerClient.safely("team tp maze teleport") { teleport(p.x, p.z, x, y, z, yaw.toDouble(), exact = true) }
     }
 
     /** Odin's TP Maze settings, whose solver is switched off (TpMazeRenderMixin): ours go in their place in Puzzle Solvers. */

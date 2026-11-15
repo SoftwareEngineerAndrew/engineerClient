@@ -66,6 +66,7 @@
     "HudItemNameAccessor",
     "ShovelPathMixin",
     "LavaAsWaterMixin",
+    "TpMazeTeleportMixin",
     "ScreenBlurMixin",
     "SignEnterMixin",
     "SsPracticeInputMixin",
