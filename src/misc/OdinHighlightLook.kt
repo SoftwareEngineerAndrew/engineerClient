@@ -122,7 +122,9 @@ object OdinHighlightLook {
             is ArmorStand -> {
                 if (e.id in claimedTags) return
                 val kind = e.customName?.string?.let(::kindOf)
-                if (kind == null) pending.remove(e.id) else pending[e.id] = e to kind
+                if (kind == null) { pending.remove(e.id); return }
+                val mob = mc.level?.let { mobUnder(it, e, offsetOf(e, kind)) }
+                if (mob == null) pending[e.id] = e to kind else { claimedTags += e.id; found[mob.id] = mob to kind; pending.remove(e.id) }
             }
             is Player -> if (isShadowAssassin(e)) found[e.id] = e to Kind.ASSASSIN
             is Bat -> if (DungeonUtils.inClear && e.health in BAT_HEALTHS) found[e.id] = e to Kind.BAT
@@ -131,13 +133,15 @@ object OdinHighlightLook {
         }
     }
 
+    private fun offsetOf(tag: ArmorStand, kind: Kind) = if (kind == Kind.TANK && "withermancer" in (tag.customName?.string ?: "").lowercase()) 3 else 1
+
     private fun match() {
         val level = mc.level ?: return
         val it = pending.values.iterator()
         while (it.hasNext()) {
             val (tag, kind) = it.next()
             if (tag.isRemoved) { it.remove(); continue }
-            val mob = mobUnder(level, tag, if (kind == Kind.TANK && "withermancer" in (tag.customName?.string ?: "").lowercase()) 3 else 1) ?: continue
+            val mob = mobUnder(level, tag, offsetOf(tag, kind)) ?: continue
             claimedTags += tag.id
             found[mob.id] = mob to kind
             it.remove()
@@ -150,11 +154,11 @@ object OdinHighlightLook {
         val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth, starWidth) + colours.values.flatMap { listOf(it.fill, it.outline) }
         for (s in all) Highlight.registerSetting(s)
 
-        // Each entity is judged as it changes; once a second, everything again, for what came in before the dungeon or boss was known.
+        // Each entity is judged as it changes; every few ticks, everything again, for what came in before the dungeon or boss was known.
         var ticks = 0
         on<TickEvent.End> {
             if (!active()) return@on
-            if (++ticks % 20 == 0) mc.level?.entitiesForRendering()?.forEach(::consider)
+            if (++ticks % 5 == 0) mc.level?.entitiesForRendering()?.forEach(::consider)
             if (pending.isNotEmpty() || found.isNotEmpty()) match()
         }
         on<EntityEvent.Add> { if (active()) consider(entity) }
