@@ -64,6 +64,7 @@
     "ScoreboardSidebarMixin",
     "HudSidebarInvoker",
     "HudItemNameAccessor",
+    "ShovelPathMixin",
     "ScreenBlurMixin",
     "SignEnterMixin",
     "SsPracticeInputMixin",

@@ -41,4 +41,9 @@ object ItemTweaks : Module(
     fun smallHead(stack: ItemStack): Boolean = enabled && oldPlayerHead && stack.`is`(Items.PLAYER_HEAD)
 
     fun noHotbarScroll(): Boolean = enabled && noHotbarScroll
+
+    /** In dungeons a shovel (AOTV and the like) right-clicked on grass makes no path on your side; the click still goes out. */
+    @JvmStatic
+    fun noShovelPath(stack: net.minecraft.world.item.ItemStack): Boolean =
+        com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils.inDungeons && stack.`is`(net.minecraft.tags.ItemTags.SHOVELS)
 }
