@@ -97,6 +97,7 @@ object Visibility : Module(
     }.withDependency { screenDropdown && !hideItemNames }
     private val hideActionBar by BooleanSetting("Hide Action Bar", false, desc = "Hides the whole action bar above the hotbar.").withDependency { screenDropdown }
     private val noDropAnimation by BooleanSetting("No Drop Animation", false, desc = "In dungeons, a rejected drop leaves the held item raised.").withDependency { screenDropdown }
+    private val lavaAsWater by BooleanSetting("Lava As Water", false, desc = "Lava looks like water.").withDependency { screenDropdown }
     private val hidePortalOverlay by BooleanSetting("Hide Portal Overlay", false, desc = "No purple overlay inside a nether portal.").withDependency { screenDropdown }
 
     private val cleanupDropdown by DropdownSetting("Cleanup", desc = "Particles, entities and players that clutter the screen.")
@@ -195,6 +196,7 @@ object Visibility : Module(
             ScoreboardLines.hideTimeElapsed = hideSbElapsed
             ScoreboardLines.hideCleared = hideSbCleared
             ScoreboardNametags.moving = enabled && scoreboardHud.enabled
+            if (lavaAsWater() != lavaShown) { lavaShown = lavaAsWater(); mc.level?.let { mc.levelRenderer.invalidateCompiledGeometry(it, mc.options, mc.gameRenderer.mainCamera(), mc.blockColors) } }
         }
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
 
@@ -266,6 +268,8 @@ object Visibility : Module(
 
     fun noVignette() = enabled && noVignette
     @JvmStatic fun hidesPortalOverlay() = enabled && hidePortalOverlay
+    @JvmStatic fun lavaAsWater() = enabled && lavaAsWater
+    private var lavaShown = false
     fun noWaterOverlay() = enabled && noWaterOverlay
     fun noSuffocationOverlay() = enabled && noSuffocationOverlay
     fun hidePotionHud() = enabled && hidePotionHud

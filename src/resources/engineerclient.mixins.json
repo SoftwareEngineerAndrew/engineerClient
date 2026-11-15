@@ -65,6 +65,7 @@
     "HudSidebarInvoker",
     "HudItemNameAccessor",
     "ShovelPathMixin",
+    "LavaAsWaterMixin",
     "ScreenBlurMixin",
     "SignEnterMixin",
     "SsPracticeInputMixin",
