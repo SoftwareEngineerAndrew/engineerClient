@@ -58,6 +58,7 @@ object Etherwarp : Module(
     val zpewAotvSound by BooleanSetting("0 Ping AOTV Sound", true, desc = "The teleport sound plays as your camera teleports, not when the server's arrives.").withDependency { legitZpew && zpewAotv }
     val zpewHyperion by BooleanSetting("Hyperion", true, desc = "Wither Impact teleports: Hyperion, Valkyrie, Astraea, Scylla, Necron's Blade with all three scrolls.").withDependency { legitZpew }
     val zpewHypeSound by BooleanSetting("0 Ping Hyperion Sound", true, desc = "The teleport and Implosion sounds play as your camera teleports, not when the server's arrive.").withDependency { legitZpew && zpewHyperion }
+    val zpewIceFill by BooleanSetting("In Ice Fill", false, desc = "Also in the Ice Fill puzzle.").withDependency { legitZpew }
     val zpewDebug by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera jump to config/engineerclient/zpew-debug.log, for checking the predictions.").withDependency { legitZpew }
     val zpewCapture by BooleanSetting("Capture Misses", false, desc = "When a prediction is wrong (warps where the server refuses, lands elsewhere, or refuses where the server warps), saves the click and the blocks around it to config/engineerclient/zpew-misses.txt, to fix the law from.").withDependency { legitZpew }
 
