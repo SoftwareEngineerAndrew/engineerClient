@@ -207,10 +207,19 @@ class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
         if (pointer >= 0) out += pointer
         if (column >= 0) { out += column; out += column + 36 }
         if (aligned()) out += button
+        BUTTONS.indexOf(button).takeIf { it >= 0 && column >= 0 }?.let { rowColumns[it] = column % 9 }
     }
 
-    /** The pane is lined up and the alert wants this row. */
-    fun alerting() = aligned() && (Terminals.melodyEveryRow || button == BUTTONS[0])
+    /** Each row's answer column as it was shown, for the staircase. */
+    private val rowColumns = IntArray(BUTTONS.size) { -1 }
+
+    /** The pane is lined up on row 1's first slot, or on a staircase: one slot right of the row before. */
+    fun alerting(): Boolean {
+        if (!aligned()) return false
+        val row = BUTTONS.indexOf(button)
+        val col = column % 9
+        return if (row == 0) col == FIRST_SLOT else row > 0 && rowColumns[row - 1] >= 0 && col == rowColumns[row - 1] + 1
+    }
 
     private fun aligned() = pointer >= 0 && column >= 0 && button >= 0 && pointer % 9 == column % 9
 
@@ -227,6 +236,7 @@ class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
 
     private companion object {
         val BUTTONS = listOf(16, 25, 34)
+        const val FIRST_SLOT = 1
         val MAGENTA_PANE = Items.STAINED_GLASS_PANE.pick(DyeColor.MAGENTA)
         val LIME_CLAY = Items.DYED_TERRACOTTA.pick(DyeColor.LIME)
     }
