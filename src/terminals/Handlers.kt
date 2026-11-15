@@ -1,7 +1,6 @@
 package com.engineerclient.terminals
 
 import com.odtheking.odin.utils.hasGlint
-import com.odtheking.odin.utils.playSoundSettings
 import net.minecraft.core.component.DataComponents
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.world.item.BlockItem
@@ -195,7 +194,6 @@ class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
     private var column = -1
     private var pointer = -1
     private var button = -1
-    private var wasAligned = false
 
     override fun key(item: ItemStack) = 0
     override fun canClickShown(slot: Int, button: Int) = slot == activeButton()
@@ -209,10 +207,10 @@ class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
         if (pointer >= 0) out += pointer
         if (column >= 0) { out += column; out += column + 36 }
         if (aligned()) out += button
-        val now = aligned()
-        if (now && !wasAligned && Terminals.melodyAlert && (Terminals.melodyEveryRow || button == BUTTONS[0])) playSoundSettings(Terminals.melodySound())
-        wasAligned = now
     }
+
+    /** The pane is lined up and the alert wants this row. */
+    fun alerting() = aligned() && (Terminals.melodyEveryRow || button == BUTTONS[0])
 
     private fun aligned() = pointer >= 0 && column >= 0 && button >= 0 && pointer % 9 == column % 9
 

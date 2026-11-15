@@ -1,6 +1,7 @@
 package com.engineerclient.terminals
 
 import com.odtheking.odin.events.MessageEvent
+import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
@@ -22,6 +23,14 @@ object TermSounds {
     private val replacing get() = replacesClicks && TerminalUtils.currentTerm != null
 
     fun install() {
+        // Melody: the alert repeats for as long as the lined up pane can be clicked.
+        var melodyTicks = 0
+        on<TickEvent.End> {
+            val m = TerminalUtils.currentTerm as? MelodyHandler
+            if (m == null || !Terminals.melodyAlert || !m.alerting()) { melodyTicks = 0; return@on }
+            if (melodyTicks++ % Terminals.melodyRepeat == 0) playSoundSettings(Terminals.melodySound())
+        }
+
         on<TerminalEvent.Solve> {
             if (!Terminals.soundsOn) return@on
             if (replacing && !Terminals.completeSounds) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value(), 8f, 4f)
