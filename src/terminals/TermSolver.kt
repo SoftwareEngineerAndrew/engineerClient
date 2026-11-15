@@ -64,9 +64,9 @@ object TermSolver {
     private fun grid(screen: AbstractContainerScreen<*>, t: TerminalHandler): Grid {
         val melody = t.type == TerminalTypes.MELODY
         val scale = if (melody) Terminals.melodySize else Terminals.customSize
-        val top = if (melody) 0 else t.top
+        val top = if (melody) 1 else t.top
         val left = if (melody) 1 else t.left
-        val rows = if (melody) 5 else t.rows
+        val rows = if (melody) 3 else t.rows
         val cols = if (melody) 7 else t.cols
         val w = cols * CELL + (cols - 1) * Terminals.gap
         val h = rows * CELL + (rows - 1) * Terminals.gap
