@@ -10,8 +10,8 @@ import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.render.drawFilledBox
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import net.minecraft.util.Mth
 import net.minecraft.world.entity.item.ItemEntity
+import net.minecraft.world.phys.Vec3
 import java.util.Collections
 import java.util.IdentityHashMap
 
@@ -53,7 +53,8 @@ object ItemHighlight : Module(
         return when {
             distance > 20.0 -> null
             distance > 3.5 -> farColor
-            item.tickCount > 11 -> readyColor
+            // Secret items have a 5 tick pickup delay, not the usual 10.
+            item.tickCount > 6 -> readyColor
             else -> freshColor
         }
     }
@@ -63,19 +64,22 @@ object ItemHighlight : Module(
             val level = mc.level ?: return@on
             tracked.removeIf { it.isRemoved }
             for (entity in level.entitiesForRendering()) {
-                if (entity is ItemEntity && entity !in tracked && wanted(entity)) tracked.add(entity)
+                if (entity is ItemEntity && entity !in tracked && wanted(entity)) {
+                    tracked.add(entity)
+                    // No drop animation: the box sits where the item appeared instead of flying out and bouncing.
+                    entity.deltaMovement = Vec3.ZERO
+                }
             }
         }
 
         on<LevelEvent.Load> { tracked.clear() }
 
         on<RenderExtractEvent> {
-            val pt = mc.deltaTracker.getGameTimeDeltaPartialTick(false).toDouble()
-            for (item in tracked) {
+                for (item in tracked) {
                 val color = colorFor(item) ?: continue
-                val x = Mth.lerp(pt, item.xOld, item.x)
-                val y = Mth.lerp(pt, item.yOld, item.y)
-                val z = Mth.lerp(pt, item.zOld, item.z)
+                val x = item.x
+                val y = item.y
+                val z = item.z
                 val box = item.getDimensions(item.pose).makeBoundingBox(x, y, z).inflate(0.1).move(0.0, 0.05, 0.0)
                 drawFilledBox(box, color, depth = false)
             }
