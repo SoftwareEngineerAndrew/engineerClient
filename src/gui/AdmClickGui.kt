@@ -106,8 +106,7 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
 
         graphics.pose().pushMatrix()
         graphics.pose().scale(scale, scale)
-        // Matching settings only open once the search is down to a few modules.
-        val openMatches = query.isNotEmpty() && panels.sumOf { p -> p.modules.count { it.matches(query) } } < OPEN_UNDER
+        val openMatches = query.isNotEmpty()
         for (panel in panels) {
             ui.hoverEnabled = panel === top
             panel.draw(ui, vw, vh, query, openMatches)
@@ -205,7 +204,6 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     override fun isPauseScreen(): Boolean = false
 
     private const val SEARCH_W = 120
-    private const val OPEN_UNDER = 10
     private const val SEARCH_H = 20
     private const val SEARCH_BOTTOM = 45
     private const val TOOLTIP_DELAY = 500L
