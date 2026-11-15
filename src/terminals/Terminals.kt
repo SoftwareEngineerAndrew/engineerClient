@@ -91,6 +91,9 @@ object Terminals : Module(
     val clickSound = createSoundSettings("Click Sound", "entity.blaze.hurt") { soundsDrop && clickSounds }
     val completeSounds by BooleanSetting("Complete Sounds", false, desc = "A sound when you finish a terminal.").withDependency { soundsDrop }
     val completeSound = createSoundSettings("Completion Sound", "entity.experience_orb.pickup") { soundsDrop && completeSounds }
+    val melodyAlert by BooleanSetting("Melody Click Alert", false, desc = "A sound the moment melody's pane lines up with its column.").withDependency { soundsDrop }
+    val melodyEveryRow by BooleanSetting("Melody Alert Every Row", false, desc = "On every row, not only the first.").withDependency { soundsDrop && melodyAlert }
+    val melodySound = createSoundSettings("Melody Alert Sound", "block.note_block.pling") { soundsDrop && melodyAlert }
 
     // ------------------------------------------------------------------ Status
     private val statusDrop by DropdownSetting("Status", false, desc = "Inactive terminals, devices and levers, and section progress.")
