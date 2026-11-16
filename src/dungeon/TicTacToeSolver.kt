@@ -14,6 +14,7 @@ import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
 import com.adm.utils.Color
+import com.adm.utils.FormatCache
 import com.adm.utils.render.drawFilledBox
 import com.adm.utils.render.drawText
 import com.adm.utils.sendCommand
@@ -72,6 +73,7 @@ object TicTacToeSolver {
     private var sent = false
     private var serverTicks = 0L
     private var replyAt = 0L
+    private val countdownText = FormatCache(1) { "%.1f".format(it / 20.0) }
 
     private val values = HashMap<String, Int>()
     private val chances = HashMap<String, Double>()
@@ -96,7 +98,7 @@ object TicTacToeSolver {
             if (showNext) for (pos in next) buttonBox(pos)?.let { drawFilledBox(it, if (next.size == 1) bestColor else nextColor, depth = true) }
             for (pos in best) buttonBox(pos)?.let { drawFilledBox(it, bestColor, depth = true) }
             val left = replyAt - serverTicks
-            if (countdown && left > 0) above?.let { drawText("%.1f".format(left / 20.0), it, 1.5f, false) }
+            if (countdown && left > 0) above?.let { drawText(countdownText(left.toDouble()), it, 1.5f, false) }
         }
         EventBus.subscribe(this)
     }
