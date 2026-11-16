@@ -91,7 +91,7 @@ object PuzzleArrows {
     fun blocksUse(): Boolean = shortbowShot(false)?.let(::blocksShot) ?: false
 
     @JvmStatic
-    fun blocksAttack(): Boolean = BeamsSolver.blocksPunch() || (shortbowShot(true)?.let(::blocksShot) ?: false)
+    fun blocksAttack(): Boolean = BeamsSolver.blocksPunch() || IcePathSolver.blocksPunch() || (shortbowShot(true)?.let(::blocksShot) ?: false)
 
     @JvmStatic
     fun blocksRelease(): Boolean {
@@ -102,7 +102,7 @@ object PuzzleArrows {
     }
 
     private fun blocksShot(shot: List<Flight>): Boolean {
-        val blocked = BlazeSolver.blocksShot(shot) || BeamsSolver.blocksShot(shot)
+        val blocked = BlazeSolver.blocksShot(shot) || BeamsSolver.blocksShot(shot) || IcePathSolver.blocksShot(shot)
         if (blocked) PuzzleSolvers.blocked()
         else BeamsSolver.fired(shot)
         return blocked

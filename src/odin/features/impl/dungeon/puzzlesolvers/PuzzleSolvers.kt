@@ -71,6 +71,9 @@ object PuzzleSolvers : Module(
     val beamsBlockWrong by BooleanSetting("Beams Block Wrong Hits", true, desc = "Blocks shots and punches on lanterns that aren't the solution's next one.").withDependency { beamsDropDown }
     private val beamsReset by ActionSetting("Reset Beams", desc = "Resets the solver.") { BeamsSolver.reset() }.withDependency { beamsSolver && beamsDropDown }
 
+    private val icePathDropDown by DropdownSetting("Ice Path", desc = "Shows settings for the Ice Path puzzle.")
+    val icePathBlockWrong by BooleanSetting("Ice Path Block Wrong Hits", true, desc = "Blocks hits and shots that push the silverfish off the shortest way out.").withDependency { icePathDropDown }
+
     private val weirdosDropDown by DropdownSetting("Three Weirdos", desc = "Shows settings for the Three Weirdos puzzle solver.")
     private val weirdosSolver by BooleanSetting("Weirdos Solver", true, desc = "Shows you the solution for the Weirdos puzzle.").withDependency { weirdosDropDown }
     private val weirdosColor by ColorSetting("Weirdos Correct Color", Colors.MINECRAFT_GREEN.withAlpha(0.7f), true, desc = "Color for the weirdos solver.").withDependency { weirdosSolver && weirdosDropDown }
@@ -147,6 +150,7 @@ object PuzzleSolvers : Module(
         on<LevelEvent.Load> {
             puzzleTimersMap.clear()
             IceFillSolver.reset()
+            IcePathSolver.reset()
             WeirdosSolver.reset()
             BoulderSolver.reset()
             TPMazeSolver.reset()
