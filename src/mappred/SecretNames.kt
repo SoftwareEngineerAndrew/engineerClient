@@ -8,7 +8,11 @@ package com.engineerclient.mappred
  */
 class SecretNames(used: Set<String>, private val targets: IntArray, missing: Set<String> = emptySet()) {
     /** Names still free in each pool. */
-    val avail: Array<List<RoomName>> = Array(MapStats.POOLS) { p -> MapStats.NAMES.filter { it.pool == p && it.name !in used && it.name !in missing } }
+    val avail: Array<List<RoomName>> = run {
+        // one Blaze a map: Lower or Higher
+        val taken = if (used.any { it in BLAZES }) used + BLAZES else used
+        Array(MapStats.POOLS) { p -> MapStats.NAMES.filter { it.pool == p && it.name !in taken && it.name !in missing } }
+    }
     private val poolWeight = DoubleArray(MapStats.POOLS) { p -> avail[p].sumOf { it.seen.toDouble() } }
     /** [solve]'s answers by pools; several threads of one session ([PredictionSession]) share them. */
     private class Box(val result: Result?)
@@ -91,6 +95,8 @@ class SecretNames(used: Set<String>, private val targets: IntArray, missing: Set
     }
 
     companion object {
+        val BLAZES = setOf("Lower Blaze", "Higher Blaze")
+
         /**
          * Unnamed rooms the samplers weigh each sample by at most (the last few rooms, where it matters; every arrangement
          * of a sample's specials is solved, so more costs a lot of time). [MapPredictor.certainNames] has no such limit.

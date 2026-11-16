@@ -599,11 +599,13 @@ object OdinMapPrediction {
 
     /** Odin's name text over a room: its name when only one fits, else "?" (nothing in LCM Style), with the secrets when every name that fits has the same count. */
     private fun roomText(g: GuiGraphicsExtractor, tiles: IntArray, names: List<NamedRoom>) {
-        val best = names.maxBy { it.chance }
+        // Lower and Higher Blaze are one puzzle: when it can be either, it's Blaze
+        val (bestName, bestChance) = names.groupBy { if (it.name.name in SecretNames.BLAZES) "Blaze" else it.name.name }
+            .mapValues { (_, n) -> n.sumOf { it.chance.toDouble() } }.maxBy { it.value }.let { it.key to it.value }
         val cx = tiles.map { (it % W) * TILE + ROOM / 2f }.average().toFloat()
         val cz = tiles.map { (it / W) * TILE + ROOM / 2f }.average().toFloat()
         val secrets = names.map { it.name.secrets }.distinct().singleOrNull()
-        val name = if (best.chance >= SURE) best.name.name else if (lcm || tiles.all { knownTile(it) }) "" else "?"
+        val name = if (bestChance >= SURE) bestName else if (lcm || tiles.all { knownTile(it) }) "" else "?"
         val text = name + if (secrets != null && secrets > 0) " 0/$secrets" else ""
         val lines = text.trim().split(" ").filter { it.isNotEmpty() }
         val fontH = mc.font.lineHeight
