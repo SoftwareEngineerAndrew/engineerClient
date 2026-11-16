@@ -52,13 +52,17 @@ object Zpew {
 
     private fun log(line: String) {
         if (!debug) return
-        try {
-            val w = logOut ?: mc.gameDirectory.toPath().resolve("config/engineerclient/zpew-debug.log").let {
-                java.nio.file.Files.createDirectories(it.parent)
-                java.nio.file.Files.newBufferedWriter(it, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
-            }.also { logOut = it }
-            w.write("${System.currentTimeMillis() - startMs} t=$ticks st=${serverTicks.get()} $line\n"); w.flush()
-        } catch (_: Throwable) {}
+        val text = "${System.currentTimeMillis() - startMs} t=$ticks st=${serverTicks.get()} $line\n"
+        val path = mc.gameDirectory.toPath().resolve("config/engineerclient/zpew-debug.log")
+        DiskWrites.write {
+            try {
+                val w = logOut ?: path.let {
+                    java.nio.file.Files.createDirectories(it.parent)
+                    java.nio.file.Files.newBufferedWriter(it, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
+                }.also { logOut = it }
+                w.write(text); w.flush()
+            } catch (_: Throwable) {}
+        }
     }
 
     private fun fmt(p: DoubleArray?) = p?.joinToString(",") { "%.3f".format(it) } ?: "-"
