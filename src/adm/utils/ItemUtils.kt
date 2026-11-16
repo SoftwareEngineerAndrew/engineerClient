@@ -20,9 +20,10 @@ import java.util.*
 const val ID = "id"
 const val UUID_STRING = "uuid"
 
+// The component's own tag, not a copy: read only, never mutate it.
 inline val ItemStack.customData: CompoundTag
     get() =
-        getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag()
+        getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).tag
 
 inline val ItemStack.itemId: String
     get() =
