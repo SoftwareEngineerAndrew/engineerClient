@@ -47,7 +47,7 @@ object LeapMenu : Module(
     description = "Renders a custom leap menu when in the Spirit Leap gui.",
     key = null
 ) {
-    val type by SelectorSetting("Sorting", Sorting.ODIN, desc = "How to sort the leap menu. /od leaporder to configure custom sorting.")
+    val type by SelectorSetting("Sorting", Sorting.ODIN, desc = "How to sort the leap menu. /adm leaporder to configure custom sorting.")
     private val onlyClass by BooleanSetting("Only Classes", false, desc = "Renders classes instead of names.")
     private val colorStyle by BooleanSetting("Color Style", false, desc = "Which color style to use.")
     private val backgroundColor by ColorSetting("Background Color", Colors.gray38.withAlpha(0.75f), true, desc = "Color of the background of the leap menu.").withDependency { !colorStyle }

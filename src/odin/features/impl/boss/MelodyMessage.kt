@@ -17,6 +17,8 @@ import com.odtheking.odin.utils.network.webSocket
 import com.odtheking.odin.utils.render.getStringWidth
 import com.odtheking.odin.utils.render.text
 import com.odtheking.odin.utils.sendCommand
+import com.odtheking.odin.utils.sendChatMessage
+import com.odtheking.odin.utils.getPositionString
 import com.odtheking.odin.utils.skyblock.LocationUtils
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
@@ -85,7 +87,7 @@ object MelodyMessage : Module(
     init {
         on<TerminalEvent.Open> {
             if (DungeonUtils.getF7Phase() != M7Phases.P3 || terminal.type != TerminalTypes.MELODY || mc.gui.screen() is TermSimGUI) return@on
-            if (melodySendCoords) sendCommand("od sendcoords")
+            if (melodySendCoords) sendChatMessage(getPositionString())
         }
 
         on<MessageEvent.Chat> {

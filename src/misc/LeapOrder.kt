@@ -43,11 +43,11 @@ import net.minecraft.util.Util
 import net.minecraft.world.entity.player.PlayerSkin
 
 /**
- * Odin's custom leap order (`/od leaporder a b c d`, Leap Menu sorting Custom), kept across restarts: Odin holds
+ * Odin's custom leap order (`/adm leaporder a b c d`, Leap Menu sorting Custom), kept across restarts: Odin holds
  * it in memory only, so it is saved to config/engineerclient/leaporder.txt whenever it changes (however it was
  * set) and put back at startup.
  *
- * `/od leaporder` (or `/lo`) with no names opens [LeapOrderScreen]: Odin's leap menu as it would look, the
+ * `/adm leaporder` (or `/lo`) with no names opens [LeapOrderScreen]: Odin's leap menu as it would look, the
  * order's players in their spots, to drag between them. `/lo a b c d` sets it as Odin's command does.
  *
  * Changing the order (any way) switches Odin's Leap Menu sorting to Custom. It goes back to what it was (Odin
@@ -109,13 +109,10 @@ object LeapOrder {
         val afterOdin = Identifier.fromNamespaceAndPath("engineerclient", "after_odin")
         ClientCommandRegistrationCallback.EVENT.addPhaseOrdering(Event.DEFAULT_PHASE, afterOdin)
         ClientCommandRegistrationCallback.EVENT.register(afterOdin) { dispatcher, _ ->
-            EngineerClient.safely("leap order /od") {
-                val nodes = listOfNotNull(
-                    dispatcher.root.getChild("odin")?.getChild("leaporder"),
-                    dispatcher.root.getChild("od")?.let { it.redirect ?: it }?.getChild("leaporder"),
-                ).distinct()
+            EngineerClient.safely("leap order /adm") {
+                val nodes = listOfNotNull(dispatcher.root.getChild("adm")?.getChild("leaporder"))
                 for (node in nodes) COMMAND.set(node, com.mojang.brigadier.Command<FabricClientCommandSource> { open(); 1 })
-                if (nodes.isEmpty()) EngineerClient.logger.info("[ec] leap order: Odin has no /od leaporder here, /lo only")
+                if (nodes.isEmpty()) EngineerClient.logger.info("[ec] leap order: no /adm leaporder here, /lo only")
             }
             dispatcher.register(literal("lo").executes { open(); 1 }
                 .then(argument("member1", StringArgumentType.word())

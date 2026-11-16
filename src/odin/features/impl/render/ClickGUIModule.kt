@@ -107,7 +107,7 @@ object ClickGUIModule : Module(
                     Component.literal(getChatBreak()).append(Component.literal("""
                         §7Thanks for installing §3Odin ${OdinMod.version}§7!
                 
-                        §7Use §d§l/od §r§7to access GUI settings.
+                        §7Use §d§l/adm §r§7to access GUI settings.
                              
                         §7Join the discord for support and suggestions.
                     """.trimIndent()))

@@ -174,7 +174,9 @@ object ChatCommands : Module(
             "f1", "f2", "f3", "f4", "f5", "f6", "f7", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "t1", "t2", "t3", "t4", "t5" -> {
                 if (!queInstance || channel != ChatChannel.PARTY || !PartyUtils.isLeader()) return
                 modMessage("§8Entering -> §e${words[0].capitalizeFirst()}")
-                sendCommand("odin ${words[0].lowercase()}")
+                val w = words[0].lowercase()
+                val n = listOf("one", "two", "three", "four", "five", "six", "seven")
+                sendCommand("joininstance " + if (w[0] == 't') "kuudra_" + listOf("normal", "hot", "burning", "fiery", "infernal")[w[1] - '1'] else "${if (w[0] == 'm') "master_" else ""}catacombs_floor_${n[w[1] - '1']}")
             }
 
             "downtime", "dt" -> {
