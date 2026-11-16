@@ -278,9 +278,11 @@ object Zpew {
             if (!live()) return@on
             blockClick = null
             ticks++
-            // A teleport the server hasn't made within your ping + 100 ms isn't coming: the camera goes back to you.
-            val ping = com.odtheking.odin.utils.ServerUtils.averagePing.takeIf { it > 0 } ?: 250
-            if (queue.expire(serverTicks.get(), ticks, System.currentTimeMillis(), ping + 100L)) sync("expire")
+            // A teleport not made 70 ms past the usual answer time isn't coming: the camera goes back to you.
+            // Odin's average ping can be stuck at a join-time spike (10 s), so the answers are timed here.
+            val ping = com.odtheking.odin.utils.ServerUtils.currentPing.takeIf { it in 1..1000 } ?: 250
+            val limit = (queue.answerMs?.plus(70) ?: (ping + 100L)).coerceIn(100L, 1500L)
+            if (queue.expire(serverTicks.get(), ticks, System.currentTimeMillis(), limit)) sync("expire")
             queue.oldestCounting()?.let { c ->
                 // Hypixel sends no server ticks in dungeons, so the blocked line is timed in client ticks
                 if (queue.settleBlocked(ticks)) {

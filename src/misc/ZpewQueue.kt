@@ -10,8 +10,8 @@ package com.engineerclient.misc
  * (the ones before it were dropped by the server); when none does, the law missed and the oldest is taken. Either way the
  * chain is worked out again from the real landing.
  *
- * A dropped click can't be told from the others, so a click waiting longer than your ping + 100 ms stops counting. It can
- * still be matched for a while ([KEEP] server ticks, [HARD] client ticks), in case it was late.
+ * A dropped click can't be told from the others, so a click waiting well past the usual answer time ([answerMs]) stops
+ * counting. It can still be matched for a while ([KEEP] server ticks, [HARD] client ticks), in case it was late.
  */
 class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleArray?) {
     /** [from]: where the server has you for this click when no earlier waiting click moves you. */
@@ -75,6 +75,11 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     var lastAnswered: C? = null
         private set
 
+    private val answers = ArrayDeque<Long>()
+
+    /** The median time the server took to answer the last clicks, or null before there are a few. */
+    val answerMs: Long? get() = if (answers.size < 5) null else answers.sorted()[answers.size / 2]
+
     /** [counts]: the server should cast it; false still lets a teleport match it. */
     /** [player]: where you are as the click goes out (the server's position: your last move packet). */
     fun click(click: C, tick: Long, player: DoubleArray, counts: Boolean, wall: Long = tick) {
@@ -89,6 +94,10 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
         var i = answers(to)
         lastMatch = i
         lastExpected = waiting.firstOrNull { it.counts }?.let { predict(it.from, it.click) }
+        if (i >= 0) {
+            answers.addLast(System.currentTimeMillis() - waiting[i].ms)
+            if (answers.size > 20) answers.removeFirst()
+        }
         if (i < 0) i = waiting.indexOfFirst { it.counts }
         lastAnswered = waiting.getOrNull(i)?.click
         repeat(i + 1) { waiting.removeFirst() }
