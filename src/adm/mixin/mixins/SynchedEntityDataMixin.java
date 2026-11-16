@@ -1,5 +1,6 @@
 package com.adm.mixin.mixins;
 
+import com.adm.events.core.EventBus;
 import com.adm.events.EntityEvent;
 import net.minecraft.network.syncher.SyncedDataHolder;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -22,6 +23,6 @@ public class SynchedEntityDataMixin {
     @Inject(method = "assignValues", at = @At("TAIL"))
     private void onAssignValues(List<SynchedEntityData.DataValue<?>> items, CallbackInfo ci) {
         Entity self = (Entity) this.entity;
-        if (self != null) new EntityEvent.SetData(self, items).postAndCatch();
+        if (self != null && EventBus.hasListeners(EntityEvent.SetData.class)) new EntityEvent.SetData(self, items).postAndCatch();
     }
 }

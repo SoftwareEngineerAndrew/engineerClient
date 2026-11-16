@@ -1,5 +1,6 @@
 package com.adm.mixin.mixins;
 
+import com.adm.events.core.EventBus;
 import com.adm.events.PacketEvent;
 import com.adm.events.TickEvent;
 import io.netty.channel.ChannelFutureListener;
@@ -18,11 +19,11 @@ public abstract class ConnectionMixin {
     @Inject(method = "channelRead0(Lio/netty/channel/ChannelHandlerContext;Lnet/minecraft/network/protocol/Packet;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/Connection;genericsFtw(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketListener;)V"), cancellable = true)
     private void channelRead0(ChannelHandlerContext ctx, Packet<?> packet, CallbackInfo ci) {
         if (packet instanceof ClientboundPingPacket pingPacket && pingPacket.getId() != 0) TickEvent.Server.INSTANCE.postAndCatch();
-        if (new PacketEvent.Receive(packet).postAndCatch()) ci.cancel();
+        if (EventBus.hasListeners(PacketEvent.Receive.class) && new PacketEvent.Receive(packet).postAndCatch()) ci.cancel();
     }
 
     @Inject(method = "sendPacket", at = @At("HEAD"), cancellable = true)
     private void sendImmediately(Packet<?> packet, ChannelFutureListener listener, boolean flush, CallbackInfo ci) {
-        if (new PacketEvent.Send(packet).postAndCatch()) ci.cancel();
+        if (EventBus.hasListeners(PacketEvent.Send.class) && new PacketEvent.Send(packet).postAndCatch()) ci.cancel();
     }
 }

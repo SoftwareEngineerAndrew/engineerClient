@@ -1,5 +1,6 @@
 package com.adm.mixin.mixins;
 
+import com.adm.events.core.EventBus;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -22,13 +23,13 @@ public class ClientPacketListenerMixin {
 
     @WrapOperation(method = "handleBundlePacket", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/protocol/Packet;handle(Lnet/minecraft/network/PacketListener;)V"))
     private void wrapPacketHandle(Packet<?> packet, PacketListener listener, Operation<Void> original) {
-        if (new PacketEvent.Receive(packet).postAndCatch()) return;
+        if (EventBus.hasListeners(PacketEvent.Receive.class) && new PacketEvent.Receive(packet).postAndCatch()) return;
         original.call(packet, listener);
     }
 
     @WrapOperation(method = "handleEntityEvent", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;handleEntityEvent(B)V"))
     private void onHandleEntityEvent(Entity instance, byte id, Operation<Void> original) {
-        new EntityEvent.Event(instance, id).postAndCatch();
+        if (EventBus.hasListeners(EntityEvent.Event.class)) new EntityEvent.Event(instance, id).postAndCatch();
         original.call(instance, id);
     }
 }

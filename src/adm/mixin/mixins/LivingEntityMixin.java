@@ -1,5 +1,6 @@
 package com.adm.mixin.mixins;
 
+import com.adm.events.core.EventBus;
 import com.adm.events.EntityEvent;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -15,6 +16,6 @@ public abstract class LivingEntityMixin {
     @Inject(method = "setItemSlot", at = @At("TAIL"))
     private void onSetItemSlot(EquipmentSlot slot, ItemStack itemStack, CallbackInfo ci) {
         LivingEntity self = (LivingEntity)(Object)this;
-        if (self != null) new EntityEvent.SetItemSlot(self, slot, itemStack).postAndCatch();
+        if (self != null && EventBus.hasListeners(EntityEvent.SetItemSlot.class)) new EntityEvent.SetItemSlot(self, slot, itemStack).postAndCatch();
     }
 }

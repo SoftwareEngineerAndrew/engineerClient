@@ -1,5 +1,6 @@
 package com.adm.mixin.mixins;
 
+import com.adm.events.core.EventBus;
 import com.adm.events.GuiEvent;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
@@ -21,7 +22,7 @@ public class AbstractContainerScreenMixin {
 
     @Inject(method = "extractSlot", at = @At("HEAD"), cancellable = true)
     private void onDrawSlot(GuiGraphicsExtractor graphics, Slot slot, int mouseX, int mouseY, CallbackInfo ci) {
-        if (new GuiEvent.RenderSlot((Screen) (Object) this, graphics, slot).postAndCatch()) ci.cancel();
+        if (EventBus.hasListeners(GuiEvent.RenderSlot.class) && new GuiEvent.RenderSlot((Screen) (Object) this, graphics, slot).postAndCatch()) ci.cancel();
     }
 
     @Inject(method = "slotClicked(Lnet/minecraft/world/inventory/Slot;IILnet/minecraft/world/inventory/ContainerInput;)V", at = @At("HEAD"), cancellable = true)

@@ -1,5 +1,6 @@
 package com.adm.mixin.mixins;
 
+import com.adm.events.core.EventBus;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.adm.events.EntityEvent;
@@ -20,6 +21,7 @@ public abstract class EntityMixin {
      private boolean onMoveOrInterpolateTo(InterpolationHandler instance, PositionPath position, float yRot, float xRot, boolean hasRotation, Operation<Boolean> original) {
         boolean result = original.call(instance, position, yRot, xRot, hasRotation);
 
+        if (!EventBus.hasListeners(EntityEvent.Move.class)) return result;
         Entity entity = (Entity)(Object)this;
         Vec3 newPos = position != null ? position.endPosition() : Vec3.ZERO;
         new EntityEvent.Move(entity, newPos, yRot, xRot, entity.onGround()).postAndCatch();

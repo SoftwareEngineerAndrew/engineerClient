@@ -1,5 +1,6 @@
 package com.adm.mixin.mixins;
 
+import com.adm.events.core.EventBus;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
@@ -17,7 +18,7 @@ public abstract class LevelChunkMixin {
     @WrapOperation(method = "setBlockState", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/LevelChunkSection;setBlockState(IIILnet/minecraft/world/level/block/state/BlockState;)Lnet/minecraft/world/level/block/state/BlockState;"))
     private BlockState onBlockChange(LevelChunkSection section, int sectionX, int sectionY, int sectionZ, BlockState state, Operation<BlockState> original, @Local(argsOnly = true, name = "pos") BlockPos pos) {
         BlockState old = original.call(section, sectionX, sectionY, sectionZ, state);
-        if (old != state) new BlockUpdateEvent(pos, old, state).postAndCatch();
+        if (old != state && EventBus.hasListeners(BlockUpdateEvent.class)) new BlockUpdateEvent(pos, old, state).postAndCatch();
         return old;
     }
 }
