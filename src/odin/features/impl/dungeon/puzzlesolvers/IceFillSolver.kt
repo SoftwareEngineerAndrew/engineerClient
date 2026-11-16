@@ -81,6 +81,7 @@ object IceFillSolver {
             else -> null
         } ?: return false
 
+        PuzzleSolvers.blocked()
         if (System.currentTimeMillis() - lastAlert > 1000) {
             lastAlert = System.currentTimeMillis()
             modMessage("§cBlocked etherwarp: $reason")

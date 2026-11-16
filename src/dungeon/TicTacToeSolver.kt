@@ -6,6 +6,7 @@ import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.ColorSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.odtheking.odin.events.BlockInteractEvent
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.TickEvent
@@ -41,6 +42,7 @@ object TicTacToeSolver {
     private val nextColorSetting = ColorSetting("Tic Tac Toe Next Color", Color(255, 255, 0, 0.6f), true, desc = "Used when your next move depends on the room's.").withDependency { dropdown.value && solver.value && showNextSetting.value }
     private val countdownSetting = BooleanSetting("Tic Tac Toe Countdown", false, desc = "Shows the time until the room answers.").withDependency { dropdown.value && solver.value }
     private val sendMessageSetting = BooleanSetting("Tic Tac Toe Send Message", false, desc = "Says \"Tic Tac Toe done\" once the game can't be lost.").withDependency { dropdown.value && solver.value }
+    private val blockWrongSetting = BooleanSetting("Tic Tac Toe Block Wrong Clicks", true, desc = "Blocks clicks that would lose the game.").withDependency { dropdown.value }
     private val messageToSetting = SelectorSetting("Tic Tac Toe Message To", Target.PARTY, desc = "Party chat or only you.").withDependency { dropdown.value && solver.value && sendMessageSetting.value }
 
     private val bestColor get() = bestColorSetting.value
@@ -64,6 +66,7 @@ object TicTacToeSolver {
     private var best: List<BlockPos> = emptyList()
     private var next: List<BlockPos> = emptyList()
     private var planned: Map<String, Int> = emptyMap()
+    private var cells: Map<BlockPos, Int> = emptyMap()
     private var above: Vec3? = null
     private var lastBoard = ""
     private var sent = false
@@ -75,7 +78,7 @@ object TicTacToeSolver {
     private val plans = HashMap<String, Pair<Double, Int>>()
 
     fun install() {
-        for (s in listOf(dropdown, solver, bestColorSetting, showNextSetting, nextColorSetting, countdownSetting, sendMessageSetting, messageToSetting))
+        for (s in listOf(dropdown, solver, bestColorSetting, showNextSetting, nextColorSetting, countdownSetting, sendMessageSetting, messageToSetting, blockWrongSetting))
             PuzzleSolvers.registerSetting(s)
         on<LevelEvent.Load> { reset(); sent = false }
         on<TickEvent.End> {
@@ -83,6 +86,11 @@ object TicTacToeSolver {
             EngineerClient.safely("tic tac toe") { scan() }
         }
         on<TickEvent.Server> { serverTicks++ }
+        on<BlockInteractEvent> {
+            if (!PuzzleSolvers.enabled || !blockWrongSetting.value || !DungeonUtils.inClear || DungeonUtils.currentRoomName != ROOM) return@on
+            val index = cells[pos] ?: return@on
+            if (loses(lastBoard, index)) { cancel(); PuzzleSolvers.blocked() }
+        }
         on<RenderExtractEvent> {
             if (!PuzzleSolvers.enabled || !solver.value) return@on
             if (showNext) for (pos in next) buttonBox(pos)?.let { drawFilledBox(it, if (next.size == 1) bestColor else nextColor, depth = true) }
@@ -93,7 +101,7 @@ object TicTacToeSolver {
         EventBus.subscribe(this)
     }
 
-    private fun reset() { clear(); planned = emptyMap(); lastBoard = "" }
+    private fun reset() { clear(); planned = emptyMap(); cells = emptyMap(); lastBoard = "" }
 
     private fun clear() { best = emptyList(); next = emptyList(); above = null; replyAt = 0 }
 
@@ -155,6 +163,8 @@ object TicTacToeSolver {
             if (alongX) origin.z else origin.z - sign * (index % 3),
         )
 
+        cells = (0..8).associateBy(::toPos)
+
         if (frames.size % 2 == 0) {
             planned = answers(now)
             best = emptyList()
@@ -166,6 +176,16 @@ object TicTacToeSolver {
         best = (planned[now]?.let(::listOf) ?: moves(now)).map(::toPos)
         next = emptyList()
         replyAt = 0
+    }
+
+    // A click while the room is thinking lands after its reply, so it must hold against every reply it can make.
+    private fun loses(b: String, index: Int): Boolean {
+        if (b.length != 9 || b[index] != EMPTY || won(b, 'X') || won(b, 'O')) return false
+        if (b.count { it != EMPTY } % 2 == 1) return value(put(b, index, 'O'), 'X') == 1
+        return replies(b).any { reply ->
+            val after = put(b, reply, 'X')
+            reply != index && !won(after, 'X') && value(put(after, index, 'O'), 'X') == 1
+        }
     }
 
     private fun done() {

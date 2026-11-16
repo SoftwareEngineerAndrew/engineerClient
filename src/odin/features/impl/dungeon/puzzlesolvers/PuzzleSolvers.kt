@@ -59,6 +59,7 @@ object PuzzleSolvers : Module(
     private val blazeAllColor by ColorSetting("Other Color", Colors.WHITE.withAlpha(.3f), true, desc = "Color for the other blazes.").withDependency { blazeSolver && blazeDropDown }
     private val blazeSendComplete by BooleanSetting("Send Complete", false, desc = "Send complete message.").withDependency { blazeSolver && blazeDropDown }
     private val hideBlazes by BooleanSetting("Hide Blazes", true, desc = "Hides the blazes while the solver is active.").withDependency { blazeSolver && blazeDropDown }
+    val blazeBlockWrong by BooleanSetting("Blaze Block Wrong Shots", true, desc = "Blocks bow shots that would hit a blaze out of order.").withDependency { blazeDropDown }
     private val blazeReset by ActionSetting("Reset Blaze", desc = "Resets the solver.") { BlazeSolver.reset() }.withDependency { blazeSolver && blazeDropDown }
 
     private val beamsDropDown by DropdownSetting("Creeper Beams", desc = "Shows settings for the Creeper Beams puzzle solver.")
@@ -95,6 +96,11 @@ object PuzzleSolvers : Module(
     private val puzzleTimers by BooleanSetting("Puzzle Timers", true, desc = "Shows the time it took to solve each puzzle.")
     private val draft by BooleanSetting("Draft", true, desc = "Architect's First Draft when a puzzle is failed.")
     private val draftMode by SelectorSetting("Draft Mode", DraftMode.PROMPT, desc = "Prompt: a chat line to click. Auto: fetched from your sacks at once.").withDependency { draft }
+
+    private val blockedSound = createSoundSettings("Blocked Input Sound", "entity.villager.no") { true }
+
+    /** Plays the blocked input sound: every block in the puzzle solvers calls this. */
+    fun blocked() = playSoundSettings(blockedSound())
 
     private enum class DraftMode(private val label: String) { PROMPT("Prompt"), AUTO("Auto"); override fun toString() = label }
     private val failRegex = Regex("^PUZZLE FAIL! (\\w{1,16}) .+$|^\\[STATUE] Oruo the Omniscient: (\\w{1,16}) chose the wrong answer! I shall never forget this moment of misrememberance\\.$")
