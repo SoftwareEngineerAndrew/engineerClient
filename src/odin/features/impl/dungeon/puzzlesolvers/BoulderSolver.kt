@@ -43,18 +43,11 @@ object BoulderSolver {
     private var planMode: Mode? = null
     private var plan = listOf<Step>()
 
-    /** Plans by board and mode, worked out off the game thread: the known layouts from the entrance as soon as one is needed. */
+    /** Plans by board, start and mode, worked out off the game thread once the board is read (the map finds the room before anyone walks in). */
     private val plans = ConcurrentHashMap<Triple<Long, Int, Mode>, List<Step>>()
     private val solving = ConcurrentHashMap.newKeySet<Triple<Long, Int, Mode>>()
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-boulder").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
-    private var precomputed = false
     private var asked: Triple<Long, Int, Mode>? = null
-
-    private fun precompute() {
-        if (precomputed) return
-        precomputed = true
-        for (layout in LAYOUTS) for (mode in Mode.entries) for (c in 0 until 7) solveLater(layout, NORTH + c, mode)
-    }
 
     private fun solveLater(b: Long, from: Int, mode: Mode) {
         val key = Triple(b, from, mode)
@@ -65,7 +58,6 @@ object BoulderSolver {
     }
 
     fun onRoomEnter(event: RoomEnterEvent) {
-        precompute()
         if (event.room?.data?.name == "Boulder") room = event.room
     }
 
