@@ -4,14 +4,13 @@ import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDepe
 import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
 import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.RoomEnterEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.features.impl.dungeon.SecretClicked
 import com.odtheking.odin.utils.Colors
 import com.odtheking.odin.utils.render.textDim
-import com.odtheking.odin.utils.skyblock.ActionBarListener
+import com.odtheking.odin.utils.noControlCodes
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.MutableComponent
@@ -33,7 +32,8 @@ object SecretCounter {
         textDim("$color$found/$max", 0, 0, Colors.WHITE)
     }.withDependency { dropdown.value }
 
-    private val SECRETS = Regex("""\s*\d+/\d+ Secrets""")
+    private val SECRETS = Regex("""\s*(§.)*\d+/\d+ Secrets""")
+    private val COUNT = Regex("""(\d+)/(\d+) Secrets""")
     private var count: Pair<Int, Int>? = null
 
     private fun on() = SecretClicked.enabled && show.value && DungeonUtils.inDungeons
@@ -44,14 +44,15 @@ object SecretCounter {
         SecretClicked.registerSetting(hud)
         on<LevelEvent.Load> { count = null }
         on<RoomEnterEvent> { count = null }
-        on<MessageEvent.ModifyOverlay> {
-            if (!on()) return@on
-            val m = Regex("""(\d+)/(\d+) Secrets""").find(message) ?: return@on
-            count = m.groupValues[1].toInt() to m.groupValues[2].toInt()
-            ActionBarListener.secrets(message)
-            component = without(component, SECRETS)
-        }
         EventBus.subscribe(this)
+    }
+
+    @JvmStatic
+    fun overlay(c: Component): Component {
+        if (!on()) return c
+        val m = COUNT.find(c.string.noControlCodes) ?: return c
+        count = m.groupValues[1].toInt() to m.groupValues[2].toInt()
+        return without(c, SECRETS)
     }
 
     /** [c] with the text [cut] matches taken out, each remaining piece keeping its style. */
