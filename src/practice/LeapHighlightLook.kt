@@ -230,7 +230,6 @@ class LeapHighlightLook(module: Module, dropdownName: String, private val shown:
     }
 
     companion object {
-        fun isLeapScreen(screen: Screen) =
-            (screen as? net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<*>)?.title?.string.let { it == "Spirit Leap" || it == "Teleport to Player" }
+        fun isLeapScreen(screen: Screen) = com.odtheking.odin.features.impl.dungeon.LeapMenu.isLeapScreen(screen)
     }
 }

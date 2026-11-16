@@ -100,7 +100,7 @@ object Zpew {
     )
 
     /** Feet; ZpewCameraMixin adds the eye height. */
-    @JvmStatic fun cameraPos(): Vec3? = if (enabled) camera else null
+    @JvmStatic fun cameraPos(): Vec3? = com.odtheking.odin.features.impl.dungeon.LeapMenu.visualPos() ?: if (enabled) camera else null
 
     /** ZpewTeleportMixin: the game has just moved you for a server teleport. */
     /** Where you were just before the server's position packet ([ZpewTeleportMixin] HEAD), or null. */

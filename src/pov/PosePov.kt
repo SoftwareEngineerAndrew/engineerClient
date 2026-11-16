@@ -314,8 +314,7 @@ object PosePov : Module(
     private fun wants(): Boolean {
         if (!enabled || !LeapMenu.enabled) return false
         if (!ShowIn.allows(places)) return false
-        val screen = mc.gui.screen() as? AbstractContainerScreen<*> ?: return false
-        return screen.title.string.equalsOneOf("Spirit Leap", "Teleport to Player")
+        return LeapMenu.isLeapScreen(mc.gui.screen())
     }
 
     /**
