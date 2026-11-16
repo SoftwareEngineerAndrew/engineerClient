@@ -1,6 +1,7 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient.mc
+import com.adm.events.EventDispatcher
 import com.adm.events.LevelEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.EventBus
@@ -32,7 +33,6 @@ object TermInfo {
     /** When the last section's time went up (ms), 0 for none: Tick Timers' Section Time Ding plays on each new one. */
     val sectionDoneAt: Long get() = shownTime?.second ?: 0L
 
-    private val CONTROL_CODES = Regex("§.")
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
     private const val CORE_OPEN = "The Core entrance is opening!"
     private const val GATE = "The gate has been destroyed!"
@@ -233,7 +233,7 @@ object TermInfo {
             while (seenChatOrder.size > 256) seenChat.remove(seenChatOrder.removeFirst())
         }
         // On the game thread, in the order they came, ahead of the game's own handling of each.
-        val msg = p.content().string.replace(CONTROL_CODES, "")
+        val msg = EventDispatcher.chatText(p)
         mc.execute { com.engineerclient.EngineerClient.safely("term info chat") { onChat(msg) } }
     }
 

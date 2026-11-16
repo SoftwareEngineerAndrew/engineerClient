@@ -116,7 +116,7 @@ object EventBus {
         override fun invoke(event: Event) {}
     }
 
-    /** Runs only the listeners for the packet's own class (and the ones taking any packet), resolved once per class. */
+    // Each packet class runs only its own listeners and the ones taking any packet, in the same order.
     private class PacketInvoker(private val profilerName: String, private val listeners: Array<EventListener<Event>>) : Invoker {
         private val byClass = ConcurrentHashMap<Class<*>, Invoker>()
 

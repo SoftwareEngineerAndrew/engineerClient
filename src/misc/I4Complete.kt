@@ -57,8 +57,9 @@ object I4Complete {
 
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
-            val msg = content.string.replace(CONTROL_CODES, "")
+            val msg = it.chatText
             if (msg == "[BOSS] Goldor: Who dares trespass into my domain?") { reset(); return@onReceive }
+            if (!msg.contains(" completed a device! (")) return@onReceive
             val m = DEVICE_LINE.matchEntire(msg) ?: return@onReceive
             if (m.groupValues[1] == mc.player?.gameProfile?.name) done()
         }

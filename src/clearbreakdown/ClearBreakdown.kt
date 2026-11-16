@@ -63,7 +63,6 @@ import kotlin.math.floor
  * Clear Info's Clear Breakdown section, with ADM's Secrets Counter.
  */
 object ClearBreakdown {
-    private val CONTROL_CODES = Regex("§.")
     /** Rooms that don't count as clears: fairy rooms and the green start room. */
     private val NOT_CLEARS = setOf(RoomType.FAIRY, RoomType.ENTRANCE)
     /** Every so often the party hears everything this client sees, not just changes: a lost frame heals. */
@@ -118,7 +117,7 @@ object ClearBreakdown {
         // Chat straight off the network, as Splits takes it: a chat cleaner can't hide the run's lines.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
-            val text = content.string.replace(CONTROL_CODES, "")
+            val text = it.chatText
             mc.execute { EngineerClient.safely("clear breakdown chat") { onChat(text) } }
         }
 

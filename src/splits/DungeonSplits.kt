@@ -55,7 +55,6 @@ object DungeonSplits : Module(
     key = null,
 ) {
 
-    private val CONTROL_CODES = Regex("§.")
     private val tracker = SplitTracker()
     private val subs = SubSplitTracker()
     private val blood = BloodRunDetail()
@@ -272,7 +271,7 @@ object DungeonSplits : Module(
         // the terminal and gate lines the splits are timed from.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
-            val text = content.string.replace(CONTROL_CODES, "")
+            val text = it.chatText
             val at = now()
             EngineerClient.mc.execute {
                 EngineerClient.safely("splits chat") {

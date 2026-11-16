@@ -16,7 +16,9 @@ import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents
+import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.network.protocol.game.ClientboundTakeItemEntityPacket
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.item.ItemEntity
@@ -49,13 +51,13 @@ object EventDispatcher {
         ClientEntityEvents.ENTITY_UNLOAD.register { entity, _ -> EntityEvent.Remove(entity).postAndCatch() }
 
         ClientReceiveMessageEvents.MODIFY_GAME.register { message, overlay ->
-            if (overlay) MessageEvent.ModifyOverlay(message.string.noControlCodes, message).apply { postAndCatch() }.component
-            else MessageEvent.ModifyChat(message.string.noControlCodes, message).apply { postAndCatch() }.component
+            if (overlay) MessageEvent.ModifyOverlay(plain(message), message).apply { postAndCatch() }.component
+            else MessageEvent.ModifyChat(plain(message), message).apply { postAndCatch() }.component
         }
 
         ClientReceiveMessageEvents.ALLOW_GAME.register { message, overlay ->
-            if (overlay) !MessageEvent.Overlay(message.string.noControlCodes, message).postAndCatch()
-            else !MessageEvent.Chat(message.string.noControlCodes, message).postAndCatch()
+            if (overlay) !MessageEvent.Overlay(plain(message), message).postAndCatch()
+            else !MessageEvent.Chat(plain(message), message).postAndCatch()
         }
 
         onReceive<ClientboundTakeItemEntityPacket> {
@@ -91,6 +93,52 @@ object EventDispatcher {
             if (isSecret(blockState, pos)) SecretPickupEvent.Interact(pos, blockState).postAndCatch()
         }
     }
+
+    // Allow and modify both get the same message: flattened once.
+    private var lastMessage: Component? = null
+    private var lastPlain = ""
+
+    private fun plain(message: Component): String {
+        if (message !== lastMessage) {
+            lastPlain = message.string.noControlCodes
+            lastMessage = message
+        }
+        return lastPlain
+    }
+
+    private class ChatText(val packet: ClientboundSystemChatPacket, val text: String)
+
+    @Volatile
+    private var lastChat: ChatText? = null
+
+    // Same text as replace(Regex("§."), ""), worked out once per packet for every listener that reads it.
+    @JvmStatic
+    fun chatText(packet: ClientboundSystemChatPacket): String {
+        lastChat?.let { if (it.packet === packet) return it.text }
+        val text = stripCodes(packet.content().string)
+        lastChat = ChatText(packet, text)
+        return text
+    }
+
+    private fun stripCodes(s: String): String {
+        var i = s.indexOf('§')
+        if (i == -1) return s
+        val out = StringBuilder(s.length)
+        out.append(s, 0, i)
+        val len = s.length
+        while (i < len) {
+            val c = s[i]
+            if (c == '§' && i + 1 < len && !isLineEnd(s[i + 1])) {
+                i += if (s[i + 1].isHighSurrogate() && i + 2 < len && s[i + 2].isLowSurrogate()) 3 else 2
+            } else {
+                out.append(c)
+                i++
+            }
+        }
+        return out.toString()
+    }
+
+    private fun isLineEnd(c: Char) = c == '\n' || c == '\r' || c == '\u0085' || c == '\u2028' || c == '\u2029'
 
     private val dungeonItemDrops = listOf(
         "Health Potion VIII Splash Potion", "Healing Potion 8 Splash Potion", "Healing Potion VIII Splash Potion", "Healing VIII Splash Potion", "Healing 8 Splash Potion",

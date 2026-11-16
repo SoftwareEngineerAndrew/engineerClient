@@ -13,6 +13,7 @@ import net.minecraft.core.particles.ParticleOptions
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.network.syncher.SynchedEntityData
 import net.minecraft.world.BossEvent
 import net.minecraft.world.InteractionHand
@@ -74,7 +75,10 @@ abstract class PartyEvent(val members: List<String>) : Event {
 }
 
 abstract class PacketEvent(val packet: Packet<*>) : CancellableEvent() { // ideally used less
-    class Receive(packet: Packet<*>) : PacketEvent(packet)
+    class Receive(packet: Packet<*>) : PacketEvent(packet) {
+        // System chat only.
+        val chatText: String get() = EventDispatcher.chatText(packet as ClientboundSystemChatPacket)
+    }
     class Send(packet: Packet<*>) : PacketEvent(packet)
 }
 

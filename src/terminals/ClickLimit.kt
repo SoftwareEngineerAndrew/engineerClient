@@ -2,6 +2,7 @@ package com.engineerclient.terminals
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.terminals.sim.TermSimGUI
+import com.adm.events.EventDispatcher
 import com.adm.events.LevelEvent
 import com.adm.events.core.EventBus
 import com.adm.events.core.on
@@ -30,7 +31,6 @@ object ClickLimit {
     private const val OWED_NO_PING = 60_000_000L
 
     private val COMPLETION = Regex("^(?:.{1,16} (?:activated a (?:terminal|lever)|completed a device)! \\(\\d+/\\d+\\)|The gate has been destroyed!|The Core entrance is opening!)$")
-    private val CODES = Regex("§.")
 
     // All below under the object's lock: written on the network thread ([tap]) and the game thread.
     /** Send times of clicks with no pling yet, oldest first. */
@@ -71,7 +71,7 @@ object ClickLimit {
                 while (pings.size > 16) pings.removeFirst()
                 owed.clear()
             }
-            is ClientboundSystemChatPacket -> if (!p.overlay() && COMPLETION.matches(p.content().string.replace(CODES, "").trim())) synchronized(this) {
+            is ClientboundSystemChatPacket -> if (!p.overlay() && EventDispatcher.chatText(p).trim().let { (it.endsWith(')') || it.endsWith('!')) && COMPLETION.matches(it) }) synchronized(this) {
                 owed.addLast(now)
             }
             is ClientboundSoundPacket -> if (p.sound.value() == SoundEvents.NOTE_BLOCK_PLING.value() && p.volume >= 7.9f && abs(p.pitch - 4.047619f) < 0.01f) synchronized(this) {

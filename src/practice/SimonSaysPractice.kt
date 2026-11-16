@@ -165,7 +165,6 @@ object SimonSaysPractice {
 
     private const val STORM_DEAD = "[BOSS] Storm: I should have known that I stood no chance."
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
-    private val CONTROL_CODES = Regex("§.")
 
     /** Nothing in the world to put back: it's no longer drawn, and that's all. */
     private fun remove() {
@@ -949,7 +948,7 @@ object SimonSaysPractice {
         // The terminals start countdown (Storm dying; Goldor's first line if that was missed): the practice device goes away.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
-            val msg = content.string.replace(CONTROL_CODES, "")
+            val msg = it.chatText
             if (msg != STORM_DEAD && msg != GOLDOR_START) return@onReceive
             mc.execute { if (placed != null) EngineerClient.safely("ss practice countdown") { remove(); EngineerClient.msg("§7SS Practice: removed (terminals starting).") } }
         }

@@ -38,7 +38,6 @@ object Recore : Module(
         Color(255, 170, 0, 121 / 255f))
     private val hideInCore by BooleanSetting("Hide When In Core", true, desc = "Off for the rest of the run once you've been in the core yourself (after S3), even if you step back out.").withDependency { look.open }
 
-    private val CONTROL_CODES = Regex("§.")
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
     private const val CORE_OPEN = "The Core entrance is opening!"
     private const val GATE = "The gate has been destroyed!"
@@ -171,7 +170,7 @@ object Recore : Module(
 
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
-            val msg = content.string.replace(CONTROL_CODES, "")
+            val msg = it.chatText
             when {
                 // A lever can be flicked the tick before Goldor speaks: its message has started terminals already.
                 msg == GOLDOR_START -> if (!terms) { reset(); terms = true }

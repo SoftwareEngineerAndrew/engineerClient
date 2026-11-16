@@ -208,7 +208,7 @@ object BrWaypoints2 : Module(
         // dungeon, each wither door starts falling on its line, and it ends at the blood door.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
             if (overlay) return@onReceive
-            val text = content.string.replace(CONTROL_CODES, "")
+            val text = it.chatText
             mc.execute { if (!BrRoles.onChat(text)) onChat(text) }
         }
 
