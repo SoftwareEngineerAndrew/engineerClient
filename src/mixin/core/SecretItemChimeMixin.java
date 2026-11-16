@@ -1,6 +1,6 @@
 package com.engineerclient.mixin.core;
 
-import com.engineerclient.misc.OdinInstantChime;
+import com.engineerclient.misc.InstantChime;
 import com.adm.events.SecretPickupEvent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -14,6 +14,6 @@ public class SecretItemChimeMixin {
 
     @Inject(method = "invoke(Lcom/adm/events/SecretPickupEvent$Item;)V", at = @At(value = "INVOKE", target = "Lcom/adm/features/impl/dungeon/SecretClicked;access$secretChime(Lcom/adm/features/impl/dungeon/SecretClicked;)V", remap = false), cancellable = true, remap = false)
     private void ec$instantChime(SecretPickupEvent.Item event, CallbackInfo ci) {
-        if (OdinInstantChime.alreadyChimed(event.getEntity())) ci.cancel();
+        if (InstantChime.alreadyChimed(event.getEntity())) ci.cancel();
     }
 }

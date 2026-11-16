@@ -9,7 +9,7 @@ import com.adm.features.ModuleManager
 import com.adm.utils.Color
 import com.adm.utils.Colors
 
-object OdinColors : Module(
+object ColorPalette : Module(
     name = "Colors",
     category = Category.RENDER,
     description = "Edit Odin's shared colour palette; settings still on their default colour follow it.",

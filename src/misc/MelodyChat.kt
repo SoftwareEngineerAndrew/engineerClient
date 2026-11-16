@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
  * that fails it is logged once and only the Odin rows go; the chat state stays. Odin's GUI only draws while its
  * websocket is connected, so with it down these rows are not shown.
  */
-object OdinMelodyChat {
+object MelodyChat {
 
     private val odinRows = BooleanSetting("Chat Melody", true, desc = "Teammates' melody progress from the party chat also gets a row here, when they aren't broadcasting through Odin. Added by engineerClient.")
 

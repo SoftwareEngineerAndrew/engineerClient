@@ -80,7 +80,7 @@ object DoorHighlight : Module(
             if (!DungeonUtils.inClear) return@on
 
             val known = DungeonScan.doors.values.map { it.worldX to it.worldZ }.toSet()
-            val predicted = if (predictedDoors) com.engineerclient.mappred.OdinMapPrediction.certainDoors().filter { (it.worldX to it.worldZ) !in known } else emptyList()
+            val predicted = if (predictedDoors) com.engineerclient.mappred.MapPrediction.certainDoors().filter { (it.worldX to it.worldZ) !in known } else emptyList()
             (DungeonScan.doors.values + predicted).forEach { door ->
                 if (!door.type.equalsOneOf(DoorType.Wither, DoorType.Blood)) return@forEach
                 if (door.type == DoorType.Blood && bloodOpened) return@forEach

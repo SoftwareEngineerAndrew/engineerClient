@@ -8,7 +8,7 @@ import net.minecraft.client.input.KeyEvent
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.network.chat.Component
 
-abstract class OdinScreen(title: Component) : Screen(title) {
+abstract class AdmScreen(title: Component) : Screen(title) {
 
     protected abstract val ui: UiHost
 

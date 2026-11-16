@@ -170,15 +170,15 @@ object OdinState {
             o.n("secretsFound", st.secretsFound).n("secretsPercent", st.secretsPercent).n("knownSecrets", st.knownSecrets)
                 .n("crypts", st.crypts).n("openedRooms", st.openedRooms).n("completedRooms", st.completedRooms)
                 .n("deaths", st.deaths).n("percentCleared", st.percentCleared).s("elapsed", st.elapsedTime)
-                .b("mimic", st.mimicKilled).b("prince", st.princeKilled).b("bat", com.engineerclient.OdinCompat.batsKilled(st) > 0).n("batKills", com.engineerclient.OdinCompat.batsKilled(st))
+                .b("mimic", st.mimicKilled).b("prince", st.princeKilled).b("bat", com.engineerclient.CoreCompat.batsKilled(st) > 0).n("batKills", com.engineerclient.CoreCompat.batsKilled(st))
                 .s("doorOpener", st.doorOpener).b("bloodDone", st.bloodDone).n("puzzleCount", st.puzzleCount)
             out.append('{').append(o.sb).append('}')
         }
         j.safe("totalSecrets") { it.append(DungeonUtils.totalSecrets) }
         j.safe("totalRooms") { it.append(DungeonUtils.totalRooms) }
-        j.safe("neededSecrets") { it.append(com.engineerclient.OdinCompat.neededSecretsAmount()) }
-        j.safe("bonus") { it.append(com.engineerclient.OdinCompat.bonusScore()) }
-        j.safe("score") { it.append(com.engineerclient.OdinCompat.score()) }
+        j.safe("neededSecrets") { it.append(com.engineerclient.CoreCompat.neededSecretsAmount()) }
+        j.safe("bonus") { it.append(com.engineerclient.CoreCompat.bonusScore()) }
+        j.safe("score") { it.append(com.engineerclient.CoreCompat.score()) }
         return j.toString()
     }
 

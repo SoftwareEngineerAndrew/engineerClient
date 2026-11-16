@@ -1,7 +1,7 @@
 package com.engineerclient.gui
 
 import com.engineerclient.EngineerClient.mc
-import com.engineerclient.splits.OdinSplitsLook
+import com.engineerclient.splits.SplitsLook
 import com.mojang.blaze3d.platform.InputConstants
 import com.adm.features.Module
 import com.adm.features.ModuleManager
@@ -86,7 +86,7 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
         panels = if (one == null) full
         else mutableListOf(Panel(one.name, listOf(view(one).also { it.expanded = true }), (vw - Theme.WIDTH) / 2, 20))
         focus = search
-        runCatching { OdinSplitsLook.refreshPlaceholders() }
+        runCatching { SplitsLook.refreshPlaceholders() }
     }
 
     override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {

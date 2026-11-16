@@ -4,7 +4,7 @@ import androidx.compose.runtime.*
 import com.adm.AdmMod
 import com.adm.AdmMod.mc
 import com.adm.clickgui.GuiTheme
-import com.adm.clickgui.OdinScreen
+import com.adm.clickgui.AdmScreen
 import com.adm.clickgui.ui.Button
 import com.adm.clickgui.ui.SWITCH_HEIGHT
 import com.adm.clickgui.ui.Switch
@@ -19,7 +19,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 
-class WaypointPackSelectorScreen(private val parent: Screen?) : OdinScreen(Component.literal("Waypoint Pack Manager")) {
+class WaypointPackSelectorScreen(private val parent: Screen?) : AdmScreen(Component.literal("Waypoint Pack Manager")) {
 
     private class Prompt(val title: String, val onConfirm: (String) -> Unit)
 

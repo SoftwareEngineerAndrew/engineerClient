@@ -2,10 +2,10 @@ package com.engineerclient.party
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
-import com.engineerclient.misc.OdinMelodyChat
+import com.engineerclient.misc.MelodyChat
 import com.engineerclient.pov.PoseShare
 import com.engineerclient.p3sim.Station
-import com.engineerclient.practice.OdinSimonSays
+import com.engineerclient.practice.SimonSaysTracker
 import com.engineerclient.practice.TermInfo
 import com.adm.events.RenderExtractEvent
 import com.adm.events.core.on
@@ -148,9 +148,9 @@ object TermProgress {
 
         // Simon Says, while you're at it and section 1's device isn't done: rounds done and presses into the next, from
         // engineerClient's solver.
-        if (!TermInfo.deviceDone(1) && OdinSimonSays.active() && me.position().distanceTo(SS_DEVICE) <= SS_RANGE) {
-            val shown = OdinSimonSays.shownRound
-            val pressed = OdinSimonSays.pressedInRound
+        if (!TermInfo.deviceDone(1) && SimonSaysTracker.active() && me.position().distanceTo(SS_DEVICE) <= SS_RANGE) {
+            val shown = SimonSaysTracker.shownRound
+            val pressed = SimonSaysTracker.pressedInRound
             // The round's lights went (or a new show began) before all of it was pressed: a fail or a restart.
             if (shown < ssShown && ssPressed < ssShown) ssRounds = 0
             if (shown > 0) {
@@ -330,7 +330,7 @@ object TermProgress {
         if (example) return rows(gfx, listOf(Triple("§bSoloF7", 0.6, "§e0.9"), Triple("§bTheBadOne", 0.3, "§63.2")))
         val now = System.nanoTime()
         // Melody from the party chat, for teammates with no frame of their own; no countdown, which rows() leaves out for null.
-        val fromChat = if (!Terminals.progressChatMelody) emptyList() else OdinMelodyChat.heard().entries
+        val fromChat = if (!Terminals.progressChatMelody) emptyList() else MelodyChat.heard().entries
             .filter { (name, h) -> now - h.at <= CHAT_MELODY_NS && terms.keys.none { it.equals(name, ignoreCase = true) } }
             .sortedBy { it.key }
             .map { (name, h) -> Triple("§b${shown(name)}", h.percent / 100.0, null as String?) }

@@ -1,12 +1,12 @@
 package com.adm.features.impl.dungeon.dungeonwaypoints
 
 import com.adm.AdmMod.mc
-import com.adm.clickgui.OdinScreen
+import com.adm.clickgui.AdmScreen
 import com.adm.utils.ui.compose.UiHost
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.chat.Component
 
-class TextPromptScreen(val promptTitle: String) : OdinScreen(Component.literal(promptTitle)) {
+class TextPromptScreen(val promptTitle: String) : AdmScreen(Component.literal(promptTitle)) {
     private var callback: (String) -> Unit = {}
 
     override val ui = UiHost {

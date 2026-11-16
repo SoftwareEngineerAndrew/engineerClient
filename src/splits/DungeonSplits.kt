@@ -39,7 +39,7 @@ import net.minecraft.world.level.block.Blocks
 
 /**
  * The BR (blood rush) and Goldor sub-split HUDs, plus the run tracking behind the Engineer Splits look (the splits
- * themselves are drawn by Odin's Splits module, see [OdinSplitsLook]): bests, Pace and lag.
+ * themselves are drawn by Odin's Splits module, see [SplitsLook]): bests, Pace and lag.
  *
  * [SplitTracker] times the splits, [SubSplitTracker] the boss steps (Pace's targets) and
  * [BloodRunDetail] the rush room by room; this module feeds them chat, the two clocks (real time
@@ -189,7 +189,7 @@ object DungeonSplits : Module(
 
     /**
      * The P3 Sim starting a fight at [label]'s phase (client thread, before its lines arrive): a
-     * fresh run, in Odin's Splits ([SimOdinSplits]) and here, whose earlier phases are taken as their
+     * fresh run, in Odin's Splits ([SimSplits]) and here, whose earlier phases are taken as their
      * Pace targets. [termsDone]: sections already done when starting partway through the terminals,
      * where no Goldor line comes to start the split.
      */
@@ -197,7 +197,7 @@ object DungeonSplits : Module(
         resetRun()
         realRun = false
         val before = { l: String ->
-            val ms = SimOdinSplits.odinName(l)?.let { SimOdinSplits.target(it) } ?: SplitPace.ref(l)?.ms ?: 0L
+            val ms = SimSplits.odinName(l)?.let { SimSplits.target(it) } ?: SplitPace.ref(l)?.ms ?: 0L
             SplitTracker.Clock(ms, (ms / 50).toInt())
         }
         val head = (1..termsDone).mapNotNull { SplitPace.subRef("terms.s$it") }
@@ -207,12 +207,12 @@ object DungeonSplits : Module(
         // runs through it: start Odin that far into Storm (the Storm Pace target, or its dark green
         // time of 41.3 s, less the lead-in) so "Storm took" reads a real time.
         if (label == SplitTracker.TERMS && termsDone == 0) {
-            val storm = SimOdinSplits.odinName(SplitTracker.STORM)
+            val storm = SimSplits.odinName(SplitTracker.STORM)
             if (storm != null) {
-                val whole = SimOdinSplits.target(storm).takeIf { it > 0 } ?: SplitPace.ref(SplitTracker.STORM)?.ms ?: 41_300L
-                SimOdinSplits.start(storm, (whole - com.engineerclient.p3sim.StormEnd.LEAD * 50L).coerceAtLeast(0L))
+                val whole = SimSplits.target(storm).takeIf { it > 0 } ?: SplitPace.ref(SplitTracker.STORM)?.ms ?: 41_300L
+                SimSplits.start(storm, (whole - com.engineerclient.p3sim.StormEnd.LEAD * 50L).coerceAtLeast(0L))
             }
-        } else SimOdinSplits.odinName(label)?.let { SimOdinSplits.start(it, headClock.ms) }
+        } else SimSplits.odinName(label)?.let { SimSplits.start(it, headClock.ms) }
         if (termsDone > 0) {
             val at = now()
             tracker.startAt(label, before, at, headClock)
@@ -228,7 +228,7 @@ object DungeonSplits : Module(
     /** The P3 Sim's Stop (client thread): this run and Odin's both gone, as a world load leaves them. */
     fun simStop() {
         resetRun()
-        SimOdinSplits.stop()
+        SimSplits.stop()
     }
 
     /**
@@ -316,7 +316,7 @@ object DungeonSplits : Module(
         }
 
         on<TickEvent.End> {
-            EngineerClient.safely("sim odin splits") { SimOdinSplits.tick() }
+            EngineerClient.safely("sim odin splits") { SimSplits.tick() }
             if (!DungeonUtils.inDungeons) return@on
             EngineerClient.safely("split bests") { recordSplitBests() }
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) door(barriers) { at, a, b -> blood.onDoorStart(at, a, b) }
@@ -698,7 +698,7 @@ object DungeonSplits : Module(
         val splits = tracker.splits()
         if (splits.isEmpty()) return null
         return SplitPace.pace(splits, { label -> subs.forSplit(label).zip(subs.idsForSplit(label)) { s, id -> SplitPace.Sub(id, s) } }, now,
-            { label -> OdinSplitsLook.paceTarget(label, false) })
+            { label -> SplitsLook.paceTarget(label, false) })
     }
 
     /** Splits whose best this run has already been looked at. */
@@ -772,12 +772,12 @@ object DungeonSplits : Module(
         }
     }
 
-    /** A best kept here, for Odin's own splits too ([OdinSplitsLook]). */
+    /** A best kept here, for Odin's own splits too ([SplitsLook]). */
     fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id], floor)
 
     /**
      * Records a finished [value] of [id] as the best on [floor] when it is one. Never in a P3 Sim
-     * run, whose earlier rows (Odin's too, via [SimOdinSplits]) are Pace targets, not times.
+     * run, whose earlier rows (Odin's too, via [SimSplits]) are Pace targets, not times.
      */
     fun recordBest(floor: String, id: String, value: Long, finished: Boolean) {
         if (!finished || !keepsTimes || !SubSplitGrades.canBeBest(id, value, floor)) return

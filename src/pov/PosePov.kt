@@ -297,14 +297,14 @@ object PosePov : Module(
     fun hidesVanilla(id: Identifier): Boolean = covering && modHuds && id !in KEEP_VANILLA
     private val KEEP_VANILLA = setOf(VanillaHudElements.TITLE_AND_SUBTITLE, VanillaHudElements.SUBTITLES)
 
-    /** Whether the Odin HUD [name] is left out this frame (OdinHuds): the map, under Mod HUDs. */
+    /** Whether the Odin HUD [name] is left out this frame (CoreHuds): the map, under Mod HUDs. */
     fun hidesHud(name: String): Boolean = covering && modHuds && name in NOT_OVER_VIEWS
 
     /** Mod HUDs: every HUD on in the HUD editor, again over the views where Odin puts it (not the map). */
     private fun redrawModHuds(gfx: GuiGraphicsExtractor) {
         for (hud in com.adm.features.ModuleManager.hudSettingsCache) {
             if (!hud.isEnabled || hud.name in NOT_OVER_VIEWS) continue
-            EngineerClient.safely("pose pov hud ${hud.name}") { com.engineerclient.OdinHuds.redraw(gfx, hud) }
+            EngineerClient.safely("pose pov hud ${hud.name}") { com.engineerclient.CoreHuds.redraw(gfx, hud) }
         }
     }
 

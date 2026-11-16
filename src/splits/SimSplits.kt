@@ -15,7 +15,7 @@ import com.adm.utils.skyblock.SplitsManager
  * Odin keeps each split as the moment (clock and its tick count) its line came; a split's length is
  * the next one's moment minus its own. Its PBs are never saved in the sim (PersonalBestSimMixin).
  */
-object SimOdinSplits {
+object SimSplits {
     private val groupField = runCatching { SplitsManager::class.java.getDeclaredField("currentSplits").apply { isAccessible = true } }.getOrNull()
     private val ticksField = runCatching { SplitsManager::class.java.getDeclaredField("tickCounter").apply { isAccessible = true } }.getOrNull()
 
@@ -43,7 +43,7 @@ object SimOdinSplits {
 
     /** How long [odinName] counts as before the sim's start: its Pace target, as ms. */
     fun target(odinName: String): Long =
-        OdinSplitsLook.f7Target(odinName)?.let { (it * 1000).toLong() }
+        SplitsLook.f7Target(odinName)?.let { (it * 1000).toLong() }
             ?: OURS[odinName]?.let { SplitPace.ref(it)?.ms } ?: 0L
 
     private val startRunMethod = runCatching { SplitsManager::class.java.getDeclaredMethod("startRun").apply { isAccessible = true } }.getOrNull()

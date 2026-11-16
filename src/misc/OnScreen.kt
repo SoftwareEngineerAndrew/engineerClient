@@ -9,7 +9,7 @@ import com.adm.features.ModuleManager
  * until the editor was opened. Each is drawn clamped to the screen (as the editor would put it), its saved place left
  * as it is: back where it was once there's room.
  */
-object OdinOnScreen {
+object OnScreen {
 
     /** Runs [draw] (Odin drawing the HUDs in play) with each HUD inside the screen, then puts the saved places back. */
     @JvmStatic

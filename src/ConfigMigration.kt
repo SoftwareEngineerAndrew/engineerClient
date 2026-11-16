@@ -106,7 +106,7 @@ object ConfigMigration {
 
      *    Splits look (written into Odin's config, read once the look's settings exist - see
 
-     *    OdinSplitsLook.install);
+     *    SplitsLook.install);
 
      *  - POV Previews' Show In choice is its matching Only In checkbox (Everywhere: none ticked).
 

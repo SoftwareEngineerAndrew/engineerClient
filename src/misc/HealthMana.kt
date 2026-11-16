@@ -60,7 +60,7 @@ object HealthMana {
 
     /**
      * Whether Odin's own Health HUD or Mana HUD should be skipped this frame: Hide Health/Mana Above
-     * % is on and the stat is above the threshold. Read by OdinHuds for every Odin HUD element; only
+     * % is on and the stat is above the threshold. Read by CoreHuds for every Odin HUD element; only
      * those two are ever skipped.
      */
     fun hidesOdinHud(hud: HudElement): Boolean {

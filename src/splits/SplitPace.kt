@@ -4,7 +4,7 @@ package com.engineerclient.splits
  * Pace and lag for the splits HUD (F7).
  *
  * Pace is the run's projected finish against a target per split: its Pace target setting, else the
- * PB for it (OdinSplitsLook.paceTarget), else its dark green time ([SubSplitGrades]' fastest band).
+ * PB for it (SplitsLook.paceTarget), else its dark green time ([SubSplitGrades]' fastest band).
  * Time already proven, plus the target for everything still to come. Proven is every finished
  * split as it was; the one running is its target, moved by what its finished sub splits gained or
  * lost against their share of that target, and by the running sub split once it is past its share.

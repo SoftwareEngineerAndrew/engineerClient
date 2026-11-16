@@ -3,7 +3,7 @@ package com.engineerclient.pov
 import com.engineerclient.dungeonpack.pack.DungeonFrame
 import com.engineerclient.dungeonpack.pack.Rot
 import com.engineerclient.dungeonpack.pack.Tile
-import com.engineerclient.dungeonpack.pack.rooms.OdinCore
+import com.engineerclient.dungeonpack.pack.rooms.RoomCore
 import com.engineerclient.dungeonpack.pack.rooms.Placement
 import com.engineerclient.dungeonpack.pack.rooms.RoomDesign
 import com.engineerclient.dungeonpack.pack.rooms.RoomPack
@@ -21,7 +21,7 @@ import java.util.concurrent.CompletableFuture
 
 /**
  * Rooms placed before their middle is in range: every column of every room design, hashed the way Odin hashes a room's core
- * column (OdinCore), indexed once from the room pack and kept on disk. A tile no room covers yet is read column by column as
+ * column (RoomCore), indexed once from the room pack and kept on disk. A tile no room covers yet is read column by column as
  * its chunks come in (the edge of a room loads before its middle), and the design, turn and place that most of its columns
  * agree on, and that the rest don't contradict, is placed. Only until Odin or a teammate names the room.
  */
@@ -79,7 +79,7 @@ object RoomEdges {
         val cols = ArrayList<IntArray>()
         for (x in x0..x0 + 30 step 2) for (z in z0..z0 + 30 step 2) {
             if (!level.hasChunk(x shr 4, z shr 4)) continue
-            val h = OdinCore.hash { y -> nameOf(level.getBlockState(pos.set(x, y, z)).block) }
+            val h = RoomCore.hash { y -> nameOf(level.getBlockState(pos.set(x, y, z)).block) }
             cols += intArrayOf(x, z, h)
         }
         if (cols.size < VOTES) { if (cols.isNotEmpty()) dirty[tz * 6 + tx] = true; return null }
@@ -195,5 +195,5 @@ object RoomEdges {
     private val names = IdentityHashMap<Block, String>()
     private fun nameOf(b: Block): String = names.getOrPut(b) { BuiltInRegistries.BLOCK.getKey(b).toString() }
 
-    internal fun hashOf(v: RoomVolume, x: Int, z: Int): Int = OdinCore.ofVolume(v, x, z)
+    internal fun hashOf(v: RoomVolume, x: Int, z: Int): Int = RoomCore.ofVolume(v, x, z)
 }

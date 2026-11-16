@@ -28,7 +28,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
  * it), a flash before the show, a lagging last light, lights counted as they come on, and a skip
  * whose last round is still showing when the buttons come back (triple skips, delayed shows).
  */
-object OdinSimonSays {
+object SimonSaysTracker {
 
     @JvmStatic
     fun active(): Boolean = Devices.simonSaysOn

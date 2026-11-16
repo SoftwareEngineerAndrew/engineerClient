@@ -15,7 +15,7 @@ import com.adm.utils.skyblock.dungeon.M7Phases
 import net.minecraft.core.BlockPos
 import net.minecraft.world.phys.AABB
 
-/** Simon Says: boxes the buttons to press from the solver's answer ([com.engineerclient.practice.OdinSimonSays]), blocks wrong ones, announces rounds. */
+/** Simon Says: boxes the buttons to press from the solver's answer ([com.engineerclient.practice.SimonSaysTracker]), blocks wrong ones, announces rounds. */
 object DevSimonSays {
     private val startButton = BlockPos(110, 121, 91)
     /** The lamps of the round being put in, in order (the solver's answer), and how many are pressed. */

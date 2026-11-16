@@ -9,7 +9,7 @@ import com.adm.features.impl.skyblock.CommandKeybinds
 import com.adm.utils.sendCommand
 import net.minecraft.client.Minecraft
 
-object OdinCustomKeybinds {
+object CustomKeybinds {
     private const val SLOTS = 20
 
     private class Slot(val key: KeybindSetting, val command: StringSetting) {

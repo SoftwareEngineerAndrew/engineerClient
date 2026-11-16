@@ -4,7 +4,7 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.features.impl.dungeon.DoorHighlight
 import com.adm.utils.render.BoxStyle
 
-object OdinDoorOutline {
+object DoorOutline {
 
     private val outlineOnly = BooleanSetting("Outline Only", false, desc = "Doors are drawn as an outline with no fill. Added by ADM.")
 

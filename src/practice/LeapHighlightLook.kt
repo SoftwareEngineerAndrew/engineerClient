@@ -168,7 +168,7 @@ class LeapHighlightLook(module: Module, dropdownName: String, private val shown:
                 val bh = LeapMenu.BOX_HEIGHT
                 val lx = if (right) 0 else -bw
                 val ly = if (bottom) 0 else -bh
-                val scale = com.engineerclient.misc.OdinLeapScale.get()
+                val scale = com.engineerclient.misc.LeapScale.get()
                 gfx.pose().pushMatrix()
                 gfx.pose().translate((cx + sx * 24).toFloat(), (cy + sy * 24).toFloat())
                 gfx.pose().scale(scale, scale)

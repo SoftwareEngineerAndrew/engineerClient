@@ -12,7 +12,7 @@ package com.engineerclient.dungeonpack.pack.rooms
  * scan stops. The core is the Java `String.hashCode` of the result. Anything added above a room's roof in this column, or a
  * missing bedrock floor, changes the core and Odin then names a different room (or none).
  */
-object OdinCore {
+object RoomCore {
     private const val AIR = "minecraft:air"
 
     /** The core of the column whose block name at height y is `name(y)` (properties stripped; null or the air name for air). */

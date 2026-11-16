@@ -8,7 +8,7 @@ import kotlin.random.Random
 
 /**
  * The map prediction worker's work, as an object the game's worker thread drives and the headless tests can too
- * ([OdinMapPrediction] holds one; no game classes in here). It lives across the map changes of one dungeon:
+ * ([MapPrediction] holds one; no game classes in here). It lives across the map changes of one dungeon:
  *
  *  - [begin] a view (a map the game shows): the samples drawn for earlier views are not thrown away. Every view the
  *    map shows later is the one before plus facts, and the facts are a function of the true map, so a sample (a whole
@@ -633,7 +633,7 @@ internal class PredictionSession(
         const val RHO_BATCHES = 5.0
         /** A group this big is imported by several lanes at once. */
         const val PARALLEL_IMPORT = 3_000
-        /** The classic sampler's worker loop: samples a chunk, and samples in all ([OdinMapPrediction]'s SAMPLES, BATCH). */
+        /** The classic sampler's worker loop: samples a chunk, and samples in all ([MapPrediction]'s SAMPLES, BATCH). */
         const val BATCH = 100
         const val SAMPLES = 2000
 

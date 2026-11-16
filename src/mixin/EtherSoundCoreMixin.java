@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * warp the camera already played, the packet is dropped before Odin plays it again.
  */
 @Mixin(targets = "com.adm.features.impl.render.Etherwarp$1", remap = false)
-public abstract class EtherSoundOdinMixin {
+public abstract class EtherSoundCoreMixin {
     @Inject(method = "invoke(Lnet/minecraft/network/protocol/game/ClientboundSoundPacket;Lcom/adm/events/PacketEvent$Receive;)V",
             at = @At("HEAD"), cancellable = true, require = 0)
     private void ec$etherSound(ClientboundSoundPacket packet, PacketEvent.Receive event, CallbackInfo ci) {

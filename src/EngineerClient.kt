@@ -7,7 +7,7 @@ import com.engineerclient.rotation.EcLog
 import com.engineerclient.pov.PosePov
 
 import com.engineerclient.splits.DungeonSplits
-import com.engineerclient.splits.OdinSplitsLook
+import com.engineerclient.splits.SplitsLook
 import com.engineerclient.waypoints.BrWaypoints2
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.adm.config.ModuleConfig
@@ -78,7 +78,7 @@ object EngineerClient : ClientModInitializer {
             RandomStuff, com.engineerclient.misc.CommandAliases, com.engineerclient.dungeon.Refill,
             com.engineerclient.misc.BlockInstaclear,
             com.engineerclient.culling.ChunkCulling,
-            com.engineerclient.misc.OdinColors,
+            com.engineerclient.misc.ColorPalette,
             com.engineerclient.dungeon.ClearInfo, com.engineerclient.dungeon.SalvageOverlay, com.engineerclient.dungeon.LagWarning, com.engineerclient.dungeon.ExplosiveShot,
             com.engineerclient.dungeon.TickTimers, com.engineerclient.dungeon.PositionalMessages, com.engineerclient.dungeon.Relics,
             com.engineerclient.skyblock.ItemTweaks,
@@ -114,17 +114,17 @@ object EngineerClient : ClientModInitializer {
         // Additions to Odin's own modules (e.g. the Engineer Splits look on Odin's Splits) go in
         // before anything saves the configs, which would drop saved values for settings that don't
         // exist yet.
-        safely("ss solver") { com.engineerclient.practice.OdinSimonSays.install() }
-        safely("masks used") { com.engineerclient.misc.OdinMasksUsed.install() }
-        safely("chat melody") { com.engineerclient.misc.OdinMelodyChat.install() }
-        safely("highlight look") { com.engineerclient.misc.OdinHighlightLook.install() }
-        safely("door outline") { com.engineerclient.misc.OdinDoorOutline.install() }
-        safely("instant chime") { com.engineerclient.misc.OdinInstantChime.install() }
+        safely("ss solver") { com.engineerclient.practice.SimonSaysTracker.install() }
+        safely("masks used") { com.engineerclient.misc.MasksUsed.install() }
+        safely("chat melody") { com.engineerclient.misc.MelodyChat.install() }
+        safely("highlight look") { com.engineerclient.misc.HighlightLook.install() }
+        safely("door outline") { com.engineerclient.misc.DoorOutline.install() }
+        safely("instant chime") { com.engineerclient.misc.InstantChime.install() }
         safely("secret counter") { com.engineerclient.dungeon.SecretCounter.install() }
-        safely("ss alerts") { com.engineerclient.misc.OdinSimonSaysAlerts.install() }
-        safely("custom keybinds") { com.engineerclient.misc.OdinCustomKeybinds.install() }
+        safely("ss alerts") { com.engineerclient.misc.SimonSaysAlerts.install() }
+        safely("custom keybinds") { com.engineerclient.misc.CustomKeybinds.install() }
         safely("odin link") { com.engineerclient.party.OdinLink.install() }
-        safely("splits look") { OdinSplitsLook.install() }
+        safely("splits look") { SplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }
         // Room Prediction and LCM Style (with LCM Colors): settings on Odin's own Dungeon Map
@@ -134,7 +134,7 @@ object EngineerClient : ClientModInitializer {
         // Read on the first dungeon otherwise, on the render thread.
         Thread({ safely("warm packs") { com.engineerclient.dungeonpack.pack.doors.DoorPack.bundled; com.engineerclient.dungeonpack.pack.secrets.SecretPack.bundled } }, "ec warm packs")
             .apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
-        safely("map prediction") { com.engineerclient.mappred.OdinMapPrediction.install() }
+        safely("map prediction") { com.engineerclient.mappred.MapPrediction.install() }
         safely("map icons") { com.engineerclient.mapicons.MapIcons.install() }
         safely("map sizes") { com.engineerclient.mapicons.MapSizes.install() }
         safely("map layout") { com.engineerclient.mapicons.MapLayout.install() }

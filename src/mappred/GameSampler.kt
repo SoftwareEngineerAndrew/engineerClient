@@ -1165,7 +1165,7 @@ internal class GameSampler(
          * maps: 300 samples and 20 batches' worth -1.0297 (0.5 s a snapshot), 300 and 120 with 120,000 particles at most
          * -1.0182 (1.0 s), 2000 and 120 with the [MAX_TRIES] below -1.0115 (2.3 s, 6 to 8 s for the slowest tenth by
          * the machine's load; the classic sampler -1.0251, 1.7 s). The longer limit alone is -1.0146 with 300 samples,
-         * -1.0144 with 1000: it is the 2000 (the classic sampler's, and the worker's own [OdinMapPrediction] SAMPLES)
+         * -1.0144 with 1000: it is the 2000 (the classic sampler's, and the worker's own [MapPrediction] SAMPLES)
          * that buys the rest.
          */
         const val MIN_SAMPLES = 2000

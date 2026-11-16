@@ -29,12 +29,12 @@ object SubSplitGrades {
     class Bands(val clock: Clock, val limits: LongArray?, val floor: Long, val fromStart: Boolean = false, val lateAfter: Long? = null)
 
     /**
-     * Color Based Off Time (Odin's Splits, set by OdinSplitsLook): off, nothing is graded - every
+     * Color Based Off Time (Odin's Splits, set by SplitsLook): off, nothing is graded - every
      * time is drawn in its split's own colour again, as before the bands.
      */
     @JvmStatic var byTime: () -> Boolean = { true }
 
-    /** Show PB (OdinSplitsLook): off, a best is not picked out in gold, just graded like any other time. */
+    /** Show PB (SplitsLook): off, a best is not picked out in gold, just graded like any other time. */
     @JvmStatic var showBest: () -> Boolean = { false }
 
     val COLOURS = listOf("§2", "§a", "§e", "§c", "§4", "§0")

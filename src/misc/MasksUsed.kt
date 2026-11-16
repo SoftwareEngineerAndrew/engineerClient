@@ -14,10 +14,10 @@ import com.adm.utils.skyblock.dungeon.DungeonUtils
  * "Only Used" for Odin's Invincibility Timer: its HUD lists only the masks (and Phoenix) that have
  * saved you since you joined the world - each stays once used, cooldown over or not, so you see
  * which are back. Nothing used yet: no HUD. Registered into Odin's module like the Splits look
- * (see OdinSplitsLook); `InvincibilityHudMixin` asks [shows] where Odin reads its Show Spirit /
+ * (see SplitsLook); `InvincibilityHudMixin` asks [shows] where Odin reads its Show Spirit /
  * Bonzo / Phoenix settings while drawing.
  */
-object OdinMasksUsed {
+object MasksUsed {
 
     private val onlyUsed = BooleanSetting("Only Used", false, desc = "Only show the masks and Phoenix that have saved you this run. Added by engineerClient.")
         .withDependency { (InvincibilityTimer.settings["Displayed Items"] as? DropdownSetting)?.value ?: true }
@@ -52,7 +52,7 @@ object OdinMasksUsed {
         }
     }
 
-    /** Adds the setting to Odin's module; before OdinSplitsLook.install, which re-reads Odin's config for both. */
+    /** Adds the setting to Odin's module; before SplitsLook.install, which re-reads Odin's config for both. */
     fun install() {
         InvincibilityTimer.registerSetting(onlyUsed)
         on<MessageEvent.Chat> {

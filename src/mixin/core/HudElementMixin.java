@@ -1,6 +1,6 @@
 package com.engineerclient.mixin.core;
 
-import com.engineerclient.OdinHuds;
+import com.engineerclient.CoreHuds;
 import com.adm.clickgui.settings.impl.HUDSetting;
 import com.adm.features.Module;
 import kotlin.Pair;
@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Every Odin HUD element is made by {@code Module.HUD} from a draw function, which Odin's Compose
- * HUD layer calls to draw it and size it. That function is swapped for {@link OdinHuds}' wrapper
+ * HUD layer calls to draw it and size it. That function is swapped for {@link CoreHuds}' wrapper
  * as the HUD is made, so Random Stuff's Hide Health/Mana Above % and the Engineer Splits look reach
  * the elements of Odin's own modules without touching those modules.
  */
@@ -23,11 +23,11 @@ public class HudElementMixin {
 
     @ModifyVariable(method = "HUD", at = @At("HEAD"), argsOnly = true, remap = false)
     private Function2<GuiGraphicsExtractor, Boolean, Pair<Integer, Integer>> ec$wrap(Function2<GuiGraphicsExtractor, Boolean, Pair<Integer, Integer>> block) {
-        return OdinHuds.wrap(block);
+        return CoreHuds.wrap(block);
     }
 
     @Inject(method = "HUD", at = @At("RETURN"), remap = false)
     private void ec$made(CallbackInfoReturnable<HUDSetting> cir) {
-        OdinHuds.made(cir.getReturnValue());
+        CoreHuds.made(cir.getReturnValue());
     }
 }

@@ -11,7 +11,7 @@ import java.util.Locale
  * What the sub splits take from Engineer Client's Odin Splits settings (its Pace target boxes, Color
  * Based Off Time, Show PB), read by name off Odin's Splits module so this mod doesn't need Engineer
  * Client; without it, the boxes are blank (PBs are used), colours are by time and bests aren't gold.
- * Mirrors Engineer Client's OdinSplitsLook.paceTarget, minus the boxes' own settings.
+ * Mirrors Engineer Client's SplitsLook.paceTarget, minus the boxes' own settings.
  */
 object PaceTargets {
     private val LABELS = listOf("Open", "Blood", "Portal", "Maxor", "Storm", "Terms", "Goldor", "Necron", "Dragons")

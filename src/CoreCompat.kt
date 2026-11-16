@@ -10,7 +10,7 @@ import java.lang.invoke.MethodType
  * Odin API that differed between 0.3.7 (the 26.3 port build) and 0.4.0. The mod now compiles against and requires 0.4.0,
  * so these work either way; kept as the one place such version differences go.
  */
-object OdinCompat {
+object CoreCompat {
 
     /**
      * Odin 0.4.0 made `batKilled` a Boolean and moved the count to `numBatsKilled`; up to 0.3.7 `batKilled` is the count.

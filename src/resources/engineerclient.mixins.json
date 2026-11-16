@@ -9,7 +9,7 @@
     "HudEditorOpenMixin",
     "StreamerFontMixin",
     "EtherSoundMixin",
-    "EtherSoundOdinMixin",
+    "EtherSoundCoreMixin",
     "ArmorFoilMixin",
     "HideBotsSimMixin",
     "OwnArrowsHideMixin",

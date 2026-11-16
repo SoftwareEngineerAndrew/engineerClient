@@ -10,7 +10,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.network.chat.Component
 
-object HudManager : OdinScreen(Component.literal("HUD Manager")) {
+object HudManager : AdmScreen(Component.literal("HUD Manager")) {
 
     override val ui: UiHost get() = HudLayer.ui
 

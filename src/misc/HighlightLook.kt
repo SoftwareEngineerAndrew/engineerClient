@@ -41,7 +41,7 @@ import net.minecraft.world.phys.AABB
  * so only what you can see is drawn.
  * Shadow Assassins have no tag: they are the fake players holding "Silent Death" in leather boots.
  */
-object OdinHighlightLook {
+object HighlightLook {
 
     private enum class Style { OUTLINE, FILLED, BOTH }
     private enum class Kind { STAR, TANK, MINI, FEL, ASSASSIN, BAT, WITHER }
@@ -163,7 +163,7 @@ object OdinHighlightLook {
         found.entries.removeIf { (id, v) -> (!v.first.isAlive || v.first.isRemoved).also { if (it) unclaim(id, v.first) } }
     }
 
-    /** Adds the settings to Odin's Highlight; before OdinSplitsLook.install, which re-reads Odin's config. */
+    /** Adds the settings to Odin's Highlight; before SplitsLook.install, which re-reads Odin's config. */
     fun install() {
         val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth, starWidth) + colours.values.flatMap { listOf(it.fill, it.outline) }
         for (s in all) Highlight.registerSetting(s)

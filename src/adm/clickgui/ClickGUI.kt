@@ -15,7 +15,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.network.chat.Component
 
-object ClickGUI : OdinScreen(Component.literal("Click GUI")) {
+object ClickGUI : AdmScreen(Component.literal("Click GUI")) {
 
     var searchString by mutableStateOf("")
         private set

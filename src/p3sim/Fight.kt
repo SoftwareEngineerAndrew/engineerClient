@@ -358,7 +358,7 @@ object Fight {
         // Practice: no splits (its own timer is the one that counts); the last run's are cleared.
         if (practice) PartyClient.send("splitsStop") else PartyClient.send("splitsStart", termsDone, split)
         Recorder.begin(what.label)
-        // No "Starting in 1 second." line (Hypixel has none in P3): SimOdinSplits starts Odin's run directly.
+        // No "Starting in 1 second." line (Hypixel has none in P3): SimSplits starts Odin's run directly.
         val p: Phase = when (what) {
             Start.P1 -> P1Maxor()
             Start.P2 -> P2Storm()

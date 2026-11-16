@@ -1,7 +1,7 @@
 package com.engineerclient.mixin.core;
 
 import com.engineerclient.hud.HudEditor;
-import com.engineerclient.misc.OdinOnScreen;
+import com.engineerclient.misc.OnScreen;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 
 /**
- * Odin's HUDs never off screen in play (OdinOnScreen): {@code render} with {@code example} false draws them in play;
+ * Odin's HUDs never off screen in play (OnScreen): {@code render} with {@code example} false draws them in play;
  * true is the HUD editor, which clamps them itself.
  */
 @Pseudo
@@ -22,6 +22,6 @@ public class HudOnScreenMixin {
             return;
         }
         if (HudEditor.isOpen()) return;
-        OdinOnScreen.hudsOnScreen(() -> original.call(graphics, example, mouseX, mouseY));
+        OnScreen.hudsOnScreen(() -> original.call(graphics, example, mouseX, mouseY));
     }
 }

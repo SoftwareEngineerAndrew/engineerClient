@@ -18,7 +18,7 @@ import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.ButtonBlock
 
-object OdinSimonSaysAlerts {
+object SimonSaysAlerts {
 
     private const val STAGES = 5
     private const val BREAK_TICKS = 12

@@ -4,7 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.engineerclient.EcConfig
-import com.engineerclient.OdinHuds
+import com.engineerclient.CoreHuds
 import com.mojang.blaze3d.platform.InputConstants
 import com.adm.clickgui.HudLayer
 import com.adm.clickgui.HudManager
@@ -130,7 +130,7 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         val key = event.key()
         when {
             key == InputConstants.KEY_R && ctrl && shift -> {
-                huds.forEach(OdinHuds::reset)
+                huds.forEach(CoreHuds::reset)
                 huds.forEach { it.hud.clampToScreen() }
                 return true
             }
@@ -156,7 +156,7 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         val w = minecraft.window.guiScaledWidth
         val h = minecraft.window.guiScaledHeight
         when {
-            key == InputConstants.KEY_R -> OdinHuds.reset(setting)
+            key == InputConstants.KEY_R -> CoreHuds.reset(setting)
             key == InputConstants.KEY_L -> if (hud.link != null) hud.unlink() else linking = !linking
             key == InputConstants.KEY_H && ctrl -> hud.x = (w - hud.scaledWidth) / 2
             key == InputConstants.KEY_V && ctrl -> hud.y = (h - hud.scaledHeight) / 2

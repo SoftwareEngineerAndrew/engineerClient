@@ -1,6 +1,6 @@
 package com.engineerclient.mixin.core;
 
-import com.engineerclient.misc.OdinDoorOutline;
+import com.engineerclient.misc.DoorOutline;
 import com.adm.utils.render.BoxStyle;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -13,6 +13,6 @@ public class DoorHighlightOutlineMixin {
 
     @ModifyArg(method = "invoke(Lcom/adm/events/RenderExtractEvent;)V", at = @At(value = "INVOKE", target = "Lcom/adm/utils/render/RenderUtilsKt;drawStyledBox(Lcom/adm/events/RenderExtractEvent;Lnet/minecraft/world/phys/AABB;Lcom/adm/utils/Color;Lcom/adm/utils/render/BoxStyle;Z)V", remap = false), index = 3, remap = false)
     private BoxStyle ec$outlineOnly(BoxStyle style) {
-        return OdinDoorOutline.style(style);
+        return DoorOutline.style(style);
     }
 }

@@ -58,7 +58,7 @@ import kotlin.math.roundToInt
  * `MapPathHintsMixin` draws this instead of Odin's "?" tiles while it is on. With LCM Style on, LcmStyle
  * draws it in that look instead: its colours, its guess tiles and doors, and the chances where the "?"s were.
  */
-object OdinMapPrediction {
+object MapPrediction {
 
     private enum class Mode { ADM, ODIN, OFF }
 

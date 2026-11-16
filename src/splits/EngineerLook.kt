@@ -3,7 +3,7 @@ package com.engineerclient.splits
 import java.util.Locale
 
 /**
- * Odin's splits, drawn the Engineer Splits way (see [OdinSplitsLook], which feeds it Odin's rows
+ * Odin's splits, drawn the Engineer Splits way (see [SplitsLook], which feeds it Odin's rows
  * and settings and puts the result on screen). Pure: rows and options in, lines out, so every case
  * tests without the game.
  *

@@ -12,7 +12,7 @@ import com.adm.features.impl.dungeon.SecretClicked
 import com.adm.utils.playSoundSettings
 import net.minecraft.world.entity.item.ItemEntity
 
-object OdinInstantChime {
+object InstantChime {
 
     private val instant = BooleanSetting("Instant Item Chime", false, desc = "Secret items chime as soon as they can be picked up, not when the server confirms it. Added by ADM.").withDependency {
         (SecretClicked.settings["Clicked"] as? DropdownSetting)?.value == true && (SecretClicked.settings["Secret Chime"] as? BooleanSetting)?.value == true

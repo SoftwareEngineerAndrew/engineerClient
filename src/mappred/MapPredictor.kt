@@ -174,7 +174,7 @@ class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = 
      * Room [j] is of the kind [old] said, to the game process: the same kind, or a brown 1x1 with one door (a dead end)
      * that was normal and is rare or the other way round, which [GameSampler] (its specials shown) and [MapPredictor]
      * (the names' pools) both read as a rare room. Odin has a room it has seen only on the map as rare until it has
-     * scanned its core, so a room can be read normal, then rare (OdinMapPrediction reads Odin's unscanned rare as normal).
+     * scanned its core, so a room can be read normal, then rare (MapPrediction reads Odin's unscanned rare as normal).
      */
     private fun sameKind(j: Int, old: Kind): Boolean {
         val k = kinds[j]

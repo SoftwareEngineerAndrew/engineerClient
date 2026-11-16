@@ -33,7 +33,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  * every split. Its settings live in Odin's Splits module, so Odin saves them and its HUDs keep their
  * place; `HudElementMixin` asks [render] for what to draw. Which splits there are stays Odin's.
  */
-object OdinSplitsLook {
+object SplitsLook {
 
     private enum class PaceFloor { F7, M7 }
     enum class PaceFrom(private val label: String) { RECENT("Recent Runs"), TARGETS("Targets"); override fun toString() = label }

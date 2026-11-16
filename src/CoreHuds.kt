@@ -1,7 +1,7 @@
 package com.engineerclient
 
 import com.engineerclient.misc.HealthMana
-import com.engineerclient.splits.OdinSplitsLook
+import com.engineerclient.splits.SplitsLook
 import com.adm.clickgui.settings.impl.HUDSetting
 import com.adm.clickgui.settings.impl.HudElement
 import com.adm.clickgui.settings.impl.drawAtHud
@@ -14,12 +14,12 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  * without touching them:
  *  - Random Stuff's Hide Health/Mana Above %: Odin's Health HUD and Mana HUD draw nothing while the
  *    stat is above the threshold. The HUD editor (example = true) always draws them.
- *  - The ADM look: for Odin's two Splits HUDs [OdinSplitsLook.render] draws instead.
+ *  - The ADM look: for Odin's two Splits HUDs [SplitsLook.render] draws instead.
  *  - P3 Sim practice: the P3 tick timers and Terminals Status' Term Info draw nothing ([PRACTICE_HIDDEN]).
  *  - POV Previews' Mod HUDs: the Dungeon Map isn't drawn over the views.
  * It is also what POV Previews calls to draw a kept HUD a second time, above the previews.
  */
-object OdinHuds {
+object CoreHuds {
 
     class Draw(private val block: (GuiGraphicsExtractor, Boolean) -> Pair<Int, Int>) : (GuiGraphicsExtractor, Boolean) -> Pair<Int, Int> {
         var hud: HudElement? = null
@@ -30,7 +30,7 @@ object OdinHuds {
             if (!example && HealthMana.hidesOdinHud(h)) return 0 to 0
             if (!example && com.engineerclient.pov.PosePov.hidesHud(name)) return 0 to 0
             if (!example && name in PRACTICE_HIDDEN && com.engineerclient.p3sim.Practice.active && com.engineerclient.p3sim.P3Sim.inSim) return 0 to 0
-            return OdinSplitsLook.render(h, g, example) ?: block(g, example)
+            return SplitsLook.render(h, g, example) ?: block(g, example)
         }
     }
 

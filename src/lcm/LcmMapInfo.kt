@@ -28,7 +28,7 @@
 package com.engineerclient.lcm
 
 import com.engineerclient.EngineerClient
-import com.engineerclient.OdinCompat
+import com.engineerclient.CoreCompat
 import com.engineerclient.dungeon.ClearInfo
 import com.engineerclient.mappred.FloorRules
 import com.adm.AdmMod.mc
@@ -92,7 +92,7 @@ object LcmMapInfo {
             if (DungeonUtils.deathCount > 0) append("§7D: §c${DungeonUtils.deathCount}   ")
             if (!DungeonUtils.mimicKilled && floorNumber() >= 6) append("§7M: §c✖   ")
             if (!DungeonUtils.princeKilled && princeLeft()) append("§7P: §c✖   ")
-            if (OdinCompat.batsKilled() < batsPossible()) append("§7B: §c${OdinCompat.batsKilled().coerceAtMost(5)}   ")
+            if (CoreCompat.batsKilled() < batsPossible()) append("§7B: §c${CoreCompat.batsKilled().coerceAtMost(5)}   ")
             if (DungeonUtils.cryptCount < 5) append("§c${DungeonUtils.cryptCount}§7/§a5")
         }.trim()
         // as wide as dtMap's map: its rooms down, 16 each and 4 between, and its 5 of background either side
@@ -161,7 +161,7 @@ object LcmMapInfo {
     }
 
     private fun calculateBonusScoreNoPaul(): Int =
-        (if (DungeonUtils.mimicKilled) 2 else 0) + (if (DungeonUtils.princeKilled) 1 else 0) + OdinCompat.batsKilled().coerceAtMost(5) + DungeonUtils.cryptCount.coerceAtMost(5)
+        (if (DungeonUtils.mimicKilled) 2 else 0) + (if (DungeonUtils.princeKilled) 1 else 0) + CoreCompat.batsKilled().coerceAtMost(5) + DungeonUtils.cryptCount.coerceAtMost(5)
 
     /** Paul's +10: Odin's Paul check, which Clear Info's Paul Score (Auto / On / Off) overrides ([PaulScore]). */
     private fun calculatePaulScore(): Int = if (DungeonUtils.isPaul) 10 else 0

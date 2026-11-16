@@ -1,7 +1,7 @@
 package com.engineerclient.lcm
 
 import com.engineerclient.EngineerClient
-import com.engineerclient.mappred.OdinMapPrediction
+import com.engineerclient.mappred.MapPrediction
 import com.adm.AdmMod.mc
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
@@ -167,7 +167,7 @@ object LcmStyle {
             if (room.tiles.isEmpty()) g.fillRoom(room, color) else fillTiles(g, room, color)
             if (opened(room) && room.shouldShowName && room.name in princeRooms && !DungeonUtils.princeKilled) drawCrown(g, room)
         }
-        if (!example && !OdinMapPrediction.render(g, lcm = true)) drawUnopened(g, hints)
+        if (!example && !MapPrediction.render(g, lcm = true)) drawUnopened(g, hints)
         for (door in doors) drawDoor(g, door, example)
         for (room in rooms) drawName(g, room)
     }

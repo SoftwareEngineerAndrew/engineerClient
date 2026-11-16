@@ -1,6 +1,6 @@
 package com.engineerclient.dungeon
 
-import com.engineerclient.misc.OdinMelodyChat
+import com.engineerclient.misc.MelodyChat
 import com.adm.features.impl.boss.MelodyMessage
 import com.adm.utils.Colors
 import com.adm.utils.render.text
@@ -21,7 +21,7 @@ object TerminalHuds {
 
     private fun melodyText(): String? {
         val me = Minecraft.getInstance().user.name
-        val (name, heard) = OdinMelodyChat.heard().filterKeys { !it.equals(me, true) }.maxByOrNull { it.value.percent } ?: return null
+        val (name, heard) = MelodyChat.heard().filterKeys { !it.equals(me, true) }.maxByOrNull { it.value.percent } ?: return null
         val who = DungeonUtils.dungeonTeammates.firstOrNull { it.name.equals(name, true) }?.clazz?.name ?: name
         return "§5§l$who§r§d has melody! ${minOf(heard.percent / 33, 2)}/3"
     }
