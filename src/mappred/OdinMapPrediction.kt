@@ -10,6 +10,7 @@ import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
 import com.odtheking.odin.clickgui.settings.impl.NumberSetting
 import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
 import com.odtheking.odin.events.LevelEvent
+import com.odtheking.odin.events.MessageEvent
 import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
@@ -168,6 +169,7 @@ object OdinMapPrediction {
             colorsDropdown, customColors, predPuzzle, predTrap, predYellow, predRare, predBlood, predFairy, predRoom)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
+        on<MessageEvent.Chat> { if (message == "Starting in 1 second.") startAt = System.currentTimeMillis() + 1000L }
         EventBus.subscribe(this)
     }
 
@@ -177,12 +179,15 @@ object OdinMapPrediction {
         worker.execute { session.clear() }
         shown = null; shownView = null; shownNames = null; shownKey = ""; lastKey = ""
         pathDoors.clear()
-        loadedAt = System.currentTimeMillis()
+        startAt = 0L
     }
 
-    /** When the world last loaded: the game is busy loading it for a few seconds, guessing waits. */
-    private var loadedAt = 0L
-    private const val LOAD_QUIET_MS = 6000L
+    /** When the run starts ("Starting in 1 second."): before it the guesses are made quietly, on one thread, and not shown. */
+    private var startAt = 0L
+    private fun started(): Boolean =
+        (startAt != 0L && System.currentTimeMillis() >= startAt) ||
+            // joined mid-run: someone has already opened a room past the entrance
+            DungeonScan.rooms.any { it.isViewable && it.type != RoomType.ENTRANCE }
 
     /** The floor's rules; null on the entrance floor (no recorded maps). */
     private fun rules(): FloorRules? = FloorRules.of(DungeonUtils.floor?.floorNumber ?: 0)
@@ -243,15 +248,15 @@ object OdinMapPrediction {
             if (lastKey.isNotEmpty()) { lastKey = ""; generation.incrementAndGet(); session.cancel() }
             return
         }
-        if (System.currentTimeMillis() - loadedAt < LOAD_QUIET_MS) return
         // Odin fills rooms in from the map packets as they come; a read mid-change just waits for the next tick
         val v = try { view() } catch (_: ConcurrentModificationException) { null } ?: return
-        val key = v.key()
+        val live = started()
+        val key = v.key() + if (live) "" else "|quiet"
         if (key == lastKey) return
         lastKey = key
         val gen = generation.incrementAndGet()
         session.cancel()
-        val threads = threadsSetting.value.let { if (it <= 0) PredictionSession.autoThreads() else it }
+        val threads = if (!live) 1 else threadsSetting.value.let { if (it <= 0) PredictionSession.autoThreads() else it }
         val ahead = aheadSetting.value
         worker.execute {
             EngineerClient.safely("map prediction worker") {
@@ -280,6 +285,7 @@ object OdinMapPrediction {
     @JvmStatic
     /** Wither and blood doors the prediction is sure of between tiles the map hasn't shown; none while it's catching up. */
     fun certainDoors(): List<com.odtheking.odin.features.impl.dungeon.map.tile.DungeonDoor> {
+        if (!started()) return emptyList()
         val p = shown ?: return emptyList()
         if (shownKey != lastKey) return emptyList()
         return p.doors.filter { it.wither >= SURE || it.blood >= SURE }.map {
@@ -400,6 +406,7 @@ object OdinMapPrediction {
     @JvmStatic
     @JvmOverloads
     fun render(g: GuiGraphicsExtractor, lcm: Boolean = false): Boolean {
+        if (!off && !started()) return false
         this.lcm = lcm
         return try { draw(g) } catch (_: ConcurrentModificationException) { false }
     }
