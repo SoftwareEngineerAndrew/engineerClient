@@ -99,6 +99,7 @@ object EeHighlight : Module(
         }
         ClientTickEvents.END_CLIENT_TICK.register { EngineerClient.safely("ee highlight") { tick() } }
         HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "ee_highlight")) { gfx, _ ->
+            if (!enabled) return@attachElementBefore
             // The HUD is drawn under any open screen too, so this is also the behind-the-terminal draw.
             EngineerClient.safely("ee highlight draw") { draw(gfx) }
         }

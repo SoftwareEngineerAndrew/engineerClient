@@ -164,6 +164,7 @@ object Recore : Module(
     init {
         on<LevelEvent.Load> { reset() }
         HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "recore")) { gfx, _ ->
+            if (!enabled) return@attachElementBefore
             // The HUD is drawn under any open screen too, so this is also the behind-the-terminal draw.
             com.engineerclient.EngineerClient.safely("recore") { trackCore(); drawRecore(gfx) }
         }
