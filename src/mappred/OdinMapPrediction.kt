@@ -680,7 +680,7 @@ object OdinMapPrediction {
     private fun overlay(g: GuiGraphicsExtractor, x: Int, y: Int, split: Split?, chance: Float?, question: Boolean) {
         val label = split != null && splitText.value
         if (label) splitLabel(g, x, y, split!!) else if (question && !lcm) icon(g, x, y)
-        if (chance != null && (lcm || chances.value)) small(g, "${(chance * 100).roundToInt()}%", x + ROOM / 2, if (label || !lcm) y + 13 else y + 8, -1)
+        if (chance != null && chances.value) small(g, "${(chance * 100).roundToInt()}%", x + ROOM / 2, if (label || !lcm) y + 13 else y + 8, -1)
     }
 
     private fun icon(g: GuiGraphicsExtractor, x: Int, y: Int) {
