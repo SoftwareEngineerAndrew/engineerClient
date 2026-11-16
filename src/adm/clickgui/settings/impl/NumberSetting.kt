@@ -5,6 +5,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
 import com.mojang.blaze3d.platform.InputConstants
+import com.adm.clickgui.settings.SettingState
 import com.adm.clickgui.GuiTheme
 import com.adm.clickgui.settings.RenderableSetting
 import com.adm.clickgui.settings.Saving
@@ -55,7 +56,7 @@ class NumberSetting<E>(
     private val minimum = range.start
     private val maximum = range.endInclusive
 
-    private var current by mutableStateOf(default)
+    private var current by SettingState(default)
 
     override var value: E
         get() = current

@@ -1,9 +1,7 @@
 package com.adm.clickgui.settings.impl
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import com.adm.clickgui.settings.SettingState
 import com.adm.clickgui.settings.RenderableSetting
 import com.adm.clickgui.ui.Icon
 import com.adm.clickgui.ui.SettingRow
@@ -23,7 +21,7 @@ class DropdownSetting(
     desc: String
 ) : RenderableSetting<Boolean>(name, desc) {
 
-    override var value: Boolean by mutableStateOf(default)
+    override var value: Boolean by SettingState(default)
     private var enabled: Boolean by this::value
 
     @Composable

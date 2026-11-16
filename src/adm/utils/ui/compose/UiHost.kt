@@ -26,9 +26,14 @@ class UiHost(content: @Composable () -> Unit) {
     val dismissListeners = ArrayList<() -> Unit>()
 
     init {
-        scope.launch(start = CoroutineStart.UNDISPATCHED) { recomposer.runRecomposeAndApplyChanges() }
-        composition.setContent {
-            CompositionLocalProvider(LocalHost provides this, content = content)
+        composing++
+        try {
+            scope.launch(start = CoroutineStart.UNDISPATCHED) { recomposer.runRecomposeAndApplyChanges() }
+            composition.setContent {
+                CompositionLocalProvider(LocalHost provides this, content = content)
+            }
+        } finally {
+            composing--
         }
     }
 
@@ -36,11 +41,16 @@ class UiHost(content: @Composable () -> Unit) {
         Motion.frameNanos = System.nanoTime()
         Motion.settling = settling
 
-        Snapshot.sendApplyNotifications()
-        drain()
-        if (clock.hasAwaiters) {
-            clock.sendFrame(Motion.frameNanos)
+        composing++
+        try {
+            Snapshot.sendApplyNotifications()
             drain()
+            if (clock.hasAwaiters) {
+                clock.sendFrame(Motion.frameNanos)
+                drain()
+            }
+        } finally {
+            composing--
         }
 
         Pointer.x = mouseX
@@ -144,6 +154,12 @@ class UiHost(content: @Composable () -> Unit) {
 
     private fun drain() {
         while (true) (tasks.poll() ?: return).run()
+    }
+
+    companion object {
+        // Above 0 while a composition may run, the only time setting reads need to be tracked.
+        @JvmField
+        var composing = 0
     }
 
     private inner class RenderThread : CoroutineDispatcher() {

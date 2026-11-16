@@ -1,10 +1,8 @@
 package com.adm.clickgui.settings.impl
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.adm.clickgui.settings.SettingState
 import com.adm.AdmMod.mc
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
@@ -89,7 +87,7 @@ open class HudElement(
             py = value
             fy = screen()?.let { value.toDouble() / it.second } ?: Double.NaN
         }
-    var enabled: Boolean by mutableStateOf(enabled)
+    var enabled: Boolean by SettingState(enabled)
 
     var width: Int = 0
         private set

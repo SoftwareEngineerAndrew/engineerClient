@@ -1,12 +1,10 @@
 package com.adm.clickgui.settings.impl
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
+import com.adm.clickgui.settings.SettingState
 import com.adm.clickgui.settings.RenderableSetting
 import com.adm.clickgui.settings.Saving
 import com.adm.clickgui.ui.SettingRow
@@ -18,7 +16,7 @@ class BooleanSetting(
     desc: String,
 ) : RenderableSetting<Boolean>(name, desc), Saving {
 
-    override var value: Boolean by mutableStateOf(default)
+    override var value: Boolean by SettingState(default)
     var enabled: Boolean by this::value
 
     @Composable

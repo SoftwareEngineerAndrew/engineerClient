@@ -1,7 +1,9 @@
 package com.adm.clickgui.settings
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import com.adm.features.Module
+import com.adm.utils.ui.compose.UiHost
 import kotlin.properties.PropertyDelegateProvider
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
@@ -25,6 +27,20 @@ abstract class Setting<T>(
 
     override operator fun setValue(thisRef: Module, property: KProperty<*>, value: T) {
         this.value = value
+    }
+}
+
+// Game code reads the plain field (no snapshot lookup); only composition reads the state, so the GUI still recomposes on changes.
+class SettingState<T>(initial: T) : ReadWriteProperty<Any?, T> {
+    @Volatile
+    private var plain = initial
+    private val state = mutableStateOf(initial)
+
+    override fun getValue(thisRef: Any?, property: KProperty<*>): T = if (UiHost.composing > 0) state.value else plain
+
+    override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
+        plain = value
+        state.value = value
     }
 }
 

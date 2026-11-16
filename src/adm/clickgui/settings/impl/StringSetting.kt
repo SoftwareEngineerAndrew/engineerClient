@@ -1,12 +1,10 @@
 package com.adm.clickgui.settings.impl
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
+import com.adm.clickgui.settings.SettingState
 import com.adm.clickgui.GuiTheme
 import com.adm.clickgui.settings.RenderableSetting
 import com.adm.clickgui.settings.Saving
@@ -24,7 +22,7 @@ class StringSetting(
     private val placeholder: String
 ) : RenderableSetting<String>(name, desc), Saving {
 
-    private var text by mutableStateOf(default)
+    private var text by SettingState(default)
 
     override var value: String
         get() = text

@@ -4,6 +4,7 @@ import androidx.compose.runtime.*
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.mojang.blaze3d.platform.InputConstants
+import com.adm.clickgui.settings.SettingState
 import com.adm.clickgui.GuiTheme
 import com.adm.clickgui.settings.RenderableSetting
 import com.adm.clickgui.settings.Saving
@@ -29,7 +30,7 @@ class ColorSetting(
     private val startExpanded: Boolean = false
 ) : RenderableSetting<Color>(name, desc), Saving {
 
-    override var value: Color by mutableStateOf(default.copy())
+    override var value: Color by SettingState(default.copy())
 
     private val hexLength = if (allowAlpha) 8 else 6
 

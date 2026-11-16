@@ -1,9 +1,7 @@
 package com.adm.features
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import com.mojang.blaze3d.platform.InputConstants
+import com.adm.clickgui.settings.SettingState
 import com.adm.AdmMod
 import com.adm.clickgui.HudLayer
 import com.adm.clickgui.settings.AlwaysActive
@@ -49,7 +47,7 @@ abstract class Module(
      * When true, it is registered to the [EventBus].
      * When false, it is unregistered, unless the module has the [AlwaysActive] annotation.
      */
-    var enabled: Boolean by mutableStateOf(toggled)
+    var enabled: Boolean by SettingState(toggled)
         private set
 
     protected inline val mc get() = AdmMod.mc

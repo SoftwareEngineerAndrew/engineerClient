@@ -4,6 +4,7 @@ import androidx.compose.runtime.*
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
+import com.adm.clickgui.settings.SettingState
 import com.adm.clickgui.GuiTheme
 import com.adm.clickgui.settings.RenderableSetting
 import com.adm.clickgui.settings.Saving
@@ -25,7 +26,7 @@ class SelectorSetting<E : Enum<E>>(
     val options: List<E> = default.declaringJavaClass.enumConstants.asList()
 ) : RenderableSetting<E>(name, desc), Saving {
 
-    override var value: E by mutableStateOf(default)
+    override var value: E by SettingState(default)
 
     fun cycle() {
         value = options[(options.indexOf(value) + 1) % options.size]
