@@ -4,6 +4,7 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.events.RenderExtractEvent
 import com.adm.events.core.on
 import com.adm.features.Module
+import com.adm.utils.NameMemo
 import com.adm.utils.render.drawText
 import com.adm.utils.render.BoxBatch
 import com.adm.utils.render.drawBoxes
@@ -28,13 +29,14 @@ object Highlight : Module(
     private val dungeonMobSpawns = hashSetOf("Lurker", "Dreadlord", "Souleater", "Zombie", "Skeleton", "Skeletor", "Sniper", "Super Archer", "Spider", "Fels", "Withermancer", "Lost Adventurer", "Angry Archaeologist", "Frozen Adventurer")
     // https://regex101.com/r/QQf502/2
     private val starredRegex = Regex("^.*✯ .*\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?.?❤$")
+    private val nonStarred = NameMemo { name -> name.string.let { s -> dungeonMobSpawns.any { it in s } && !starredRegex.matches(s) } }
 
     /** Only not drawn: removing the tag would also lose a ✯ it gets later, and the mob highlight finds mobs by their tags. */
     @JvmStatic
     fun hidesTag(entity: Entity): Boolean {
         if (!enabled || !hideNonNames || entity !is ArmorStand || !entity.isInvisible || !DungeonUtils.inClear) return false
-        val name = entity.name.string
-        return dungeonMobSpawns.any { it in name } && !starredRegex.matches(name)
+        val name = entity.customName ?: return false
+        return nonStarred[entity, name]
     }
 
     private fun teammates(): List<Pair<Player, DungeonPlayer>> {

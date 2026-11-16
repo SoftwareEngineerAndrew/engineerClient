@@ -273,10 +273,12 @@ object Visibility : Module(
     // "1,234", "✧1,234✧" and crits like "✯1,234✯", with Hypixel's separators and icons around them.
     private val DAMAGE = Regex("""^[^\p{L}]*\d[\d,.]*[kKmMbB]?[^\p{L}]*$""")
 
+    private val damageNames = com.adm.utils.NameMemo { name -> name.string.let { '❤' !in it && DAMAGE.matches(it) } }
+
     @JvmStatic fun hidesDamageNumber(entity: Entity): Boolean {
         if (!enabled || !hideDamageNumbers || entity !is net.minecraft.world.entity.decoration.ArmorStand || !entity.isInvisible) return false
-        val name = entity.customName?.string ?: return false
-        return '❤' !in name && DAMAGE.matches(name)
+        val name = entity.customName ?: return false
+        return damageNames[entity, name]
     }
     @JvmStatic fun lavaAsWater() = enabled && lavaAsWater
     private var lavaShown = false

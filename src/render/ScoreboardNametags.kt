@@ -3,7 +3,9 @@ package com.engineerclient.render
 import com.engineerclient.mixin.HudSidebarInvoker
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import com.adm.utils.NameMemo
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.Style
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.decoration.ArmorStand
@@ -32,6 +34,12 @@ object ScoreboardNametags {
     fun hidesMobDialogue(entity: Entity): Boolean {
         if (!enabled || !v.hideMobDialogue || entity !is ArmorStand || !DungeonUtils.inDungeons) return false
         val name = entity.customName ?: return false
+        return dialogue[entity, name]
+    }
+
+    private val dialogue = NameMemo(::isDialogue)
+
+    private fun isDialogue(name: Component): Boolean {
         val text = name.string
         if (text == "JERRY! RUN!" || text == "???") return true
         var style: Style? = null
