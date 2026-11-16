@@ -71,6 +71,7 @@
     "SignEnterMixin",
     "SsPracticeInputMixin",
     "BlockInstaclearMixin",
+    "IceFillEtherwarpMixin",
     "TerminalNumberMixin",
     "WandInputMixin",
     "WandScrollMixin",
