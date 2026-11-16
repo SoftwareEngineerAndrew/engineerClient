@@ -23,7 +23,7 @@ object BlazeSolver {
     private class BlazeTag(val entity: ArmorStand, val maxHealth: Int)
 
     private val blazes = ArrayList<BlazeTag>(10)
-    private val blazeHealthRegex = Regex("^\\[Lv+\\d+]  Blaze [\\d,]+/([\\d,]+)❤$")
+    private val blazeHealthRegex = Regex("^\\[Lv+\\d+]  Blaze [\\d,]+/([\\d,]+)❤$")
 
     inline val inBlazeRoom get() = DungeonUtils.currentRoomName.equalsOneOf("Lower Blaze", "Higher Blaze")
 
