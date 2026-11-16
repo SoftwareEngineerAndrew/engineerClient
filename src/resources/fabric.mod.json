@@ -7,16 +7,15 @@
   "authors": ["engineerandrew"],
   "license": "All-Rights-Reserved",
   "environment": "client",
-  "breaks": { "coffeeclient": "*", "devgineerclient": "*" },
+  "breaks": { "devgineerclient": "*" },
   "provides": ["odin"],
   "accessWidener": "odin.accesswidener",
-  "mixins": ["odin.mixins.json", "engineerclient.mixins.json", "engineerclient.odin.mixins.json", "engineerclient.sodium.mixins.json", "coffeeclient.mixins.json", "coffeeclient.odin.mixins.json", "devgineerclient.mixins.json", "devgineerclient.odin.mixins.json"],
+  "mixins": ["odin.mixins.json", "engineerclient.mixins.json", "engineerclient.odin.mixins.json", "engineerclient.sodium.mixins.json", "devgineerclient.mixins.json", "devgineerclient.odin.mixins.json"],
   "entrypoints": {
     "modmenu": ["com.odtheking.odin.clickgui.ModMenuIntegration"],
     "client": [
       { "adapter": "kotlin", "value": "com.odtheking.odin.OdinMod" },
       { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" },
-      { "adapter": "kotlin", "value": "com.coffeeclient.CoffeeClient" },
       { "adapter": "kotlin", "value": "com.devgineerclient.DevgineerClient" }
     ]
   },

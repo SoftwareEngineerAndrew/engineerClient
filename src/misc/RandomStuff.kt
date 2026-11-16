@@ -9,10 +9,8 @@ import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
 import com.odtheking.odin.features.Category
 import com.odtheking.odin.features.Module
-import com.engineerclient.terminals.sim.TermSimGUI
 import com.odtheking.odin.utils.sendCommand
 import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.engineerclient.terminals.TerminalUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.client.gui.screens.ConnectScreen
 import net.minecraft.client.multiplayer.ServerData
@@ -29,7 +27,6 @@ object RandomStuff : Module(
     description = "A collection of small unrelated QoL toggles.",
     key = null,
 ) {
-    private val termCursorReset by BooleanSetting("Force Cursor Reset", false, desc = "Opening a terminal always puts the cursor in the middle of the screen. On Linux (Xwayland) the game sometimes leaves it where it was; this moves it again. Terminals (and /termsim) only, no other menu.")
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
 
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", true, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
@@ -96,16 +93,6 @@ object RandomStuff : Module(
     fun signEnterFinishes(key: Int): Boolean =
         enabled && signEnterConfirms && LocationUtils.isInSkyblock &&
             (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER)
-
-    /** Force Cursor Reset: whether it is on at all; read by Coffee Client's CursorReset. */
-    fun forcesTermCursorReset(): Boolean = enabled && termCursorReset
-
-    /** Force Cursor Reset: on, and a terminal is open now. */
-    fun termCursorResetNow(): Boolean = forcesTermCursorReset() && inTerminal()
-
-    /** A live terminal (Odin tracks the open one) or a practice term sim. */
-    private fun inTerminal(): Boolean =
-        TerminalUtils.currentTerm != null || mc.gui.screen() is TermSimGUI
 
     init {
         on<MessageEvent.Chat> {

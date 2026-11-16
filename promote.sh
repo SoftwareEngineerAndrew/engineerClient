@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # promote.sh [-n] [-u soft|hard|now] "<commit message>": copies this repo's committed HEAD to the public
 # undonecoffee/adm as ADM (Advanced Dungeons Mod), without the extras that only ship in this dev build:
-#   src/coffee/   Coffee Client features   (+ src/resources/coffeeclient{,.odin}.mixins.json)
 #   src/dev/      Devgineer Client features (+ src/resources/devgineerclient.mixins.json)
 #   promote.sh    this script
 # fabric.mod.json loses their entrypoints, mixin configs and the "breaks" line. The result must
@@ -52,11 +51,11 @@ PREV_NOW="$(jq -r '.now // ""' "$PUB/.github/update.json" 2>/dev/null || true)"
 # Replace the public tree with the dev HEAD, then drop the extras and what only the dev repo needs (notes, tests, tools).
 git -C "$PUB" rm -rq --ignore-unmatch .
 git -C "$TEAM" archive HEAD | tar x -C "$PUB"
-rm -rf "$PUB/src/coffee" "$PUB/src/dev" "$PUB/promote.sh" \
+rm -rf "$PUB/src/dev" "$PUB/promote.sh" \
   "$PUB/docs" "$PUB/test" "$PUB/tools" \
-  "$PUB/src/resources/coffeeclient.mixins.json" "$PUB/src/resources/coffeeclient.odin.mixins.json" "$PUB/src/resources/devgineerclient.mixins.json" \
+  "$PUB/src/resources/devgineerclient.mixins.json" \
   "$PUB/src/resources/devgineerclient.odin.mixins.json" \
-  "$PUB/src/resources/rotation" "$PUB/src/resources/coffeeclient" \
+  "$PUB/src/resources/rotation" \
   "$PUB/src/resources/assets/engineerclient/dungeonpack/packs"/{layouts.json.gz,mobs.json.gz,doors.json.gz,runstate.json.gz,traps.json,secrets.json.gz}
 # POV Previews keeps the room pack (rooms.index.json.gz, rooms.blocks.bin), its shaders and posepov/.
 # Chunk Culling isn't finished: ADM leaves it out.
@@ -65,11 +64,11 @@ sed -i 's/, com\.engineerclient\.culling\.ChunkCulling//' "$PUB/src/EngineerClie
 
 FMJ="$PUB/src/resources/fabric.mod.json"
 sed -i -E \
-  -e 's/, "(coffeeclient|devgineerclient)(\.odin)?\.mixins\.json"//g' \
+  -e 's/, "devgineerclient(\.odin)?\.mixins\.json"//g' \
   -e 's/, "engineerclient\.sodium\.mixins\.json"//' \
-  -e '/"breaks": \{ "coffeeclient"/d' \
+  -e '/"breaks": \{ "devgineerclient"/d' \
   -e '/"preLaunch": \[/,/^    \],$/d' \
-  -e '/"value": "com\.(coffeeclient|devgineerclient)\./d' \
+  -e '/"value": "com\.devgineerclient\./d' \
   -e 's/("value": "com\.engineerclient\.EngineerClient" \}),$/\1/' \
   "$FMJ"
 jq -e . "$FMJ" >/dev/null || { echo "promote: fabric.mod.json is not valid JSON after stripping" >&2; exit 1; }
@@ -164,7 +163,7 @@ process.exit(bad ? 1 : 0);
 JS
 jq -e . "$FMJ" >/dev/null || { echo "promote: fabric.mod.json is not valid JSON after renaming" >&2; exit 1; }
 
-if grep -rniE 'coffeeclient|devgineerclient' "$PUB/src" "$PUB/build.gradle.kts"; then
+if grep -rniE 'devgineerclient' "$PUB/src" "$PUB/build.gradle.kts"; then
   echo "promote: the lines above still reference the extras" >&2; exit 1
 fi
 

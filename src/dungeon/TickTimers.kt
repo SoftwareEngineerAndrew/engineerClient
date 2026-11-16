@@ -378,7 +378,6 @@ object TickTimers : Module(
         maxorHealth = hp
     }
 
-    /** A local sound, so Coffee Client's Mute Completion Ding never touches it. */
     private fun sectionDing() {
         val at = TermInfo.sectionDoneAt
         if (at == dingedAt) return

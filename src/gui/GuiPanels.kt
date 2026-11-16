@@ -21,7 +21,7 @@ object Placement {
     /** Kept out of the panels; opened on their own instead. */
     val HIDDEN = setOf("POV Previews")
 
-    val PANELS = listOf("Dungeons", "Clear", "F7/M7 Boss", "Crimson Isle", "Skyblock", "Render", "AscentClient", "Coffee Client", "Devgineer Client")
+    val PANELS = listOf("Dungeons", "Clear", "F7/M7 Boss", "Crimson Isle", "Skyblock", "Render", "AscentClient", "Devgineer Client")
 
     /** Where a panel starts: six to a row. */
     fun home(name: String): Pair<Int, Int> {
@@ -30,11 +30,11 @@ object Placement {
     }
 
     private val lists = listOf(
-        "Dungeons" to listOf("Refill", "ADR", "Boss Bar", "Highlights", "Waypoints", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Timers2", "Leap Menu", "Blessing Display", "Dungeon Queue", "Pre-Requeue", "Lag Warning", "Croesus", "Box Iced Mobs", "Quiet Media", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay", "Livid Solver", "Maxor Crystals", "Spirit Bear", "Terracotta Timer"),
+        "Dungeons" to listOf("Refill", "ADR", "Boss Bar", "Highlights", "Waypoints", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Leap Menu", "Blessing Display", "Dungeon Queue", "Lag Warning", "Croesus", "Box Iced Mobs", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay", "Livid Solver", "Maxor Crystals", "Spirit Bear", "Terracotta Timer"),
         "Clear" to listOf("BR Roles", "Dungeon Map", "Clear Info", "Secrets", "Puzzles", "Door Highlight", "Block Instaclear", "Mimic", "Blood Camp"),
-        "F7/M7 Boss" to listOf("Terminals", "Devices", "EE Highlight", "Recore", "Tick Timers", "Melody Message", "Positional Messages", "Invincibility Timer", "Wither Dragons", "Relics", "Spring Boots", "Explosive Shot", "Agro Sphere", "Highlight Levers", "i4 Aim", "Term Info", "ADS", "Termsim"),
+        "F7/M7 Boss" to listOf("Terminals", "Devices", "EE Highlight", "Recore", "Tick Timers", "Melody Message", "Positional Messages", "Invincibility Timer", "Wither Dragons", "Relics", "Spring Boots", "Explosive Shot", "Agro Sphere", "i4 Aim", "ADS"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
-        "Skyblock" to listOf("Arrows", "Chat Commands", "Coffee Random Stuff", "Command Aliases", "Command Keybinds", "Enchant Colors", "Etherwarp", "Fast Launch", "Gyro Wand", "Item Protection", "Item Tweaks", "No Cursor Reset", "Player Display", "Ragnarock", "Random Stuff", "Sound Collector", "Sound Editor", "Menu Keybinds"),
+        "Skyblock" to listOf("Arrows", "Chat Commands", "Command Aliases", "Command Keybinds", "Enchant Colors", "Etherwarp", "Fast Launch", "Gyro Wand", "Item Protection", "Item Tweaks", "No Cursor Reset", "Player Display", "Ragnarock", "Random Stuff", "Sound Collector", "Menu Keybinds"),
         "Render" to listOf("Search Bar", "Slot Binds", "Sounds", "Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Performance", "Player Size", "Render Tweaks", "Scrollable Tooltip", "Visibility"),
     )
 
@@ -55,7 +55,7 @@ object Placement {
         // The addons' modules keep their own panel, named by the category each gives them.
         when (module.category.name) {
             "Ascent Client" -> return "AscentClient"
-            "Coffee Client", "Devgineer Client" -> return module.category.name
+            "Devgineer Client" -> return module.category.name
         }
         byName[module.name]?.let { return it }
         return when (module.category) {

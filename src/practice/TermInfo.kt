@@ -6,9 +6,6 @@ import com.odtheking.odin.events.TickEvent
 import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
 import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.render.text
-import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import java.util.Locale
 
@@ -16,30 +13,15 @@ import java.util.Locale
  * F7/M7 terminals (P3), ported from Devonian's Terminal Display, Terminal Hide Completion and its terminal section
  * tracking (Stages.TerminalSection). Not a module of its own any more; what it tracks shows in:
  *
- *  - Coffee Client's Term Info ([drawInfo]): the current section's progress, 3/7 (green once the gate is down), or
- *    in detail its terms, levers, device and gate.
  *  - Tick Timers' Section Time ([sectionTime]): when a section is done, how long it took, in purple, for a few seconds
  *    (server ticks). S1 runs from Goldor's first line, each next one from the last one's end.
  *  - Recore: told when S3 is done by this count ([Recore.s3Done]) and when the sim starts ([Recore.simStart]).
- *  - Term Info's Completion Titles ([isCompletionTitle]) and Role Times ([sectionNumber], [deviceDone]).
+ *  - Term Progress ([deviceDone]) and Positional Messages ([sectionNumber]).
  *
  * Terminals run from Goldor's first line (or the first task message) to "The Core entrance is
  * opening!". Chat and titles are read straight off the network.
  */
 object TermInfo {
-    /** The Term Info lines (Coffee Client's Term Info HUD): [simple] just the total. */
-    fun drawInfo(g: GuiGraphicsExtractor, example: Boolean, simple: Boolean): Pair<Int, Int> {
-        if (example) return lines(g, if (simple) listOf("§c2/7") else listOf("§eTerms: 3/4", "§aLevers: 2/2", "§aDevice: §l✔", "§cGate: §l✘"))
-        val s = current() ?: return 0 to 0
-        return lines(g, if (simple) listOf("${if (s.gateDestroyed) "§a" else "§c"}${s.termsDone + s.leversDone + (if (s.deviceDone) 1 else 0)}/${s.terms + 3}")
-        else listOf(
-            "${colourFor(s.termsDone, s.terms)}Terms: ${s.termsDone}/${s.terms}",
-            "${colourFor(s.leversDone, 2)}Levers: ${s.leversDone}/2",
-            if (s.deviceDone) "§aDevice: §l✔" else "§cDevice: §l✘",
-            if (s.gateDestroyed) "§aGate: §l✔" else "§cGate: §l✘",
-        ))
-    }
-
     /** The last section's time while it's up ([seconds] after it's done), else null. None in a P3 Sim practice (its Practice Time HUD is the clock). */
     fun sectionTime(seconds: Double): String? {
         if (com.engineerclient.p3sim.P3Sim.inSim && com.engineerclient.p3sim.Practice.active) return null
@@ -55,8 +37,6 @@ object TermInfo {
     private const val CORE_OPEN = "The Core entrance is opening!"
     private const val GATE = "The gate has been destroyed!"
     private val TASK = Regex("^(\\w+) (?:activated|completed) a (terminal|lever|device)! \\((\\d)/\\d\\)$")
-    private val GATE_CORE_TITLE = Regex("gate (?:has been )?destroyed|core entrance is opening", RegexOption.IGNORE_CASE)
-    private val TITLE = Regex("^(\\w{1,16}) (?:activated a (?:terminal|lever)|completed a device)! \\(\\d+/\\d+\\)$")
 
     private class Section(val terms: Int, val number: Int) {
         var termsDone = 0
@@ -78,7 +58,7 @@ object TermInfo {
 
     private fun current() = simSection() ?: if (com.engineerclient.p3sim.P3Sim.localSim) null else sections.getOrNull(active)
 
-    /** The section being done (1-4), or null outside P3 (Coffee Client's Role Times). */
+    /** The section being done (1-4), or null outside P3. */
     fun sectionNumber(): Int? = current()?.number
 
     /** The section's tasks done and needed (terms, levers and device), or null outside P3. */
@@ -104,13 +84,6 @@ object TermInfo {
             deviceDone = st.any { it.kind == com.engineerclient.p3sim.Station.Kind.DEVICE && it.done }
             gateDestroyed = n == 4 || g.gateIsDown(n)
         }
-    }
-
-    private fun colourFor(n: Int, max: Int) = when (n) { max -> "§a"; 0 -> "§c"; else -> "§e" }
-
-    private fun lines(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
-        lines.forEachIndexed { i, l -> gfx.text(l, 0, i * 10, Colors.WHITE, shadow = true) }
-        return (lines.maxOfOrNull { mc.font.width(it) } ?: 0) to lines.size * 10
     }
 
     private fun reset() {
@@ -288,17 +261,5 @@ object TermInfo {
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) { take(this) }
         onReceive<net.minecraft.network.protocol.game.ClientboundOpenScreenPacket>(priority = 1000, ignoreCancelled = true) { TerminalHitboxes.opened(title.string) }
         EventBus.subscribe(this)
-    }
-
-    /**
-     * Whether a title or subtitle is a terminal one: "X activated a terminal! (3/7)" and the like while
-     * terminals run (or in the P3 sim), the gate destroyed and core entrance opening ones whenever. For
-     * Term Info's Completion Titles.
-     */
-    fun isCompletionTitle(raw: String): Boolean {
-        val text = raw.replace(CONTROL_CODES, "")
-        // The gate and core titles: by their text, whenever (the core one comes as terminals end).
-        if (GATE_CORE_TITLE.containsMatchIn(text)) return true
-        return (active in 0..3 || simSection() != null) && TITLE.matches(text)
     }
 }

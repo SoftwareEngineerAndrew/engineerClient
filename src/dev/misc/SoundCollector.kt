@@ -28,8 +28,7 @@ object SoundCollector : Module(
     private val names = ArrayList<String>()
     private val hidden = HashSet<Int>()
     /**
-     * The mute list (/sound <number> a), by name, kept in config/devgineerclient/muted-sounds.txt: Coffee Client's Sound Editor,
-     * while on, stops these sounds from playing at all.
+     * The mute list (/sound <number> a), by name, kept in config/devgineerclient/muted-sounds.txt.
      */
     private val mutedFile by lazy { DevgineerClient.mc.gameDirectory.toPath().resolve("config/devgineerclient/muted-sounds.txt") }
     @Volatile private var muted: Set<String> = emptySet()

@@ -15,9 +15,6 @@ object TermTitles {
     private val titleRegex = Regex("^(.{1,16}) (activated|completed) a (terminal|lever|device)! \\((\\d+)/(\\d+)\\)$")
     private val colorCode = Regex("&([0-9A-FK-ORa-fk-or])")
 
-    /** Titles is on: Coffee Client's Term Info clears what this puts up for titles it hides. */
-    @JvmStatic val on get() = Terminals.titlesOn
-
     fun install() {
         onReceive<ClientboundSetTitleTextPacket> { it.handle(text.string) }
         onReceive<ClientboundSetSubtitleTextPacket> { it.handle(text.string) }
