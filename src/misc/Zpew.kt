@@ -241,6 +241,21 @@ object Zpew {
         return DungeonScan.rooms.any { room -> test(room) && room.tiles.any { it.data in tiles } }
     }
 
+    /** Where a right click with the held AOTE, AOTV or wither blade would blink you, or null when it doesn't. */
+    fun blinkLanding(): Vec3? {
+        val p = mc.player ?: return null
+        val stack = p.mainHandItem
+        if (p.isShiftKeyDown && stack.isEtherwarpItem() != null) return null
+        val id = stack.itemId
+        val distance = when {
+            id == "ASPECT_OF_THE_END" || id == "ASPECT_OF_THE_VOID" -> 8 + stack.customData.getInt("tuned_transmission").orElse(0)
+            id in WITHER_BLADES && stack.customData.getListOrEmpty("ability_scroll").size == 3 -> 10
+            else -> return null
+        }
+        val c = Click(false, p.yRot, p.xRot, p.isShiftKeyDown, distance.toDouble(), id in WITHER_BLADES, p.pose == Pose.SWIMMING)
+        return land(doubleArrayOf(p.x, p.y, p.z), c)?.let { Vec3(it[0], it[1], it[2]) }
+    }
+
     /** The click as the server will cast it, or null when it isn't a teleport we show. */
     private fun click(packet: ServerboundUseItemPacket): Click? {
         val p = mc.player ?: return null

@@ -18,6 +18,7 @@ import net.minecraft.resources.Identifier
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.Vec3
 import kotlin.math.abs
+import com.engineerclient.misc.Zpew
 
 object IceFillSolver {
 
@@ -68,11 +69,11 @@ object IceFillSolver {
         val room = iceFillRoom() ?: return false
         val player = mc.player ?: return false
         val level = mc.level ?: return false
-        val data = player.mainHandItem.isEtherwarpItem() ?: return false
-        if (!player.isShiftKeyDown && data.itemId != "ETHERWARP_CONDUIT") return false
-
-        val ether = Etherwarp.getEtherPos(player.position(), Etherwarp.getEtherwarpDistance(data), etherWarp = true)
-        val target = ether.pos?.takeIf { ether.succeeded } ?: return false
+        val data = player.mainHandItem.isEtherwarpItem()?.takeIf { player.isShiftKeyDown || it.itemId == "ETHERWARP_CONDUIT" }
+        val target = if (data != null) {
+            val ether = Etherwarp.getEtherPos(player.position(), Etherwarp.getEtherwarpDistance(data), etherWarp = true)
+            ether.pos?.takeIf { ether.succeeded } ?: return false
+        } else Zpew.blinkLanding()?.let { BlockPos.containing(it.x, it.y - 1, it.z) } ?: return false
         val floor = floorOf(room, target) ?: return false
 
         val reason = when (level.getBlockState(target).block) {
@@ -84,7 +85,7 @@ object IceFillSolver {
         PuzzleSolvers.blocked()
         if (System.currentTimeMillis() - lastAlert > 1000) {
             lastAlert = System.currentTimeMillis()
-            modMessage("§cBlocked etherwarp: $reason")
+            modMessage("§cBlocked ${if (data != null) "etherwarp" else "teleport"}: $reason")
         }
         return true
     }

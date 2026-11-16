@@ -44,8 +44,8 @@ object PuzzleSolvers : Module(
     private val iceFillSolver by BooleanSetting("Ice Fill Solver", true, desc = "Solver for the ice fill puzzle.").withDependency { iceFillDropDown }
     private val iceFillColor by ColorSetting("Ice Fill Color", Colors.MINECRAFT_LIGHT_PURPLE, true, desc = "Color for the ice fill solver.").withDependency { iceFillSolver && iceFillDropDown }
     private val useOptimizedPatterns by BooleanSetting("Use Optimized Patterns", false, desc = "Use optimized patterns for the ice fill solver.").withDependency { iceFillSolver && iceFillDropDown }
-    val iceFillBlockPacked by BooleanSetting("Block Etherwarp On Packed Ice", true, desc = "Blocks etherwarping onto packed ice while its floor isn't done.").withDependency { iceFillDropDown }
-    val iceFillBlockBreak by BooleanSetting("Block Breaking Etherwarps", true, desc = "Blocks etherwarps that would drop the floor.").withDependency { iceFillDropDown }
+    val iceFillBlockPacked by BooleanSetting("Block Etherwarp On Packed Ice", true, desc = "Blocks etherwarps and teleports onto packed ice while its floor isn't done.").withDependency { iceFillDropDown }
+    val iceFillBlockBreak by BooleanSetting("Block Breaking Etherwarps", true, desc = "Blocks etherwarps and teleports that would drop the floor.").withDependency { iceFillDropDown }
     private val iceFillReset by ActionSetting("Reset Ice Fill", desc = "Resets the solver.") { IceFillSolver.reset() }.withDependency { iceFillSolver && iceFillDropDown }
 
     private val blazeDropDown by DropdownSetting("Blaze", desc = "Shows settings for the Blaze puzzle solver.")
