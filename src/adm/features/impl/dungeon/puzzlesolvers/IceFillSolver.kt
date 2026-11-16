@@ -17,6 +17,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.resources.Identifier
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.Vec3
+import kotlin.math.abs
 
 object IceFillSolver {
 
@@ -26,7 +27,6 @@ object IceFillSolver {
     private val floorCells: List<Set<BlockPos>> = listOf(Triple(14, 7, 3), Triple(13, 12, 5), Triple(12, 19, 7)).mapIndexed { i, (x0, z0, w) ->
         buildSet { for (x in x0 until x0 + w) for (z in z0 until z0 + w) add(BlockPos(x, 69 + i, z)); add(BlockPos(15, 69 + i, z0 + w)) }
     }
-    private val startCells = listOf(BlockPos(15, 69, 7), BlockPos(15, 70, 12), BlockPos(15, 71, 19))
     private val heads = arrayOfNulls<BlockPos>(3)
     private var lastAlert = 0L
 
@@ -89,19 +89,15 @@ object IceFillSolver {
         return true
     }
 
-    // The floor is checked once a server tick: a cell left before it packs is never stepped on, so the warp reads as a skip or diagonal.
+    // A warp from off the centre of the block you stand on reads as a skip or diagonal.
     private fun breaksFloor(room: DungeonRoom, floor: Int, target: BlockPos): Boolean {
         val player = mc.player ?: return false
         val level = mc.level ?: return false
         val stand = BlockPos.containing(player.x, player.y - 1, player.z)
         val onFloor = floorOf(room, stand) == floor
-        val head = heads[floor] ?: stand.takeIf { onFloor && level.getBlockState(it).block == Blocks.PACKED_ICE }
-        if (head == null) {
-            if (floorCells[floor].any { level.getBlockState(room.getRealCoords(it)).block == Blocks.PACKED_ICE }) return false
-            return room.getRelativeCoords(target) != startCells[floor]
-        }
-        if (onFloor && stand != head) return true
-        return target.distManhattan(head) != 1
+        val head = heads[floor] ?: stand.takeIf { onFloor && level.getBlockState(it).block == Blocks.PACKED_ICE } ?: return false
+        if (onFloor && (abs(player.x - stand.x - 0.5) > 0.05 || abs(player.z - stand.z - 0.5) > 0.05)) return true
+        return target.distManhattan(if (onFloor) stand else head) != 1
     }
 
     private fun isDone(room: DungeonRoom, floor: Int): Boolean {
