@@ -67,7 +67,7 @@ object DungeonScan {
         on<RoomEnterEvent> { room?.let { updateViewableDoors() } }
         on<MapUpdateEvent> { updateViewableDoors() }
 
-        listOf(WorldScan, MapScan, SpecialColumn).forEach { EventBus.subscribe(it) }
+        listOf(WorldScan, MapScan, SpecialColumn, DoorScan).forEach { EventBus.subscribe(it) }
     }
 
     private fun reset() {
