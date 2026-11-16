@@ -167,13 +167,13 @@ object LeapMenu : Module(
             CustomGUIImpl.HandlerSet(enabled = { currentLeapScreen() != null || (pending != null && isLeapScreen(mc.gui.screen())) },
             click = fun ScreenEvent.MouseClick.(): Any {
                 val screen = currentLeapScreen() ?: return false
-                if (onRelease || pending != null) return true
+                if (onRelease || busy()) return true
                 triggerMouseQuadrant(screen, click.x().toInt(), click.y().toInt())
                 return true
             },
             release = fun ScreenEvent.MouseRelease.(): Any {
                 val screen = currentLeapScreen() ?: return false
-                if (!onRelease || pending != null) return true
+                if (!onRelease || busy()) return true
                 triggerMouseQuadrant(screen, click.x().toInt(), click.y().toInt())
                 return true
             },
@@ -185,7 +185,7 @@ object LeapMenu : Module(
                 if (pressed !in keybindList) return false
 
                 currentLeapScreen() ?: return false
-                if (pending != null) return true
+                if (busy()) return true
 
                 val index = if (keybindType == KeybindMode.CORNERS) keybindList.indexOf(pressed)
                 else DungeonClass.entries.find { clazz -> clazz.ordinal == keybindList.indexOf(pressed) }
@@ -200,8 +200,12 @@ object LeapMenu : Module(
                 return true
             },
             render = fun ScreenEvent.Render.(): Any {
-                // the server's menu for a leap already picked: clicked as soon as its heads are in, never shown
-                if (pending != null) { tryClick(); return true }
+                // the server's menu for a leap already picked: clicked as soon as its heads are in, never shown;
+                // one more after the click, from a use before it, is closed
+                if (pending != null && screen !is LeapScreen && (clickedAt == 0L || usedAt == 0L)) {
+                    if (clickedAt != 0L) mc.player?.closeContainer() else tryClick()
+                    return true
+                }
                 if (dismissed && screen is AbstractContainerScreen<*>) { dismissed = false; mc.player?.closeContainer(); return true }
                 drawMenu(guiGraphics, mouseX, mouseY)
                 return true
@@ -249,10 +253,13 @@ object LeapMenu : Module(
         on<LevelEvent.Load> { clear(); usedAt = 0L; dismissed = false }
     }
 
+    /** The server's menu that's open is for a leap already clicked: nothing in it to pick. */
+    private fun busy() = pending != null && clickedAt != 0L && usedAt == 0L && mc.gui.screen() !is LeapScreen
+
     /** The leap used: our menu up at once, unless something else is open or there's no one to leap to. */
     private fun open(itemId: String) {
         if (!enabled || !instant || itemId !in LEAPS || !DungeonUtils.inDungeons) return
-        if (mc.gui.screen() != null || pending != null) return
+        if (mc.gui.screen() != null) return
         if (leapTeammates.isEmpty() || leapTeammates.all { it == EMPTY }) return
         usedAt = System.currentTimeMillis()
         dismissed = false
