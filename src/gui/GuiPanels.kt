@@ -30,7 +30,7 @@ object Placement {
     }
 
     private val lists = listOf(
-        "Dungeons" to listOf("Refill", "ADR", "Boss Bar", "Highlights", "Waypoints", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Splits", "Sub Splits", "All Sub Splits", "Leap Menu", "Blessing Display", "Dungeon Queue", "Lag Warning", "Croesus", "Box Iced Mobs", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay", "Livid Solver", "Maxor Crystals", "Spirit Bear", "Terracotta Timer"),
+        "Dungeons" to listOf("Leap Menu", "Splits", "Sub Splits", "Highlights", "Waypoints", "Better Party Finder", "Refill", "Mage Beam", "Dungeonbreaker", "Boss Bar", "Lag Warning", "Dungeon Queue", "Spirit Bear", "Livid Solver", "Terracotta Timer", "Blessing Display", "Salvage Overlay", "Croesus", "ADR", "All Sub Splits", "Maxor Crystals", "Better Recorder", "Dungeon Recorder", "Boss Recorder"),
         "Clear" to listOf("BR Roles", "Dungeon Map", "Clear Info", "Secrets", "Puzzles", "Door Highlight", "Block Instaclear", "Mimic", "Blood Camp"),
         "F7/M7 Boss" to listOf("Terminals", "Devices", "EE Highlight", "Recore", "Tick Timers", "Melody Message", "Positional Messages", "Invincibility Timer", "Wither Dragons", "Relics", "Spring Boots", "Explosive Shot", "Agro Sphere", "i4 Aim", "ADS"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
@@ -41,7 +41,7 @@ object Placement {
     private val byName: Map<String, String> = lists.flatMap { (panel, names) -> names.map { it to panel } }.toMap()
 
     /** Panels listed in their own order rather than widest name first. */
-    private val ORDERED = setOf("Clear", "F7/M7 Boss", "Skyblock", "Render")
+    private val ORDERED = setOf("Dungeons", "Clear", "F7/M7 Boss", "Skyblock", "Render")
 
     /** Where [module] sits in its panel: its place in an ordered panel's list (unlisted last), else 0 (widest name first decides). */
     fun rank(module: Module): Int {
