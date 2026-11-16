@@ -79,6 +79,7 @@ object DungeonQueue : Module(
     private const val MORT = "[NPC] Mort: Here, I found this map when I first entered the dungeon."
     private val TIME_PART = Regex("""(\d+)([hms])""")
     private val SECONDS = Regex("""(\d{1,3})\s*s(?:ec|econds?)?\b""")
+    private val PB_TIME = Regex("""^\s*(\d{1,2}):([0-5]\d)\s*$""")
 
     private val enterRegex = Regex("^-*\\n\\[[^]]+] (\\w+) entered (?:MM )?\\w+ Catacombs, Floor (\\w+)!\\n-*$")
     private val timeoutExeceptionRegex = Regex("^Exception Connecting:ReadTimeoutException : null$")
@@ -241,7 +242,7 @@ object DungeonQueue : Module(
     }
 
     private fun parse(s: String): Int? {
-        val m = Regex("""^\s*(\d{1,2}):([0-5]\d)\s*$""").find(s) ?: return null
+        val m = PB_TIME.find(s) ?: return null
         return m.groupValues[1].toInt() * 60 + m.groupValues[2].toInt()
     }
 
