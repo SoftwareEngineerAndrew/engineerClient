@@ -4,6 +4,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.adm.clickgui.settings.SettingState
 import com.adm.AdmMod.mc
+import com.mojang.blaze3d.platform.Window
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 open class HudElement(
@@ -60,32 +61,45 @@ open class HudElement(
         x = cx; y = cy
     }
 
-    private fun screen(): Pair<Int, Int>? = runCatching { mc.window.guiScaledWidth to mc.window.guiScaledHeight }.getOrNull()?.takeIf { it.first > 0 && it.second > 0 }
+    // 0 until the window exists and has a size.
+    private fun screenWidth(): Int {
+        val window: Window = mc.window ?: return 0
+        return if (window.guiScaledWidth > 0 && window.guiScaledHeight > 0) window.guiScaledWidth else 0
+    }
+
+    private fun screenHeight(): Int {
+        val window: Window = mc.window ?: return 0
+        return if (window.guiScaledWidth > 0 && window.guiScaledHeight > 0) window.guiScaledHeight else 0
+    }
 
     var x: Int
         get() {
             parent()?.let { p -> return guarded { p.x } + lx }
-            val (w, _) = screen() ?: return px
+            val w = screenWidth()
+            if (w == 0) return px
             if (fx.isNaN()) fx = px.toDouble() / w
             return Math.round(fx * w).toInt()
         }
         set(value) {
             parent()?.let { p -> lx = value - guarded { p.x }; return }
             px = value
-            fx = screen()?.let { value.toDouble() / it.first } ?: Double.NaN
+            val w = screenWidth()
+            fx = if (w == 0) Double.NaN else value.toDouble() / w
         }
 
     var y: Int
         get() {
             parent()?.let { p -> return guarded { p.y } + ly }
-            val (_, h) = screen() ?: return py
+            val h = screenHeight()
+            if (h == 0) return py
             if (fy.isNaN()) fy = py.toDouble() / h
             return Math.round(fy * h).toInt()
         }
         set(value) {
             parent()?.let { p -> ly = value - guarded { p.y }; return }
             py = value
-            fy = screen()?.let { value.toDouble() / it.second } ?: Double.NaN
+            val h = screenHeight()
+            fy = if (h == 0) Double.NaN else value.toDouble() / h
         }
     var enabled: Boolean by SettingState(enabled)
 
@@ -114,7 +128,8 @@ open class HudElement(
 
     /** Whether the HUD's middle is in the screen's middle third. */
     fun inMiddle(): Boolean {
-        val w = screen()?.first ?: return false
+        val w = screenWidth()
+        if (w == 0) return false
         val mid = x + scaledWidth / 2
         return mid > w / 3 && mid < w * 2 / 3
     }
