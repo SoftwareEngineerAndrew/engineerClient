@@ -455,7 +455,10 @@ object OdinMapPrediction {
             greyRoom(g, room.tiles)
         }
         for (t in 0 until W * W) {
-            if (known[t] || exact[t] || t in blood) continue
+            if (known[t] || t in blood) continue
+            // a door the guess up doesn't know yet: the plain "?" at once, the guess when it's worked out
+            if (stale && t in hints && t !in splits) { plainTile(g, t); continue }
+            if (exact[t]) continue
             val probs = p.probs[t]?.let(::kept)
             if (probs == null || v.roomAt[t] >= 0) {
                 if (t in hints) plainTile(g, t)
