@@ -2,6 +2,7 @@ package com.engineerclient.render
 
 import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.events.EntityEvent
+import com.adm.utils.FormatCache
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.core.on
@@ -73,7 +74,7 @@ object BossBar : Module(
         if (!enabled) return
         val progress = event.progress
         val text = (if (shown == Shown.HEALTH) health(progress) else null)
-            ?: String.format(Locale.ROOT, "%.1f%%", progress * 100f)
+            ?: percent(progress.toDouble())
         val w = mc.font.width(text)
         g.text(mc.font, text, x + (BAR_WIDTH - w) / 2, y - 1, -1, true)
     }
@@ -86,8 +87,11 @@ object BossBar : Module(
             .filterIsInstance<LivingEntity>()
             .filter { it !is Player && it.isAlive && it.maxHealth > 40f && abs(it.health / it.maxHealth - progress) < 0.01f }
             .minByOrNull { it.distanceToSqr(me) } ?: return null
-        return "${format(boss.health)}/${format(boss.maxHealth)}"
+        return "${amount(boss.health.toDouble())}/${amount(boss.maxHealth.toDouble())}"
     }
+
+    private val percent = FormatCache(1) { String.format(Locale.ROOT, "%.1f%%", it.toFloat() * 100f) }
+    private val amount = FormatCache { format(it.toFloat()) }
 
     private fun format(v: Float): String = when {
         v >= 1e9 -> String.format(Locale.ROOT, "%.1fB", v / 1e9)
