@@ -177,7 +177,12 @@ object OdinMapPrediction {
         worker.execute { session.clear() }
         shown = null; shownView = null; shownNames = null; shownKey = ""; lastKey = ""
         pathDoors.clear()
+        loadedAt = System.currentTimeMillis()
     }
+
+    /** When the world last loaded: the game is busy loading it for a few seconds, guessing waits. */
+    private var loadedAt = 0L
+    private const val LOAD_QUIET_MS = 6000L
 
     /** The floor's rules; null on the entrance floor (no recorded maps). */
     private fun rules(): FloorRules? = FloorRules.of(DungeonUtils.floor?.floorNumber ?: 0)
@@ -238,6 +243,7 @@ object OdinMapPrediction {
             if (lastKey.isNotEmpty()) { lastKey = ""; generation.incrementAndGet(); session.cancel() }
             return
         }
+        if (System.currentTimeMillis() - loadedAt < LOAD_QUIET_MS) return
         // Odin fills rooms in from the map packets as they come; a read mid-change just waits for the next tick
         val v = try { view() } catch (_: ConcurrentModificationException) { null } ?: return
         val key = v.key()
