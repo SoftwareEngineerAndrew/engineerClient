@@ -48,11 +48,11 @@ import kotlin.math.abs
 object SecretWaypoints {
     private val dropdown = DropdownSetting("Waypoints", desc = "Boxes every secret in the clear.")
     private val show = BooleanSetting("Secret Waypoints", false, desc = "Boxes every secret in the clear.").withDependency { dropdown.value }
-    private val chestColor = ColorSetting("Chest Color", Color(255, 170, 0), true, desc = "Chests.").withDependency { dropdown.value && show.value }
-    private val itemColor = ColorSetting("Item Color", Color(85, 85, 255), true, desc = "Items.").withDependency { dropdown.value && show.value }
-    private val essenceColor = ColorSetting("Essence Color", Color(170, 0, 170), true, desc = "Wither essence.").withDependency { dropdown.value && show.value }
-    private val batColor = ColorSetting("Bat Color", Color(85, 255, 85), true, desc = "Bats.").withDependency { dropdown.value && show.value }
-    private val keyColor = ColorSetting("Redstone Key Color", Color(255, 85, 85), true, desc = "Redstone Key spots.").withDependency { dropdown.value && show.value }
+    private val chestColor = ColorSetting("Chest Color", Color(0, 255, 0), true, desc = "Chests.").withDependency { dropdown.value && show.value }
+    private val itemColor = ColorSetting("Item Color", Color(0, 0, 255), true, desc = "Items.").withDependency { dropdown.value && show.value }
+    private val essenceColor = ColorSetting("Essence Color", Color(255, 0, 255), true, desc = "Wither essence.").withDependency { dropdown.value && show.value }
+    private val batColor = ColorSetting("Bat Color", Color(0, 255, 150), true, desc = "Bats.").withDependency { dropdown.value && show.value }
+    private val keyColor = ColorSetting("Redstone Key Color", Color(255, 0, 0), true, desc = "Redstone Key spots.").withDependency { dropdown.value && show.value }
     private val leverColor = ColorSetting("Lever Color", Color(255, 255, 85), true, desc = "Levers.").withDependency { dropdown.value && show.value }
     private val text = BooleanSetting("Secret Text", false, desc = "Names each secret.").withDependency { dropdown.value && show.value }
     private val hideCollected = BooleanSetting("Hide Collected", true, desc = "Removes a secret once it is taken.").withDependency { dropdown.value && show.value }

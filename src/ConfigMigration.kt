@@ -1824,6 +1824,18 @@ object ConfigMigration {
 
 
 
+        // Secret waypoint colours still on the old defaults take Devonian's.
+        if (Files.exists(odinFile)) run {
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val s = module(odin, "Secrets")?.let(::settings) ?: return@run
+            var moved = false
+            for ((key, old, new) in listOf(Triple("Chest Color", "#FFAA00FF", "#00FF00FF"), Triple("Item Color", "#5555FFFF", "#0000FFFF"),
+                    Triple("Essence Color", "#AA00AAFF", "#FF00FFFF"), Triple("Bat Color", "#55FF55FF", "#00FF96FF"), Triple("Redstone Key Color", "#FF5555FF", "#FF0000FF"))) {
+                if (s[key]?.takeIf { it.isJsonPrimitive }?.asString.equals(old, true)) { s.addProperty(key, new); moved = true }
+            }
+            if (moved) write(odinFile, odin)
+        }
+
         if (changed) {
 
             Files.createDirectories(file.parent)
