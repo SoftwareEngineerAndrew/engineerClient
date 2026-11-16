@@ -30,11 +30,11 @@ object Placement {
     }
 
     private val lists = listOf(
-        "Dungeons" to listOf("Leap Menu", "Splits", "Sub Splits", "Highlights", "Waypoints", "Better Party Finder", "Refill", "Mage Beam", "Dungeonbreaker", "Boss Bar", "Lag Warning", "Dungeon Queue", "Spirit Bear", "Livid Solver", "Terracotta Timer", "Blessing Display", "Salvage Overlay", "Croesus", "ADR", "All Sub Splits", "Maxor Crystals", "Better Recorder", "Dungeon Recorder", "Boss Recorder"),
+        "Dungeons" to listOf("Leap Menu", "Splits", "Sub Splits", "Highlights", "Waypoints", "Better Party Finder", "Refill", "Mage Beam", "Dungeonbreaker", "Boss Bar", "Dungeon Queue", "Spirit Bear", "Livid Solver", "Terracotta Timer", "Blessing Display", "Salvage Overlay", "Croesus", "ADR", "All Sub Splits", "Maxor Crystals", "Better Recorder", "Dungeon Recorder", "Boss Recorder"),
         "Clear" to listOf("BR Roles", "Dungeon Map", "Clear Info", "Secrets", "Puzzles", "Door Highlight", "Block Instaclear", "Mimic", "Blood Camp"),
         "F7/M7 Boss" to listOf("Terminals", "Devices", "EE Highlight", "Recore", "Tick Timers", "Melody Message", "Positional Messages", "Invincibility Timer", "Wither Dragons", "Relics", "Spring Boots", "Explosive Shot", "Agro Sphere", "i4 Aim", "ADS"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
-        "Skyblock" to listOf("Etherwarp", "Command Keybinds", "Command Aliases", "LD WD Pet Keybinds", "Item Tweaks", "Item Protection", "Ragnarock", "Gyro Wand", "Player Display", "Arrows", "Random Stuff", "Enchant Colors", "No Cursor Reset", "Chat Commands", "Fast Launch", "Sound Collector"),
+        "Skyblock" to listOf("Etherwarp", "Lag Warning", "Command Keybinds", "Command Aliases", "LD WD Pet Keybinds", "Item Tweaks", "Item Protection", "Ragnarock", "Gyro Wand", "Player Display", "Arrows", "Random Stuff", "Enchant Colors", "Chat Commands", "Fast Launch", "Sound Collector"),
         "Render" to listOf("Visibility", "Sounds", "Camera", "Item Animations", "Chunk Culling", "Performance", "Player Size", "Search Bar", "Slot Binds", "Block Overlay", "Colors", "Click GUI", "Render Tweaks", "Scrollable Tooltip"),
     )
 
