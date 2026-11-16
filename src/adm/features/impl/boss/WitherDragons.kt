@@ -11,7 +11,8 @@ import com.adm.features.Module
 import com.adm.utils.*
 import com.adm.utils.render.drawText
 import com.adm.utils.render.drawTracer
-import com.adm.utils.render.drawWireFrameBox
+import com.adm.utils.render.BoxBatch
+import com.adm.utils.render.drawBoxes
 import com.adm.utils.render.textDim
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.M7Phases
@@ -53,6 +54,8 @@ object WitherDragons : Module(
 
     val dragonPBs = PersonalBest(this, "DragonPBs")
 
+    private val boxes = BoxBatch()
+
     init {
         onReceive<ClientboundLevelParticlesPacket> {
             if (DungeonUtils.getF7Phase() == M7Phases.P5) handleSpawnPacket(this)
@@ -86,13 +89,14 @@ object WitherDragons : Module(
         on<RenderExtractEvent> {
             if (DungeonUtils.getF7Phase() != M7Phases.P5) return@on
 
-            WitherDragonsEnum.entries.forEach { dragon ->
-                if (dragonHealth) {
-                    DragonCheck.dragonHealthMap.toList().forEach { (_, data) ->
-                        if (data.second > 0) drawText(colorHealth(data.second), data.first.renderPos, 5f, false)
-                    }
+            if (dragonHealth) {
+                DragonCheck.dragonHealthMap.toList().forEach { (_, data) ->
+                    if (data.second > 0) drawText(colorHealth(data.second), data.first.renderPos, 5f, false)
                 }
+            }
 
+            boxes.clear()
+            WitherDragonsEnum.entries.forEach { dragon ->
                 if (dragonTimer && dragon.timeToSpawn > 0) {
                     drawText(
                         "§${dragon.colorCode}${dragon.name.first()}: ${getDragonTimer(dragon.timeToSpawn)}",
@@ -101,8 +105,9 @@ object WitherDragons : Module(
                 }
 
                 if (dragonBoxes && dragon.state != WitherDragonState.DEAD)
-                    drawWireFrameBox(dragon.aabbDimensions, dragon.color, depth = true)
+                    boxes.outline(dragon.aabbDimensions, dragon.color, depth = true)
             }
+            drawBoxes(boxes)
 
             priorityDragon?.let { dragon ->
                 if (dragonTracers && dragon.state == WitherDragonState.SPAWNING)
