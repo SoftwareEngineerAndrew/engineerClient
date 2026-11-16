@@ -42,7 +42,7 @@ object LaunchStats {
     fun install() {
         playtimeMs = runCatching { Files.readString(file).trim().toLong() }.getOrDefault(0L)
         ClientTickEvents.END_CLIENT_TICK.register { runCatching { count() } }
-        ClientLifecycleEvents.CLIENT_STOPPING.register { save() }
+        ClientLifecycleEvents.CLIENT_STOPPING.register { DiskWrites.writeNow(saver()) }
         // Started: ADM has read every module's settings by now.
         ClientLifecycleEvents.CLIENT_STARTED.register { runCatching { send() } }
     }
@@ -51,12 +51,18 @@ object LaunchStats {
         val now = System.currentTimeMillis()
         if (lastTick != 0L) (now - lastTick).takeIf { it in 1..MAX_GAP_MS }?.let { playtimeMs += it }
         lastTick = now
-        if (now - lastSave >= SAVE_EVERY_MS) { lastSave = now; save() }
+        if (now - lastSave >= SAVE_EVERY_MS) { lastSave = now; DiskWrites.write(saver()) }
     }
 
-    private fun save() = runCatching {
-        Files.createDirectories(file.parent)
-        Files.writeString(file, playtimeMs.toString())
+    private fun saver(): () -> Unit {
+        val path = file
+        val text = playtimeMs.toString()
+        return {
+            runCatching {
+                Files.createDirectories(path.parent)
+                Files.writeString(path, text)
+            }
+        }
     }
 
     private fun report(): JsonObject {
