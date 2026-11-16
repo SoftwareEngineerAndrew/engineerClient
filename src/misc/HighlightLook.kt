@@ -13,6 +13,7 @@ import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.Highlight
 import com.adm.utils.Color
+import com.adm.utils.NameMemo
 import com.adm.utils.render.drawFilledBox
 import com.adm.utils.render.drawWireFrameBox
 import com.adm.utils.renderBoundingBox
@@ -20,6 +21,7 @@ import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.world.entity.LivingEntity
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet
 import kotlin.math.abs
 import net.minecraft.world.effect.MobEffects
 import net.minecraft.world.entity.Entity
@@ -81,6 +83,9 @@ object HighlightLook {
     /** Each found mob's tag: a mob that unloads frees its tag, so the pair is matched again when they load back in. */
     private val tagOf = HashMap<Int, Int>()
     private val pending = HashMap<Int, Pair<ArmorStand, Kind>>()
+    // Tags the rescan just found no mob for: nothing moves before match() runs, so it would find none either.
+    private val missed = IntOpenHashSet()
+    private var rescanning = false
 
     private val mc: Minecraft get() = Minecraft.getInstance()
 
@@ -92,6 +97,9 @@ object HighlightLook {
         TANKS.any { it in name } -> Kind.TANK
         else -> Kind.STAR
     }
+
+    private val kinds = NameMemo { kindOf(it.string) }
+    private val withermancers = NameMemo { "withermancer" in it.string.lowercase() }
 
     private fun isShadowAssassin(p: Player): Boolean =
         p.uuid.version() == 2 && p.mainHandItem.customName?.string == "Silent Death" &&
@@ -123,10 +131,13 @@ object HighlightLook {
         when (e) {
             is ArmorStand -> {
                 if (e.id in claimedTags) return
-                val kind = e.customName?.string?.let(::kindOf)
+                val kind = e.customName?.let { kinds[e, it] }
                 if (kind == null) { pending.remove(e.id); return }
                 val mob = mc.level?.let { mobUnder(it, e, offsetOf(e, kind)) }
-                if (mob == null) pending[e.id] = e to kind else { claim(e, mob, kind); pending.remove(e.id) }
+                if (mob == null) {
+                    pending[e.id] = e to kind
+                    if (rescanning) missed.add(e.id)
+                } else { claim(e, mob, kind); pending.remove(e.id) }
             }
             is Player -> if (isShadowAssassin(e)) found[e.id] = e to Kind.ASSASSIN
             is Bat -> if (DungeonUtils.inClear && e.health in BAT_HEALTHS) found[e.id] = e to Kind.BAT
@@ -135,7 +146,7 @@ object HighlightLook {
         }
     }
 
-    private fun offsetOf(tag: ArmorStand, kind: Kind) = if (kind == Kind.TANK && "withermancer" in (tag.customName?.string ?: "").lowercase()) 3 else 1
+    private fun offsetOf(tag: ArmorStand, kind: Kind) = if (kind == Kind.TANK && tag.customName?.let { withermancers[tag, it] } == true) 3 else 1
 
     private fun claim(tag: ArmorStand, mob: Entity, kind: Kind) {
         claimedTags += tag.id
@@ -156,6 +167,7 @@ object HighlightLook {
         while (it.hasNext()) {
             val (tag, kind) = it.next()
             if (tag.isRemoved) { it.remove(); continue }
+            if (tag.id in missed) continue
             val mob = mobUnder(level, tag, offsetOf(tag, kind)) ?: continue
             claim(tag, mob, kind)
             it.remove()
@@ -172,8 +184,12 @@ object HighlightLook {
         var ticks = 0
         on<TickEvent.End> {
             if (!active()) return@on
-            if (++ticks % 5 == 0) mc.level?.entitiesForRendering()?.forEach(::consider)
+            if (++ticks % 5 == 0) {
+                rescanning = true
+                try { mc.level?.entitiesForRendering()?.forEach(::consider) } finally { rescanning = false }
+            }
             if (pending.isNotEmpty() || found.isNotEmpty()) match()
+            missed.clear()
         }
         on<EntityEvent.Add> { if (active()) consider(entity) }
         on<EntityEvent.SetData> { if (active()) consider(entity) }
