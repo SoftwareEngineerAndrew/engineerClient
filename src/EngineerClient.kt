@@ -105,13 +105,13 @@ object EngineerClient : ClientModInitializer {
         val firstRun = EcConfig.load()
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { _, _, _ -> EcConfig.migrateRoleBindings() }
 
-        // Register our own module into Odin's module system: own ClickGUI panel
-        // ("Engineer Client"), own config file (config/odin/addons/engineerclient.json), own event
-        // subscription lifecycle. This is Odin's documented addon path.
+        // Register our own module into ADM's module system: own ClickGUI panel
+        // ("Engineer Client"), own config file (config/core/addons/engineerclient.json), own event
+        // subscription lifecycle. This is ADM's documented addon path.
         ModuleManager.registerModules(ModuleConfig("engineerclient.json"), *MODULES.toTypedArray())
         safely("subscribe enabled") { subscribeEnabled(MODULES) }
 
-        // Additions to Odin's own modules (e.g. the Engineer Splits look on Odin's Splits) go in
+        // Additions to ADM's own modules (e.g. the Engineer Splits look on ADM's Splits) go in
         // before anything saves the configs, which would drop saved values for settings that don't
         // exist yet.
         safely("ss solver") { com.engineerclient.practice.SimonSaysTracker.install() }
@@ -123,12 +123,12 @@ object EngineerClient : ClientModInitializer {
         safely("secret counter") { com.engineerclient.dungeon.SecretCounter.install() }
         safely("ss alerts") { com.engineerclient.misc.SimonSaysAlerts.install() }
         safely("custom keybinds") { com.engineerclient.misc.CustomKeybinds.install() }
-        safely("odin link") { com.engineerclient.party.OdinLink.install() }
+        safely("core link") { com.engineerclient.party.OdinLink.install() }
         safely("splits look") { SplitsLook.install() }
         safely("sub splits tracking") { com.engineerclient.splits.DungeonSplits.install() }
         safely("term info") { com.engineerclient.practice.TermInfo.init() }
-        // Room Prediction and LCM Style (with LCM Colors): settings on Odin's own Dungeon Map
-        // (from Ascent Client, same names, so saved values carry over); Odin's configs are read again so they apply
+        // Room Prediction and LCM Style (with LCM Colors): settings on ADM's own Dungeon Map
+        // (from Ascent Client, same names, so saved values carry over); ADM's configs are read again so they apply
         // (reading never writes the file).
         safely("lcm style") { com.engineerclient.lcm.LcmStyle.install() }
         // Read on the first dungeon otherwise, on the render thread.
@@ -138,7 +138,7 @@ object EngineerClient : ClientModInitializer {
         safely("map icons") { com.engineerclient.mapicons.MapIcons.install() }
         safely("map sizes") { com.engineerclient.mapicons.MapSizes.install() }
         safely("map layout") { com.engineerclient.mapicons.MapLayout.install() }
-        // Team TP Maze: settings on Odin's Puzzle Solvers (its TP Maze), the party's shared maze map over Odin's websocket.
+        // Team TP Maze: settings on ADM's Puzzle Solvers (its TP Maze), the party's shared maze map over ADM's websocket.
         safely("team tp maze") { com.engineerclient.tpmaze.TeamTpMaze.install() }
         safely("water board") { com.engineerclient.waterboard.WaterBoardSolver.install() }
         safely("tic tac toe") { com.engineerclient.dungeon.TicTacToeSolver.install() }
@@ -170,11 +170,11 @@ object EngineerClient : ClientModInitializer {
             ModuleManager.saveConfigurations()
         }
 
-        // Odin's event bus: world load resets class detection.
+        // ADM's event bus: world load resets class detection.
         on<LevelEvent.Load> { safely("levelLoad") { ClassDetect.reset() } }
         EventBus.subscribe(this)
 
-        // Own-class poll: once a second is plenty; Odin keeps the teammate list fresh from packets.
+        // Own-class poll: once a second is plenty; ADM keeps the teammate list fresh from packets.
         ClientTickEvents.END_CLIENT_TICK.register {
             if (++tickCounter % 20 == 0) safely("classPoll") { ClassDetect.poll() }
             if (!windowKept) safely("window") { keepWindowUp() }
@@ -203,20 +203,20 @@ object EngineerClient : ClientModInitializer {
     }
 
     /**
-     * Subscribes those of [modules] that are on to Odin's event bus. Odin subscribes a module only when it's toggled on
+     * Subscribes those of [modules] that are on to ADM's event bus. ADM subscribes a module only when it's toggled on
      * (onEnable) or always active: one made with `toggled = true` starts on but unsubscribed, and a config load toggles
      * only a module whose saved state differs, so with "enabled" saved it stays that way for good. On in the ClickGUI,
      * yet every `on<...>` / `onReceive<...>` of its is never called until it's turned off and on again (Terminal Hitboxes'
-     * boxes, EE Highlight's Show Spots, Term Progress's labels; 2026-11-07, Odin 0.4.0). Call right after
+     * boxes, EE Highlight's Show Spots, Term Progress's labels; 2026-11-07, ADM 0.4.0). Call right after
      * registerModules: a later config load that turns one off then unsubscribes it as usual. Subscribing twice is nothing.
      */
     fun subscribeEnabled(modules: Iterable<com.adm.features.Module>) {
         val fixed = modules.filter { it.enabled && !it.alwaysActive && it !in EventBus.activeSubscribers }
         for (m in fixed) EventBus.subscribe(m)
-        if (fixed.isNotEmpty()) logger.info("[ec] on but left off Odin's event bus, subscribed: ${fixed.joinToString { it.name }}")
+        if (fixed.isNotEmpty()) logger.info("[ec] on but left off ADM's event bus, subscribed: ${fixed.joinToString { it.name }}")
     }
 
-    /** Every handler that runs inside Odin's bus or a coroutine must not be able to take Odin down with it. */
+    /** Every handler that runs inside ADM's bus or a coroutine must not be able to take ADM down with it. */
     inline fun safely(what: String, block: () -> Unit) {
         try {
             block()
@@ -255,7 +255,7 @@ object EngineerClient : ClientModInitializer {
         "§f /adm log§7 [mark <note>] — the session log; §f/adm memreport",
     )
 
-    private val OD = Regex("""^(?i)(od|odin)(\s+|$)""")
+    private val OD = Regex("""^(?i)(od|core)(\s+|$)""")
     private val FLOOR = Regex("""^(?i)(e|[fm][1-7])$""")
 
     /** A saved command written for /od: the same under /adm, floors as /f7. */
@@ -297,13 +297,13 @@ object EngineerClient : ClientModInitializer {
                 .executes { mc.schedule { type.simulator().open(com.engineerclient.terminals.Terminals.simPing.toLong()) }; 1 }
                 .then(sim { type.simulator().open(it) }))
             dispatcher.register(termsim)
-            // /adm on its own: the settings menu; Odin's commands live under it too.
+            // /adm on its own: the settings menu; ADM's commands live under it too.
             // Same tree under every alias (Brigadier literals are case-sensitive). Built fresh per
             // name — a bare redirect would not run the root executes on the alias itself.
-            val odin = com.mojang.brigadier.CommandDispatcher<net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource>()
+            val core = com.mojang.brigadier.CommandDispatcher<net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource>()
                 .also { com.adm.commands.mainCommand.register(it) }.root.getChild("adm").children
             for (name in COMMANDS) dispatcher.register(
-                literal(name).apply { odin.forEach { then(it) } }
+                literal(name).apply { core.forEach { then(it) } }
                     .executes { mc.schedule { mc.setScreenAndShow(com.engineerclient.gui.AdmClickGui) }; 1 }
                     .then(literal("keybinds").executes {
                         mc.schedule { com.engineerclient.gui.AdmClickGui.open(com.adm.features.impl.skyblock.CommandKeybinds) }
@@ -346,7 +346,7 @@ object EngineerClient : ClientModInitializer {
     }
 }
 
-/** A selector's place in its option list (Odin's selectors hold the enum constant); setting it wraps around. */
+/** A selector's place in its option list (ADM's selectors hold the enum constant); setting it wraps around. */
 var <E : Enum<E>> com.adm.clickgui.settings.impl.SelectorSetting<E>.index: Int
     get() = options.indexOf(value)
     set(i) { value = options[Math.floorMod(i, options.size)] }

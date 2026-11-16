@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Odin is told it is in F7's boss in the P3 Sim world, so its splits and terminal times would save
+ * ADM is told it is in F7's boss in the P3 Sim world, so its splits and terminal times would save
  * the sim's times as real personal bests. They still show there; they are never stored.
  */
 @Pseudo

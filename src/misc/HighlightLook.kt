@@ -34,7 +34,7 @@ import net.minecraft.world.item.Items
 import net.minecraft.world.phys.AABB
 
 /**
- * Blade Addons' Mob Highlight, as the only mob highlight: it lives in Odin's Highlight module, saved with it. Each kind
+ * ADM's Mob Highlight, as the only mob highlight: it lives in ADM's Highlight module, saved with it. Each kind
  * in its own colour, filled, outlined or both: starred mobs, tanks, minibosses, Fels, Shadow Assassins, secret
  * bats and boss withers. A mob is found from its name tag: by entity id first (the mob is spawned just before its tag, one
  * id less, three for a Withermancer), checked to stand under the tag, else the nearest mob under it. Boxes are depth tested,
@@ -163,7 +163,7 @@ object HighlightLook {
         found.entries.removeIf { (id, v) -> (!v.first.isAlive || v.first.isRemoved).also { if (it) unclaim(id, v.first) } }
     }
 
-    /** Adds the settings to Odin's Highlight; before SplitsLook.install, which re-reads Odin's config. */
+    /** Adds the settings to ADM's Highlight; before SplitsLook.install, which re-reads ADM's config. */
     fun install() {
         val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth, starWidth) + colours.values.flatMap { listOf(it.fill, it.outline) }
         for (s in all) Highlight.registerSetting(s)

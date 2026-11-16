@@ -37,7 +37,7 @@ object MelodyMessage : Module(
     private val melodyProgress by BooleanSetting("Melody Progress", false, desc = "Tells the party about melody terminal progress.")
     private val melodySendCoords by BooleanSetting("Melody Send Coords", false, desc = "Sends the coordinates of the melody terminal.").withDependency { melodyProgress }
 
-    private val melodyGui by HUD("Progress GUI", "Shows a gui with the progress of broadcasting odin users in melody.", true) {
+    private val melodyGui by HUD("Progress GUI", "Shows a gui with the progress of broadcasting core users in melody.", true) {
         var rows = 0
         var labelWidth = 0
 

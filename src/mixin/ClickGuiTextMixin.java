@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 /**
- * Random Stuff's Click GUI Size, text side: Odin's menu draws with the pixel font, and at a size that
+ * Random Stuff's Click GUI Size, text side: ADM's menu draws with the pixel font, and at a size that
  * isn't a whole number (1.5) each font pixel lands on 1 or 2 screen pixels, so letters come out
  * uneven. In the menu, text at such a scale is sampled bilinearly instead - even and slightly soft,
  * like a smooth font. Whole-number scales and everything outside the menu keep the crisp sampler.

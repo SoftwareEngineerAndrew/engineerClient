@@ -7,7 +7,7 @@ import kotlin.math.hypot
 import kotlin.math.sin
 
 /**
- * The Teleport Maze's pads in the room's own frame: Odin's pad order and its relative coordinates (TPMazeSolver's list), so a pad's
+ * The Teleport Maze's pads in the room's own frame: ADM's pad order and its relative coordinates (TPMazeSolver's list), so a pad's
  * number is the same on every client however the room is turned. 28 pads in seven cells of four, then the end pad (28) and the
  * start pad (29). A pad drops you on the middle of the far corner of its 2x2 slab patch, its landing cell.
  *
@@ -293,7 +293,7 @@ object MazePlan {
 }
 
 /**
- * The room's frame against the world's, from where Odin puts three of the room's blocks (relative (0, 0), (1, 0) and (0, 1)):
+ * The room's frame against the world's, from where ADM puts three of the room's blocks (relative (0, 0), (1, 0) and (0, 1)):
  * positions and yaws both ways. [ox], [oz]: the world block of relative (0, 0); ([axX], [axZ]) and ([azX], [azZ]): the world step
  * of one block along the room's x and z. A block's middle maps to a block's middle.
  */
@@ -314,7 +314,7 @@ class RoomFrame(private val ox: Int, private val oz: Int, private val axX: Int, 
         return Math.toDegrees(atan2(-(dx * axX + dz * axZ), dx * azX + dz * azZ))
     }
 
-    /** The same room (Odin found the same corner and turn). */
+    /** The same room (ADM found the same corner and turn). */
     fun sameAs(o: RoomFrame) = ox == o.ox && oz == o.oz && axX == o.axX && axZ == o.axZ && azX == o.azX && azZ == o.azZ
 
     /** The room's block (0, 0) in the world: what teammates' messages are checked against. */

@@ -62,7 +62,7 @@ object P3Sim : Module(
     enum class MaskOption { SPIRIT, BONZO }
 
     // Kept as objects (not delegates) so the sim's own menu can change them.
-    val classS = +SelectorSetting("Your Class", ClassOption.ARCHER, desc = "Your dungeon class (Odin's party list and leap menu). The four bots are the other classes. What you do in P3 is the menu's Plan tab.")
+    val classS = +SelectorSetting("Your Class", ClassOption.ARCHER, desc = "Your dungeon class (ADM's party list and leap menu). The four bots are the other classes. What you do in P3 is the menu's Plan tab.")
     val speedS = +NumberSetting("Speed", 500, 100..750, 10, desc = "Your Skyblock speed without Black Cat. Black Cat adds 100 (and 100 to the speed cap), so 450 is 550 with it out, as in recorded P3 starts (1.55 blocks a tick sprinting); Phoenix out has no Black Cat bonus.")
     val botsS = +BooleanSetting("Party Bots", true, desc = "The rest of the party's terminals, levers, devices and gates are always done at the plan's times; on, four bots show it (a late one is put on its job). Off: nobody's shown, the plan still runs.")
     val deathTicksS = +SelectorSetting("Death Ticks", DeathTickOption.MASKS, desc = "Goldor's death tick (every 60 ticks, hits anyone in a section ahead): Warn only says so; Masks uses your Spirit Mask, Bonzo's Mask and Phoenix as Hypixel does, and with none left you die (back to the section's start).")
@@ -128,7 +128,7 @@ object P3Sim : Module(
     }
 
     init {
-        // Shown by default (Odin starts a toggleable HUD hidden); a saved config still decides.
+        // Shown by default (ADM starts a toggleable HUD hidden); a saved config still decides.
         practiceHud.enabled = true; practiceTimeHud.enabled = true; practiceStartHud.enabled = true
     }
 
@@ -276,7 +276,7 @@ object P3Sim : Module(
             // /pos: where you stand and look (and the block you look at), copied, to set spots from.
             dispatcher.register(ClientCommands.literal("pos").executes { pos(); 1 })
         }
-        // Odin scans a room once, when its centre chunk loads, and queues every chunk that loads before it believes it is in a dungeon (and never
+        // ADM scans a room once, when its centre chunk loads, and queues every chunk that loads before it believes it is in a dungeon (and never
         // flushes the queue, since the sim posts no location change). So the area and floor are set at join, before the first chunk packet.
         EngineerClient.safely("ads join hook") {
             net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { _, _, _ ->
@@ -284,7 +284,7 @@ object P3Sim : Module(
             }
         }
         ClientTickEvents.START_CLIENT_TICK.register {
-            // Each on its own: Odin drift breaking the bridge must not stop the party's hello and roster.
+            // Each on its own: ADM drift breaking the bridge must not stop the party's hello and roster.
             EngineerClient.safely("p3sim bridge") { bridge() }
             EngineerClient.safely("p3sim client items") { SimItems.clientTick() }
             EngineerClient.safely("p3sim party client") { PartyClient.tick() }
@@ -353,13 +353,13 @@ object P3Sim : Module(
         if (inSim) mc.execute { mc.gui.setScreen(SimRestartScreen()) } else SimWorld.open()
     }
 
-    // ------------------------------------------------------------------ Odin
+    // ------------------------------------------------------------------ ADM
 
     private var bridged = false
 
     /**
-     * Tells Odin it is in F7's boss with a party of five, every tick while in the sim (Odin clears
-     * it all on each world load). Odin's dungeon features (terminal solver, leap menu, Simon Says,
+     * Tells ADM it is in F7's boss with a party of five, every tick while in the sim (ADM clears
+     * it all on each world load). ADM's dungeon features (terminal solver, leap menu, Simon Says,
      * splits...) then work in the sim as they do on Hypixel.
      */
     private fun bridge() {
@@ -392,7 +392,7 @@ object P3Sim : Module(
             val others = team.filter { it.name != me }
             DungeonListener.dungeonTeammates = team
             DungeonListener.dungeonTeammatesNoSelf = others
-            // Odin's leap menu quadrants in the plan's leap slot order (slot 1 = top left ... 4 = bottom right).
+            // ADM's leap menu quadrants in the plan's leap slot order (slot 1 = top left ... 4 = bottom right).
             DungeonListener.leapTeammates = others
         }
     }
@@ -410,7 +410,7 @@ object P3Sim : Module(
         setArea(Island.Unknown)
     }
 
-    // Resolved once: if Odin renames them, the bridge stays off instead of failing every tick.
+    // Resolved once: if ADM renames them, the bridge stays off instead of failing every tick.
     private val areaField = runCatching { LocationUtils::class.java.getDeclaredField("currentArea").apply { isAccessible = true } }.getOrNull()
     private val skyblockField = runCatching { LocationUtils::class.java.getDeclaredField("isInSkyblock").apply { isAccessible = true } }.getOrNull()
 
@@ -418,7 +418,7 @@ object P3Sim : Module(
         val areaField = areaField ?: return
         val skyblockField = skyblockField ?: return
         if (LocationUtils.currentArea != area) areaField.set(null, area)
-        // SinglePlayer (the clear of a full run) counts as SkyBlock too: it is the dungeon as far as Odin's gates go.
+        // SinglePlayer (the clear of a full run) counts as SkyBlock too: it is the dungeon as far as ADM's gates go.
         val skyblock = area == Island.Dungeon || area == Island.SinglePlayer
         if (skyblockField.getBoolean(null) != skyblock) skyblockField.setBoolean(null, skyblock)
     }

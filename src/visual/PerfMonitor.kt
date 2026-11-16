@@ -222,7 +222,7 @@ object PerfMonitor {
         if (pkg.size > 2 && pkg[0] == "com" && pkg[1].endsWith("client")) return pkg[1].removeSuffix("client") + "/" + pkg[2]
         if (infra.any { cls.startsWith(it) }) return null
         return when {
-            cls.startsWith("com.odtheking.") -> "Odin"
+            cls.startsWith("com.odtheking.") -> "ADM"
             cls.startsWith("net.caffeinemc.") -> "Sodium"
             else -> cls.split('.').let { if (it.size > 3) it.take(3).joinToString(".") else it.dropLast(1).joinToString(".") }
         }

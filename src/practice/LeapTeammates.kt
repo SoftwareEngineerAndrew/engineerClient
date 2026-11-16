@@ -4,7 +4,7 @@ import com.adm.utils.skyblock.dungeon.DungeonPlayer
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.world.entity.Entity
 
-/** Finding the teammates in Odin's Leap Menu in the world, for the leap highlights (Recore, EE Highlight). */
+/** Finding the teammates in ADM's Leap Menu in the world, for the leap highlights (Recore, EE Highlight). */
 internal object LeapTeammates {
     private val CONTROL_CODES = Regex("§.")
 

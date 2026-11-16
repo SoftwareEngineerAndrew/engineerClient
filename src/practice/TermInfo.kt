@@ -10,7 +10,7 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import java.util.Locale
 
 /**
- * F7/M7 terminals (P3), ported from Devonian's Terminal Display, Terminal Hide Completion and its terminal section
+ * F7/M7 terminals (P3), ported from ADM's Terminal Display, Terminal Hide Completion and its terminal section
  * tracking (Stages.TerminalSection). Not a module of its own any more; what it tracks shows in:
  *
  *  - Tick Timers' Section Time ([sectionTime]): when a section is done, how long it took, in purple, for a few seconds
@@ -51,7 +51,7 @@ object TermInfo {
     private val sections = listOf(Section(4, 1), Section(5, 2), Section(4, 3), Section(4, 4))
     /** The section being done (0-3); -1 outside terminals, 4 once S4 is done. */
     @Volatile private var active = -1
-    /** Odin's server ticks, counted here; a section's time is in these, so server lag doesn't count. */
+    /** ADM's server ticks, counted here; a section's time is in these, so server lag doesn't count. */
     @Volatile private var serverTicks = 0
     @Volatile private var sectionStart = 0
     @Volatile private var shownTime: Pair<String, Long>? = null
@@ -64,7 +64,7 @@ object TermInfo {
     /** The section's tasks done and needed (terms, levers and device), or null outside P3. */
     fun sectionProgress(): Pair<Int, Int>? = current()?.let { it.termsDone + it.leversDone + (if (it.deviceDone) 1 else 0) to it.terms + 3 }
 
-    /** Section [n]'s device (1 is Simon Says, 4 is i4) counted done, as Devonian counts it - early ones too (Role Times). */
+    /** Section [n]'s device (1 is Simon Says, 4 is i4) counted done, as ADM counts it - early ones too (Role Times). */
     fun deviceDone(n: Int): Boolean = sections.getOrNull(n - 1)?.deviceDone == true
 
     /**
@@ -149,7 +149,7 @@ object TermInfo {
         return if (active in 0..3) active + 1 else 0
     }
 
-    /** Devonian's TerminalSection.onChat, for the active section only. */
+    /** ADM's TerminalSection.onChat, for the active section only. */
     private fun onTaskChat(msg: String) {
         val cur = current() ?: return
         if (msg == GATE) cur.gateDestroyed = true
@@ -201,8 +201,8 @@ object TermInfo {
 
     /**
      * Every inbound packet, first of all mods (TerminalTapMixin, priority 1, read-only), on the network thread.
-     * blade-addons' Terminal Timestamps cancels each task line and each section's first gate line in channelRead0
-     * ahead of Odin's hook (and posts its own copy into the chat window), so Odin's event never fires for them and
+     * other mods' Terminal Timestamps cancels each task line and each section's first gate line in channelRead0
+     * ahead of ADM's hook (and posts its own copy into the chat window), so ADM's event never fires for them and
      * the count would stay at S1. Hypixel also sends a completion inside a bundle with its sound and title, which is
      * opened here by hand.
      */
@@ -221,7 +221,7 @@ object TermInfo {
         }
     }
 
-    /** Chat packets already read, by identity: [tap] and Odin's event can both deliver one. */
+    /** Chat packets already read, by identity: [tap] and ADM's event can both deliver one. */
     private val seenChat: MutableSet<ClientboundSystemChatPacket> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())
     private val seenChatOrder = ArrayDeque<ClientboundSystemChatPacket>()
 
@@ -257,7 +257,7 @@ object TermInfo {
         on<LevelEvent.Load> { reset(); shownTime = null }
         on<TickEvent.Server> { serverTicks++ }
 
-        // The second path to [take] ([tap] is the first): only what reaches Odin's hook.
+        // The second path to [take] ([tap] is the first): only what reaches ADM's hook.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) { take(this) }
         onReceive<net.minecraft.network.protocol.game.ClientboundOpenScreenPacket>(priority = 1000, ignoreCancelled = true) { TerminalHitboxes.opened(title.string) }
         EventBus.subscribe(this)

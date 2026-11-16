@@ -9,7 +9,7 @@ package com.engineerclient.splits
  */
 class BossMoments {
 
-    // Blood, split the way Devonian does: the dialog (his first line to "Let's see how you can handle
+    // Blood, split the way ADM does: the dialog (his first line to "Let's see how you can handle
     // this."), the move (that line to the Watcher's first move at least 45 server ticks after it -
     // 55-148 ticks in recorded runs, depending on the camp), then the clear.
     /** "Let's see how you can handle this." */

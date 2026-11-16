@@ -21,7 +21,7 @@ import net.minecraft.world.entity.player.Player
  * the closest, it goes through the 2nd closest instead - the margin you have before someone else
  * takes it - in its own colour.
  *
- * The phase that is actually running comes from the boss dialogue (Odin's phase is just your
+ * The phase that is actually running comes from the boss dialogue (ADM's phase is just your
  * height), and the sphere only shows while you are in that phase's arena: fall below Maxor's
  * platform during P1, or below Storm's during P2, and it is gone for the rest of that phase instead of
  * switching to the next boss. Before any boss line has been seen (joined mid-fight) it goes by height

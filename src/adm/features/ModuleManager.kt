@@ -37,7 +37,7 @@ import java.io.File
 object ModuleManager {
 
     /**
-     * Map containing all modules in Odin,
+     * Map containing all modules in ADM,
      * where the key is the modules name in lowercase.
      */
     val modules: HashMap<String, Module> = linkedMapOf()
@@ -48,7 +48,7 @@ object ModuleManager {
     val modulesByCategory: HashMap<Category, ArrayList<Module>> = hashMapOf()
 
     /**
-     * List of all configurations handled by Odin.
+     * List of all configurations handled by ADM.
      */
     val configs: ArrayList<ModuleConfig> = arrayListOf()
 

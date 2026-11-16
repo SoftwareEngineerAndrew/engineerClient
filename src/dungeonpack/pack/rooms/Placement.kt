@@ -111,7 +111,7 @@ class Placement private constructor(
         }
 
         /**
-         * Odin rotations the law accepts per shape (FORMAT-rooms 4.1; L's EAST is implemented by symmetry, never observed).
+         * ADM rotations the law accepts per shape (FORMAT-rooms 4.1; L's EAST is implemented by symmetry, never observed).
          * A design's own `rotations` list is the narrower authority ([RoomDesign.place] checks it too).
          */
         fun legalRotations(shape: String): List<Rot> = when (shape) {

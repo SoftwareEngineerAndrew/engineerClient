@@ -9,8 +9,8 @@ import java.nio.file.Files
  * Random Stuff's Clean Chat: hides chat lines its rules mark Block — at the very last step, when the chat GUI is about to
  * add the line to its list (see ChatComponentMixin).
  *
- * That placement is the point. Everything else that reads chat — Odin's parsers, this mod's
- * own rotation, blade-addons, devonian, anything on Fabric's message events or the packet —
+ * That placement is the point. Everything else that reads chat — ADM's parsers, this mod's
+ * own rotation, other mods, anything on Fabric's message events or the packet —
  * runs before the GUI, and none of it is touched: a hidden line is still received, still parsed
  * by every mod, still written to latest.log, it just never appears on screen. Cancelling a chat
  * event or the packet would have silenced the other mods too.

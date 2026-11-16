@@ -375,7 +375,7 @@ object LeapMenu : Module(
      * the player is added to a second round list. After all players have been processed, the function fills the remaining
      * empty quadrants with the players from the second round list.
      */
-    fun odinSorting(players: List<DungeonPlayer>): Array<DungeonPlayer> {
+    fun coreSorting(players: List<DungeonPlayer>): Array<DungeonPlayer> {
         val result = Array(4) { EMPTY }
         val secondRound = mutableListOf<DungeonPlayer>()
 

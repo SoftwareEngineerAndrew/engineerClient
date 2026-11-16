@@ -17,7 +17,7 @@ import java.io.File
 class ModuleConfig internal constructor(file: File) {
 
     /**
-     * Main constructor for Addons. (config/odin/addons/{fileName})
+     * Main constructor for Addons. (config/core/addons/{fileName})
      */
     constructor(fileName: String) : this(File(AdmMod.configFile, "addons/$fileName"))
 

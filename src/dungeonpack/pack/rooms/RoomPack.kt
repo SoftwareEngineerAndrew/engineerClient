@@ -49,10 +49,10 @@ data class RoomTripwire(val pos: Pos, val facing: String?)
 /** FORMAT-rooms 7.9: `kind` and the named anchor cells. */
 data class RoomPuzzle(val kind: String, val anchors: Map<String, List<Pos>>)
 
-/** FORMAT-rooms 8.3: a variant is a patch over the base volume, with the Odin core it produces when known. */
+/** FORMAT-rooms 8.3: a variant is a patch over the base volume, with the ADM core it produces when known. */
 data class RoomVariant(val id: String, val kind: String, val core: Int?, val srcFile: String?, val changedCells: Int, val vol: BlobRef)
 
-/** One row of the pack's `cores` table: the lookup from an Odin core (or a recorded `Name|ROT|core` key) to a design and variant. */
+/** One row of the pack's `cores` table: the lookup from an ADM core (or a recorded `Name|ROT|core` key) to a design and variant. */
 data class CoreEntry(val core: Int, val design: String, val variant: String?)
 
 /** One room design (FORMAT-rooms 7.2). All coordinates canonical; `y` absolute. */
@@ -83,17 +83,17 @@ class RoomDesign(
     val crushers: List<RoomCrusher>,
     val tripwires: List<RoomTripwire>,
     val puzzle: RoomPuzzle?,
-    /** A copy of the Odin `rooms.json` entry (name, type, secrets, crypts, cores, ...); null if the design has none. */
-    val odin: JsonObject?,
+    /** A copy of the ADM `rooms.json` entry (name, type, secrets, crypts, cores, ...); null if the design has none. */
+    val core: JsonObject?,
     val variants: List<RoomVariant>,
     val gaps: List<String>,
-    /** The Odin cores the BASE volume produces (the centre column of each tile; FORMAT-rooms 8.2, an extractor extra); empty when the index lacks them. */
+    /** The ADM cores the BASE volume produces (the centre column of each tile; FORMAT-rooms 8.2, an extractor extra); empty when the index lacks them. */
     val baseCores: List<Int> = emptyList(),
     /** `mob`, `miniboss` or `none`: how the room is cleared (the rooms_index `clear`), or null. */
     val clear: String? = null,
 ) {
-    /** How many secrets Odin says the room has (`odin.secrets`, or `maxSecrets` in older exports); null when unknown. */
-    val odinSecrets: Int? get() = odin?.int("secrets") ?: odin?.int("maxSecrets")
+    /** How many secrets ADM says the room has (`core.secrets`, or `maxSecrets` in older exports); null when unknown. */
+    val coreSecrets: Int? get() = core?.int("secrets") ?: core?.int("maxSecrets")
 
     /** The Fairy room is never rotated by the world (FORMAT-rooms 4.5). */
     val isFairy: Boolean get() = type == "fairy" || family == "Fairy"
@@ -139,7 +139,7 @@ class RoomPack internal constructor(
     /** Every design with this in-game name (builds share a name). */
     fun designsByName(name: String): List<RoomDesign> = byName[normalise(name)].orEmpty()
 
-    /** The design and variant that produce this Odin core, or null (FORMAT-rooms 8.2). */
+    /** The design and variant that produce this ADM core, or null (FORMAT-rooms 8.2). */
     fun designByCore(core: Int): CoreEntry? = coreIndex[core]
 
     /** The family a room name belongs to: through the pack's `aliases`, else the name with spaces as underscores. */
@@ -320,7 +320,7 @@ class RoomPack internal constructor(
                 puzzle = o.obj("puzzle")?.let { p ->
                     RoomPuzzle(p.str("kind") ?: "unknown", p.obj("anchors")?.entrySet()?.associate { (k, v) -> k to anchorList(v) }.orEmpty())
                 },
-                odin = o.obj("odin"),
+                core = o.obj("core"),
                 variants = o.arr("variants").objects().mapNotNull { v ->
                     RoomVariant(v.str("id") ?: return@mapNotNull null, v.str("kind") ?: "state", v.int("core"), v.str("srcFile"), v.int("changedCells") ?: 0,
                         parseBlob(v.obj("vol") ?: return@mapNotNull null))

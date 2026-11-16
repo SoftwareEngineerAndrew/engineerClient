@@ -20,9 +20,9 @@ import net.minecraft.util.ARGB
 
 /**
  * How a leap highlight looks (Recore's Core Leap Highlight, EE Highlight's): the part of the screen where a teammate sits in
- * Odin's Leap Menu (0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right), so the flick is already on its way when the menu
+ * ADM's Leap Menu (0 top-left, 1 top-right, 2 bottom-left, 3 bottom-right), so the flick is already on its way when the menu
  * opens. Its settings go on [module], in this order, under the [dropdown] named [dropdownName], showing while [shown] is
- * (the highlight is on). Only ever drawn by the HUD, which renders before any open screen, so a terminal (vanilla or Odin's)
+ * (the highlight is on). Only ever drawn by the HUD, which renders before any open screen, so a terminal (vanilla or ADM's)
  * always draws over it: it can flash behind one but never covers or recolours a slot.
  *
  * [there] says, for the settings' text, who the highlight is for ("someone is in the core"); [color] is its colour.
@@ -32,10 +32,10 @@ class LeapHighlightLook(module: Module, dropdownName: String, private val shown:
     /** The look settings show: the highlight on and its dropdown open. */
     val open get() = shown() && dropdown.value
     private val previewS = module.registerSetting(BooleanSetting("Preview", false, desc = previewDesc).withDependency { open })
-    private val styleS = module.registerSetting(SelectorSetting("Style", Style.EDGE_GLOW, desc = "Quadrant: the quarter of the screen with their box. Side: the whole left or right half. Top / Bottom: the whole top or bottom half. Edge Glow: a glow along that quarter's two outer edges. Corner Bracket: an L near the crosshair pointing at it. Leap Box: their leap menu box, as Odin draws it.").withDependency { open })
+    private val styleS = module.registerSetting(SelectorSetting("Style", Style.EDGE_GLOW, desc = "Quadrant: the quarter of the screen with their box. Side: the whole left or right half. Top / Bottom: the whole top or bottom half. Edge Glow: a glow along that quarter's two outer edges. Corner Bracket: an L near the crosshair pointing at it. Leap Box: their leap menu box, as ADM draws it.").withDependency { open })
     private val colorS = module.registerSetting(ColorSetting("Color", color, true, desc = "The highlight's colour and opacity.").withDependency { open })
     private val fillS = module.registerSetting(SelectorSetting("Fill", Fill.SOLID, desc = "Solid, or fading out toward the crosshair (strongest at the screen's edge), or the other way round. Quadrant, Side and Top / Bottom.").withDependency { open && style.area })
-    private val gapS = module.registerSetting(NumberSetting("Centre Gap", 0, 0..120, 2, desc = "Leaves this much room around the crosshair clear (Odin's boxes start 24 from the centre). Quadrant, Side, Top / Bottom, Corner Bracket.", unit = "px").withDependency { open && (style != Style.LEAP_BOX && style != Style.EDGE_GLOW) })
+    private val gapS = module.registerSetting(NumberSetting("Centre Gap", 0, 0..120, 2, desc = "Leaves this much room around the crosshair clear (ADM's boxes start 24 from the centre). Quadrant, Side, Top / Bottom, Corner Bracket.", unit = "px").withDependency { open && (style != Style.LEAP_BOX && style != Style.EDGE_GLOW) })
     private val glowDepthS = module.registerSetting(NumberSetting("Glow Depth", 11, 4..50, 1, desc = "How far in from the edge the Edge Glow reaches, in % of the screen.", unit = "%").withDependency { open && style == Style.EDGE_GLOW })
     private val bracketSizeS = module.registerSetting(NumberSetting("Bracket Size", 24, 6..120, 2, desc = "Length of the Corner Bracket's arms.", unit = "px").withDependency { open && style == Style.BRACKET })
     private val bracketWidthS = module.registerSetting(NumberSetting("Bracket Width", 3, 1..12, 1, desc = "Thickness of the Corner Bracket's arms.", unit = "px").withDependency { open && style == Style.BRACKET })
@@ -69,7 +69,7 @@ class LeapHighlightLook(module: Module, dropdownName: String, private val shown:
     enum class Fill(private val label: String) { SOLID("Solid"), TO_CENTRE("Fade To Crosshair"), TO_EDGE("Fade To Edge"); override fun toString() = label }
     enum class NamePos(private val label: String) { AREA("Area Middle"), CROSSHAIR("By Crosshair"); override fun toString() = label }
 
-    /** Someone to highlight: [i] is their place in Odin's Leap Menu, [since] when they got there; [extra] a line under the name. */
+    /** Someone to highlight: [i] is their place in ADM's Leap Menu, [since] when they got there; [extra] a line under the name. */
     class Target(val i: Int, val name: String, val clazz: String, val skin: net.minecraft.world.entity.player.PlayerSkin, val since: Long, val extra: String? = null)
 
     /** Whether it may show now, as far as the open screen goes (none, or one it's set to show behind). */
@@ -163,7 +163,7 @@ class LeapHighlightLook(module: Module, dropdownName: String, private val shown:
                 midX = px + sx * 12; midY = py + sy * 12
             }
             Style.LEAP_BOX -> {
-                // Odin's box for that player: 24px off the centre, its Render Scale from the near corner.
+                // ADM's box for that player: 24px off the centre, its Render Scale from the near corner.
                 val bw = LeapMenu.BOX_WIDTH
                 val bh = LeapMenu.BOX_HEIGHT
                 val lx = if (right) 0 else -bw

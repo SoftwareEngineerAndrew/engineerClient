@@ -33,7 +33,7 @@ import net.minecraft.world.level.chunk.status.ChunkStatus
  * a room 7 chunks off through a door, is missing whatever is kept here: the HUD counts the kept chunk columns that
  * aren't loaded, to tell the two apart.
  *
- * Off outside a dungeon, in the boss, and with the camera off the 6x6 grid: everything draws. Odin counts every
+ * Off outside a dungeon, in the boss, and with the camera off the 6x6 grid: everything draws. ADM counts every
  * singleplayer world as a dungeon, so the rule runs there too (a simulated dungeon, a practice map): a world whose blocks
  * don't make rooms is left alone ([TileRule.MAX_ROOM]).
  */

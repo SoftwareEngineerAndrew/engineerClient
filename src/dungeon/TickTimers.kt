@@ -39,7 +39,7 @@ import java.util.Locale
 /**
  * Timers through a run, all counted in server ticks so lag doesn't run them down.
  *
- *  - Blade's phase timers (Maxor, Storm, Term Start, Goldor): time since each phase's first line, alone or in one shared HUD.
+ *  - ADM's phase timers (Maxor, Storm, Term Start, Goldor): time since each phase's first line, alone or in one shared HUD.
  *  - Clear Countdown: from the Watcher's first line, 50 s of camp and 4 s of portal; set to 4 s at "You may pass".
  *  - Maxor Move: 85 ticks after his first line (80-87 seen). Crystal Spawn: 40 ticks after a laser hit.
  *  - Purple Pad: pads are read on the 20-tick checks' eve and a read 41 or 61 ticks before a check crushes on it; Storm is in
@@ -245,7 +245,7 @@ object TickTimers : Module(
     private fun stormText(): Pair<String, Color>? {
         if (!stormOn || phase != 2 || stormDead) return null
         if (!stormDown) return fmt(stormTicks) to stormColor
-        // Blade's count down: only the last 5 s before 29 s.
+        // ADM's count down: only the last 5 s before 29 s.
         return if (STORM_DOWN_TICKS - stormTicks in 0..100) fmt(29.0 - stormTicks / 20.0) to stormColor else null
     }
 
@@ -262,7 +262,7 @@ object TickTimers : Module(
 
     private fun current() = maxorText() ?: stormText() ?: termStartText() ?: goldorText()
 
-    // Centred in a fixed width, as Blade draws them, so the HUD doesn't move as digits change.
+    // Centred in a fixed width, as ADM draws them, so the HUD doesn't move as digits change.
     private fun GuiGraphicsExtractor.draw(s: String, color: Color): Pair<Int, Int> {
         text(s, (WIDTH - mc.font.width(s)) / 2, 0, color, true)
         return WIDTH to 9

@@ -6,7 +6,7 @@ import net.minecraft.world.level.GameType
 
 /**
  * The tab list's puzzle section, in the order the tab list draws it: "Puzzles: (3)", then a line per puzzle,
- * " Ice Fill: [✦]" or " ???: [✦]". Odin's own list keeps only the named ones, in the order it learned them; here every
+ * " Ice Fill: [✦]" or " ???: [✦]". ADM's own list keeps only the named ones, in the order it learned them; here every
  * line keeps its place, "???" included, so a puzzle found later doesn't move down.
  */
 object TabPuzzles {
@@ -58,6 +58,6 @@ object TabPuzzles {
 
     private val COUNT_LINE = Regex("^Puzzles: \\((\\d+)\\)$")
 
-    /** " Ice Fill: [✦]" or " ???: [✦]", as Odin reads them. */
+    /** " Ice Fill: [✦]" or " ???: [✦]", as ADM reads them. */
     private val PUZZLE_LINE = Regex("^ (\\w+(?: \\w+)*|\\?\\?\\?): \\[([✖✔✦])] ?(?:\\((\\w+)\\))?$")
 }

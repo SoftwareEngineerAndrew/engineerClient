@@ -102,7 +102,7 @@ object Players {
         @Volatile var mineFor: String? = null
         /** Their own spawn and early-enter spots (skill/class/key), as their plan has them. */
         val spots = ConcurrentHashMap<String, Spots.Spot>()
-        /** Their leap order (the other four classes, slots 1-4), as their menu has it; null: Odin's. */
+        /** Their leap order (the other four classes, slots 1-4), as their menu has it; null: ADM's. */
         @Volatile var order: List<DungeonClass>? = null
         /** Their stacked jobs (right click) and the bot that helps on each, as their game picked it. */
         @Volatile var stacks: Map<String, DungeonClass> = emptyMap()
@@ -448,14 +448,14 @@ object PartyServer {
                 if ((rm0 != rm1 || wm0 != wm1) && !Masks.ghost) Masks.equip(p)
             }
         }
-        // A leap order changed (anyone's): Odin's leap menus follow at once.
+        // A leap order changed (anyone's): ADM's leap menus follow at once.
         val order = Sim.players().joinToString { p -> Party.mates(p).joinToString { it.name } }
         if (order != lastOrder) { lastOrder = order; rosterDirty = true }
         if (rosterDirty || Fight.serverTick % 20 == 0) { rosterDirty = false; Sim.players().forEach { roster(it) } }
     }
 
     /**
-     * The party as [p] sees it: themselves, then everyone else (players and bots) in their leap order, for Odin's
+     * The party as [p] sees it: themselves, then everyone else (players and bots) in their leap order, for ADM's
      * party list and leap menu on their game.
      */
     private fun roster(p: ServerPlayer, force: Boolean = false) {
@@ -552,7 +552,7 @@ object PartyClient {
     private val ownFile get() = java.io.File(mc.gameDirectory, "config/engineerclient/p3sim-own-settings.json")
     private fun keepOwn(o: JsonObject) = EngineerClient.safely("p3sim own settings keep") { ownFile.parentFile.mkdirs(); ownFile.writeText(o.toString()) }
 
-    /** What the fight does on your game: the splits, Odin's timers and solvers, Term Info. */
+    /** What the fight does on your game: the splits, ADM's timers and solvers, Term Info. */
     private fun fx(what: String) {
         val o = runCatching { JsonParser.parseString(what).asJsonObject }.getOrNull() ?: return
         val n = o.get("n")?.asInt ?: 0
@@ -564,7 +564,7 @@ object PartyClient {
             }
             "splitsStop" -> {
                 EngineerClient.safely("p3sim splits stop") { com.engineerclient.splits.DungeonSplits.simStop() }
-                // Stop and practice starts too: Odin's i4 solver forgets the blocks it marked hit.
+                // Stop and practice starts too: ADM's i4 solver forgets the blocks it marked hit.
                 EngineerClient.safely("p3sim arrows device") { Fight.resetArrowsDevice() }
                 EngineerClient.safely("p3sim tick timers stop") { com.engineerclient.dungeon.TickTimers.stopAll() }
             }

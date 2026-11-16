@@ -8,7 +8,7 @@ import net.minecraft.sounds.SoundEvents
 
 /**
  * 0 ping teleport sounds: a teleport's sound plays when the camera teleports, and the server's own one is swallowed when it
- * arrives for a teleport already heard. Etherwarp: ender dragon hurt at 34/63 (the sound Odin's Etherwarp module swaps for its
+ * arrives for a teleport already heard. Etherwarp: ender dragon hurt at 34/63 (the sound ADM's Etherwarp module swaps for its
  * own). AOTE / AOTV: enderman teleport 1/1. Hyperion: that and the Implosion (explode 1/1). Each teleport the camera played is
  * owed its server sounds; one never coming (a refusal) is forgotten after [KEEP_MS].
  */
@@ -32,8 +32,8 @@ object EtherSound {
         when (kind) {
             Kind.ETHER -> {
                 try {
-                    val odin = if (odinSounds()) odinSettings() else null
-                    if (odin != null) playSoundSettings(odin) else vanilla()
+                    val core = if (coreSounds()) coreSettings() else null
+                    if (core != null) playSoundSettings(core) else vanilla()
                 } catch (_: Throwable) {
                     vanilla()
                 }
@@ -65,11 +65,11 @@ object EtherSound {
         return queue.removeFirstOrNull() != null
     }
 
-    // Odin's Etherwarp settings, read through its accessors (no public getters).
-    private fun odinSounds(): Boolean =
+    // ADM's Etherwarp settings, read through its accessors (no public getters).
+    private fun coreSounds(): Boolean =
         Etherwarp.enabled && Etherwarp::class.java.getMethod("access\$getSounds", Etherwarp::class.java).invoke(null, Etherwarp) as Boolean
 
     @Suppress("UNCHECKED_CAST")
-    private fun odinSettings(): Triple<String, Float, Float>? =
+    private fun coreSettings(): Triple<String, Float, Float>? =
         (Etherwarp::class.java.getMethod("access\$getSoundSettings\$p").invoke(null) as? () -> Any?)?.invoke() as? Triple<String, Float, Float>
 }

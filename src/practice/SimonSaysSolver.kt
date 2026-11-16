@@ -2,7 +2,7 @@ package com.engineerclient.practice
 
 /**
  * Simon Says' answer, worked out from how the device behaves in a couple hundred recorded F7 runs
- * (replayed against those rounds it gets noticeably more right than Odin's own solver).
+ * (replayed against those rounds it gets noticeably more right than ADM's own solver).
  * Pure: fed every block packet for a lamp and the grid's buttons and presses, with server ticks;
  * [C] is whatever names a cell (a BlockPos in game).
  *

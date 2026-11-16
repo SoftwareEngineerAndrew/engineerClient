@@ -73,7 +73,7 @@ object EventBus {
 
         invokers[eventClass] = when {
             activeListeners.isEmpty() -> EmptyInvoker
-            else -> InvokerFactory.build("Odin: ${eventClass.simpleName}", activeListeners)
+            else -> InvokerFactory.build("ADM: ${eventClass.simpleName}", activeListeners)
         }
     }
 

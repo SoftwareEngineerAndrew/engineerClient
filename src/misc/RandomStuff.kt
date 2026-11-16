@@ -83,7 +83,7 @@ object RandomStuff : Module(
 
     /**
      * Whether text drawn at pose scale [scale] should be sampled smoothly (ClickGuiTextMixin): only in
-     * Odin's menu, and only where a font pixel doesn't land on a whole number of screen pixels.
+     * ADM's menu, and only where a font pixel doesn't land on a whole number of screen pixels.
      */
     fun smoothsGuiText(scale: Float): Boolean {
         if (mc.gui.screen() !== com.engineerclient.gui.AdmClickGui) return false
@@ -153,8 +153,8 @@ object RandomStuff : Module(
         }
 
         // The lobby can ignore a command sent before it is ready, so /skyblock goes out [skyblockDelay]
-        // after landing and then every 3 seconds until Odin sees the Skyblock scoreboard. On raw client
-        // ticks: Odin's TickEvent.End only fires with a world loaded. Raw ticks also run with the module
+        // after landing and then every 3 seconds until ADM sees the Skyblock scoreboard. On raw client
+        // ticks: ADM's TickEvent.End only fires with a world loaded. Raw ticks also run with the module
         // off, so turning it (or the setting) off mid-countdown ends the countdown here.
         ClientTickEvents.END_CLIENT_TICK.register { client ->
             if (!pendingSkyblockJoin || ticksUntilSkyblock < 0) return@register

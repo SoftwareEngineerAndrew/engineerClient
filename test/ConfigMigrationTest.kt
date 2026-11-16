@@ -8,11 +8,11 @@ import kotlin.test.assertFalse
 
 class ConfigMigrationTest {
     private fun migrate(brSettings: String): com.google.gson.JsonObject {
-        val odin = Files.createTempDirectory("odin")
-        Files.createDirectories(odin.resolve("addons"))
-        val file = odin.resolve("addons").resolve("engineerclient.json")
+        val core = Files.createTempDirectory("odin")
+        Files.createDirectories(core.resolve("addons"))
+        val file = core.resolve("addons").resolve("engineerclient.json")
         Files.writeString(file, """[{"name":"BR Roles","enabled":true,"settings":$brSettings}]""")
-        ConfigMigration.run(odin)
+        ConfigMigration.run(core)
         val modules = JsonParser.parseString(Files.readString(file)).asJsonArray
         return modules.map { it.asJsonObject }.first { it["name"].asString == "BR Roles" }.getAsJsonObject("settings")
     }
@@ -32,22 +32,22 @@ class ConfigMigrationTest {
     }
 
     @Test fun necronDropHudIsNecronDps() {
-        val odin = Files.createTempDirectory("odin")
-        Files.createDirectories(odin.resolve("addons"))
-        val file = odin.resolve("addons").resolve("engineerclient.json")
+        val core = Files.createTempDirectory("odin")
+        Files.createDirectories(core.resolve("addons"))
+        val file = core.resolve("addons").resolve("engineerclient.json")
         Files.writeString(file, """[{"name":"Timers","enabled":true,"settings":{"Necron Drop":{"enabled":false,"x":12}}}]""")
-        ConfigMigration.run(odin)
+        ConfigMigration.run(core)
         val t = JsonParser.parseString(Files.readString(file)).asJsonArray.first().asJsonObject.getAsJsonObject("settings")
         assertFalse(t.has("Necron Drop"))
         assertEquals(12, t.getAsJsonObject("Necron DPS")["x"].asInt)
     }
 
     private fun migrateAds(adsSettings: String): com.google.gson.JsonObject {
-        val odin = Files.createTempDirectory("odin")
-        Files.createDirectories(odin.resolve("addons"))
-        val file = odin.resolve("addons").resolve("engineerclient.json")
+        val core = Files.createTempDirectory("odin")
+        Files.createDirectories(core.resolve("addons"))
+        val file = core.resolve("addons").resolve("engineerclient.json")
         Files.writeString(file, """[{"name":"ADS","enabled":true,"settings":$adsSettings}]""")
-        ConfigMigration.run(odin)
+        ConfigMigration.run(core)
         return JsonParser.parseString(Files.readString(file)).asJsonArray.first().asJsonObject.getAsJsonObject("settings")
     }
 
@@ -62,11 +62,11 @@ class ConfigMigrationTest {
     }
 
     private fun migrateAdr(adrSettings: String): com.google.gson.JsonObject {
-        val odin = Files.createTempDirectory("odin")
-        Files.createDirectories(odin.resolve("addons"))
-        val file = odin.resolve("addons").resolve("engineerclient.json")
+        val core = Files.createTempDirectory("odin")
+        Files.createDirectories(core.resolve("addons"))
+        val file = core.resolve("addons").resolve("engineerclient.json")
         Files.writeString(file, """[{"name":"ADR","enabled":true,"settings":$adrSettings}]""")
-        ConfigMigration.run(odin)
+        ConfigMigration.run(core)
         return JsonParser.parseString(Files.readString(file)).asJsonArray.first().asJsonObject.getAsJsonObject("settings")
     }
 
@@ -88,22 +88,22 @@ class ConfigMigrationTest {
     }
 
     @Test fun zpewIsRenamedLegitZpewWithItsSettings() {
-        val odin = Files.createTempDirectory("odin")
-        Files.createDirectories(odin.resolve("addons"))
-        val file = odin.resolve("addons").resolve("engineerclient.json")
+        val core = Files.createTempDirectory("odin")
+        Files.createDirectories(core.resolve("addons"))
+        val file = core.resolve("addons").resolve("engineerclient.json")
         Files.writeString(file, """[{"name":"Zpew","enabled":true,"settings":{"Timeout":15}}]""")
-        ConfigMigration.run(odin)
+        ConfigMigration.run(core)
         val m = JsonParser.parseString(Files.readString(file)).asJsonArray.map { it.asJsonObject }.first { it["name"].asString == "Legit Zpew" }
         assertEquals(true, m["enabled"].asBoolean)
         assertEquals(15, m.getAsJsonObject("settings")["Timeout"].asInt)
     }
 
     @Test fun zpewTeleportSplitsIntoAotvAndHyperion() {
-        val odin = Files.createTempDirectory("odin")
-        Files.createDirectories(odin.resolve("addons"))
-        val file = odin.resolve("addons").resolve("engineerclient.json")
+        val core = Files.createTempDirectory("odin")
+        Files.createDirectories(core.resolve("addons"))
+        val file = core.resolve("addons").resolve("engineerclient.json")
         Files.writeString(file, """[{"name":"Zpew","enabled":true,"settings":{"Teleport":false}}]""")
-        ConfigMigration.run(odin)
+        ConfigMigration.run(core)
         val s = JsonParser.parseString(Files.readString(file)).asJsonArray.map { it.asJsonObject }.first { it["name"].asString == "Legit Zpew" }.getAsJsonObject("settings")
         assertEquals(false, s["AOTE / AOTV"].asBoolean)
         assertEquals(false, s["Hyperion"].asBoolean)

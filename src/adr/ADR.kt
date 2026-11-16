@@ -171,13 +171,13 @@ object ADR : Module(
             }
         }
 
-        // Your Simon Says clicks, after Odin has had its say (so blocked ones are known).
+        // Your Simon Says clicks, after ADM has had its say (so blocked ones are known).
         on<BlockInteractEvent>(priority = -1) {
             val s = session ?: return@on
             if (s.isSsButton(pos)) EngineerClient.safely("adr ss click") { s.onSsClick(pos, isCancelled) }
         }
         on<BlockUpdateEvent> { EngineerClient.safely("adr block") { session?.onBlockUpdate(pos, updated) } }
-        // Server ticks (Odin's, from the server's per-tick ping): the server's own clock, which falls
+        // Server ticks (ADM's, from the server's per-tick ping): the server's own clock, which falls
         // behind the client's 20 a second when the server lags (what split timers and tick timers use).
         on<TickEvent.Server> { EngineerClient.safely("adr server tick") { session?.onServerTick() } }
         // Teleports the server puts you through (etherwarp, leaps, the Teleport Maze pads...).

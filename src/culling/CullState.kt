@@ -2,7 +2,7 @@ package com.engineerclient.culling
 
 /**
  * What the two Sodium hooks share: the chunk columns to draw now ([mask]) and what the last render list left out. Nothing
- * of the game or of Odin in here: [culls] is asked once for every section in view each time a render list is made.
+ * of the game or of ADM in here: [culls] is asked once for every section in view each time a render list is made.
  */
 object CullState {
     /** The chunk columns to draw, or null: draw everything. Set on the render thread ([ChunkCulling.frame]). */

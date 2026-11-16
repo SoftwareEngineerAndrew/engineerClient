@@ -12,7 +12,7 @@ import com.adm.utils.Colors
 object ColorPalette : Module(
     name = "Colors",
     category = Category.RENDER,
-    description = "Edit Odin's shared colour palette; settings still on their default colour follow it.",
+    description = "Edit ADM's shared colour palette; settings still on their default colour follow it.",
     key = null,
 ) {
     private val palette: List<Pair<String, Color>> = listOf(
@@ -40,7 +40,7 @@ object ColorPalette : Module(
     private val originals = palette.map { it.second.copy() }
 
     private val edits = palette.map { (name, color) ->
-        +ColorSetting(name, color.copy(), true, desc = "Odin's $name.")
+        +ColorSetting(name, color.copy(), true, desc = "ADM's $name.")
     }
 
     init {

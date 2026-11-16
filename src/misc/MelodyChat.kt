@@ -19,15 +19,15 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Melody progress from the party chat. Teammates' mods announce it ("Melody 33%", "Melody terminal is at 67%"); this
- * keeps the furthest percent heard per teammate in P3 ([heard], read by Term Progress as well) and, for teammates Odin's
+ * keeps the furthest percent heard per teammate in P3 ([heard], read by Term Progress as well) and, for teammates ADM's
  * Melody Message does not know from its own websocket, puts a row into its Progress GUI: clay from the percent, pane
- * and purple unknown. Odin's `melodies` map and `MelodyData` are private, so both are reached by reflection, once. If
- * that fails it is logged once and only the Odin rows go; the chat state stays. Odin's GUI only draws while its
+ * and purple unknown. ADM's `melodies` map and `MelodyData` are private, so both are reached by reflection, once. If
+ * that fails it is logged once and only the ADM rows go; the chat state stays. ADM's GUI only draws while its
  * websocket is connected, so with it down these rows are not shown.
  */
 object MelodyChat {
 
-    private val odinRows = BooleanSetting("Chat Melody", true, desc = "Teammates' melody progress from the party chat also gets a row here, when they aren't broadcasting through Odin. Added by engineerClient.")
+    private val coreRows = BooleanSetting("Chat Melody", true, desc = "Teammates' melody progress from the party chat also gets a row here, when they aren't broadcasting through ADM. Added by engineerClient.")
 
     /** A teammate's furthest percent heard, and when ([at], System.nanoTime) the last percent message came. */
     class Heard(val percent: Int, val at: Long)
@@ -37,7 +37,7 @@ object MelodyChat {
     private val TERMINAL = Regex("^(\\w{1,16}) activated a terminal! \\(\\d+/\\d+\\)$")
 
     private val chat = ConcurrentHashMap<String, Heard>()
-    /** The names whose Odin row we put there, so only those are taken out again. */
+    /** The names whose ADM row we put there, so only those are taken out again. */
     private val added = ConcurrentHashMap.newKeySet<String>()
     private var section = 0
 
@@ -46,7 +46,7 @@ object MelodyChat {
 
     private fun inP3() = DungeonUtils.inBoss && DungeonUtils.getF7Phase() == M7Phases.P3
 
-    /** The Odin row's clay for a percent: 25 or 33 is 2, 50 to 67 is 3, 75 is 4, less than 25 is 1. */
+    /** The ADM row's clay for a percent: 25 or 33 is 2, 50 to 67 is 3, 75 is 4, less than 25 is 1. */
     private fun clayOf(percent: Int) = when {
         percent >= 75 -> 4
         percent >= 50 -> 3
@@ -54,16 +54,16 @@ object MelodyChat {
         else -> 1
     }
 
-    // ------------------------------------------------------------------ Odin's private bits, found once
+    // ------------------------------------------------------------------ ADM's private bits, found once
 
-    private class Odin(val map: MutableMap<String, Any>, val make: Constructor<*>, val getClay: Method, val setClay: Method)
+    private class ADM(val map: MutableMap<String, Any>, val make: Constructor<*>, val getClay: Method, val setClay: Method)
 
-    private var odin: Odin? = null
-    private var odinFailed = false
+    private var core: ADM? = null
+    private var coreFailed = false
 
-    private fun odin(): Odin? {
-        odin?.let { return it }
-        if (odinFailed) return null
+    private fun core(): ADM? {
+        core?.let { return it }
+        if (coreFailed) return null
         try {
             val field = MelodyMessage::class.java.getDeclaredField("melodies").apply { isAccessible = true }
             @Suppress("UNCHECKED_CAST")
@@ -73,17 +73,17 @@ object MelodyChat {
             val make = data.getDeclaredConstructor(int, int, int, DungeonClass::class.java).apply { isAccessible = true }
             val getClay = data.getDeclaredMethod("getClay").apply { isAccessible = true }
             val setClay = data.getDeclaredMethod("setClay", int).apply { isAccessible = true }
-            return Odin(map, make, getClay, setClay).also { odin = it }
+            return ADM(map, make, getClay, setClay).also { core = it }
         } catch (t: Throwable) {
-            odinFailed = true
-            EngineerClient.logger.error("[ec] chat melody rows in Odin's Melody Message failed, turned off", t)
+            coreFailed = true
+            EngineerClient.logger.error("[ec] chat melody rows in ADM's Melody Message failed, turned off", t)
             return null
         }
     }
 
-    /** Odin's row for [name] at least at [percent]'s clay; made if there is none, never lowered. */
+    /** ADM's row for [name] at least at [percent]'s clay; made if there is none, never lowered. */
     private fun putRow(name: String, percent: Int) {
-        val o = odin() ?: return
+        val o = core() ?: return
         val clay = clayOf(percent)
         val row = o.map[name]
         if (row == null) {
@@ -96,7 +96,7 @@ object MelodyChat {
     }
 
     private fun dropRow(name: String) {
-        if (added.remove(name)) odin()?.map?.remove(name)
+        if (added.remove(name)) core()?.map?.remove(name)
     }
 
     private fun clear() {
@@ -118,12 +118,12 @@ object MelodyChat {
         val percent = PERCENT.find(party.groupValues[2])?.groupValues?.get(1)?.toIntOrNull() ?: return
         // The furthest progress wins, so a stray number doesn't move it back; the time is of the latest message.
         chat[sender] = Heard(maxOf(percent, chat[sender]?.percent ?: 0), System.nanoTime())
-        if (odinRows.value) EngineerClient.safely("chat melody odin row") { putRow(sender, chat.getValue(sender).percent) }
+        if (coreRows.value) EngineerClient.safely("chat melody core row") { putRow(sender, chat.getValue(sender).percent) }
     }
 
-    /** Adds the setting to Odin's Melody Message; before the configs are loaded, so a saved value applies. */
+    /** Adds the setting to ADM's Melody Message; before the configs are loaded, so a saved value applies. */
     fun install() {
-        MelodyMessage.registerSetting(odinRows)
+        MelodyMessage.registerSetting(coreRows)
         on<MessageEvent.Chat> { EngineerClient.safely("chat melody") { onChat(message) } }
         on<TickEvent.End> {
             EngineerClient.safely("chat melody section") {
@@ -132,7 +132,7 @@ object MelodyChat {
             }
         }
         on<LevelEvent.Load> {
-            // Odin empties its own map on a world load.
+            // ADM empties its own map on a world load.
             chat.clear(); added.clear(); section = 0
         }
         EventBus.subscribe(this)

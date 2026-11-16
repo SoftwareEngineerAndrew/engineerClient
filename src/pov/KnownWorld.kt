@@ -37,9 +37,9 @@ import java.util.concurrent.ConcurrentLinkedQueue
 /**
  * The blocks Pose POV draws, the way ADR rebuilds a run: what we already know, then this run's block changes.
  *  1. A block the server changed since the world loaded ([changed], straight off the packets): doors opening, P3's gates.
- *  2. The doors between the rooms ADS would build for Odin's door map ([RegionEdits]: seals, frames, door bodies).
+ *  2. The doors between the rooms ADS would build for ADM's door map ([RegionEdits]: seals, frames, door bodies).
  *  3. F7/M7's boss: the shipped arena (p3sim's [Arena], built from the ADR library), at x, z >= 0.
- *  4. A dungeon room Odin has named and turned: its design from the bundled ADS room pack ([Room]).
+ *  4. A dungeon room ADM has named and turned: its design from the bundled ADS room pack ([Room]).
  *  5. Anything else (rooms not identified yet, every other island): the loaded chunks.
  */
 object KnownWorld {
@@ -168,8 +168,8 @@ object KnownWorld {
     fun bossFloor(): Boolean = arenaReady && DungeonUtils.floor.let { it == Floor.F7 || it == Floor.M7 }
 
     /**
-     * Places every room Odin has named with a rotation it is sure of, and lays the doors between them out again when the rooms
-     * or Odin's doors change. [placed] is called for each room new this time. Render thread; cheap when nothing changed.
+     * Places every room ADM has named with a rotation it is sure of, and lays the doors between them out again when the rooms
+     * or ADM's doors change. [placed] is called for each room new this time. Render thread; cheap when nothing changed.
      */
     fun refresh(level: ClientLevel, edges: Boolean, placed: (Room) -> Unit) {
         val pack = pack ?: return
@@ -212,7 +212,7 @@ object KnownWorld {
             for (k in changed.keys) if (r.covers(BlockPos.getX(k), BlockPos.getZ(k))) touchedCells.add(k)
             changedRooms = true
         }
-        // Rooms nobody has named yet, from their edge columns (until Odin or a teammate does).
+        // Rooms nobody has named yet, from their edge columns (until ADM or a teammate does).
         if (edges) RoomEdges.step(level, pack) { tiles[it] != null }?.let { f ->
             val r = try {
                 Room("${f.design.id}|${f.rot}|${f.tiles}|guess|null", RoomInstance(f.design, pack.volume(f.design) ?: return@let, f.design.place(f.rot, f.tiles)), f.tiles, guessed = true)
@@ -235,7 +235,7 @@ object KnownWorld {
         for (k in edits.keys) if (old[k] != edits[k]) touchedCells.add(k)
     }
 
-    /** Odin's door map as ADS door slots. */
+    /** ADM's door map as ADS door slots. */
     private fun doors(): Map<Slot, DoorKind> {
         val out = HashMap<Slot, DoorKind>()
         for (d in DungeonScan.doors.values) {
@@ -255,7 +255,7 @@ object KnownWorld {
         return out
     }
 
-    /** Odin's core of the first of the room's tiles whose chunk is loaded and has one of its cores (it names the variant). */
+    /** ADM's core of the first of the room's tiles whose chunk is loaded and has one of its cores (it names the variant). */
     private fun core(level: ClientLevel, room: DungeonRoom): Int? {
         for (t in room.tiles) {
             val cx = (t.x - 6) * 2; val cz = (t.z - 6) * 2

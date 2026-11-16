@@ -52,7 +52,7 @@ class ChatRules(val custom: List<Custom>, val block: List<Block>) {
     companion object {
         private val gson = GsonBuilder().create()
         private val formatting = Regex("§.")
-        /** Compact-chat repeat counters, e.g. Devonian's " (3)" sibling on a stacked line. */
+        /** Compact-chat repeat counters, e.g. ADM's " (3)" sibling on a stacked line. */
         private val repeatCounter = Regex("""\s\(\d+\)$""")
 
         /**

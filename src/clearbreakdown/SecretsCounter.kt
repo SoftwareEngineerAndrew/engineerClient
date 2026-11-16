@@ -9,7 +9,7 @@ import com.adm.utils.skyblock.dungeon.DungeonUtils
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 
-/** Odin's Secrets Counter: each teammate's secrets this run from the API, at the end of any run, won or not. */
+/** ADM's Secrets Counter: each teammate's secrets this run from the API, at the end of any run, won or not. */
 object SecretsCounter {
     private val secretsBaseline = ConcurrentHashMap<String, Long>()
     private var snapshotDone = false

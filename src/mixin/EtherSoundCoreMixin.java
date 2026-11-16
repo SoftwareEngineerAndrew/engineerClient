@@ -9,8 +9,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * 0 Ping Etherwarp Sound: Odin's Etherwarp module swaps the server's etherwarp sound for its own as the packet arrives; for a
- * warp the camera already played, the packet is dropped before Odin plays it again.
+ * 0 Ping Etherwarp Sound: ADM's Etherwarp module swaps the server's etherwarp sound for its own as the packet arrives; for a
+ * warp the camera already played, the packet is dropped before ADM plays it again.
  */
 @Mixin(targets = "com.adm.features.impl.render.Etherwarp$1", remap = false)
 public abstract class EtherSoundCoreMixin {

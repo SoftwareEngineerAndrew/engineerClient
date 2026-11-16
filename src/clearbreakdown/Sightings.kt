@@ -19,7 +19,7 @@ import net.minecraft.world.phys.AABB
  * or exactly you when you clicked that chest or skull just before. Each goes to
  * [ClearBreakdown.secrets], and into [outbox] for the party (ADR Online).
  *
- * A sighting nobody was in reach of is dropped rather than counted for nobody: Odin's room count
+ * A sighting nobody was in reach of is dropped rather than counted for nobody: ADM's room count
  * then gives it to whoever was in the room.
  */
 object Sightings {
@@ -31,7 +31,7 @@ object Sightings {
     /** Chunks around you searched for essence skulls, as ADR's skull scan (a twentieth each tick). */
     private const val SKULL_CHUNKS = 12
     private const val WITHER_ESSENCE_ID = "2865274b-3097-394e-8149-ec629c72d850"
-    /** Odin's list of the items dungeon secrets drop (EventDispatcher.dungeonItemDrops, private there). */
+    /** ADM's list of the items dungeon secrets drop (EventDispatcher.dungeonItemDrops, private there). */
     private val SECRET_ITEMS = listOf(
         "Health Potion VIII Splash Potion", "Healing Potion 8 Splash Potion", "Healing Potion VIII Splash Potion", "Healing VIII Splash Potion", "Healing 8 Splash Potion",
         "Decoy", "Inflatable Jerry", "Spirit Leap", "Trap", "Training Weights", "Defuse Kit", "Dungeon Chest Key", "Treasure Talisman", "Revive Stone", "Architect's First Draft",

@@ -11,10 +11,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Odin's Dungeon Map HUD (the lambda behind its "Dungeon Map" HUD setting, which draws the background, the map
+ * ADM's Dungeon Map HUD (the lambda behind its "Dungeon Map" HUD setting, which draws the background, the map
  * and the players and returns its size): with LCM Style on, {@link LcmStyle} draws all of it instead.
  * With Custom Map Padding (and no LCM Style), {@link MapSizes} draws it with its background fitted to the rooms.
- * If either can't draw a frame, Odin's own map is drawn.
+ * If either can't draw a frame, ADM's own map is drawn.
  */
 @Pseudo
 @Mixin(targets = "com.adm.features.impl.dungeon.map.DungeonMap$mapHud$2", remap = false)

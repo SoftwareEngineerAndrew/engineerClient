@@ -25,7 +25,7 @@ import java.util.Collection;
  * measures and boxes only the lines that are left, so a hidden line leaves no gap and the sidebar
  * shrinks around it.
  *
- * Nothing else sees this. The scoreboard itself is untouched, so Odin's area detection and
+ * Nothing else sees this. The scoreboard itself is untouched, so ADM's area detection and
  * anything else reading the sidebar still get every line; they just are not drawn.
  */
 @Mixin(Hud.class)

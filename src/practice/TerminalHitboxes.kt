@@ -24,7 +24,7 @@ import net.minecraft.world.entity.player.Player
  * your eyes and before any block (375 crosshair hits on a stand, the farthest 2.998). The box drawn is both stands'
  * together, and it's in range when a point of it is that close with nothing in front.
  *
- * The live section is [TermInfo]'s count (chat read off the wire, so blade-addons' Terminal Timestamps can't hide it),
+ * The live section is [TermInfo]'s count (chat read off the wire, so other mods' Terminal Timestamps can't hide it),
  * backed by the world: a terminal is only ever done in the live section, and the section doors open as sections end.
  */
 object TerminalHitboxes {

@@ -5,7 +5,7 @@ import net.minecraft.client.Minecraft
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
-/** EC's own settings outside Odin's module config: the player's P3 starting role and the class stash. */
+/** EC's own settings outside ADM's module config: the player's P3 starting role and the class stash. */
 object EcConfig {
 
     data class Data(

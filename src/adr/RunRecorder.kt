@@ -49,7 +49,7 @@ import java.util.zip.GZIPOutputStream
  *
  * Nothing is kept unless the world turns out to be a dungeon: until [DungeonUtils.inDungeons]
  * reports true, lines pile up in memory; the moment it does, the file is opened and the backlog
- * flushed, so the recording still starts at instance load. If Odin works out the area is
+ * flushed, so the recording still starts at instance load. If ADM works out the area is
  * something else, or a minute passes without it, the session is dropped - a hub or island visit
  * costs nothing on disk.
  *
@@ -130,7 +130,7 @@ class RunRecorder(
         flushMouse()
         tick++
         if (!confirmed && com.engineerclient.p3sim.P3Sim.inSim) {
-            // Never the P3 Sim world as a Hypixel run: Odin is told it is in F7 there, and ADR would take it for one.
+            // Never the P3 Sim world as a Hypixel run: ADM is told it is in F7 there, and ADR would take it for one.
             abandon(); return
         } else if (!confirmed) {
             if (DungeonUtils.inDungeons) confirm()
@@ -202,7 +202,7 @@ class RunRecorder(
     }
 
     // ------------------------------------------------------------------ server ticks
-    // The server's own tick count (Odin's per-tick ping), written when it moved: split and tick
+    // The server's own tick count (ADM's per-tick ping), written when it moved: split and tick
     // timers count these, and they fall behind the client's ticks when the server lags.
     @Volatile private var serverTicks = 0
     private var lastServerTicks = 0
@@ -220,7 +220,7 @@ class RunRecorder(
     val stamp: String get() = startedAt.format(STAMP)
 
     // ------------------------------------------------------------------ what you do
-    /** A container slot click you sent (any window, any way: mouse, Odin's terminal GUI, keys). */
+    /** A container slot click you sent (any window, any way: mouse, ADM's terminal GUI, keys). */
     fun onSlotClick(slot: Int, button: Int, type: String) =
         emit("""{"k":"slotclick","t":$tick,"slot":$slot,"button":$button,"type":${str(type)}}""")
 
@@ -467,7 +467,7 @@ class RunRecorder(
     private var roomsKey = ""
 
     /**
-     * Odin's own room classification: every room it knows (from the dungeon map, and named once its
+     * ADM's own room classification: every room it knows (from the dungeon map, and named once its
      * core has been seen), with type, shape, rotation and checkmark. Rewritten whenever any of that
      * changes, which is also how cleared/failed state shows up over time.
      */
@@ -482,7 +482,7 @@ class RunRecorder(
                 .append(str(r.checkmark.name)).append(",[")
             r.tiles.forEachIndexed { j, t -> if (j > 0) sb.append(','); sb.append('[').append(t.x).append(',').append(t.z).append(']') }
             // Secrets found / total. "Found" comes from the action bar (the room you're in) and other
-            // Odin users, so it's a lower bound for rooms nobody running Odin is in.
+            // ADM users, so it's a lower bound for rooms nobody running ADM is in.
             sb.append("],").append(r.foundSecrets ?: -1).append(',').append(r.data?.maxSecrets ?: -1)
             // [8]: the room's library key when it's known (rotation found, variant told apart).
             RoomKeys.key(r)?.let { sb.append(',').append(str(it)) }
@@ -553,7 +553,7 @@ class RunRecorder(
             raw.x = p.x; raw.y = p.y; raw.z = p.z; raw.yRot = p.yRot; raw.xRot = p.xRot; raw.crouching = p.isCrouching
             if (raw.stack !== stack) {
                 raw.stack = stack
-                // (Odin's itemId copies the item's whole custom data: once per stack, not every tick)
+                // (ADM's itemId copies the item's whole custom data: once per stack, not every tick)
                 raw.vanilla = vanillaId(stack)
                 raw.held = if (stack.isEmpty) "" else stack.itemId.ifEmpty { raw.vanilla }
             }
@@ -592,7 +592,7 @@ class RunRecorder(
 
     /**
      * Your own click on a Simon Says button (start or grid), once per click: whether a mod blocked
-     * it (Odin's Block Wrong Clicks / Block Wrong on Start), and whether the button already showed
+     * it (ADM's Block Wrong Clicks / Block Wrong on Start), and whether the button already showed
      * as pressed here - the start button's presses almost never show as a block change, the
      * likely reason being that it already reads as pressed, so a click changes nothing you can see.
      */
@@ -610,8 +610,8 @@ class RunRecorder(
     fun onSsSound(id: String, x: Double, y: Double, z: Double, volume: Float, pitch: Float) =
         emit("""{"k":"sssound","t":$tick,"id":${str(id)},"x":${n(x)},"y":${n(y)},"z":${n(z)},"v":${f2(volume)},"p":${f2(pitch)}}""")
 
-    // Teammates the game isn't rendering: where the dungeon map puts them (Odin decodes the map's
-    // player markers), turned into world coordinates the way Odin's map draws them. Clear only -
+    // Teammates the game isn't rendering: where the dungeon map puts them (ADM decodes the map's
+    // player markers), turned into world coordinates the way ADM's map draws them. Clear only -
     // the map shows the room grid, not the boss.
     private val lastMapPos = HashMap<String, String>()
 

@@ -16,8 +16,8 @@ import com.adm.utils.skyblock.LocationUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 /**
- * Health and mana: bar versions of Odin's Health HUD and Mana HUD, in the colours set in Odin's
- * Player Display, and an option to hide Odin's text HUDs and these bars until the stat runs low.
+ * Health and mana: bar versions of ADM's Health HUD and Mana HUD, in the colours set in ADM's
+ * Player Display, and an option to hide ADM's text HUDs and these bars until the stat runs low.
  * Each bar is its own HUD so it can be placed and toggled on its own; unlike the text, a bar stays
  * up at 0 as an empty bar.
  */
@@ -28,7 +28,7 @@ object HealthMana {
     private val hideUnlessLow get() = hideUnlessLowSetting.value
     private val threshold get() = thresholdSetting.value
 
-    private val healthBar = PlayerDisplay.HUD("Health Bar HUD", "Your health as a filled bar, in Odin's Player Display Health Color.", true, 434, 501, 1.6f) { example ->
+    private val healthBar = PlayerDisplay.HUD("Health Bar HUD", "Your health as a filled bar, in ADM's Player Display Health Color.", true, 434, 501, 1.6f) { example ->
         val (current, max) = when {
             example -> 3000 to 4000
             !LocationUtils.isInSkyblock || ActionBarListener.maxHealth == 0 -> return@HUD 0 to 0
@@ -40,7 +40,7 @@ object HealthMana {
     private val healthBarWidth = NumberSetting("Health Bar Width", 60, 20..200, 5, desc = "Width of the health bar.").withDependency { dropdown.value }
     private val healthBarHeight = NumberSetting("Health Bar Height", 8, 2..30, 1, desc = "Height of the health bar.").withDependency { dropdown.value }
 
-    private val manaBar = PlayerDisplay.HUD("Mana Bar HUD", "Your mana as a filled bar, in Odin's Player Display Mana Color.", true, 434, 480, 1.6f) { example ->
+    private val manaBar = PlayerDisplay.HUD("Mana Bar HUD", "Your mana as a filled bar, in ADM's Player Display Mana Color.", true, 434, 480, 1.6f) { example ->
         val (current, max) = when {
             example -> 2000 to 20000
             !LocationUtils.isInSkyblock || ActionBarListener.maxMana == 0 -> return@HUD 0 to 0
@@ -52,18 +52,18 @@ object HealthMana {
     private val manaBarWidth = NumberSetting("Mana Bar Width", 60, 20..200, 5, desc = "Width of the mana bar.").withDependency { dropdown.value }
     private val manaBarHeight = NumberSetting("Mana Bar Height", 8, 2..30, 1, desc = "Height of the mana bar.").withDependency { dropdown.value }
 
-    /** Adds the bars and the low-stat hiding to Odin's Player Display. */
+    /** Adds the bars and the low-stat hiding to ADM's Player Display. */
     fun install() {
         healthBar.value.enabled = false; manaBar.value.enabled = false
         for (s in listOf(dropdown, hideUnlessLowSetting, thresholdSetting, healthBar, healthBarWidth, healthBarHeight, manaBar, manaBarWidth, manaBarHeight)) PlayerDisplay.registerSetting(s)
     }
 
     /**
-     * Whether Odin's own Health HUD or Mana HUD should be skipped this frame: Hide Health/Mana Above
-     * % is on and the stat is above the threshold. Read by CoreHuds for every Odin HUD element; only
+     * Whether ADM's own Health HUD or Mana HUD should be skipped this frame: Hide Health/Mana Above
+     * % is on and the stat is above the threshold. Read by CoreHuds for every ADM HUD element; only
      * those two are ever skipped.
      */
-    fun hidesOdinHud(hud: HudElement): Boolean {
+    fun hidesCoreHud(hud: HudElement): Boolean {
         if (!PlayerDisplay.enabled || !hideUnlessLow) return false
         return when {
             hud === (PlayerDisplay.settings["Health HUD"] as? HUDSetting)?.value -> aboveThreshold(ActionBarListener.currentHealth, ActionBarListener.maxHealth)

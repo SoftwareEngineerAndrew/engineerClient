@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Odin's Dungeon Map drawing an icon (renderIcon: the room check marks and the guess tiles' "?"): skipped when
+ * ADM's Dungeon Map drawing an icon (renderIcon: the room check marks and the guess tiles' "?"): skipped when
  * {@link MapIcons} has that kind turned off. renderIcon takes an inline-class IVec2, so its JVM name is mangled
  * (renderIcon-xaMhWKE); Mixin rejects a '-' in a plain selector ("Invalid name"), so it's matched by regex.
  */

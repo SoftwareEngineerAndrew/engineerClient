@@ -75,7 +75,7 @@ object BoxFaces {
         return true
     }
 
-    /** [move] for corners that are not whole blocks (Odin's posmsg boxes): same rule, in doubles. */
+    /** [move] for corners that are not whole blocks (ADM's posmsg boxes): same rule, in doubles. */
     fun move(c: DoubleArray, face: Face, by: Int): Boolean {
         val (corner, sign, other) = when (face) {
             Face.EAST -> Triple(MAX_X, 1, MIN_X)

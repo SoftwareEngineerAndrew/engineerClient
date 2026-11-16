@@ -35,7 +35,7 @@ object I4Complete {
     private var tagWasActive: Boolean? = null
     private var shown = false
 
-    /** Its handlers are on Odin's bus from here on; they do nothing while Random Stuff is off. */
+    /** Its handlers are on ADM's bus from here on; they do nothing while Random Stuff is off. */
     fun register() = EventBus.subscribe(this)
 
     private fun reset() { tagWasActive = null; shown = false }

@@ -23,6 +23,6 @@ class NoDepthFeatureRenderer : RenderTypeFeatureRenderer<NoDepthSubmit>() {
     }
 
     companion object {
-        val TYPE: FeatureRendererType<NoDepthSubmit> = FeatureRendererType.create("odin_no_depth")
+        val TYPE: FeatureRendererType<NoDepthSubmit> = FeatureRendererType.create("core_no_depth")
     }
 }

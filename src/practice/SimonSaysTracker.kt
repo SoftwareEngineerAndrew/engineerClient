@@ -23,8 +23,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties
  * The Simon Says solver behind Devices' Simon Says ([com.engineerclient.devices.DevSimonSays]): it draws, blocks and announces
  * from the answer worked out here by [SimonSaysSolver].
  *
- * Fixes over Odin's: a re-skip after a fail (Odin keeps the stray light, as it only looks for one
- * after a world load - the start button never shows as pressed), a 2-light skip (Odin reverses
+ * Fixes over ADM's: a re-skip after a fail (ADM keeps the stray light, as it only looks for one
+ * after a world load - the start button never shows as pressed), a 2-light skip (ADM reverses
  * it), a flash before the show, a lagging last light, lights counted as they come on, and a skip
  * whose last round is still showing when the buttons come back (triple skips, delayed shows).
  */
@@ -55,7 +55,7 @@ object SimonSaysTracker {
         on<TickEvent.Server> { tick++ }
         on<LevelEvent.Load> { solver.reset(); lampLit.clear(); buttonTick.clear() }
         // Lamps come from their block packets, re-sends included: a lamp sent lit while lit (cleared and
-        // relit in one tick) is how a skip's chain starts show, and Odin's BlockUpdateEvent skips it as no
+        // relit in one tick) is how a skip's chain starts show, and ADM's BlockUpdateEvent skips it as no
         // change. Stamped with the server tick on arrival, and what the lamp was taken from the packets before
         // it (in arrival order), then handled on the client thread.
         on<PacketEvent.Receive> {
@@ -93,7 +93,7 @@ object SimonSaysTracker {
             if (pos.x != 110 || pos.y !in 120..123 || pos.z !in 92..95) return@on
             EngineerClient.safely("ss solver") {
                 val level = EngineerClient.mc.level ?: return@safely
-                // Odin's event comes before the change is applied: the grid as it was.
+                // ADM's event comes before the change is applied: the grid as it was.
                 val packetTick = buttonTick[pos] ?: tick
                 when {
                     updated.block is ButtonBlock && old.block !is ButtonBlock ->

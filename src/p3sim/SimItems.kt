@@ -1512,7 +1512,7 @@ object SimItems {
 
     fun etherwarp(p: ServerPlayer, range: Double = 61.0) {
         // Cast from where you clicked: Hypixel reads the use packet after the move packets sent before it, never after the ones that
-        // follow. A client that moves you at once (Odin's zero-ping etherwarp) has already sent the landing spot when the delayed cast
+        // follow. A client that moves you at once (ADM's zero-ping etherwarp) has already sent the landing spot when the delayed cast
         // runs, so a position taken then was a second warp from there.
         val seen = clickPos ?: p.position()
         val eye = Vec3(seen.x, seen.y + 1.27, seen.z)

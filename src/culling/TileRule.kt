@@ -15,7 +15,7 @@ object TileRule {
     private const val N = DungeonFrame.TILES
     private val DIRS = arrayOf(intArrayOf(1, 0), intArrayOf(-1, 0), intArrayOf(0, 1), intArrayOf(0, -1))
 
-    /** Bit of tile ([tx], [tz]) in a tile set: z * 6 + x, as Odin numbers them. */
+    /** Bit of tile ([tx], [tz]) in a tile set: z * 6 + x, as ADM numbers them. */
     fun bit(tx: Int, tz: Int): Long = 1L shl (tz * N + tx)
 
     /**
@@ -32,7 +32,7 @@ object TileRule {
 
     /**
      * Hypixel's rooms are 4 tiles at most (and one entrance reads as joined to the room in front of it: [Links]). Blocks
-     * that join more tiles than this into one aren't a dungeon's: a singleplayer world, which Odin counts as a dungeon
+     * that join more tiles than this into one aren't a dungeon's: a singleplayer world, which ADM counts as a dungeon
      * too, with its ground running under every gap. Nothing is left out there.
      */
     const val MAX_ROOM = 8

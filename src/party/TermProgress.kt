@@ -37,10 +37,10 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Every game in P3 sends its own (this on or not, as Pose POV's sharing does), small frames on each change and once a
  * second while it lasts:
- *  - kind 7, a terminal: [7][terminal 0-16, 255 closed][Odin's type][clicks left][clicks in all][tenths of a second open]
+ *  - kind 7, a terminal: [7][terminal 0-16, 255 closed][ADM's type][clicks left][clicks in all][tenths of a second open]
  *    (Melody: 0 and 0, it isn't clicks);
  *  - kind 8, Simon Says: [8][rounds done 0-4][presses into the next][tenths of a second since the first start, u16].
- * What arrives is kept only as far as it could be real: a terminal of the 17, a type Odin has, no more clicks than a
+ * What arrives is kept only as far as it could be real: a terminal of the 17, a type ADM has, no more clicks than a
  * terminal takes, a round and press count Simon Says can have; it is never shown as text a sender wrote.
  */
 object TermProgress {
@@ -129,7 +129,7 @@ object TermProgress {
         if (TermInfo.deviceDone(1)) sses.clear()
         countdowns.keys.removeIf { k -> if (k.startsWith("t:")) !terms.containsKey(k.substring(2)) else !sses.containsKey(k.substring(2)) }
 
-        // Your terminal: the one you're by while Odin has one open.
+        // Your terminal: the one you're by while ADM has one open.
         val term = TerminalUtils.currentTerm
         val near = TERMINALS.indices.minByOrNull { TERMINALS[it].distanceToSqr(me.position()) }?.takeIf { TERMINALS[it].distanceTo(me.position()) <= REACH }
         if (term != null && near != null && me.containerMenu !== me.inventoryMenu) {

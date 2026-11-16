@@ -14,7 +14,7 @@ open class HudElement(
     var scale: Float,
     enabled: Boolean = true,
 ) {
-    // Where it sits as a share of the screen, as Blade keeps it, so it stays put when the window or GUI scale changes.
+    // Where it sits as a share of the screen, as ADM keeps it, so it stays put when the window or GUI scale changes.
     // Until the window is known it holds pixels, turned into a share on first use.
     private var fx = Double.NaN
     private var fy = Double.NaN

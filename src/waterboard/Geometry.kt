@@ -1,7 +1,7 @@
 package com.engineerclient.waterboard
 
 /**
- * One Water Board's plane in room coordinates (Odin's frame, `DungeonRoom.getRealCoords`): which cells are open, where the
+ * One Water Board's plane in room coordinates (ADM's frame, `DungeonRoom.getRealCoords`): which cells are open, where the
  * lever-driven blocks ("slots") are and whose lever moves them, the outlets, the inlet; plus the order Minecraft 1.8 visits a
  * block's neighbours in, which depends on how the room is turned.
  *
@@ -18,7 +18,7 @@ class Geometry private constructor(
     val w = X1 - X0 + 1
     val h = Y1 - Y0 + 1
     val source = cell(15, 82)
-    /** Outlet pits, in Odin's colour order: purple, orange, blue, green, red. */
+    /** Outlet pits, in ADM's colour order: purple, orange, blue, green, red. */
     val outletCell = IntArray(OUTLET_X.size) { cell(OUTLET_X[it], 58) }
 
     /** 1.8's EnumFacing.Plane.HORIZONTAL order (N, E, S, W) on the board's axis, as cell offsets (+1 = room +x). */

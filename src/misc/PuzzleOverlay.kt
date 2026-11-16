@@ -22,7 +22,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
  * Puzzle Overlay: dtmap's puzzle HUD (github.com/ricedotwho/dtMap, PuzzleHud.kt), "Puzzles(N):" then a line per puzzle,
  * green once completed and red otherwise, "???" for one not found yet. Always in the tab list's order: each line stays
  * where the tab list has it, so a puzzle found later fills its own "???" instead of moving to the bottom (dtmap's
- * default lists them in map scan order). The Odin style draws it the way Odin's Puzzle HUD did, in the same order.
+ * default lists them in map scan order). The ADM style draws it the way ADM's Puzzle HUD did, in the same order.
  */
 object PuzzleOverlay {
     private val mc: Minecraft get() = Minecraft.getInstance()

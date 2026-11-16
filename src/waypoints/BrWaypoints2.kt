@@ -122,7 +122,7 @@ object BrWaypoints2 : Module(
 
     private val opacity by NumberSetting("Fill Opacity", 0.03f, 0.0..1.0, 0.01f, desc = "How solid the boxes' faces are. The next of yours to kill is filled in more.")
 
-    private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in Odin's Highlight colour.")
+    private val spawnMarkers by BooleanSetting("Starred Mobs Spawn", false, desc = "Marks where each starred mob was first seen, flat on the floor in ADM's Highlight colour.")
 
     private val allRooms by BooleanSetting("All Rooms", false, desc = "Shows boxes in every room. Off, only in rooms the blood rush went through.")
 
@@ -135,7 +135,7 @@ object BrWaypoints2 : Module(
 
     /** A box in the world: its corners ([BoxFaces.MIN_X]..) and the room it belongs to. */
     class Box(val c: IntArray, val room: String?) {
-        /** Written to the file. A box placed before Odin has worked out its room waits to be. */
+        /** Written to the file. A box placed before ADM has worked out its room waits to be. */
         var saved = false
 
         fun aabb() = AABB(c[0].toDouble(), c[1].toDouble(), c[2].toDouble(), c[3].toDouble(), c[4].toDouble(), c[5].toDouble())
@@ -145,7 +145,7 @@ object BrWaypoints2 : Module(
 
     /**
      * Every room's boxes, by room name, as their lowest and highest block in the room's own
-     * coordinates (rotated to north, as Odin's waypoints are): x1 y1 z1 x2 y2 z2.
+     * coordinates (rotated to north, as ADM's waypoints are): x1 y1 z1 x2 y2 z2.
      */
     private val savedFile = lazy { read() }
     private val saved: MutableMap<String, MutableList<IntArray>> by savedFile
@@ -172,7 +172,7 @@ object BrWaypoints2 : Module(
     private val byId = HashMap<Int, Mob>()
     private var ticks = 0
 
-    // Odin's Highlight: which name tags are starred mobs, and how a tag finds its mob.
+    // ADM's Highlight: which name tags are starred mobs, and how a tag finds its mob.
     private val MOB_NAMES = listOf("Lurker", "Dreadlord", "Souleater", "Zombie", "Skeleton", "Skeletor", "Sniper", "Super Archer", "Spider", "Fels", "Withermancer", "Lost Adventurer", "Angry Archaeologist", "Frozen Adventurer")
     private val STARRED = Regex("^.*✯ .*\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?.?❤$")
 
@@ -456,7 +456,7 @@ object BrWaypoints2 : Module(
      * are the ones on the way from Entrance to each of those doors (and to Blood), and each is
      * entered by the door on its Entrance side. Other rooms, cleared by whoever isn't rushing, are
      * not on it however early they are walked into. The doors come from the world ([worldDoors]),
-     * which has the whole dungeon from the start as far as it is loaded, and from Odin's map.
+     * which has the whole dungeon from the start as far as it is loaded, and from ADM's map.
      */
     private fun mapPath() {
         val links = HashMap<DungeonRoom, MutableList<Pair<DungeonRoom, Pair<Int, Int>>>>()
@@ -726,9 +726,9 @@ object BrWaypoints2 : Module(
     }
 
     /**
-     * What can sit under a starred tag: Odin's Highlight rule, except for Fels. A Fel is an
+     * What can sit under a starred tag: ADM's Highlight rule, except for Fels. A Fel is an
      * enderman named "Dinnerbone" (drawn upside down) about 3 blocks under its tag, and until it
-     * wakes it is invisible but for its head — Odin skips invisible mobs, which would drop every
+     * wakes it is invisible but for its head — ADM skips invisible mobs, which would drop every
      * dormant Fel, so an enderman counts whether it can be seen or not.
      */
     private fun isMob(e: Entity): Boolean = when (e) {
@@ -783,9 +783,9 @@ object BrWaypoints2 : Module(
     }
 
     /**
-     * A room Odin has worked out well enough to turn room coordinates into world ones: rotation and
+     * A room ADM has worked out well enough to turn room coordinates into world ones: rotation and
      * clay block known, and every one of its tiles found. That last part matters — until the whole
-     * room is in, Odin reads a big room as a 1x1 and guesses its rotation from that. Rooms such as
+     * room is in, ADM reads a big room as a 1x1 and guesses its rotation from that. Rooms such as
      * Pipes, Pit, Waterfall, Hallway and Quartz Knight can read NORTH first and only turn WEST up to
      * ~180 ticks later, and boxes placed or saved by the first guess would come out rotated.
      */
@@ -798,8 +798,8 @@ object BrWaypoints2 : Module(
     private fun transform(room: DungeonRoom) = "${room.rotation}|${room.clayPos}"
 
     /**
-     * Puts each saved room's boxes into the world once Odin has worked the room out, and puts them
-     * again if Odin later changes its mind about the room. Boxes placed before the room was worked
+     * Puts each saved room's boxes into the world once ADM has worked the room out, and puts them
+     * again if ADM later changes its mind about the room. Boxes placed before the room was worked
      * out are kept where they are and saved now.
      */
     private fun loadRooms() {
@@ -822,7 +822,7 @@ object BrWaypoints2 : Module(
         }
     }
 
-    /** Saves a room's boxes as they are now. False if Odin has not worked the room out yet. */
+    /** Saves a room's boxes as they are now. False if ADM has not worked the room out yet. */
     private fun save(name: String?): Boolean {
         if (name == null) return false
         val room = placed(name) ?: return false

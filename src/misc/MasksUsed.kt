@@ -11,10 +11,10 @@ import com.adm.features.impl.dungeon.InvincibilityTimer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 
 /**
- * "Only Used" for Odin's Invincibility Timer: its HUD lists only the masks (and Phoenix) that have
+ * "Only Used" for ADM's Invincibility Timer: its HUD lists only the masks (and Phoenix) that have
  * saved you since you joined the world - each stays once used, cooldown over or not, so you see
- * which are back. Nothing used yet: no HUD. Registered into Odin's module like the Splits look
- * (see SplitsLook); `InvincibilityHudMixin` asks [shows] where Odin reads its Show Spirit /
+ * which are back. Nothing used yet: no HUD. Registered into ADM's module like the Splits look
+ * (see SplitsLook); `InvincibilityHudMixin` asks [shows] where ADM reads its Show Spirit /
  * Bonzo / Phoenix settings while drawing.
  */
 object MasksUsed {
@@ -22,7 +22,7 @@ object MasksUsed {
     private val onlyUsed = BooleanSetting("Only Used", false, desc = "Only show the masks and Phoenix that have saved you this run. Added by engineerClient.")
         .withDependency { (InvincibilityTimer.settings["Displayed Items"] as? DropdownSetting)?.value ?: true }
 
-    /** Same messages Odin procs on: Spirit, Bonzo, Phoenix. */
+    /** Same messages ADM procs on: Spirit, Bonzo, Phoenix. */
     private val PROCS = listOf(
         Regex("^Second Wind Activated! Your Spirit Mask saved your life!$"),
         Regex("^Your (?:. )?Bonzo's Mask saved your life!$"),
@@ -31,7 +31,7 @@ object MasksUsed {
     private val used = BooleanArray(3)
 
     /**
-     * Odin's Show setting for item [index] (0 Spirit, 1 Bonzo, 2 Phoenix), less the unused ones with Only Used on, and
+     * ADM's Show setting for item [index] (0 Spirit, 1 Bonzo, 2 Phoenix), less the unused ones with Only Used on, and
      * none in P3 Sim while it's stopped (no phase running).
      */
     @JvmStatic
@@ -39,20 +39,20 @@ object MasksUsed {
         !(com.engineerclient.p3sim.P3Sim.inSim && com.engineerclient.p3sim.PartyClient.phase.isEmpty())
 
     /**
-     * P3 Sim restarted its masks and Phoenix (Masks.reset, every start): Odin's timers go back to ready as well, and
-     * nothing counts as used this run. Odin's InvincibilityType enum is package-private, so its public reset()
+     * P3 Sim restarted its masks and Phoenix (Masks.reset, every start): ADM's timers go back to ready as well, and
+     * nothing counts as used this run. ADM's InvincibilityType enum is package-private, so its public reset()
      * (cooldown and invincibility to 0) is reached by reflection. Client thread.
      */
     fun resetTimers() {
         used.fill(false)
-        com.engineerclient.EngineerClient.safely("odin invincibility reset") {
+        com.engineerclient.EngineerClient.safely("core invincibility reset") {
             val type = Class.forName("com.adm.features.impl.dungeon.InvincibilityTimer\$InvincibilityType")
             val reset = type.getMethod("reset").apply { isAccessible = true }
             type.enumConstants.forEach { reset.invoke(it) }
         }
     }
 
-    /** Adds the setting to Odin's module; before SplitsLook.install, which re-reads Odin's config for both. */
+    /** Adds the setting to ADM's module; before SplitsLook.install, which re-reads ADM's config for both. */
     fun install() {
         InvincibilityTimer.registerSetting(onlyUsed)
         on<MessageEvent.Chat> {

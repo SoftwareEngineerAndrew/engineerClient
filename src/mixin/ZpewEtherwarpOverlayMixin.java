@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 /**
- * Legit Zpew: Odin's etherwarp overlay is worked out from where the camera is (the end of the teleports still on their
+ * Legit Zpew: ADM's etherwarp overlay is worked out from where the camera is (the end of the teleports still on their
  * way), not from the player the server hasn't moved yet, so it shows where your next etherwarp will really land.
  * getEtherPos adds the eye height to this position itself.
  */

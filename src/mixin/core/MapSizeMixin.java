@@ -16,9 +16,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Collection;
 
 /**
- * {@link MapSizes} on Odin's Dungeon Map. Odin writes its sizes into the code as numbers: 16 a room (fillRoom, and
+ * {@link MapSizes} on ADM's Dungeon Map. ADM writes its sizes into the code as numbers: 16 a room (fillRoom, and
  * renderGuess's guess tile with its halves 8 and thirds 5), 8 a door across the 4 gap (renderDoors). The room ones
- * are swapped for Room Size; the doors are drawn by MapSizes instead whenever a size isn't Odin's. A room's check
+ * are swapped for Room Size; the doors are drawn by MapSizes instead whenever a size isn't ADM's. A room's check
  * mark and text are placed for a 16 room, so they're moved by half the difference: renderRoomText as a whole, and
  * renderIcon on its own when renderGuess calls it. Mangled names (inline-class IVec2 arguments) are matched by regex,
  * since Mixin rejects their '-'.

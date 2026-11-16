@@ -29,9 +29,9 @@ import com.adm.utils.skyblock.kuudraT5SplitsGroup
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 /**
- * The splits HUD: Odin's Splits, drawn in Blade's look with ADM's Pace and Lag, and a switch for
- * every split. Its settings live in Odin's Splits module, so Odin saves them and its HUDs keep their
- * place; `HudElementMixin` asks [render] for what to draw. Which splits there are stays Odin's.
+ * The splits HUD: ADM's Splits, drawn in ADM's look with ADM's Pace and Lag, and a switch for
+ * every split. Its settings live in ADM's Splits module, so ADM saves them and its HUDs keep their
+ * place; `HudElementMixin` asks [render] for what to draw. Which splits there are stays ADM's.
  */
 object SplitsLook {
 
@@ -52,7 +52,7 @@ object SplitsLook {
     private val showLag = toggle("Lag", "The time lost to lag so far this run (floor 7).")
     private val showPace = toggle("Pace", "The projected finish.")
 
-    /** One switch per split: the clear and floor 7 by ADM's names, F1-F6 bosses and Kuudra by Odin's. */
+    /** One switch per split: the clear and floor 7 by ADM's names, F1-F6 bosses and Kuudra by ADM's. */
     private val runToggles = listOf("Open", "Blood", "Portal", "Enter", "Maxor", "Storm", "Terms", "Goldor", "Necron", "Dragons")
         .associateWith { toggle(it, "The $it split.") }
 
@@ -129,12 +129,12 @@ object SplitsLook {
     }.withDependency { pace.value }
 
     /**
-     * Adds the settings to Odin's Splits. Odin read its config before any of them existed, so it is
+     * Adds the settings to ADM's Splits. ADM read its config before any of them existed, so it is
      * read again now to pick up what was saved for them; reading is idempotent (a module is only
      * toggled if its saved state differs), so nothing else changes.
      *
      * Also rearranges Splits' settings: Look first and no Keybind (taken
-     * out of the cache Odin fires keybinds from as well, so a saved key can't toggle Splits).
+     * out of the cache ADM fires keybinds from as well, so a saved key can't toggle Splits).
      */
     fun install() {
         dragonsOnRelics()
@@ -149,7 +149,7 @@ object SplitsLook {
         }
         EventBus.subscribe(this)
         (Splits.settings.remove("Keybind") as? KeybindSetting)?.let { ModuleManager.keybindSettingsCache.remove(it) }
-        // The Show switches replace Odin's own Boss Entry toggle.
+        // The Show switches replace ADM's own Boss Entry toggle.
         Splits.settings.remove("Boss Entry Split")
         val all = LinkedHashMap(Splits.settings)
         Splits.settings.clear()
@@ -162,9 +162,9 @@ object SplitsLook {
     // --- Necron's end ----------------------------------------------------------------------------
 
     /**
-     * M7 only. Odin's splits end Necron's split and start "Cleared" (the Dragons) on "[BOSS] Necron:
+     * M7 only. ADM's splits end Necron's split and start "Cleared" (the Dragons) on "[BOSS] Necron:
      * All this, for nothing...", which he stopped saying with Hypixel's boss update of 5 Oct 2026, so
-     * the Dragons never started. Odin's floor 7 splits are a public list: its last split is made to
+     * the Dragons never started. ADM's floor 7 splits are a public list: its last split is made to
      * start on the Wither King's first line instead, said once every relic is placed - Necron's split
      * runs through the relics, as Sub Splits' does. F7 never says it: Necron runs to the run's end.
      */
@@ -192,8 +192,8 @@ object SplitsLook {
     private var failed = false
 
     /**
-     * What Odin's [hud] draws instead, if it is one of Splits' two: its size, as Odin's own drawing
-     * returns it. Null lets Odin draw it - any other HUD, or (once, logged) an error here.
+     * What ADM's [hud] draws instead, if it is one of Splits' two: its size, as ADM's own drawing
+     * returns it. Null lets ADM draw it - any other HUD, or (once, logged) an error here.
      */
     @JvmStatic
     fun render(hud: HudElement, g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int>? {
@@ -204,7 +204,7 @@ object SplitsLook {
             drawDisplay(g, example)
         } catch (t: Throwable) {
             failed = true
-            EngineerClient.logger.error("[ec] Splits look failed - back to Odin's look for this session", t)
+            EngineerClient.logger.error("[ec] Splits look failed - back to ADM's look for this session", t)
             null
         }
     }
@@ -230,7 +230,7 @@ object SplitsLook {
 
     /**
      * The targets for the floor, as seconds; null off floor 7. A blank box (or one that isn't a
-     * time) follows the Odin PB for that split, live, so it keeps up as the PB improves.
+     * time) follows the ADM PB for that split, live, so it keeps up as the PB improves.
      */
     private fun targets(place: EngineerLook.Place, master: Boolean): List<Double?>? {
         if (place != EngineerLook.Place.FLOOR7) return null
@@ -261,18 +261,18 @@ object SplitsLook {
 
     /**
      * The PB for split [i]: the faster of the best kept by Sub Splits (timed by its own tracker, on
-     * the split's own clock) and Odin's PB, each only if it is a real time - not under the split's
-     * floor. Odin's F7 PBs can't be taken as they are: its F7 Necron split never ends (it waits for
+     * the split's own clock) and ADM's PB, each only if it is a real time - not under the split's
+     * floor. ADM's F7 PBs can't be taken as they are: its F7 Necron split never ends (it waits for
      * a line Necron no longer says), and old configs can carry a 0.01 s Portal.
      */
     private fun pb(i: Int, master: Boolean): SplitPace.Clocks? {
         val floor = if (master) "M7" else "F7"
         val id = SplitPace.ALL.getOrNull(i)?.let { SplitPace.SPLIT_IDS[it] }
         val ours = id?.let { sid -> DungeonSplits.bestOf(floor, sid)?.takeIf { SubSplitGrades.canBeBest(sid, it, floor) }?.let { SplitPace.clocks(sid, it) } }
-        val odin = PB_NAMES.getOrNull(i)?.let { Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal].get(it) }
+        val core = PB_NAMES.getOrNull(i)?.let { Splits.dungeonPBsList[(if (master) Floor.M7 else Floor.F7).ordinal].get(it) }
             ?.let { secs(it.toDouble()) }
             ?.takeIf { c -> if (id != null) SubSplitGrades.canBeBest(id, SubSplitGrades.value(id, c.ms, c.ticks), floor) else c.ms >= 1000 }
-        return listOfNotNull(ours, odin).minByOrNull { it.ms }
+        return listOfNotNull(ours, core).minByOrNull { it.ms }
     }
 
     /** F7's dark green for split [i] (SplitPace), what Pace counts it as with no box and no PB; none on M7. */
@@ -297,13 +297,13 @@ object SplitsLook {
         }
     }
 
-    /** The F7 Pace target for the Odin split named [name] (seconds; a blank box the PB), null with neither. */
+    /** The F7 Pace target for the ADM split named [name] (seconds; a blank box the PB), null with neither. */
     fun f7Target(name: String): Double? {
         val i = PB_NAMES.indexOf(name).takeIf { it >= 0 } ?: return null
         return targets(EngineerLook.Place.FLOOR7, false)?.getOrNull(i)
     }
 
-    /** Odin keys a PB by the split's name as it has it, colour codes included. */
+    /** ADM keys a PB by the split's name as it has it, colour codes included. */
     private val PB_NAMES by lazy { listOf("§2Blood Open", "§bBlood Clear", "§dPortal Entry") + floor7SplitGroup.map { it.name } }
 
     /**
@@ -373,7 +373,7 @@ object SplitsLook {
         g.text(s, width - EngineerClient.mc.font.width(s), y, Colors.WHITE)
     }
 
-    /** Blade's look: the name in its colour on the left, real time in green and server time in gray on the right. */
+    /** ADM's look: the name in its colour on the left, real time in green and server time in gray on the right. */
     private fun drawDisplay(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
         val layout = layout(example) ?: return 0 to 0
         val lines = if (separate.value) layout.lines.filter { strip(it.label) !in separateHuds } else layout.lines

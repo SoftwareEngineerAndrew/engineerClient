@@ -355,11 +355,11 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
     private fun announce(line: String) {
         // Hypixel's line is a styled component (name, green text, red count), not a § string.
         Sim.chatStyled(line)
-        // Hypixel shows each completion as a subtitle too (Odin's Terminal Titles replaces it): 0/40/0, the
+        // Hypixel shows each completion as a subtitle too (ADM's Terminal Titles replaces it): 0/40/0, the
         // subtitle a legacy string without the §r's ("§bPlayer1§a activated a terminal! (§c3§a/8)").
         Sim.title("", line.replace("§r", ""), 0, 40, 0)
         // Every progress line (devices too): pling vol 8 at your own position, pitch 4.05 as sent (the client clamps it to 2;
-        // Odin's Terminal Sounds keys on the raw 4.047619).
+        // ADM's Terminal Sounds keys on the raw 4.047619).
         Sim.sound(SoundEvents.NOTE_BLOCK_PLING, 8f, 4.047619f, source = net.minecraft.sounds.SoundSource.BLOCKS)
     }
 

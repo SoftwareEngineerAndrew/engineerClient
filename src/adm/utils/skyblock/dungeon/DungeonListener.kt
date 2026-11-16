@@ -6,7 +6,7 @@ import com.adm.events.*
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.features.impl.dungeon.LeapMenu
-import com.adm.features.impl.dungeon.LeapMenu.odinSorting
+import com.adm.features.impl.dungeon.LeapMenu.coreSorting
 import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.utils.network.WebUtils.hasBonusPaulScore
 import com.adm.utils.noControlCodes
@@ -186,7 +186,7 @@ object DungeonListener {
 
         leapTeammates =
             when (LeapMenu.type) {
-                LeapMenu.Sorting.DEFAULT -> odinSorting(dungeonTeammatesNoSelf.sortedBy { it.clazz.priority }).toList()
+                LeapMenu.Sorting.DEFAULT -> coreSorting(dungeonTeammatesNoSelf.sortedBy { it.clazz.priority }).toList()
                 LeapMenu.Sorting.CLASS -> dungeonTeammatesNoSelf.sortedWith(compareBy({ it.clazz.ordinal }, { it.name }))
                 LeapMenu.Sorting.NAME -> dungeonTeammatesNoSelf.sortedBy { it.name }
                 LeapMenu.Sorting.CUSTOM -> dungeonTeammatesNoSelf.sortedBy { DungeonUtils.customLeapOrder.indexOf(it.name.lowercase()).takeIf { index -> index != -1 } ?: Int.MAX_VALUE }

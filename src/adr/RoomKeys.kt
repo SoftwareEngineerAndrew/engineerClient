@@ -10,7 +10,7 @@ import net.minecraft.world.level.chunk.status.ChunkStatus
 
 /**
  * Which copy in the room library a dungeon room is: "Name|ROTATION", plus "|core" for 1x1 rooms
- * that come in several variants (Odin lists more than one core for them: the Entrance, Default,
+ * that come in several variants (ADM lists more than one core for them: the Entrance, Default,
  * some traps and puzzles), so each variant gets its own copy instead of sharing one.
  */
 object RoomKeys {
@@ -19,7 +19,7 @@ object RoomKeys {
     fun reset() = cores.clear()
 
     /**
-     * The variant of a 1x1 room: Odin's core (a hash of the room's centre column) of its tile, once
+     * The variant of a 1x1 room: ADM's core (a hash of the room's centre column) of its tile, once
      * that chunk is loaded; null for rooms with only one variant, or until it can be read.
      */
     fun core(room: DungeonRoom): Int? {
@@ -36,9 +36,9 @@ object RoomKeys {
     }
 
     /**
-     * Whether Odin's rotation is the room's real one. 1x1 rooms: only once it found the blue clay
+     * Whether ADM's rotation is the room's real one. 1x1 rooms: only once it found the blue clay
      * in the room's corner - otherwise the rotation is a placeholder (a room only seen on the map
-     * gets WEST). Fairy rooms have no clay (Odin always says SOUTH): the viewer turns them to fit.
+     * gets WEST). Fairy rooms have no clay (ADM always says SOUTH): the viewer turns them to fit.
      */
     fun rotationKnown(room: DungeonRoom): Boolean =
         room.shape != RoomShape.OneByOne || room.clayPos != null || room.data?.name == "Fairy"

@@ -45,7 +45,7 @@ object Fight {
     var refreshPhase = 18
         private set
 
-    /** Server ticks since the sim started (the ping ids Odin counts as server ticks). */
+    /** Server ticks since the sim started (the ping ids ADM counts as server ticks). */
     var serverTick = 0
         private set
 
@@ -280,7 +280,7 @@ object Fight {
     }
 
     /**
-     * Odin's 4th device solver (Arrows Device) keeps the blocks hit, the target and "complete" until
+     * ADM's 4th device solver (Arrows Device) keeps the blocks hit, the target and "complete" until
      * a world load; a sim restart is a new P3, so it starts clean too.
      */
     /**
@@ -344,7 +344,7 @@ object Fight {
         Stats.runStart = if (what == Start.P1) serverTick else -1
         previous = null
         // Our splits: a fresh run from this phase, the ones before it at your Pace times. Queued on
-        // the client before any of this fight's lines can reach it (it starts Odin's run too).
+        // the client before any of this fight's lines can reach it (it starts ADM's run too).
         val (split, termsDone) = when (what) {
             Start.P1 -> com.engineerclient.splits.SplitTracker.MAXOR to 0
             Start.P2 -> com.engineerclient.splits.SplitTracker.STORM to 0
@@ -358,7 +358,7 @@ object Fight {
         // Practice: no splits (its own timer is the one that counts); the last run's are cleared.
         if (practice) PartyClient.send("splitsStop") else PartyClient.send("splitsStart", termsDone, split)
         Recorder.begin(what.label)
-        // No "Starting in 1 second." line (Hypixel has none in P3): SimSplits starts Odin's run directly.
+        // No "Starting in 1 second." line (Hypixel has none in P3): SimSplits starts ADM's run directly.
         val p: Phase = when (what) {
             Start.P1 -> P1Maxor()
             Start.P2 -> P2Storm()
@@ -393,7 +393,7 @@ object Fight {
         Devices.showIdle()
         resetI4Solver()
         Party.clear()
-        // The splits stop with it: ours and Odin's cleared as a world load clears them, rather than
+        // The splits stop with it: ours and ADM's cleared as a world load clears them, rather than
         // left counting a fight that's gone. Queued on the client like a start's, so they stay in order.
         PartyClient.send("splitsStop")
         PartyClient.send("termStart", 0)
@@ -402,9 +402,9 @@ object Fight {
     fun tick(server: MinecraftServer) {
         Sim.clearActor()
         serverTick++
-        // Hypixel pings every client each server tick; Odin (and this mod) count those as server
+        // Hypixel pings every client each server tick; ADM (and this mod) count those as server
         // ticks: Simon Says, terminal first-click protection, splits all run on them.
-        // Hypixel's ids count down from about -700 (never 0, which Odin ignores).
+        // Hypixel's ids count down from about -700 (never 0, which ADM ignores).
         server.playerList.players.forEach { it.connection.send(ClientboundPingPacket(-(PING_BASE + serverTick))) }
         // The party keeps its food full all run (the world is on normal difficulty, and vanilla hunger would end sprinting at food 6; Hypixel's is always 20).
         server.playerList.players.forEach { p -> if (p.foodData.foodLevel != 20) { p.foodData.setFoodLevel(20); p.foodData.setSaturation(5f) } }

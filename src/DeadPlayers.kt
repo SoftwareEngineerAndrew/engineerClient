@@ -9,7 +9,7 @@ import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 
 /**
- * Who in the dungeon is dead right now. Odin's own flag comes from the tab list, which only says
+ * Who in the dungeon is dead right now. ADM's own flag comes from the tab list, which only says
  * DEAD once it next refreshes; the death and revive lines say it the moment it happens:
  *
  *     ☠ name was killed by ... and became a ghost.     ☠ name was crushed / died to a trap /
@@ -46,7 +46,7 @@ object DeadPlayers {
         if (SELF_REVIVED.matches(line)) me?.let { dead -= it }
     }
 
-    /** Whether [name] is dead: the chat said so, or Odin's tab list does. */
+    /** Whether [name] is dead: the chat said so, or ADM's tab list does. */
     @JvmStatic
     fun isDead(name: String): Boolean =
         name.lowercase() in dead || DungeonUtils.dungeonTeammates.any { it.isDead && it.name.equals(name, ignoreCase = true) }

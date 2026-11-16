@@ -19,12 +19,12 @@ import kotlin.random.Random
 
 /**
  * F7's six terminals as Hypixel serves them (measured from recorded runs): the same titles, window
- * sizes, items, names and counts, so Odin's solver and custom GUI take them for the real thing.
+ * sizes, items, names and counts, so ADM's solver and custom GUI take them for the real thing.
  *
  * As on Hypixel: the items come in the same tick as the window, one slot update each (no full
- * refill; Odin only solves on those), and one full refill ~5 ticks later; a click is answered by a
+ * refill; ADM only solves on those), and one full refill ~5 ticks later; a click is answered by a
  * pling at once and its slot update the tick after; at most 5 clicks count in any 10 ticks (the
- * rest get no answer at all); left, right and middle clicks all count (Odin sends middle); a wrong
+ * rest get no answer at all); left, right and middle clicks all count (ADM sends middle); a wrong
  * Melody lock stalls it 20 ticks; every open is a fresh puzzle of the terminal's type; the
  * finishing click closes the window (then the chat line, then a close of window 0) in one tick.
  */
@@ -177,7 +177,7 @@ object Terminals {
     /** "Change all to same color!": 3 x 3 panes, left/middle step forward R-O-Y-G-B, right back. */
     class Rubix : Term(Type.RUBIX) {
         override val title = "Change all to same color!"
-        // Slot 32 last: Odin locks its target colour on that slot's update.
+        // Slot 32 last: ADM locks its target colour on that slot's update.
         private val slots = listOf(12, 13, 14, 21, 22, 23, 30, 31, 32)
         private val cycle = listOf(Items.STAINED_GLASS_PANE.red() to "Red", Items.STAINED_GLASS_PANE.orange() to "Orange", Items.STAINED_GLASS_PANE.yellow() to "Yellow", Items.STAINED_GLASS_PANE.green() to "Green", Items.STAINED_GLASS_PANE.blue() to "Blue")
         private val colour = IntArray(45)
@@ -420,7 +420,7 @@ object Terminals {
         override fun clicked(slot: Int, button: Int, input: ContainerInput, p: Player) {
             // A refused click gets no reply of its own (Hypixel sends no set_slot, no cursor). A vanilla client's guess (the
             // item on its cursor, the slot emptied) is still put back: handleContainerClick takes the guess as the remote
-            // state and its broadcastChanges right after this sends the real slot and cursor. Odin's clicks guess nothing,
+            // state and its broadcastChanges right after this sends the real slot and cursor. ADM's clicks guess nothing,
             // so they get nothing back, as on Hypixel.
             if (term.done || slot !in 0 until term.size) return
             Fight.afterPing("terminal click") {
@@ -449,7 +449,7 @@ object Terminals {
             }
         }
 
-        /** A click from a client a step behind: answer slot by slot, never with a full refill (Odin ignores those). */
+        /** A click from a client a step behind: answer slot by slot, never with a full refill (ADM ignores those). */
         override fun broadcastFullState() = broadcastChanges()
 
         override fun quickMoveStack(p: Player, slot: Int): ItemStack = ItemStack.EMPTY

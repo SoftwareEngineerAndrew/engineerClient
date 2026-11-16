@@ -39,7 +39,7 @@ import net.minecraft.world.level.block.Blocks
 
 /**
  * The BR (blood rush) and Goldor sub-split HUDs, plus the run tracking behind the Engineer Splits look (the splits
- * themselves are drawn by Odin's Splits module, see [SplitsLook]): bests, Pace and lag.
+ * themselves are drawn by ADM's Splits module, see [SplitsLook]): bests, Pace and lag.
  *
  * [SplitTracker] times the splits, [SubSplitTracker] the boss steps (Pace's targets) and
  * [BloodRunDetail] the rush room by room; this module feeds them chat, the two clocks (real time
@@ -189,7 +189,7 @@ object DungeonSplits : Module(
 
     /**
      * The P3 Sim starting a fight at [label]'s phase (client thread, before its lines arrive): a
-     * fresh run, in Odin's Splits ([SimSplits]) and here, whose earlier phases are taken as their
+     * fresh run, in ADM's Splits ([SimSplits]) and here, whose earlier phases are taken as their
      * Pace targets. [termsDone]: sections already done when starting partway through the terminals,
      * where no Goldor line comes to start the split.
      */
@@ -197,22 +197,22 @@ object DungeonSplits : Module(
         resetRun()
         realRun = false
         val before = { l: String ->
-            val ms = SimSplits.odinName(l)?.let { SimSplits.target(it) } ?: SplitPace.ref(l)?.ms ?: 0L
+            val ms = SimSplits.coreName(l)?.let { SimSplits.target(it) } ?: SplitPace.ref(l)?.ms ?: 0L
             SplitTracker.Clock(ms, (ms / 50).toInt())
         }
         val head = (1..termsDone).mapNotNull { SplitPace.subRef("terms.s$it") }
         val headClock = SplitTracker.Clock(head.sumOf { it.ms }, head.sumOf { it.ticks }.toInt())
         // A P3 / S1 start plays Storm's end first (StormEnd.LEAD, 3 s, to Goldor's "Who dares"
-        // line; the game's is 3.1 s since Hypixel's boss update), and on Hypixel Odin's Storm row
-        // runs through it: start Odin that far into Storm (the Storm Pace target, or its dark green
+        // line; the game's is 3.1 s since Hypixel's boss update), and on Hypixel ADM's Storm row
+        // runs through it: start ADM that far into Storm (the Storm Pace target, or its dark green
         // time of 41.3 s, less the lead-in) so "Storm took" reads a real time.
         if (label == SplitTracker.TERMS && termsDone == 0) {
-            val storm = SimSplits.odinName(SplitTracker.STORM)
+            val storm = SimSplits.coreName(SplitTracker.STORM)
             if (storm != null) {
                 val whole = SimSplits.target(storm).takeIf { it > 0 } ?: SplitPace.ref(SplitTracker.STORM)?.ms ?: 41_300L
                 SimSplits.start(storm, (whole - com.engineerclient.p3sim.StormEnd.LEAD * 50L).coerceAtLeast(0L))
             }
-        } else SimSplits.odinName(label)?.let { SimSplits.start(it, headClock.ms) }
+        } else SimSplits.coreName(label)?.let { SimSplits.start(it, headClock.ms) }
         if (termsDone > 0) {
             val at = now()
             tracker.startAt(label, before, at, headClock)
@@ -225,7 +225,7 @@ object DungeonSplits : Module(
         } else tracker.startAt(label, before)
     }
 
-    /** The P3 Sim's Stop (client thread): this run and Odin's both gone, as a world load leaves them. */
+    /** The P3 Sim's Stop (client thread): this run and ADM's both gone, as a world load leaves them. */
     fun simStop() {
         resetRun()
         SimSplits.stop()
@@ -246,14 +246,14 @@ object DungeonSplits : Module(
     private fun Stamp.minus(ticks: Int) = Stamp(realMs - ticks * 50L, tick - ticks)
 
     init {
-        // The three HUDs are off until switched on; Odin's HUD flag would also take their toggle away.
+        // The three HUDs are off until switched on; ADM's HUD flag would also take their toggle away.
         bloodHud.value.enabled = false; stormHud.value.enabled = false; goldorHud.value.enabled = false
         on<LevelEvent.Load> {
             resetRun()
             serverTicks = 0
         }
 
-        // Odin's server tick: the server's own clock, which falls behind when it lags.
+        // ADM's server tick: the server's own clock, which falls behind when it lags.
         on<TickEvent.Server> {
             serverTicks++; subs.onServerTick(); sampleLag()
             val now = serverTicks
@@ -316,7 +316,7 @@ object DungeonSplits : Module(
         }
 
         on<TickEvent.End> {
-            EngineerClient.safely("sim odin splits") { SimSplits.tick() }
+            EngineerClient.safely("sim core splits") { SimSplits.tick() }
             if (!DungeonUtils.inDungeons) return@on
             EngineerClient.safely("split bests") { recordSplitBests() }
             if (barriers.size >= DoorBlocks.DOOR_BLOCKS) door(barriers) { at, a, b -> blood.onDoorStart(at, a, b) }
@@ -510,7 +510,7 @@ object DungeonSplits : Module(
     /**
      * Necron dead at [at]. On F7 that is all: his split runs on to the run's end, there being no
      * end animation since Hypixel's boss update. On M7 his kill ends here and the relics begin; his
-     * split (and Odin's) runs on to the Wither King's first line, which starts the Dragons. Once a
+     * split (and ADM's) runs on to the Wither King's first line, which starts the Dragons. Once a
      * run: his wither going ~20 ticks after the burst calls this again.
      */
     private fun necronDead(at: Stamp) {
@@ -609,11 +609,11 @@ object DungeonSplits : Module(
     private var watcherAt: Pair<Int, net.minecraft.world.phys.Vec3>? = null
 
     /**
-     * The Watcher's move, the way Devonian times it: once his dialog is over ("Let's see how you
+     * The Watcher's move, the way ADM times it: once his dialog is over ("Let's see how you
      * can handle this."), the first tick he moves at least 45 server ticks after that line - the
      * wait skips his settling right as he says it. 55-148 ticks after the line in the recorded runs,
      * depending on the camp, so there is nothing to count it from: without him in view it stays
-     * blank. He is the zombie in one of his skins (Odin's Blood Camp list).
+     * blank. He is the zombie in one of his skins (ADM's Blood Camp list).
      */
     private fun watchWatcher(level: net.minecraft.client.multiplayer.ClientLevel) {
         val handle = moments.watcherHandle ?: return
@@ -772,12 +772,12 @@ object DungeonSplits : Module(
         }
     }
 
-    /** A best kept here, for Odin's own splits too ([SplitsLook]). */
+    /** A best kept here, for ADM's own splits too ([SplitsLook]). */
     fun bestOf(floor: String, id: String): Long? = validBest(id, bests(floor)[id], floor)
 
     /**
      * Records a finished [value] of [id] as the best on [floor] when it is one. Never in a P3 Sim
-     * run, whose earlier rows (Odin's too, via [SimSplits]) are Pace targets, not times.
+     * run, whose earlier rows (ADM's too, via [SimSplits]) are Pace targets, not times.
      */
     fun recordBest(floor: String, id: String, value: Long, finished: Boolean) {
         if (!finished || !keepsTimes || !SubSplitGrades.canBeBest(id, value, floor)) return

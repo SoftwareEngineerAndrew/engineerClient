@@ -129,7 +129,7 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
     override fun isPauseScreen(): Boolean = false
 
 
-    /** Odin's settings save when the menu closes (dragging the speed slider would write every step). */
+    /** ADM's settings save when the menu closes (dragging the speed slider would write every step). */
     override fun removed() {
         super.removed()
         Practice.saveMenu(tab?.name, practiceSec.takeIf { it in 1..4 } ?: 1)
@@ -236,8 +236,8 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
             grid.addChild(line)
         }
         val side = LinearLayout.vertical().spacing(2)
-        side.addChild(change("Leap Sort: " + if (P3Plan.odinSort) "§aOdin" else "Custom", 100,
-            "The leap menu's order. Odin (green): as Odin's Leap Menu sorts it (by class). Custom: your own, set with the slots.") { P3Plan.odinSort = !P3Plan.odinSort; P3Plan.save() })
+        side.addChild(change("Leap Sort: " + if (P3Plan.coreSort) "§aCore" else "Custom", 100,
+            "The leap menu's order. ADM (green): as ADM's Leap Menu sorts it (by class). Custom: your own, set with the slots.") { P3Plan.coreSort = !P3Plan.coreSort; P3Plan.save() })
         val gap = LinearLayout.horizontal().spacing(2)
         gap.addChild(change("-", 16, "Bots leap 0.25 s closer together.") { P3Plan.leapGap = (P3Plan.leapGap - 0.25).coerceAtLeast(0.05); P3Plan.save() })
         gap.addChild(label("§f${"%.2f".format(Locale.ROOT, P3Plan.leapGap)}s apart", 64, "How far apart the bots' leaps onto an early enterer come."))

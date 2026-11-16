@@ -1,6 +1,6 @@
 /*
  * The score calculator and score text below are dtMap's (github.com/ricedotwho/dtMap, its Scoreboard.TabData and
- * Score), which are in turn Odin's (github.com/odtheking/Odin, DungeonUtils and DungeonListener).
+ * Score), which are in turn ADM's (github.com/odtheking/ADM, DungeonUtils and DungeonListener).
  *
  * Copyright (c) 2026, rice.who
  * Original code Copyright (c) 2026, odtheking
@@ -44,12 +44,12 @@ import kotlin.math.floor
 /**
  * Clear Info's Map Info HUD, drawn the way LCM's map, dtMap, draws its score (Score Calculation),
  * worked out by dtMap's score calculator in its Legit Mode with its default score settings, from the tab list
- * stats Odin reads:
+ * stats ADM reads:
  *
  * - secrets found (aqua), the secrets still missing for 300 (yellow; the bonus score so far and Paul's +10 count,
- *   as in Odin's needed secrets and dtMap's "Missing secrets calculate paul") and
+ *   as in ADM's needed secrets and dtMap's "Missing secrets calculate paul") and
  *   the total (red), then the unknown secrets (the total less the rooms someone has walked into: yours, and your
- *   teammates' from Odin's map websocket; green while at least the 300 needs, else gold - dtMap shows it only when
+ *   teammates' from ADM's map websocket; green while at least the 300 needs, else gold - dtMap shows it only when
  *   solo clearing) and the score: red under 270, yellow under 300, green from 300
  * - what's still missing from the bonus: deaths, the Mimic (F6/F7), the Prince (until every room but blood is
  *   open on the map and none is a Prince room), bats (until every player in the run has one, at most 5) and
@@ -102,7 +102,7 @@ object LcmMapInfo {
             else listOf(line1, line2)
     }
 
-    /** The secrets in the rooms the map names: every open room Odin has scanned ([LcmStyle.knownName]). */
+    /** The secrets in the rooms the map names: every open room ADM has scanned ([LcmStyle.knownName]). */
     private fun knownRoomSecrets(): Int = DungeonScan.rooms.sumOf { if (LcmStyle.knownName(it) != null) it.data?.maxSecrets ?: 0 else 0 }
 
     /** One bat per player in the run, at most 5 (dtMap: 5, or 1 when solo clearing); 5 until the tab list has the team. */
@@ -163,11 +163,11 @@ object LcmMapInfo {
     private fun calculateBonusScoreNoPaul(): Int =
         (if (DungeonUtils.mimicKilled) 2 else 0) + (if (DungeonUtils.princeKilled) 1 else 0) + CoreCompat.batsKilled().coerceAtMost(5) + DungeonUtils.cryptCount.coerceAtMost(5)
 
-    /** Paul's +10: Odin's Paul check, which Clear Info's Paul Score (Auto / On / Off) overrides ([PaulScore]). */
+    /** Paul's +10: ADM's Paul check, which Clear Info's Paul Score (Auto / On / Off) overrides ([PaulScore]). */
     private fun calculatePaulScore(): Int = if (DungeonUtils.isPaul) 10 else 0
 
     /**
-     * The secrets 300 needs in all: the bonus score so far and Paul's +10 both count (Odin's needed secrets, and
+     * The secrets 300 needs in all: the bonus score so far and Paul's +10 both count (ADM's needed secrets, and
      * dtMap with "Missing secrets calculate paul" on; dtMap's default leaves Paul out, which asked for 10 bonus
      * points' worth of secrets too many whenever Paul is mayor).
      */

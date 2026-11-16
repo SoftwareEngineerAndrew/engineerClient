@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * POV Previews' Sharing FPS at its lowest reads "off" on its slider (nothing is shared there): the text Odin shows comes
+ * POV Previews' Sharing FPS at its lowest reads "off" on its slider (nothing is shared there): the text ADM shows comes
  * from NumberSetting.format, worked out whenever the value is set.
  */
 @Mixin(value = NumberSetting.class, remap = false)

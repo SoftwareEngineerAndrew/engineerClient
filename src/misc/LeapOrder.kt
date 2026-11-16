@@ -43,14 +43,14 @@ import net.minecraft.util.Util
 import net.minecraft.world.entity.player.PlayerSkin
 
 /**
- * Odin's custom leap order (`/adm leaporder a b c d`, Leap Menu sorting Custom), kept across restarts: Odin holds
+ * ADM's custom leap order (`/adm leaporder a b c d`, Leap Menu sorting Custom), kept across restarts: ADM holds
  * it in memory only, so it is saved to config/engineerclient/leaporder.txt whenever it changes (however it was
  * set) and put back at startup.
  *
- * `/adm leaporder` (or `/lo`) with no names opens [LeapOrderScreen]: Odin's leap menu as it would look, the
- * order's players in their spots, to drag between them. `/lo a b c d` sets it as Odin's command does.
+ * `/adm leaporder` (or `/lo`) with no names opens [LeapOrderScreen]: ADM's leap menu as it would look, the
+ * order's players in their spots, to drag between them. `/lo a b c d` sets it as ADM's command does.
  *
- * Changing the order (any way) switches Odin's Leap Menu sorting to Custom. It goes back to what it was (Odin
+ * Changing the order (any way) switches ADM's Leap Menu sorting to Custom. It goes back to what it was (ADM
  * Sorting if it was already Custom) only once the party is clearly a different one ([dropReason]): a player or
  * two swapping out doesn't. Only ADR's party tracker counts, and only when it has no doubt, so a party that
  * isn't known never switches it. Kept across restarts in config/engineerclient/leaporder-sorting.txt: the
@@ -89,23 +89,23 @@ object LeapOrder {
             }
         }.onFailure { EngineerClient.logger.warn("[ec] leap order: couldn't read $autoFile", it) }
 
-        // Saved on any change, also from Odin's own command.
+        // Saved on any change, also from ADM's own command.
         ClientTickEvents.END_CLIENT_TICK.register {
             val now = DungeonUtils.customLeapOrder
             if (now != saved) EngineerClient.safely("leap order save") { save(now); spots.fill(""); if (now.isNotEmpty()) useCustom() }
             EngineerClient.safely("leap order party") { checkParty() }
             EngineerClient.safely("leap order spots") { keepSpots() }
         }
-        // Again just before Odin's leap menu draws or takes a click or key (it redoes its list on every tab list update).
+        // Again just before ADM's leap menu draws or takes a click or key (it redoes its list on every tab list update).
         on<ScreenEvent.Render>(EventPriority.HIGHEST + 50) { EngineerClient.safely("leap order spots") { keepSpots() } }
         on<ScreenEvent.MouseClick>(EventPriority.HIGHEST + 50) { EngineerClient.safely("leap order spots") { keepSpots() } }
         on<ScreenEvent.KeyPress>(EventPriority.HIGHEST + 50) { EngineerClient.safely("leap order spots") { keepSpots() } }
         EventBus.subscribe(this)
 
         // /adm leaporder with no names opens the screen; every /adm alias shares the one node.
-        val afterOdin = Identifier.fromNamespaceAndPath("engineerclient", "after_odin")
-        ClientCommandRegistrationCallback.EVENT.addPhaseOrdering(Event.DEFAULT_PHASE, afterOdin)
-        ClientCommandRegistrationCallback.EVENT.register(afterOdin) { dispatcher, _ ->
+        val afterCore = Identifier.fromNamespaceAndPath("engineerclient", "after_odin")
+        ClientCommandRegistrationCallback.EVENT.addPhaseOrdering(Event.DEFAULT_PHASE, afterCore)
+        ClientCommandRegistrationCallback.EVENT.register(afterCore) { dispatcher, _ ->
             EngineerClient.safely("leap order /adm") {
                 val nodes = listOfNotNull(dispatcher.root.getChild("adm")?.getChild("leaporder"))
                 for (node in nodes) COMMAND.set(node, com.mojang.brigadier.Command<FabricClientCommandSource> { open(); 1 })
@@ -146,19 +146,19 @@ object LeapOrder {
     private val skins = ConcurrentHashMap<String, PlayerSkin>()
     private val looking = ConcurrentHashMap.newKeySet<String>()
 
-    /** Brigadier's node command (no setter: Odin's node is given the bare run in place). */
+    /** Brigadier's node command (no setter: ADM's node is given the bare run in place). */
     private val COMMAND by lazy { com.mojang.brigadier.tree.CommandNode::class.java.getDeclaredField("command").apply { isAccessible = true } }
 
     private fun open() = mc.schedule { mc.gui.setScreen(LeapOrderScreen()) }
 
-    /** Odin's order, Odin-style (lower case, ranks 0-3: top left, top right, bottom left, bottom right). */
+    /** ADM's order, ADM-style (lower case, ranks 0-3: top left, top right, bottom left, bottom right). */
     fun set(names: List<String>) {
         DungeonUtils.customLeapOrder = names.filter { it.isNotBlank() }.map { it.lowercase(Locale.ROOT) }
     }
 
     private val sorting get() = LeapMenu.settings["Sorting"] as? SelectorSetting<LeapMenu.Sorting>
 
-    /** Whether Odin's Leap Menu sorts by the order (sorting Custom). */
+    /** Whether ADM's Leap Menu sorts by the order (sorting Custom). */
     val custom get() = sorting?.value == LeapMenu.Sorting.CUSTOM
 
     /** The Leap Order screen's checkbox: on is as setting the order, off puts back the sorting from before. */
@@ -228,7 +228,7 @@ object LeapOrder {
 
     /**
      * Who's in your party besides you (lower case; empty: not in one), or null while that isn't surely known.
-     * Only ADR's tracker with no doubt: Odin's list can be partial (after a Party Finder join it only has whoever
+     * Only ADR's tracker with no doubt: ADM's list can be partial (after a Party Finder join it only has whoever
      * joined since), and a partial list would read as people having left.
      */
     private fun party(): Set<String>? {
@@ -244,7 +244,7 @@ object LeapOrder {
     private val EMPTY = DungeonPlayer("Empty", DungeonClass.EMPTY, 0, null)
 
     /**
-     * Odin's Custom sorting packs the teammates in the order's ranks, so with someone gone everyone after them moves up a
+     * ADM's Custom sorting packs the teammates in the order's ranks, so with someone gone everyone after them moves up a
      * spot. Instead each keeps the spot they had: a leaver's spot stays empty until someone new comes, who takes it (the
      * first free one, when the order doesn't rank them), and a changed order starts the spots over from its ranks.
      */
@@ -267,7 +267,7 @@ object LeapOrder {
         if (list != DungeonListener.leapTeammates) DungeonListener.leapTeammates = list
     }
 
-    /** Its name as Odin's setting shows it ("Odin Sorting"). */
+    /** Its name as the setting shows it ("Default Sorting"). */
     private fun label(s: LeapMenu.Sorting) = s.toString()
 
     private fun saveAuto() = runCatching {
@@ -287,7 +287,7 @@ object LeapOrder {
 }
 
 /**
- * Odin's leap menu, simulated: the 4 boxes where its Leap Menu puts them (24px off the centre, its Render Scale),
+ * ADM's leap menu, simulated: the 4 boxes where its Leap Menu puts them (24px off the centre, its Render Scale),
  * the custom order's players in rank order, empty spots filled with your party. Drag a player onto another spot
  * to swap them; the order is set (and saved) on the drop.
  */
@@ -328,7 +328,7 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         for (i in 0 until 4) names[i] = shown.getOrElse(i) { "" }
     }
 
-    /** The people you're with: the dungeon's teammates in one, else the party (ADR's tracker, else Odin's). */
+    /** The people you're with: the dungeon's teammates in one, else the party (ADR's tracker, else ADM's). */
     private fun party(): List<String> {
         val team = DungeonUtils.dungeonTeammates.map { it.name }
         if (DungeonUtils.inDungeons && team.isNotEmpty()) return team
@@ -392,7 +392,7 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
             null -> {}
         }
 
-        // Whether the leap menu uses this order: Odin's sorting is Custom.
+        // Whether the leap menu uses this order: ADM's sorting is Custom.
         val cb = checkbox()
         val on = LeapOrder.custom
         val hot = dragging < 0 && mouseX >= cb[0] && mouseX < cb[2] && mouseY >= cb[1] && mouseY < cb[3]
@@ -425,7 +425,7 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         }
     }
 
-    /** A leap menu box at [x], [y] for [name], drawn at Odin's size and scaled as its Render Scale does. */
+    /** A leap menu box at [x], [y] for [name], drawn at ADM's size and scaled as its Render Scale does. */
     private fun drawBox(gfx: GuiGraphicsExtractor, x: Int, y: Int, name: String, fill: Color) {
         val w = LeapMenu.BOX_WIDTH
         val h = LeapMenu.BOX_HEIGHT
@@ -490,7 +490,7 @@ class LeapOrderScreen : Screen(Component.literal("Leap Order")) {
         if (to != dragging) slide(dragging, other[0], other[1])
         if (to != dragging) {
             val t = names[to]; names[to] = names[dragging]; names[dragging] = t
-            // Odin's order has no gaps (its menu fills the spots in rank order), so a player dropped on an
+            // ADM's order has no gaps (its menu fills the spots in rank order), so a player dropped on an
             // empty spot moves up to the first free one here too: the screen shows the order as it applies.
             val order = names.filter { it.isNotEmpty() }
             for (i in 0 until 4) names[i] = order.getOrElse(i) { "" }

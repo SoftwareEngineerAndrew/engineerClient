@@ -114,10 +114,10 @@ object BossWaypoints {
                 gson.fromJson(Files.readString(file), Saved::class.java)?.waypoints?.let { waypoints += it }
                 return
             }
-            // First run: bring over Blade's waypoints, which stored colors as 0..1 floats.
-            val blade = dir.resolve("blade-addons-waypoints.json")
-            if (!Files.exists(blade)) return
-            for (e in JsonParser.parseString(Files.readString(blade)).asJsonObject.getAsJsonArray("waypoints")) {
+            // First run: bring over ADM's waypoints, which stored colors as 0..1 floats.
+            val legacy = dir.resolve("blade-addons-waypoints.json")
+            if (!Files.exists(legacy)) return
+            for (e in JsonParser.parseString(Files.readString(legacy)).asJsonObject.getAsJsonArray("waypoints")) {
                 val o = e.asJsonObject
                 fun f(k: String) = o.get(k).asDouble
                 fun c(k: String) = (o.get(k).asFloat * 255).toInt().coerceIn(0, 255)

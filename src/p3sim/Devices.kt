@@ -161,7 +161,7 @@ class Devices(val phase: GoldorPhase) {
      * Lights: 20 levers (x58-62, y133-136, z142) over 20 lamps (z143), all off at the start.
      * A lamp is lit while any lever in its plus (itself and the four next to it)
      * is on: an OR, not a toggle. Levers flick any time (players pre-do it in Maxor); a click in S2
-     * with all 20 lamps lit is the device done, even one that turns a lever off. Odin's six are
+     * with all 20 lamps lit is the device done, even one that turns a lever off. ADM's six are
      * the solution from all off.
      */
     inner class Lights {
@@ -232,7 +232,7 @@ class Devices(val phase: GoldorPhase) {
 
     /**
      * Arrow Align (S3): item frames at x=-2, y120-124, z75-79 (index (y-120) + (z-75)*5), only on
-     * one of Odin's nine layouts' arrow cells plus its few extra (non-arrow) frames, never on the
+     * one of ADM's nine layouts' arrow cells plus its few extra (non-arrow) frames, never on the
      * other cells. It starts solved but for the arrow nearest the bottom left; a click turns one +1. Frames turn
      * any time (pre-dev); the device line comes in the same tick as the solving click, before S3 too.
      */
@@ -302,9 +302,9 @@ class Devices(val phase: GoldorPhase) {
      * arrow in that same tick can hit it too (arrows tick in spawn order, so only a later one); but it only shows
      * (emerald) on a per-attempt 10-tick grid while someone is on the plate, 1-10 ticks after. A hit on the shown one
      * turns it blue at once. A target hit before it showed counts and
-     * changes no block, so the board (and Odin's solver, which only sees blocks) never lights it: 7-8 lights for 9
+     * changes no block, so the board (and ADM's solver, which only sees blocks) never lights it: 7-8 lights for 9
      * hits is usual. Off the plate, on the grid: the lit one goes blue and progress resets. Done, the board stays
-     * all blue terracotta (all emerald would read as 9 new targets to Odin).
+     * all blue terracotta (all emerald would read as 9 new targets to ADM).
      */
     inner class Target {
         val PLATE = BlockPos(63, 127, 35)
@@ -435,14 +435,14 @@ class Devices(val phase: GoldorPhase) {
         }
 
         /**
-         * A new Arrow Align board: frames only on one of Odin's nine layouts' arrow cells plus its few extra (non-arrow)
+         * A new Arrow Align board: frames only on one of ADM's nine layouts' arrow cells plus its few extra (non-arrow)
          * frames, all solved but the arrow nearest the bottom left; and its back wall (x -3, the board's own y/z): sea
          * lanterns on the layout's frame cells, blue terracotta elsewhere. At the start every wool cell is lit, an arrow
          * cell only about one in eight (in practice one already turned right), no other cell ever; it does not follow
          * clicks. On completion every frame cell (6-15 of them) goes lantern in one tick.
          */
         private fun newBoard(): Board {
-            // Layouts 1-8 come about equally often; Odin's layout 0 has not been seen on Hypixel.
+            // Layouts 1-8 come about equally often; ADM's layout 0 has not been seen on Hypixel.
             val layout = (1 until SOLUTIONS.size).random()
             val solution = SOLUTIONS[layout]
             val frames = HashMap<Int, ItemFrame>()
@@ -471,7 +471,7 @@ class Devices(val phase: GoldorPhase) {
             return Board(layout, frames)
         }
 
-        /** Odin's Arrow Align layouts: each frame's rotation, -1 = no arrow. */
+        /** ADM's Arrow Align layouts: each frame's rotation, -1 = no arrow. */
         val SOLUTIONS = listOf(
             listOf(7, 7, -1, -1, -1, 1, -1, -1, -1, -1, 1, 3, 3, 3, 3, -1, -1, -1, -1, 1, -1, -1, -1, 7, 1),
             listOf(-1, -1, 7, 7, 5, -1, 7, 1, -1, 5, -1, -1, -1, -1, -1, -1, 7, 5, -1, 1, -1, -1, 7, 7, 1),
@@ -485,7 +485,7 @@ class Devices(val phase: GoldorPhase) {
         )
 
         /**
-         * Each layout's extra (non-arrow) frames, Odin index to their item: true = lime wool (a
+         * Each layout's extra (non-arrow) frames, ADM index to their item: true = lime wool (a
          * path's start), false = red wool (its end). The same cells and wool in every run of a layout
          * Layout 0 has not been seen on Hypixel; it keeps layout 2's, whose shape it shares.
          */

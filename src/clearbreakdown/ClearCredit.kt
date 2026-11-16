@@ -1,6 +1,6 @@
 package com.engineerclient.clearbreakdown
 
-/** A room's checkmark, as far as clearing goes: Odin's other map states are all [OTHER]. */
+/** A room's checkmark, as far as clearing goes: ADM's other map states are all [OTHER]. */
 enum class Mark { WHITE, GREEN, RED, OTHER }
 
 /** One room a player helped clear: [solo] when nobody else helped. */
@@ -13,7 +13,7 @@ data class Clear(val room: String, val solo: Boolean)
  * it is a solo clear when there was only one.
  *
  * A failed puzzle's red X credits nobody and throws away the time spent on the failed attempt:
- * Odin never says when a reset puzzle is back to normal (it stays red until it turns white or
+ * ADM never says when a reset puzzle is back to normal (it stays red until it turns white or
  * green), so the time after the red X is what counts toward the attempt that clears it.
  *
  * Nothing here touches Minecraft, so it tests headlessly: the module feeds it each tick's

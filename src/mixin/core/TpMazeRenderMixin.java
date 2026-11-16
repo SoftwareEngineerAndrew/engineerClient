@@ -7,8 +7,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Odin's own TP Maze solver is switched off: Team TP Maze ({@link com.engineerclient.tpmaze.TeamTpMaze}) takes its place, and its
- * settings take the old ones' spot in Puzzle Solvers. Nothing of Odin's runs: no room scan, no teleport tracking, no drawing.
+ * ADM's own TP Maze solver is switched off: Team TP Maze ({@link com.engineerclient.tpmaze.TeamTpMaze}) takes its place, and its
+ * settings take the old ones' spot in Puzzle Solvers. Nothing of ADM's runs: no room scan, no teleport tracking, no drawing.
  */
 @Pseudo
 @Mixin(targets = "com.adm.features.impl.dungeon.puzzlesolvers.TPMazeSolver", remap = false)

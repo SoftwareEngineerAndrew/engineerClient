@@ -27,8 +27,8 @@ class UpdateCheckTest {
     }
 
     @Test fun parse() {
-        val p = UpdateCheck.parse("""{"version":"1.0.14","note":"§cneeds Odin 0.4.0","hard":"1.0.14","now":""}""")!!
-        assertEquals("1.0.14", p.version); assertEquals("needs Odin 0.4.0", p.note); assertEquals("1.0.14", p.hard); assertEquals("", p.now)
+        val p = UpdateCheck.parse("""{"version":"1.0.14","note":"§cneeds ADM 0.4.0","hard":"1.0.14","now":""}""")!!
+        assertEquals("1.0.14", p.version); assertEquals("needs ADM 0.4.0", p.note); assertEquals("1.0.14", p.hard); assertEquals("", p.now)
         assertNull(UpdateCheck.parse("""{"version":"latest"}"""))
         assertNull(UpdateCheck.parse("""{"version":"1.0.14","hard":"x"}"""))
         assertNull(UpdateCheck.parse("not json"))

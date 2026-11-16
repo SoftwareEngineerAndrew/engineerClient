@@ -1,16 +1,16 @@
 package com.engineerclient.dungeonpack.pack.rooms
 
 /**
- * Odin's room core (`WorldScan.getRoomCore`, FORMAT-rooms 8.2): the hash of a tile's CENTRE column that Odin looks up in its
+ * ADM's room core (`WorldScan.getRoomCore`, FORMAT-rooms 8.2): the hash of a tile's CENTRE column that ADM looks up in its
  * `rooms.json` to name a room. Pure, so the layout module and its tests can check headless that a pasted room will be
- * recognised, without starting the game. Mirrors the reference `odin_core` of the rooms pack tooling, which reproduced 245 of
- * Odin's 272 cores from real captures (the other 27 are variants the pack could not see).
+ * recognised, without starting the game. Mirrors the reference `core_core` of the rooms pack tooling, which reproduced 245 of
+ * ADM's 272 cores from real captures (the other 27 are variants the pack could not see).
  *
  * The column is read from y 140 down to 12. Above the first solid block a `0` is written per layer (gold block counts as air
  * there); from the first other block on, `Block{<name>}` per layer (no properties; air is `Block{minecraft:air}`), skipping
  * oak planks and chests; when air sits under two or more bedrock layers below y 69 the rest of the column is `0` characters and the
  * scan stops. The core is the Java `String.hashCode` of the result. Anything added above a room's roof in this column, or a
- * missing bedrock floor, changes the core and Odin then names a different room (or none).
+ * missing bedrock floor, changes the core and ADM then names a different room (or none).
  */
 object RoomCore {
     private const val AIR = "minecraft:air"

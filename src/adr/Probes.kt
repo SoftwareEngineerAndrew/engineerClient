@@ -14,7 +14,7 @@ import net.minecraft.world.level.chunk.status.ChunkStatus
  * and the one line in RunRecorder that calls it.
  *
  * Puzzle rooms whose layout varies run to run (Boulder's boxes, Water Board's pattern and gates): every block of
- * the room once, as soon as Odin has named it and its chunks are here - before anyone has touched it, as a
+ * the room once, as soon as ADM has named it and its chunks are here - before anyone has touched it, as a
  * rule. Which layouts come up and how often, and whether any is missing from the hand-captured sets.
  *
  * {"k":"probe","t":t,"what":"room","name":name,"at":[x0,y0,z0],"size":[w,h,d],"pal":[state, ...],

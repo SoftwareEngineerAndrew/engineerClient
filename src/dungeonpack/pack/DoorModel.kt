@@ -8,17 +8,17 @@ import com.engineerclient.dungeonpack.pack.layouts.DoorKind
  *
  * The rooms pack holds the doorways of the rooms themselves (the `slots` of a design: the opening is 3 wide and 4 tall, door band
  * y 69..72, threshold y 68, lintel y 73, frame columns at offsets 13 and 17 of the tile); the door pack ([com.engineerclient.dungeonpack.pack.doors.DoorPack])
- * holds the units drawn round it (six ordinary styles in a normal and a key version, the entrance and the blood door). Everything Odin and
+ * holds the units drawn round it (six ordinary styles in a normal and a key version, the entrance and the blood door). Everything ADM and
  * the clear logic care about is the BODY below.
  * Measured on Hypixel (FORMAT-layouts 6.1, FORMAT-runstate 4): the body is a 3 x 4 x 3 volume of 36 blocks around the slot's
  * centre, `x in cx-1..cx+1`, `z in cz-1..cz+1`, `y in 69..72`; a wither door is coal, the blood door red terracotta, the entrance
  * door infested stone; on use all 36 become barrier in one tick and air 14 ticks later (15 for the entrance). A plain door has no
- * body (an open doorway). The frame top (lintel) at y 73 is what Odin reads as "a door is here".
+ * body (an open doorway). The frame top (lintel) at y 73 is what ADM reads as "a door is here".
  */
 object DoorModel {
     const val BODY_Y_MIN = DungeonFrame.DOOR_Y_MIN   // 69
     const val BODY_Y_MAX = DungeonFrame.DOOR_Y_MAX   // 72
-    /** The frame top Odin reads (air there = no door). */
+    /** The frame top ADM reads (air there = no door). */
     const val LINTEL_Y = 73
     /** The floor of the opening. */
     const val THRESHOLD_Y = 68

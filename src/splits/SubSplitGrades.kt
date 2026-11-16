@@ -29,7 +29,7 @@ object SubSplitGrades {
     class Bands(val clock: Clock, val limits: LongArray?, val floor: Long, val fromStart: Boolean = false, val lateAfter: Long? = null)
 
     /**
-     * Color Based Off Time (Odin's Splits, set by SplitsLook): off, nothing is graded - every
+     * Color Based Off Time (ADM's Splits, set by SplitsLook): off, nothing is graded - every
      * time is drawn in its split's own colour again, as before the bands.
      */
     @JvmStatic var byTime: () -> Boolean = { true }
@@ -124,7 +124,7 @@ object SubSplitGrades {
         // on a 20-tick check, so 161-169 is one check late, 271-384 a second trip.
         "necron.kill" to stepped(Clock.TICKS, 140, 155, 20),
 
-        // The run's own splits (Odin's), F7, all but the terminals in ticks.
+        // The run's own splits (ADM's), F7, all but the terminals in ticks.
         // Open: Mort's line to the blood door, 8 / 14 / 19 / 25 / 32 s; the floor (5 s) only keeps a
         // missed moment from standing as a best.
         "split.open" to ticks(100, 160, 280, 380, 500, 640),
@@ -134,7 +134,7 @@ object SubSplitGrades {
         // Portal: "proven yourself" to Maxor's line, mostly the warp: usually 4.10 or 4.60 s, 3.1-4.0
         // when it opened early, over 9 s (about a quarter of runs) when someone was late.
         "split.portal" to ticks(40, 76, 88, 100, 120, 160),
-        // Enter: Odin's Boss Entry, Mort to Maxor's line (Open + Blood + Portal): 59.15-162.65 s, median 71.35.
+        // Enter: ADM's Boss Entry, Mort to Maxor's line (Open + Blood + Portal): 59.15-162.65 s, median 71.35.
         "split.enter" to ticks(1100, 1240, 1400, 1560, 1700, 1900),
         // Maxor 263-1498, Storm 820-1624: a perfect fight is ~263-277 and ~820-829.
         "split.maxor" to ticks(263, 272, 280, 300, 340, 400),
@@ -175,11 +175,11 @@ object SubSplitGrades {
 
     private fun anyBands(id: String, floor: String?) = bands(id, floor) ?: BANDS[id] ?: BANDS_M7[id]
 
-    /** Odin's split names (colour codes stripped) to their ids here. */
+    /** ADM's split names (colour codes stripped) to their ids here. */
     val MAIN_SPLITS = mapOf(
         "Blood Open" to "split.open", "Blood Clear" to "split.blood", "Portal Entry" to "split.portal", "Boss Entry" to "split.enter", "Maxor" to "split.maxor", "Storm" to "split.storm",
         "Terminals" to "split.terms", "Goldor" to "split.goldor", "Necron" to "split.necron",
-        // M7's Dragons (Odin's last floor 7 split; F7 never starts it).
+        // M7's Dragons (ADM's last floor 7 split; F7 never starts it).
         "Cleared" to "split.dragons",
     )
 

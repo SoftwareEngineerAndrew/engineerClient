@@ -14,14 +14,14 @@ data class Tile(val x: Int, val z: Int)
 data class Pos(val x: Int, val y: Int, val z: Int)
 
 /**
- * Odin's rotation words. [q] is the number of clockwise quarter turns from the canonical (SOUTH) frame that the rooms
+ * ADM's rotation words. [q] is the number of clockwise quarter turns from the canonical (SOUTH) frame that the rooms
  * pack's placement law uses (FORMAT-rooms 4.1).
  */
 enum class Rot(val q: Int) {
     SOUTH(0), WEST(1), NORTH(2), EAST(3);
 
     companion object {
-        /** The rotation for an Odin/ADR word (any case); null for anything else, including null. */
+        /** The rotation for an ADM/ADR word (any case); null for anything else, including null. */
         fun fromWord(word: String?): Rot? = word?.let { w -> entries.firstOrNull { it.name.equals(w, ignoreCase = true) } }
     }
 }

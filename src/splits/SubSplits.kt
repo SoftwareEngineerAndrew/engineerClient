@@ -81,7 +81,7 @@ class SubSplitTracker {
 
     // ------------------------------------------------------------------ the world's moments
 
-    /** Odin's server tick: Storm leaves his spot a fixed 99 of them after his lightning line. */
+    /** ADM's server tick: Storm leaves his spot a fixed 99 of them after his lightning line. */
     fun onServerTick() {
         ticks++
         val from = lightning ?: return

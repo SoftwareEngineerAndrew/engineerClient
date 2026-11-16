@@ -73,13 +73,13 @@ object CustomRenderPipelines {
     )
 
     val OIT_LINES_ESP: OitPipelineSet = RenderPipelines.register(
-        OitPipelineSet.builder("odin_lines_esp", RenderPipeline.builder(RenderPipelines.OIT_LINES_SNIPPET))
+        OitPipelineSet.builder("core_lines_esp", RenderPipeline.builder(RenderPipelines.OIT_LINES_SNIPPET))
             .withoutDepthTest()
             .build()
     )
 
     val OIT_QUADS_ESP: OitPipelineSet = RenderPipelines.register(
-        OitPipelineSet.builder("odin_quads_esp", RenderPipeline.builder(RenderPipelines.OIT_DEBUG_FILLED_SNIPPET))
+        OitPipelineSet.builder("core_quads_esp", RenderPipeline.builder(RenderPipelines.OIT_DEBUG_FILLED_SNIPPET))
             .withoutDepthTest()
             .build()
     )

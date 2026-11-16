@@ -3,7 +3,7 @@ package com.engineerclient.splits
 import java.util.Locale
 
 /**
- * Odin's splits, drawn the Engineer Splits way (see [SplitsLook], which feeds it Odin's rows
+ * ADM's splits, drawn the Engineer Splits way (see [SplitsLook], which feeds it ADM's rows
  * and settings and puts the result on screen). Pure: rows and options in, lines out, so every case
  * tests without the game.
  *
@@ -13,17 +13,17 @@ import java.util.Locale
  *     Open   > 14.00s (14.00s)
  *     Blood  > 63.00s (62.85s)
  *     Portal > 4.20s (4.20s)
- *     Enter  > 1m 21.2s (1m 21.1s)     Odin's Boss Entry
+ *     Enter  > 1m 21.2s (1m 21.1s)     ADM's Boss Entry
  *     Maxor  > 25.50s (25.45s)
  *     ...
  *
- * Everything else is Odin's: which splits there are and when each starts (its SplitsManager rows),
+ * Everything else is ADM's: which splits there are and when each starts (its SplitsManager rows),
  * Boss Entry, Show 0 splits, Show Tick Time, Fixed Width and Split Location all mean what they mean
- * for Odin's own look.
+ * for ADM's own look.
  */
 object EngineerLook {
 
-    /** One of Odin's split rows: its name (with colour codes), time, server ticks, and whether it is running. */
+    /** One of ADM's split rows: its name (with colour codes), time, server ticks, and whether it is running. */
     data class Row(val name: String, val ms: Long, val ticks: Long, val current: Boolean)
 
     /** Where the rows are from: floor 7 (F7 or M7), another dungeon floor, or elsewhere (Kuudra). */
@@ -36,7 +36,7 @@ object EngineerLook {
     /** A line: its label (colour codes included), the colour its time is drawn in, the time, and the tick time if shown. */
     data class Line(val label: String, val colour: String, val time: String, val ticks: String?, val graded: Boolean = false)
 
-    /** Odin's floor 7 splits, in order: what the pace targets are for. */
+    /** ADM's floor 7 splits, in order: what the pace targets are for. */
     val TARGET_SPLITS = listOf("Blood Open", "Blood Clear", "Portal Entry", "Maxor", "Storm", "Terminals", "Goldor", "Necron", "Cleared")
 
     /**
@@ -54,15 +54,15 @@ object EngineerLook {
     private val CODES = Regex("§.")
     private fun strip(s: String) = s.replace(CODES, "").trim()
 
-    /** A split's label in this look: the short Engineer name in a dungeon, Odin's own elsewhere. */
-    fun label(odinName: String, place: Place, master: Boolean): String {
-        val name = strip(odinName)
+    /** A split's label in this look: the short Engineer name in a dungeon, ADM's own elsewhere. */
+    fun label(coreName: String, place: Place, master: Boolean): String {
+        val name = strip(coreName)
         if (place != Place.OTHER) DUNGEON_NAMES[name]?.let { return it }
         if (place == Place.FLOOR7) {
             FLOOR7_NAMES[name]?.let { return it }
             if (name == "Cleared" && master) return "§dDragons"
         }
-        return if (odinName.startsWith("§")) odinName else "§f$odinName"
+        return if (coreName.startsWith("§")) coreName else "§f$coreName"
     }
 
     /** The colour code a label starts with, which its time is drawn in too. */
@@ -77,12 +77,12 @@ object EngineerLook {
      * target is passed), and one not reached yet counts its target - or nothing, blank or without
      * targets, so there Pace is the time so far. On both clocks, the same way.
      *
-     * As in Odin's own look, a split that hasn't started (time 0) only shows with Show 0 splits.
+     * As in ADM's own look, a split that hasn't started (time 0) only shows with Show 0 splits.
      * Before the run starts Pace is the targets' total: where there are targets (floor 7) it shows
      * from the moment you load in, so the HUD opens on the PBs added up.
      */
     fun lines(rows: List<Row>, opts: Options, place: Place, master: Boolean, targets: List<Double?>?,
-              /** A split's time colour (Odin's name, ms, ticks, over), or null for its label's colour. */
+              /** A split's time colour (ADM's name, ms, ticks, over), or null for its label's colour. */
               grade: ((String, Long, Long, Boolean) -> String?)? = null,
               /** Pace against the dark green times ([SplitPace], ms and ticks), in place of the targets' pace. */
               pace: Pair<Long, Long>? = null,
@@ -117,7 +117,7 @@ object EngineerLook {
                 val over = current < 0 || i < current
                 out += grade?.invoke(s.name, s.ms, s.ticks, over && s.ms != 0L)?.let { l.copy(colour = it, graded = true) } ?: l
             }
-            // Odin's Boss Entry: after the third split, the first three together - with Enter
+            // ADM's Boss Entry: after the third split, the first three together - with Enter
             // After Entry, only once they are all over.
             val entered = current > 2 || (current == -1 && started)
             if (opts.bossEntry && i == 2 && rows.size > 3 && (entered || !opts.enterAfterEntry)) {
@@ -141,7 +141,7 @@ object EngineerLook {
     }
 
     /**
-     * The rows that are splits (Odin's last row is the run's end), less F7's "Cleared": since
+     * The rows that are splits (ADM's last row is the run's end), less F7's "Cleared": since
      * Hypixel's boss update of 5 Oct 2026 there is no end animation, and Necron runs to the end.
      */
     private fun segments(rows: List<Row>, place: Place, master: Boolean) =
@@ -157,9 +157,9 @@ object EngineerLook {
     private fun line(label: String, ms: Long, ticks: Long, opts: Options, format: (Long) -> String) =
         Line(label, colourOf(label), format(ms), if (opts.showTicks) format(ticks * 50L) else null)
 
-    private fun targetFor(odinName: String, targets: List<Double?>?): Double? {
+    private fun targetFor(coreName: String, targets: List<Double?>?): Double? {
         targets ?: return null
-        val i = TARGET_SPLITS.indexOf(strip(odinName))
+        val i = TARGET_SPLITS.indexOf(strip(coreName))
         return if (i < 0) null else targets.getOrNull(i)
     }
 

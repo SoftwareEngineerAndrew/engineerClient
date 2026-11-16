@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * The other half of Terminals' Hide Numbers' Numbers: the stack count vanilla draws in a slot's corner.
  *
  * In the numbers terminal the 1-10 are the panes' stack sizes, so any slot left to vanilla shows its
- * number whatever Odin does. Odin's own render type takes every terminal slot off vanilla, but the
+ * number whatever ADM does. ADM's own render type takes every terminal slot off vanilla, but the
  * Normal one only takes the slots still in the solution - the ones already clicked come through
  * here, numbers and all. Dropping the decorations for those slots leaves the pane itself alone:
  * terminal panes carry no durability bar and no cooldown, so the count is all that goes.

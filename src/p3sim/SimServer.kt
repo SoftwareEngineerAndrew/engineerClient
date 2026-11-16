@@ -101,7 +101,7 @@ object SimServer {
     }
 
     /**
-     * `/pc <message>`, only on the sim's server: party chat as Hypixel shows it (Odin sends its
+     * `/pc <message>`, only on the sim's server: party chat as Hypixel shows it (ADM sends its
      * party messages, "Leaped to X!" and the like, this way).
      */
     private fun commands(s: MinecraftServer) {

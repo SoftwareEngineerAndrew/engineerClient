@@ -28,7 +28,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * a hand or on the ground, and the glint settings let those be switched independently.
  *
  * <p>Only the drawing changes. {@code hasFoil()} still answers honestly everywhere else, so
- * Odin's terminal solvers — which read the glint component, not the screen — are untouched.
+ * ADM's terminal solvers — which read the glint component, not the screen — are untouched.
  *
  * <p>The identity element is not decoration. GUI items are not redrawn per frame: they are baked
  * into {@code GuiItemAtlas}, whose slots are keyed by the model identity {@code update} builds,

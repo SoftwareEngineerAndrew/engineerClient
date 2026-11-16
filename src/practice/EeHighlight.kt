@@ -29,7 +29,7 @@ import net.minecraft.world.phys.Vec3
 
 /**
  * Recore's Core Leap Highlight for the early enters: in S1, S2 and S3, the part of the screen where each teammate standing on
- * the next section's early enter ([PointsOfInterest]) is in Odin's Leap Menu, so the flick is on its way as the menu opens.
+ * the next section's early enter ([PointsOfInterest]) is in ADM's Leap Menu, so the flick is on its way as the menu opens.
  * Same looks as Recore's ([LeapHighlightLook]), its own colour.
  *
  * Only when it's sure ([PoiPresence]): a wrong highlight sends you leaping to someone who isn't there, which is worse than
@@ -47,7 +47,7 @@ import net.minecraft.world.phys.Vec3
 object EeHighlight : Module(
     name = "EE Highlight",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Like Recore's Core Leap Highlight, for the early enters: in S1-S3, where the teammates surely on the next section's early enter are in Odin's Leap Menu, so you flick there as it opens. Shared over Pose POV's party link.",
+    description = "Like Recore's Core Leap Highlight, for the early enters: in S1-S3, where the teammates surely on the next section's early enter are in ADM's Leap Menu, so you flick there as it opens. Shared over Pose POV's party link.",
     key = null,
     toggled = true,
 ) {

@@ -14,13 +14,13 @@ fun sendCommand(command: String) {
     mc.execute { mc.player?.connection?.sendCommand(command) }
 }
 
-fun modMessage(message: Any?, prefix: String = "§3Odin §8»§r ", chatStyle: Style? = null) {
+fun modMessage(message: Any?, prefix: String = "§3ADM §8»§r ", chatStyle: Style? = null) {
     val text = Component.literal("$prefix$message")
     chatStyle?.let { text.setStyle(chatStyle) }
     mc.schedule { mc.gui.hud.chat.addClientSystemMessage(text) }
 }
 
-fun modMessage(message: Component, prefix: String = "§3Odin §8»§r ", chatStyle: Style? = null) {
+fun modMessage(message: Component, prefix: String = "§3ADM §8»§r ", chatStyle: Style? = null) {
     val text = Component.literal(prefix).append(message)
     chatStyle?.let { text.setStyle(chatStyle) }
     mc.schedule { mc.gui.hud.chat.addClientSystemMessage(text) }
@@ -28,7 +28,7 @@ fun modMessage(message: Component, prefix: String = "§3Odin §8»§r ", chatSty
 
 fun devMessage(message: Any?) {
     if (!ClickGUIModule.devMessage) return println(message)
-    modMessage(message, "§3Odin§bDev §8»§r ")
+    modMessage(message, "§3ADM§bDev §8»§r ")
 }
 
 fun getCenteredText(text: String): String {

@@ -32,7 +32,7 @@ object ConfigMigration {
 
     /**
 
-     * The public build is ADM, which was Engineer Client: there, Engineer Client's Odin settings file is copied to
+     * The public build is ADM, which was Engineer Client: there, Engineer Client's ADM settings file is copied to
 
      * ADM's and its own folder under config (ADR runs, P3 Sim saves, stats...) moved to ADM's, the first time
 
@@ -76,7 +76,7 @@ object ConfigMigration {
 
     /**
 
-     * One-time moves inside config/odin/addons/engineerclient.json, before Odin reads it, so a
+     * One-time moves inside config/core/addons/engineerclient.json, before ADM reads it, so a
 
      * module that was renamed or folded into another keeps what was set in it:
 
@@ -92,7 +92,7 @@ object ConfigMigration {
 
      *  - the health and mana settings moved from Random Stuff to Health & Mana (on if Random Stuff
 
-     *    was); Player Display's Health/Mana Bar HUD settings found in Odin's own config are copied
+     *    was); Player Display's Health/Mana Bar HUD settings found in ADM's own config are copied
 
      *    to Health & Mana, which provides those HUDs;
 
@@ -102,9 +102,9 @@ object ConfigMigration {
 
      *  - Sub Splits' detail levels: "Extreme" is "Debug", and "Off" is the HUD switched off;
 
-     *  - a former engineerClient Splits HUD that was on becomes Odin's Splits in the Engineer
+     *  - a former engineerClient Splits HUD that was on becomes ADM's Splits in the Engineer
 
-     *    Splits look (written into Odin's config, read once the look's settings exist - see
+     *    Splits look (written into ADM's config, read once the look's settings exist - see
 
      *    SplitsLook.install);
 
@@ -118,7 +118,7 @@ object ConfigMigration {
 
      *    hitbox settings with it.
 
-     *  - Term Info is gone: its HUD is Odin's Terminals Status (switched on where ours was if Odin's
+     *  - Term Info is gone: its HUD is ADM's Terminals Status (switched on where ours was if ADM's
 
      *    wasn't showing), Section Time a Timers HUD, the Core* settings Recore's (without "Core ");
 
@@ -126,9 +126,9 @@ object ConfigMigration {
 
      *  - BR Roles' Doorer Kills is its Door Kills: on is Always, off Never.
 
-     *  - Legit Zpew is Etherwarp's Legit Zpew setting, in Odin's config.
+     *  - Legit Zpew is Etherwarp's Legit Zpew setting, in ADM's config.
 
-     *  - Dungeon Breaker Torch Guard and Odin's Breaker Display are Dungeonbreaker.
+     *  - Dungeon Breaker Torch Guard and ADM's Breaker Display are Dungeonbreaker.
 
      *  - Timers' Necron Drop HUD is its Necron DPS (where it was, on or off as it was).
 
@@ -144,33 +144,33 @@ object ConfigMigration {
 
      *  - World Border Click Fix and Shadow Assassin Jump Hider are Shadow Assassin.
 
-     *  - Arrow Fix, Arrow Swap Title, Arrow Hit Sound, Odin's Quiver Display and the arrow settings of Render Cleanup
+     *  - Arrow Fix, Arrow Swap Title, Arrow Hit Sound, ADM's Quiver Display and the arrow settings of Render Cleanup
 
      *    and Random Stuff are Arrows.
 
-     *  - Random Stuff's Party Finder Classes is Better Party Finder's Show Missing List, in Odin's config.
+     *  - Random Stuff's Party Finder Classes is Better Party Finder's Show Missing List, in ADM's config.
 
-     *  - Mob Highlight's Teammate Class Glow goes, in Odin's config.
+     *  - Mob Highlight's Teammate Class Glow goes, in ADM's config.
 
      *  - Screen Tweaks, Render Cleanup, Chat Tweaks and Tab Tweaks are Visibility.
 
-     *  - Phase Timers, Timers and Odin's Tick Timers (its Fire Freeze Hud and look) are Tick Timers.
+     *  - Phase Timers, Timers and ADM's Tick Timers (its Fire Freeze Hud and look) are Tick Timers.
 
-     *  - Odin's terminal modules, Term Progress and Terminal Hitboxes are Terminals.
+     *  - ADM's terminal modules, Term Progress and Terminal Hitboxes are Terminals.
 
-     *  - Odin's Simon Says, Arrow Align and Arrows Device, and SS Practice, are Devices.
+     *  - ADM's Simon Says, Arrow Align and Arrows Device, and SS Practice, are Devices.
 
-     *  - Odin's Dungeon Waypoints, Boss Waypoints and Odin's Temporary Waypoints (its From Party Chat) are Waypoints.
+     *  - ADM's Dungeon Waypoints, Boss Waypoints and ADM's Temporary Waypoints (its From Party Chat) are Waypoints.
 
-     *  - Odin's Secret Clicked, Waypoints' Secret Waypoints, Item Highlight and Close Chest On Key are Secrets.
+     *  - ADM's Secret Clicked, Waypoints' Secret Waypoints, Item Highlight and Close Chest On Key are Secrets.
 
-     *  - Odin's Map Info and Extra Stats, Score Time, Room Alerts and Clear Breakdown are Clear Info.
+     *  - ADM's Map Info and Extra Stats, Score Time, Room Alerts and Clear Breakdown are Clear Info.
 
      *  - Random Stuff's visibility settings are Visibility's, and Hide Numbers' Numbers and Show Next Numbers are Terminals'.
 
-     * Each only happens while its target is still missing, so it runs once. [odinDir] is
+     * Each only happens while its target is still missing, so it runs once. [coreDir] is
 
-     * config/odin. True if the file was rewritten.
+     * config/core. True if the file was rewritten.
 
      */
 
@@ -184,20 +184,20 @@ object ConfigMigration {
         var c = false
         for (m in list.filterIsInstance<JsonObject>()) {
             val s = m.getAsJsonObject("settings") ?: continue
-            for ((key, odinTo) in RENAMED_VALUE_KEYS) {
+            for ((key, coreTo) in RENAMED_VALUE_KEYS) {
                 val v = s[key]?.takeIf { it.isJsonPrimitive }?.asString ?: continue
-                val to = (if (v == "ODIN") odinTo else null) ?: VALUE_RENAMES[v]?.takeIf { v != "ODIN" } ?: continue
+                val to = (if (v == "ODIN") coreTo else null) ?: VALUE_RENAMES[v]?.takeIf { v != "ODIN" } ?: continue
                 s.addProperty(key, to); c = true
             }
         }
         return c
     }
 
-    fun run(odinDir: Path): Boolean {
+    fun run(coreDir: Path): Boolean {
 
-        val file = odinDir.resolve("addons").resolve("engineerclient.json")
+        val file = coreDir.resolve("addons").resolve("engineerclient.json")
 
-        val odinFile = odinDir.resolve("config.json")
+        val coreFile = coreDir.resolve("config.json")
 
         if (!Files.exists(file)) return false
 
@@ -273,11 +273,11 @@ object ConfigMigration {
 
         module(modules, "Legit Zpew")?.let { lz ->
 
-            if (!Files.exists(odinFile)) return@let
+            if (!Files.exists(coreFile)) return@let
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val ew = module(odin, "Etherwarp") ?: JsonObject().apply { addProperty("name", "Etherwarp"); addProperty("enabled", false) }.also { odin.add(it) }
+            val ew = module(core, "Etherwarp") ?: JsonObject().apply { addProperty("name", "Etherwarp"); addProperty("enabled", false) }.also { core.add(it) }
 
             val es = settings(ew)
 
@@ -291,7 +291,7 @@ object ConfigMigration {
 
                 if (on && ew["enabled"]?.asBoolean != true) { ew.addProperty("enabled", true); es.addProperty("Show Guess", false) }
 
-                write(odinFile, odin)
+                write(coreFile, core)
 
             }
 
@@ -303,15 +303,15 @@ object ConfigMigration {
 
 
 
-        // Dungeon Breaker Torch Guard and Odin's Breaker Display are Dungeonbreaker's Torch Guard and Charges Display.
+        // Dungeon Breaker Torch Guard and ADM's Breaker Display are Dungeonbreaker's Torch Guard and Charges Display.
 
         run {
 
             val tg = module(modules, "Dungeon Breaker Torch Guard")
 
-            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else null
+            val core = if (Files.exists(coreFile)) JsonParser.parseString(Files.readString(coreFile)).asJsonArray else null
 
-            val bd = odin?.let { module(it, "Breaker Display") }
+            val bd = core?.let { module(it, "Breaker Display") }
 
             if (tg == null && bd == null) return@run
 
@@ -333,7 +333,7 @@ object ConfigMigration {
 
             tg?.let { modules.remove(it) }
 
-            if (odin != null && bd != null) { odin.remove(bd); write(odinFile, odin) }
+            if (core != null && bd != null) { core.remove(bd); write(coreFile, core) }
 
             changed = true
 
@@ -425,7 +425,7 @@ object ConfigMigration {
 
 
 
-        val own = odinDir.parent.resolve(NAME)
+        val own = coreDir.parent.resolve(NAME)
 
         if (Files.isDirectory(own.resolve("betterpf")) && !Files.exists(own.resolve("adr"))) Files.move(own.resolve("betterpf"), own.resolve("adr"))
 
@@ -603,7 +603,7 @@ object ConfigMigration {
 
 
 
-        // Term Info is no module any more: its HUD is Odin's Terminals Status, Section Time a Timers
+        // Term Info is no module any more: its HUD is ADM's Terminals Status, Section Time a Timers
 
         // HUD (on only if Section Times was), and Core Leap Highlight Recore's. The entry goes, so this runs once.
 
@@ -645,13 +645,13 @@ object ConfigMigration {
 
 
 
-            if (Files.exists(odinFile)) {
+            if (Files.exists(coreFile)) {
 
-                val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+                val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-                val ts = module(odin, "Terminals Status")
+                val ts = module(core, "Terminals Status")
 
-                    ?: JsonObject().apply { addProperty("name", "Terminals Status"); addProperty("enabled", false) }.also { odin.add(it) }
+                    ?: JsonObject().apply { addProperty("name", "Terminals Status"); addProperty("enabled", false) }.also { core.add(it) }
 
                 val tss = settings(ts)
 
@@ -661,11 +661,11 @@ object ConfigMigration {
 
                 if (!tss.has("Simple Mode")) tss.addProperty("Simple Mode", bool("Simple Mode", false))
 
-                // Ours was showing and Odin's wasn't: Odin's on, where ours was.
+                // Ours was showing and ADM's wasn't: ADM's on, where ours was.
 
-                val odinsShowing = ts["enabled"]?.asBoolean == true && tss["Term Info"]?.takeIf { it.isJsonObject }?.asJsonObject?.get("enabled")?.asBoolean == true
+                val coresShowing = ts["enabled"]?.asBoolean == true && tss["Term Info"]?.takeIf { it.isJsonObject }?.asJsonObject?.get("enabled")?.asBoolean == true
 
-                if (ours != null && !odinsShowing) {
+                if (ours != null && !coresShowing) {
 
                     ts.addProperty("enabled", true)
 
@@ -673,7 +673,7 @@ object ConfigMigration {
 
                 }
 
-                write(odinFile, odin)
+                write(coreFile, core)
 
             }
 
@@ -719,13 +719,13 @@ object ConfigMigration {
 
 
 
-        if (Files.exists(odinFile)) {
+        if (Files.exists(coreFile)) {
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
             fun copy(from: String, to: String, keys: List<String>) {
 
-                val src = module(odin, from)?.let(::settings) ?: return
+                val src = module(core, from)?.let(::settings) ?: return
 
                 if (keys.none { src.has(it) }) return // nothing to copy
 
@@ -747,13 +747,13 @@ object ConfigMigration {
 
             val used = oldSplitsHud?.takeIf { it.isJsonObject }?.asJsonObject?.get("enabled")?.asBoolean == true
 
-            val odinSplits = module(odin, "Splits")?.let(::settings)
+            val coreSplits = module(core, "Splits")?.let(::settings)
 
-            if (used && odinSplits != null && !odinSplits.has("Look")) {
+            if (used && coreSplits != null && !coreSplits.has("Look")) {
 
-                odinSplits.addProperty("Look", "ENGINEER_SPLITS")
+                coreSplits.addProperty("Look", "ENGINEER_SPLITS")
 
-                write(odinFile, odin)
+                write(coreFile, core)
 
                 changed = true
 
@@ -763,7 +763,7 @@ object ConfigMigration {
 
 
 
-        // Engineer Client's Terminals Status is gone (2026-11-06; Odin's own, in odin-config.json, is another module).
+        // Engineer Client's Terminals Status is gone (2026-11-06; ADM's own, in core-config.json, is another module).
 
         val gone = module(modules, "Terminals Status")
 
@@ -843,11 +843,11 @@ object ConfigMigration {
 
             val from = settings(gh)
 
-            if (Files.exists(odinFile)) {
+            if (Files.exists(coreFile)) {
 
-                val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+                val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-                fun host(name: String) = module(odin, name) ?: JsonObject().apply { addProperty("name", name); addProperty("enabled", false); add("settings", JsonObject()) }.also { odin.add(it) }
+                fun host(name: String) = module(core, name) ?: JsonObject().apply { addProperty("name", name); addProperty("enabled", false); add("settings", JsonObject()) }.also { core.add(it) }
 
                 fun hud(key: String) = from.get(key)?.deepCopy()?.also { if (!on && it.isJsonObject) it.asJsonObject.addProperty("enabled", false) }
 
@@ -867,7 +867,7 @@ object ConfigMigration {
 
                 if (on && ts.get("enabled")?.asBoolean != true) { ts.addProperty("enabled", true); ts2.addProperty("Waypoints", false); (ts2.get("Term Info") as? JsonObject)?.addProperty("enabled", false) }
 
-                write(odinFile, odin)
+                write(coreFile, core)
 
             }
 
@@ -901,11 +901,11 @@ object ConfigMigration {
 
         module(modules, "POV Previews")?.let { pov ->
 
-            if (!Files.exists(odinFile)) return@let
+            if (!Files.exists(coreFile)) return@let
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val leap = module(odin, "Leap Menu") ?: JsonObject().apply { addProperty("name", "Leap Menu"); addProperty("enabled", false) }.also { odin.add(it) }
+            val leap = module(core, "Leap Menu") ?: JsonObject().apply { addProperty("name", "Leap Menu"); addProperty("enabled", false) }.also { core.add(it) }
 
             val to = settings(leap)
 
@@ -915,7 +915,7 @@ object ConfigMigration {
 
             for ((k, v) in settings(pov).entrySet()) if (k != "Keybind" && !to.has(k)) to.add(k, v)
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
         }
 
@@ -923,13 +923,13 @@ object ConfigMigration {
 
         // Highlight is Mob Highlight.
 
-        if (Files.exists(odinFile)) {
+        if (Files.exists(coreFile)) {
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val old = module(odin, "Highlight")
+            val old = module(core, "Highlight")
 
-            if (old != null && module(odin, "Mob Highlight") == null) { old.addProperty("name", "Mob Highlight"); write(odinFile, odin) }
+            if (old != null && module(core, "Mob Highlight") == null) { old.addProperty("name", "Mob Highlight"); write(coreFile, core) }
 
         }
 
@@ -937,15 +937,15 @@ object ConfigMigration {
 
         // Puzzle Solvers is Puzzles; Creeper Beams Ding and Puzzle Overlay are its settings.
 
-        if (Files.exists(odinFile)) {
+        if (Files.exists(coreFile)) {
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            var odinChanged = false
+            var coreChanged = false
 
-            val old = module(odin, "Puzzle Solvers")
+            val old = module(core, "Puzzle Solvers")
 
-            if (old != null && module(odin, "Puzzles") == null) { old.addProperty("name", "Puzzles"); odinChanged = true }
+            if (old != null && module(core, "Puzzles") == null) { old.addProperty("name", "Puzzles"); coreChanged = true }
 
             val ding = module(modules, "Creeper Beams Ding")
 
@@ -953,7 +953,7 @@ object ConfigMigration {
 
             if (ding != null || overlay != null) {
 
-                val puzzles = module(odin, "Puzzles") ?: JsonObject().apply { addProperty("name", "Puzzles"); addProperty("enabled", true) }.also { odin.add(it) }
+                val puzzles = module(core, "Puzzles") ?: JsonObject().apply { addProperty("name", "Puzzles"); addProperty("enabled", true) }.also { core.add(it) }
 
                 val to = settings(puzzles)
 
@@ -995,13 +995,13 @@ object ConfigMigration {
 
                 }
 
-                odinChanged = true
+                coreChanged = true
 
                 changed = true
 
             }
 
-            if (odinChanged) write(odinFile, odin)
+            if (coreChanged) write(coreFile, core)
 
         }
 
@@ -1061,7 +1061,7 @@ object ConfigMigration {
 
 
 
-        // Arrow Fix, Arrow Swap Title, Arrow Hit Sound and Odin's Quiver Display are Arrows settings, on if the module was; Render Cleanup's
+        // Arrow Fix, Arrow Swap Title, Arrow Hit Sound and ADM's Quiver Display are Arrows settings, on if the module was; Render Cleanup's
 
         // and Random Stuff's arrow settings too, on only if their module was.
 
@@ -1069,9 +1069,9 @@ object ConfigMigration {
 
             if (module(modules, "Arrows") != null) return@run
 
-            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else null
+            val core = if (Files.exists(coreFile)) JsonParser.parseString(Files.readString(coreFile)).asJsonArray else null
 
-            val quiver = odin?.let { module(it, "Quiver Display") }
+            val quiver = core?.let { module(it, "Quiver Display") }
 
             val fix = module(modules, "Arrow Fix")
 
@@ -1119,7 +1119,7 @@ object ConfigMigration {
 
             listOfNotNull(fix, swap, hit).forEach(modules::remove)
 
-            if (odin != null && quiver != null) { odin.remove(quiver); write(odinFile, odin) }
+            if (core != null && quiver != null) { core.remove(quiver); write(coreFile, core) }
 
             changed = true
 
@@ -1173,13 +1173,13 @@ object ConfigMigration {
 
             changed = true
 
-            if (!Files.exists(odinFile)) return@let
+            if (!Files.exists(coreFile)) return@let
 
             val on = (rs["enabled"]?.asBoolean ?: true) && old.isJsonPrimitive && old.asBoolean
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val bpf = module(odin, "Better Party Finder") ?: JsonObject().apply { addProperty("name", "Better Party Finder"); addProperty("enabled", false) }.also { odin.add(it) }
+            val bpf = module(core, "Better Party Finder") ?: JsonObject().apply { addProperty("name", "Better Party Finder"); addProperty("enabled", false) }.also { core.add(it) }
 
             val s = settings(bpf)
 
@@ -1197,7 +1197,7 @@ object ConfigMigration {
 
             }
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
         }
 
@@ -1205,43 +1205,43 @@ object ConfigMigration {
 
         // Mob Highlight's Teammate Class Glow goes.
 
-        if (Files.exists(odinFile)) {
+        if (Files.exists(coreFile)) {
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            if (module(odin, "Mob Highlight")?.let(::settings)?.remove("Teammate Class Glow") != null) write(odinFile, odin)
+            if (module(core, "Mob Highlight")?.let(::settings)?.remove("Teammate Class Glow") != null) write(coreFile, core)
 
         }
 
 
 
-        // Phase Timers, Timers and Odin's Tick Timers are Tick Timers, on if any was; Odin's other timers were already in the first two.
+        // Phase Timers, Timers and ADM's Tick Timers are Tick Timers, on if any was; ADM's other timers were already in the first two.
 
         // With it on, the timers of one that was off go off. HUDs linked to theirs follow. The old entries go, so this runs once.
 
         run {
 
-            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else null
+            val core = if (Files.exists(coreFile)) JsonParser.parseString(Files.readString(coreFile)).asJsonArray else null
 
             val phase = module(modules, "Phase Timers")
 
             val timers = module(modules, "Timers")
 
-            val odinTicks = odin?.let { module(it, "Tick Timers") }
+            val coreTicks = core?.let { module(it, "Tick Timers") }
 
-            if (listOf(phase, timers, odinTicks).all { it == null } || module(modules, "Tick Timers") != null) return@run
+            if (listOf(phase, timers, coreTicks).all { it == null } || module(modules, "Tick Timers") != null) return@run
 
             fun on(m: JsonObject?) = m?.get("enabled")?.asBoolean == true
 
             fun hudOff(s: JsonObject, key: String) = (s[key] as? JsonObject ?: JsonObject().also { s.add(key, it) }).addProperty("enabled", false)
 
-            val anyOn = on(phase) || on(timers) || on(odinTicks)
+            val anyOn = on(phase) || on(timers) || on(coreTicks)
 
             val to = settings(ensure("Tick Timers").also { it.addProperty("enabled", anyOn) })
 
             for (m in listOfNotNull(phase, timers)) for ((k, v) in settings(m).entrySet()) if (!to.has(k)) to.add(k, v)
 
-            odinTicks?.let(::settings)?.let { s -> for (k in ODIN_TICK_TIMERS_KEYS) s[k]?.let { to.add(k, it) } }
+            coreTicks?.let(::settings)?.let { s -> for (k in CORE_TICK_TIMERS_KEYS) s[k]?.let { to.add(k, it) } }
 
             if (anyOn) {
 
@@ -1249,7 +1249,7 @@ object ConfigMigration {
 
                 if (!on(timers)) for (k in TIMERS_HUDS) hudOff(to, k)
 
-                if (!on(odinTicks)) hudOff(to, "Fire Freeze Hud")
+                if (!on(coreTicks)) hudOff(to, "Fire Freeze Hud")
 
             }
 
@@ -1265,13 +1265,13 @@ object ConfigMigration {
 
             relink(modules)
 
-            if (odin != null) {
+            if (core != null) {
 
-                odinTicks?.let(odin::remove)
+                coreTicks?.let(core::remove)
 
-                relink(odin)
+                relink(core)
 
-                write(odinFile, odin)
+                write(coreFile, core)
 
             }
 
@@ -1281,15 +1281,15 @@ object ConfigMigration {
 
 
 
-        // Odin's terminal modules, Term Progress and Terminal Hitboxes are Terminals' sections, each on if its module was.
+        // ADM's terminal modules, Term Progress and Terminal Hitboxes are Terminals' sections, each on if its module was.
 
         run {
 
             if (module(modules, "Terminals") != null) return@run
 
-            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else null
+            val core = if (Files.exists(coreFile)) JsonParser.parseString(Files.readString(coreFile)).asJsonArray else null
 
-            val olds = TERMINAL_SECTIONS.mapNotNull { (name, switch, inOdin) -> (if (inOdin) odin?.let { module(it, name) } else module(modules, name))?.let { Triple(it, switch, inOdin) } }
+            val olds = TERMINAL_SECTIONS.mapNotNull { (name, switch, inCore) -> (if (inCore) core?.let { module(it, name) } else module(modules, name))?.let { Triple(it, switch, inCore) } }
 
             if (olds.isEmpty()) return@run
 
@@ -1325,17 +1325,17 @@ object ConfigMigration {
 
             }
 
-            for ((m, _, inOdin) in olds) if (!inOdin) modules.remove(m)
+            for ((m, _, inCore) in olds) if (!inCore) modules.remove(m)
 
             relink(modules)
 
-            if (odin != null) {
+            if (core != null) {
 
-                for ((m, _, inOdin) in olds) if (inOdin) odin.remove(m)
+                for ((m, _, inCore) in olds) if (inCore) core.remove(m)
 
-                relink(odin)
+                relink(core)
 
-                write(odinFile, odin)
+                write(coreFile, core)
 
             }
 
@@ -1351,19 +1351,19 @@ object ConfigMigration {
 
         run {
 
-            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else JsonArray()
+            val core = if (Files.exists(coreFile)) JsonParser.parseString(Files.readString(coreFile)).asJsonArray else JsonArray()
 
-            val dw = module(odin, "Dungeon Waypoints")
+            val dw = module(core, "Dungeon Waypoints")
 
-            val tw = module(odin, "Temporary Waypoints")
+            val tw = module(core, "Temporary Waypoints")
 
             val bw = module(modules, "Boss Waypoints")
 
-            if (listOf(dw, tw, bw).all { it == null } || module(odin, "Waypoints") != null) return@run
+            if (listOf(dw, tw, bw).all { it == null } || module(core, "Waypoints") != null) return@run
 
             fun on(m: JsonObject?) = m?.get("enabled")?.asBoolean == true
 
-            val w = dw ?: JsonObject().apply { addProperty("name", "Waypoints"); add("settings", JsonObject()) }.also { odin.add(it) }
+            val w = dw ?: JsonObject().apply { addProperty("name", "Waypoints"); add("settings", JsonObject()) }.also { core.add(it) }
 
             w.addProperty("name", "Waypoints")
 
@@ -1371,9 +1371,9 @@ object ConfigMigration {
 
             tw?.let { settings(w).addProperty("Party Waypoints", on(it) && (settings(it)["From Party Chat"]?.asBoolean ?: true)) }
 
-            tw?.let(odin::remove)
+            tw?.let(core::remove)
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
             bw?.let { modules.remove(it); changed = true }
 
@@ -1399,15 +1399,15 @@ object ConfigMigration {
 
 
 
-        // Odin's Simon Says, Arrow Align and Arrows Device are Devices' sections, each on if its module was.
+        // ADM's Simon Says, Arrow Align and Arrows Device are Devices' sections, each on if its module was.
 
         run {
 
-            if (settings(module(modules, "Devices") ?: JsonObject()).has("Enable Simon Says") || !Files.exists(odinFile)) return@run
+            if (settings(module(modules, "Devices") ?: JsonObject()).has("Enable Simon Says") || !Files.exists(coreFile)) return@run
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val olds = DEVICE_SECTIONS.mapNotNull { (name, switch) -> module(odin, name)?.let { Triple(it, name, switch) } }
+            val olds = DEVICE_SECTIONS.mapNotNull { (name, switch) -> module(core, name)?.let { Triple(it, name, switch) } }
 
             if (olds.isEmpty()) return@run
 
@@ -1427,11 +1427,11 @@ object ConfigMigration {
 
                 }
 
-                odin.remove(m)
+                core.remove(m)
 
             }
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
             changed = true
 
@@ -1447,21 +1447,21 @@ object ConfigMigration {
 
         run {
 
-            if (!Files.exists(odinFile)) return@run
+            if (!Files.exists(coreFile)) return@run
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            if (module(odin, "Secrets") != null) return@run
+            if (module(core, "Secrets") != null) return@run
 
             fun on(m: JsonObject?) = m?.get("enabled")?.asBoolean == true
 
-            val sc = module(odin, "Secret Clicked")
+            val sc = module(core, "Secret Clicked")
 
             val ih = module(modules, "Item Highlight")
 
             val cc = module(modules, "Close Chest On Key")
 
-            val wp = module(odin, "Waypoints")
+            val wp = module(core, "Waypoints")
 
             val sw = wp?.let(::settings)?.let { w -> SECRET_WAYPOINT_KEYS.filter(w::has).associateWith { w.remove(it) } }.orEmpty()
 
@@ -1471,7 +1471,7 @@ object ConfigMigration {
 
             val anyOn = on(sc) || on(ih) || on(cc) || swOn
 
-            val secrets = sc ?: JsonObject().apply { add("settings", JsonObject()) }.also { odin.add(it) }
+            val secrets = sc ?: JsonObject().apply { add("settings", JsonObject()) }.also { core.add(it) }
 
             secrets.addProperty("name", "Secrets")
 
@@ -1495,7 +1495,7 @@ object ConfigMigration {
 
             to.addProperty("Close Chest On Key", on(cc))
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
             listOfNotNull(ih, cc).forEach { modules.remove(it); changed = true }
 
@@ -1505,19 +1505,19 @@ object ConfigMigration {
 
         // Mob Highlight is Highlights.
 
-        if (Files.exists(odinFile)) {
+        if (Files.exists(coreFile)) {
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val old = module(odin, "Mob Highlight")
+            val old = module(core, "Mob Highlight")
 
-            if (old != null && module(odin, "Highlights") == null) { old.addProperty("name", "Highlights"); write(odinFile, odin) }
+            if (old != null && module(core, "Highlights") == null) { old.addProperty("name", "Highlights"); write(coreFile, core) }
 
         }
 
 
 
-        // Odin's Map Info and Extra Stats, Score Time, Room Alerts and Clear Breakdown are Clear Info's sections, each switch on if its
+        // ADM's Map Info and Extra Stats, Score Time, Room Alerts and Clear Breakdown are Clear Info's sections, each switch on if its
 
         // module was. Map Info's Full Hud is its Map Info HUD; the two sounds and Score Time's Alert get the section's name.
 
@@ -1525,11 +1525,11 @@ object ConfigMigration {
 
             if (module(modules, "Clear Info") != null) return@run
 
-            val odin = if (Files.exists(odinFile)) JsonParser.parseString(Files.readString(odinFile)).asJsonArray else JsonArray()
+            val core = if (Files.exists(coreFile)) JsonParser.parseString(Files.readString(coreFile)).asJsonArray else JsonArray()
 
-            val mi = module(odin, "Map Info")
+            val mi = module(core, "Map Info")
 
-            val es = module(odin, "Extra Stats")
+            val es = module(core, "Extra Stats")
 
             val st = module(modules, "Score Time")
 
@@ -1579,7 +1579,7 @@ object ConfigMigration {
 
             listOfNotNull(st, ra, cb).forEach { modules.remove(it) }
 
-            if (mi != null || es != null) { listOfNotNull(mi, es).forEach { odin.remove(it) }; write(odinFile, odin) }
+            if (mi != null || es != null) { listOfNotNull(mi, es).forEach { core.remove(it) }; write(coreFile, core) }
 
             changed = true
 
@@ -1587,17 +1587,17 @@ object ConfigMigration {
 
 
 
-        // Health & Mana is a section of Odin's Player Display; its bars and hiding stay off where the module was off.
+        // Health & Mana is a section of ADM's Player Display; its bars and hiding stay off where the module was off.
 
         module(modules, "Health & Mana")?.let { hm ->
 
-            if (!Files.exists(odinFile)) return@let
+            if (!Files.exists(coreFile)) return@let
 
             val on = hm["enabled"]?.asBoolean == true
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val pd = module(odin, "Player Display") ?: JsonObject().apply { addProperty("name", "Player Display"); addProperty("enabled", on) }.also { odin.add(it) }
+            val pd = module(core, "Player Display") ?: JsonObject().apply { addProperty("name", "Player Display"); addProperty("enabled", on) }.also { core.add(it) }
 
             val to = settings(pd)
 
@@ -1615,7 +1615,7 @@ object ConfigMigration {
 
             if (on && pd["enabled"]?.asBoolean != true) pd.addProperty("enabled", true)
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
             modules.remove(hm)
 
@@ -1689,13 +1689,13 @@ object ConfigMigration {
 
         module(modules, "LCM Melee Warning")?.let { lcm ->
 
-            if (!Files.exists(odinFile)) return@let
+            if (!Files.exists(coreFile)) return@let
 
             val on = lcm["enabled"]?.asBoolean == true
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val beam = module(odin, "Mage Beam") ?: JsonObject().apply { addProperty("name", "Mage Beam"); addProperty("enabled", false) }.also { odin.add(it) }
+            val beam = module(core, "Mage Beam") ?: JsonObject().apply { addProperty("name", "Mage Beam"); addProperty("enabled", false) }.also { core.add(it) }
 
             val to = settings(beam)
 
@@ -1707,7 +1707,7 @@ object ConfigMigration {
 
             if (on && beam["enabled"]?.asBoolean != true) beam.addProperty("enabled", true)
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
             modules.remove(lcm)
 
@@ -1751,11 +1751,11 @@ object ConfigMigration {
 
         // Hide Portal Overlay is Visibility's.
 
-        if (Files.exists(odinFile)) run {
+        if (Files.exists(coreFile)) run {
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val cam = module(odin, "Camera") ?: return@run
+            val cam = module(core, "Camera") ?: return@run
 
             val s = settings(cam)
 
@@ -1765,7 +1765,7 @@ object ConfigMigration {
 
             s.remove("Hide Portal Overlay")
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
             changed = true
 
@@ -1775,17 +1775,17 @@ object ConfigMigration {
 
         // Puzzles' Draft prompt is Draft (Prompt or Auto).
 
-        if (Files.exists(odinFile)) run {
+        if (Files.exists(coreFile)) run {
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val s = module(odin, "Puzzles")?.let(::settings) ?: return@run
+            val s = module(core, "Puzzles")?.let(::settings) ?: return@run
 
             val v = s.remove("Draft prompt") ?: return@run
 
             if (!s.has("Draft")) s.add("Draft", v)
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
         }
 
@@ -1793,11 +1793,11 @@ object ConfigMigration {
 
         // LCM Style draws in the Dungeon Map's own colours: where it was on, its own ones carry over.
 
-        if (Files.exists(odinFile)) run {
+        if (Files.exists(coreFile)) run {
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val s = module(odin, "Dungeon Map")?.let(::settings) ?: return@run
+            val s = module(core, "Dungeon Map")?.let(::settings) ?: return@run
 
             if (!s.has("LCM Normal Room")) return@run
 
@@ -1819,7 +1819,7 @@ object ConfigMigration {
 
             }
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
         }
 
@@ -1827,48 +1827,48 @@ object ConfigMigration {
 
         // Legit Zpew's In Ice Fill is In Puzzles.
 
-        if (Files.exists(odinFile)) run {
+        if (Files.exists(coreFile)) run {
 
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
 
-            val s = module(odin, "Etherwarp")?.let(::settings) ?: return@run
+            val s = module(core, "Etherwarp")?.let(::settings) ?: return@run
 
             val v = s.remove("In Ice Fill") ?: return@run
 
             if (!s.has("In Puzzles")) s.add("In Puzzles", v)
 
-            write(odinFile, odin)
+            write(coreFile, core)
 
         }
 
 
 
-        // Secret waypoint colours still on the old defaults take Devonian's.
-        if (Files.exists(odinFile)) run {
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
-            val s = module(odin, "Secrets")?.let(::settings) ?: return@run
+        // Secret waypoint colours still on the old defaults take ADM's.
+        if (Files.exists(coreFile)) run {
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
+            val s = module(core, "Secrets")?.let(::settings) ?: return@run
             var moved = false
             for ((key, old, new) in listOf(Triple("Chest Color", "#FFAA00FF", "#00FF00FF"), Triple("Item Color", "#5555FFFF", "#0000FFFF"),
                     Triple("Essence Color", "#AA00AAFF", "#FF00FFFF"), Triple("Bat Color", "#55FF55FF", "#00FF96FF"), Triple("Redstone Key Color", "#FF5555FF", "#FF0000FF"))) {
                 if (s[key]?.takeIf { it.isJsonPrimitive }?.asString.equals(old, true)) { s.addProperty(key, new); moved = true }
             }
-            if (moved) write(odinFile, odin)
+            if (moved) write(coreFile, core)
         }
 
-        if (Files.exists(odinFile)) {
-            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
-            if (renameValues(odin)) write(odinFile, odin)
-            val sprint = module(odin, "Auto Sprint")
+        if (Files.exists(coreFile)) {
+            val core = JsonParser.parseString(Files.readString(coreFile)).asJsonArray
+            if (renameValues(core)) write(coreFile, core)
+            val sprint = module(core, "Auto Sprint")
             val rs = module(modules, "Random Stuff")
             if (sprint != null && rs != null && !settings(rs).has("Auto Sprint")) { settings(rs).addProperty("Auto Sprint", sprint["enabled"]?.asBoolean == true); changed = true }
-            val cursor = module(odin, "No Cursor Reset")
+            val cursor = module(core, "No Cursor Reset")
             if (cursor != null && rs != null && !settings(rs).has("No Cursor Reset")) {
                 settings(rs).addProperty("No Cursor Reset", cursor["enabled"]?.asBoolean == true)
                 settings(cursor)["Unhook Timeout"]?.let { settings(rs).add("Unhook Timeout", it) }
                 changed = true
             }
-            val old = module(odin, "Menu Keybinds")
-            if (old != null && module(odin, "LD WD Pet Keybinds") == null) { old.addProperty("name", "LD WD Pet Keybinds"); write(odinFile, odin) }
+            val old = module(core, "Menu Keybinds")
+            if (old != null && module(core, "LD WD Pet Keybinds") == null) { old.addProperty("name", "LD WD Pet Keybinds"); write(coreFile, core) }
         }
 
         if (renameValues(modules)) changed = true
@@ -1901,7 +1901,7 @@ object ConfigMigration {
 
 
 
-    /** Odin's device modules and their on/off switch in Devices. */
+    /** ADM's device modules and their on/off switch in Devices. */
 
     private val DEVICE_SECTIONS = listOf("Simon Says" to "Enable Simon Says", "Arrow Align" to "Enable Arrow Align", "Arrows Device" to "Enable Arrows Device")
 
@@ -1923,7 +1923,7 @@ object ConfigMigration {
 
 
 
-    /** Old module, its on/off switch in Terminals (none: always on), and whether it lived in Odin's config. */
+    /** Old module, its on/off switch in Terminals (none: always on), and whether it lived in ADM's config. */
 
     private val TERMINAL_SECTIONS = listOf<Triple<String, String?, Boolean>>(
 
@@ -2039,7 +2039,7 @@ object ConfigMigration {
 
 
 
-    private val ODIN_TICK_TIMERS_KEYS = listOf("Fire Freeze Hud", "Display in Ticks", "Display Symbol", "Show Prefix")
+    private val CORE_TICK_TIMERS_KEYS = listOf("Fire Freeze Hud", "Display in Ticks", "Display Symbol", "Show Prefix")
 
 
 

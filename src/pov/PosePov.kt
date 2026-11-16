@@ -88,14 +88,14 @@ import java.util.Optional
 import java.util.OptionalDouble
 
 /**
- * Each teammate's view in their quarter of Odin's leap menu, from nothing but where they stand,
+ * Each teammate's view in their quarter of ADM's leap menu, from nothing but where they stand,
  * where they look and what they hold: the blocks are our own flat-coloured meshes ([BlockMesh]),
  * drawn from their eye, with the entities around them. No world render.
  */
 object PosePov : Module(
     name = "POV Previews",
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Each teammate's view in their quarter of Odin's leap menu: their position, look and held item over flat-coloured blocks.",
+    description = "Each teammate's view in their quarter of ADM's leap menu: their position, look and held item over flat-coloured blocks.",
     key = null,
 ) {
     private const val FEEDS = 4
@@ -137,10 +137,10 @@ object PosePov : Module(
     private val onlyTerms by BooleanSetting("Only In Terms", false, desc = "Shows the views in terms: F7/M7 phase 3, the terminals, devices and levers, and the Goldor split after them until you drop to Necron. Adds to the other Only In place; neither ticked is everywhere.")
     private val places get() = buildList { if (onlyBloodRush) add(ShowIn.Place.BLOOD_RUSH); if (onlyTerms) add(ShowIn.Place.GOLDOR) }
     private enum class HudsOver { NONE, MOD_HUDS, ALL }
-    private val hudsOver by com.adm.clickgui.settings.impl.SelectorSetting("HUDs Over Views", HudsOver.MOD_HUDS, desc = "What's drawn over the views. None: just the views. Mod HUDs: every mod's HUD (the HUD editor's timers, Term Progress..., other mods' HUDs, and titles such as alerts), one that turns up while the menu is open too, but not Odin's Dungeon Map or the rest of vanilla's HUD (hotbar, health, chat, scoreboard...). All: everything, maps and vanilla's HUD too. The leap menu's own boxes and names stay on top either way.")
+    private val hudsOver by com.adm.clickgui.settings.impl.SelectorSetting("HUDs Over Views", HudsOver.MOD_HUDS, desc = "What's drawn over the views. None: just the views. Mod HUDs: every mod's HUD (the HUD editor's timers, Term Progress..., other mods' HUDs, and titles such as alerts), one that turns up while the menu is open too, but not ADM's Dungeon Map or the rest of vanilla's HUD (hotbar, health, chat, scoreboard...). All: everything, maps and vanilla's HUD too. The leap menu's own boxes and names stay on top either way.")
     /** All and Mod HUDs: the views go under the whole GUI (PosePovUnderGuiMixin), so every mod's HUD, and one that turns up while the menu is open, is drawn over them. */
     private val showHuds get() = hudsOver != HudsOver.NONE
-    /** Mod HUDs: vanilla's own HUD (but titles, which mods' alerts use) and Odin's Dungeon Map are left out while the views cover the screen ([hidesVanilla], [hidesHud]). */
+    /** Mod HUDs: vanilla's own HUD (but titles, which mods' alerts use) and ADM's Dungeon Map are left out while the views cover the screen ([hidesVanilla], [hidesHud]). */
     private val modHuds get() = hudsOver == HudsOver.MOD_HUDS
     private val NOT_OVER_VIEWS = setOf("Dungeon Map")
     private val resolution by NumberSetting("POV resolution", 100, 25..100, 5, unit = "%", desc = "How sharp the views are drawn. Lower is faster on weaker graphics cards; they're scaled up to fill their quarter of the screen.")
@@ -297,10 +297,10 @@ object PosePov : Module(
     fun hidesVanilla(id: Identifier): Boolean = covering && modHuds && id !in KEEP_VANILLA
     private val KEEP_VANILLA = setOf(VanillaHudElements.TITLE_AND_SUBTITLE, VanillaHudElements.SUBTITLES)
 
-    /** Whether the Odin HUD [name] is left out this frame (CoreHuds): the map, under Mod HUDs. */
+    /** Whether the ADM HUD [name] is left out this frame (CoreHuds): the map, under Mod HUDs. */
     fun hidesHud(name: String): Boolean = covering && modHuds && name in NOT_OVER_VIEWS
 
-    /** Mod HUDs: every HUD on in the HUD editor, again over the views where Odin puts it (not the map). */
+    /** Mod HUDs: every HUD on in the HUD editor, again over the views where ADM puts it (not the map). */
     private fun redrawModHuds(gfx: GuiGraphicsExtractor) {
         for (hud in com.adm.features.ModuleManager.hudSettingsCache) {
             if (!hud.isEnabled || hud.name in NOT_OVER_VIEWS) continue
@@ -636,7 +636,7 @@ object PosePov : Module(
     }
 
     /**
-     * A teammate's open terminal over their feed: its grid, as Odin lays it out, with Odin's solution lit (Numbers in order,
+     * A teammate's open terminal over their feed: its grid, as ADM lays it out, with ADM's solution lit (Numbers in order,
      * Rubix with its click counts, Melody's pointer and its lane). Nothing of theirs is drawn but which cells: no items, no
      * text (the title is the terminal's name here, with the letter or colour looked up here).
      */
@@ -1024,7 +1024,7 @@ object PosePov : Module(
         gfx.text(label, cx - mc.font.width(label) / 2, y1 - 12, color, shadow = true)
     }
 
-    /** Places what Odin has newly identified, then builds geometry for [budgetNs]: [near] first, then the whole dungeon if prerendering. */
+    /** Places what ADM has newly identified, then builds geometry for [budgetNs]: [near] first, then the whole dungeon if prerendering. */
     private fun build(budgetNs: Long, near: List<Long>) {
         val level = mc.level ?: return
         // On arrival the world sections are built again with the rooms and the arena in them.

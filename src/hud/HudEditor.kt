@@ -24,7 +24,7 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sign
 
-/** Blade's grid HUD editor, for every HUD registered with Odin; opened wherever Odin opens its own. */
+/** ADM's grid HUD editor, for every HUD registered with ADM; opened wherever ADM opens its own. */
 class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Editor")) {
 
     private var huds = listOf<HUDSetting>()
@@ -186,7 +186,7 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         offHere += huds.filter { !shown(it) }
     }
 
-    // Blade's grid runs out from the screen's centre.
+    // ADM's grid runs out from the screen's centre.
     private fun snap(pos: Int, center: Int) = center + ((pos - center).toFloat() / GRID).roundToInt() * GRID
 
     private fun scale(hud: HudElement, amount: Float) {
@@ -281,7 +281,7 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
     override fun isPauseScreen() = false
 
     companion object {
-        // Read by HUDSetting.isEnabled while Odin composes its HUDs, so a category switch recomposes them.
+        // Read by HUDSetting.isEnabled while ADM composes its HUDs, so a category switch recomposes them.
         private var filter by mutableStateOf<Category?>(null)
 
         @JvmStatic

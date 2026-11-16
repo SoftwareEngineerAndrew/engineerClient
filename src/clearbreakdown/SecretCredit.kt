@@ -14,7 +14,7 @@ data class PlayerSecrets(val total: Int?, val rooms: List<RoomSecrets>, val unkn
  *    server calls it (entity id, block), so the same secret seen by two clients counts once: the
  *    first sighting is the secret, an exact one (the pickup packet's collector, your own click)
  *    replaces a "who was in reach" one of the same moment, and two in-reach sightings of the same moment are joined.
- *  - [observe]: Odin's count of a room's secrets going up (action bar, its map sync, a green
+ *  - [observe]: ADM's count of a room's secrets going up (action bar, its map sync, a green
  *    checkmark). Whatever the sightings since the last count don't explain is a gap, given to
  *    everyone who was in that room since that last count: a count is often first seen when someone
  *    walks in, long after the secrets were found.
@@ -52,7 +52,7 @@ class SecretCredit(private val mergeMs: Long = 1000, private val exactMs: Long =
             else if (!exact && !known.exact && kotlin.math.abs(atMs - known.atMs) <= mergeMs) known.candidates = known.candidates + candidates
             return
         }
-        // A party member's sighting can land just after Odin's count already made it a gap: it
+        // A party member's sighting can land just after ADM's count already made it a gap: it
         // takes that gap's place rather than counting the secret twice.
         val gap = groups.lastOrNull { it.gap && it.roomKey == roomKey && atMs - it.atMs in 0..GAP_CATCH_MS && it.units > 0 }
         if (gap != null) gap.units-- else directSince[roomKey] = (directSince[roomKey] ?: 0) + 1
@@ -61,7 +61,7 @@ class SecretCredit(private val mergeMs: Long = 1000, private val exactMs: Long =
         byKey[key] = g
     }
 
-    /** A room's found count, from Odin. Counts at or below the last one seen change nothing. */
+    /** A room's found count, from ADM. Counts at or below the last one seen change nothing. */
     fun observe(roomKey: String, roomName: String, found: Int, atMs: Long = System.currentTimeMillis()) {
         val last = lastSeen[roomKey] ?: 0
         if (found <= last) return
@@ -142,7 +142,7 @@ class SecretCredit(private val mergeMs: Long = 1000, private val exactMs: Long =
     private class Credit(val group: Int, val player: String, val count: Int, val estimate: Boolean)
 
     private companion object {
-        /** How late a party member's sighting may arrive after Odin's count of the same secret. */
+        /** How late a party member's sighting may arrive after ADM's count of the same secret. */
         const val GAP_CATCH_MS = 3000L
     }
 }

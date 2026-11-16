@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Every game in a dungeon takes part (whether or not it has Pose POV on), but sends only while a party member is looking
  * (the leap menu open, or a leap in hand, ready for it): where you stand and look (and what you hold, and your swings),
  * the same for each teammate you can see who doesn't share for themselves (so one out of someone's range still shows if
- * you can see them), and Odin's solution to the terminal you have open. The relay passes it only to party members who
+ * you can see them), and ADM's solution to the terminal you have open. The relay passes it only to party members who
  * list you as you list them, by name and by the entity id Hypixel gave each in this run: never on screen and known only
  * to games in the run, so neither a stream of it nor knowing the server lets anyone pose as a teammate. No Mojang, no
  * accounts, nothing about you but that.
@@ -138,12 +138,12 @@ object PoseShare {
     // ------------------------------------------------------------------ what's been heard
 
     /**
-     * An open terminal as its holder sees it: Odin's type, the letter (Starts With) or colour (Select), and Odin's solution
+     * An open terminal as its holder sees it: ADM's type, the letter (Starts With) or colour (Select), and ADM's solution
      * (slot numbers, in order; Rubix repeats a slot once per click).
      */
     class Gui(val type: TerminalTypes, val extra: Int, val solution: IntArray, val at: Long)
 
-    /** Each terminal's grid of clickable cells (as Odin lays them out), and how many cells of it a solution may light. */
+    /** Each terminal's grid of clickable cells (as ADM lays them out), and how many cells of it a solution may light. */
     class Grid(val rows: Int, val cols: Int, val startRow: Int, val startCol: Int, val maxCells: Int) {
         operator fun contains(slot: Int): Boolean { val r = slot / 9 - startRow; val c = slot % 9 - startCol; return r in 0 until rows && c in 0 until cols }
     }
@@ -221,7 +221,7 @@ object PoseShare {
         // have reached): when they change or someone new links. Whether or not anyone is watching.
         if (sharing && seq % 10 == 0) shareRooms(nowMs)
 
-        // The terminal you have open: its type, Odin's solution and where your mouse is on it, when that changes (and every
+        // The terminal you have open: its type, ADM's solution and where your mouse is on it, when that changes (and every
         // second, for whoever started looking since); closed once. Whether or not anyone is watching the views: Terminals
         // Status shows it too.
         val term = TerminalUtils.currentTerm

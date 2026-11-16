@@ -51,7 +51,7 @@ object BlockStates {
 }
 
 /**
- * Makes the block entities the rooms need: player heads with their textures (the wither essence and redstone key heads Odin and the
+ * Makes the block entities the rooms need: player heads with their textures (the wither essence and redstone key heads ADM and the
  * secrets look for, and the decoration), signs with their text, and an empty one for every other kind of block that has one (chests,
  * beds, banners, dispensers...). Without them a chest or a bed written straight into a chunk section would have nothing to render.
  * Items, banner patterns and chest loot are not in the room pack; the secrets module fills what a secret holds.
@@ -60,7 +60,7 @@ class BlockEntityMaker(textures: List<SkullTexture>) {
     private val profiles: List<ResolvableProfile?> = textures.map { t ->
         if (t.value == null) return@map null
         try {
-            // Odin matches the profile id, so the pack's one is kept; a head without one gets a stable id of its texture.
+            // ADM matches the profile id, so the pack's one is kept; a head without one gets a stable id of its texture.
             val id = t.profileId?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: UUID.nameUUIDFromBytes("ads-skull:${t.id}".toByteArray())
             // A name the network codec accepts (letters, digits, underscore, up to 16): the start of the texture id.
             val name = t.id.take(12).ifEmpty { "ads" }

@@ -116,7 +116,7 @@ object Sim {
     /** Whether [name] (a station's doer, say) is a player in the sim, not a bot. */
     fun isPlayerName(name: String?) = name != null && players().any { it.gameProfile.name == name }
 
-    /** A chat line as Hypixel sends it: plain system chat, `§` codes and all (Odin reads these). */
+    /** A chat line as Hypixel sends it: plain system chat, `§` codes and all (ADM reads these). */
     fun chat(text: String) {
         val to = audience()
         if (to.any { isHost(it) }) Recorder.event(text)

@@ -43,7 +43,7 @@ object LaunchStats {
         playtimeMs = runCatching { Files.readString(file).trim().toLong() }.getOrDefault(0L)
         ClientTickEvents.END_CLIENT_TICK.register { runCatching { count() } }
         ClientLifecycleEvents.CLIENT_STOPPING.register { save() }
-        // Started: Odin has read every module's settings by now.
+        // Started: ADM has read every module's settings by now.
         ClientLifecycleEvents.CLIENT_STARTED.register { runCatching { send() } }
     }
 

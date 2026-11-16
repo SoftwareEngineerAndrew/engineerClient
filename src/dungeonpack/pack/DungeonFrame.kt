@@ -1,7 +1,7 @@
 package com.engineerclient.dungeonpack.pack
 
 /**
- * The dungeon's world frame (BRIEF "World frame"): Hypixel's real coordinates, so Odin's scanner works unmodified.
+ * The dungeon's world frame (BRIEF "World frame"): Hypixel's real coordinates, so ADM's scanner works unmodified.
  * The 6x6 room grid starts at x,z = -200 and each tile is a 32-block pitch; a room covers 31 blocks of it and the 1-block
  * column between two tiles is where doors stand. +x is east, +z is south, y is absolute (0..255). Pure functions.
  *
@@ -32,7 +32,7 @@ object DungeonFrame {
     /** Min corner (x or z) of tile index [t]. */
     fun tileMin(t: Int): Int = ORIGIN + PITCH * t
 
-    /** Centre column (x or z) of tile index [t]: `-185 + 32 t`. This is the column Odin hashes to name a room. */
+    /** Centre column (x or z) of tile index [t]: `-185 + 32 t`. This is the column ADM hashes to name a room. */
     fun tileCentre(t: Int): Int = tileMin(t) + 15
 
     /** The tile index (0..5) a world coordinate falls in, clipped to the grid; the gap column belongs to the lower tile. */

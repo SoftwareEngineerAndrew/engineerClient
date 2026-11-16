@@ -224,33 +224,33 @@ object P3Plan {
             val cur = leapOrder
             (cur + Party.CLASSES).distinct().filter { it != mineClass }.also { if (it != cur) leapOrder = it }
         }
-        return if (odinSort) odinOrder(order) ?: order else order
+        return if (coreSort) coreOrder(order) ?: order else order
     }
 
-    /** The other four classes in leap slot order for someone playing [c]: yours as you set it, anyone else's as Odin sorts them. */
+    /** The other four classes in leap slot order for someone playing [c]: yours as you set it, anyone else's as ADM sorts them. */
     fun orderFor(c: DungeonClass): List<DungeonClass> {
         if (c == P3Sim.ownClass) return botOrder()
         val o = Party.CLASSES.filter { it != c }
         // A joiner's: their menu's order, as their game sent it.
         Players.playerOf(c)?.takeIf { !Sim.isHost(it) }?.let { Players.profile(it).order }
             ?.takeIf { it.size == o.size && it.toSet() == o.toSet() }?.let { return it }
-        return odinOrder(o) ?: o
+        return coreOrder(o) ?: o
     }
 
-    /** The leap menu sorted as Odin does by default: by class priority, into Odin's quadrants. On unless you choose your own order. */
-    var odinSort = true
+    /** The leap menu sorted as ADM does by default: by class priority, into ADM's quadrants. On unless you choose your own order. */
+    var coreSort = true
 
-    private fun odinOrder(classes: List<DungeonClass>): List<DungeonClass>? = runCatching {
+    private fun coreOrder(classes: List<DungeonClass>): List<DungeonClass>? = runCatching {
         val players = classes.map { com.adm.utils.skyblock.dungeon.DungeonPlayer(Roles.label(it), it, 50, null) }.sortedBy { it.clazz.priority }
-        com.adm.features.impl.dungeon.LeapMenu.odinSorting(players).toList().map { it.clazz }.filter { it in classes }
+        com.adm.features.impl.dungeon.LeapMenu.coreSorting(players).toList().map { it.clazz }.filter { it in classes }
     }.getOrNull()?.takeIf { it.size == classes.size && it.toSet() == classes.toSet() }
 
     /** Slot [slot] (1-4) takes the next class ([back]: the one before): swaps with the slot that had it. */
     fun cycleSlot(slot: Int, back: Boolean = false) {
         synchronized(leapLock) {
-            // From Odin's order to your own, starting from what it showed.
+            // From ADM's order to your own, starting from what it showed.
             val order = botOrder().toMutableList()
-            odinSort = false
+            coreSort = false
             val i = slot - 1
             val j = (i + (if (back) order.size - 1 else 1)) % order.size
             val t = order[i]; order[i] = order[j]; order[j] = t
@@ -264,7 +264,7 @@ object P3Plan {
     private class Saved(
         val skill: Int? = null, val mine: List<String>? = null, val mineFor: String? = null,
         val botMin: Double? = null, val botMax: Double? = null,
-        val waitForYou: Boolean? = null, val leapGap: Double? = null, val leapOrder: List<String>? = null, val odinSort: Boolean? = null,
+        val waitForYou: Boolean? = null, val leapGap: Double? = null, val leapOrder: List<String>? = null, val coreSort: Boolean? = null,
         val spots: Map<String, List<Double>>? = null,
         val helper: Boolean? = null,
         val ghosts: List<String>? = null,
@@ -299,7 +299,7 @@ object P3Plan {
             s.picks?.let { pickMap().clear(); pickMap() += it }
             s.stacked?.let { stackSet().clear(); stackSet() += it }
             s.leapGap?.let { leapGap = it }
-            s.odinSort?.let { odinSort = it }
+            s.coreSort?.let { coreSort = it }
             s.leapOrder?.let { names -> synchronized(leapLock) { leapOrder = names.mapNotNull { n -> Party.CLASSES.firstOrNull { it.name == n } } } }
             // [x, y, z] or [x, y, z, yaw, pitch]. A saved EE2 spot at (69, 109, 124.7), S2's 1st terminal and an
             // earlier default, is ignored so the current default applies.
@@ -385,7 +385,7 @@ object P3Plan {
             val leapGap = own?.get("leapGap")?.asDouble ?: leapGap
             // In a party with other jobs than their own: their own are what's kept.
             val keepOwn = own != null && ownMineFor != null && ownMineFor != mineFor
-            val s = Saved(skill, if (keepOwn) ownMine.orEmpty() else mine.toList(), if (keepOwn) ownMineFor else mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, odinSort,
+            val s = Saved(skill, if (keepOwn) ownMine.orEmpty() else mine.toList(), if (keepOwn) ownMineFor else mineFor, botMin, botMax, waitForYou, leapGap, botOrder().let { leapOrder.map { it.name } }, coreSort,
                 earlyEnters.associate { it.key to listOf(it.spot.x, it.spot.y, it.spot.z, it.yaw.toDouble(), it.pitch.toDouble()) }, helper, ghosts.toList(),
                 spots().mapValues { (_, p) -> listOf(p.x, p.y, p.z, p.yaw.toDouble(), p.pitch.toDouble()) }, HashMap(pickMap()), stackSet().toList())
             file.parentFile.mkdirs()

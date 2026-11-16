@@ -51,8 +51,8 @@ import kotlin.math.floor
  * [BreakdownText] the words; this feeds them.
  *
  * Where someone is comes from what can be seen first: their player in render distance (this
- * client's, or a party member's relayed through ADR Online), and only then Odin's map icon. Secrets
- * the same way: seen happening ([Sightings]), then Odin's room counts (the action bar, Odin's map
+ * client's, or a party member's relayed through ADR Online), and only then ADM's map icon. Secrets
+ * the same way: seen happening ([Sightings]), then ADM's room counts (the action bar, ADM's map
  * sync on its own connection, [OdinSync], and green checkmarks) for what nobody saw, all settled
  * against each player's run total from the Hypixel API.
  *
@@ -60,7 +60,7 @@ import kotlin.math.floor
  * it is; one that ends any other way posts nothing, and a world load starts over. The API totals
  * are asked for through the boss, where nobody finds secrets, so the post never waits on them.
  *
- * Clear Info's Clear Breakdown section, with Odin's Secrets Counter.
+ * Clear Info's Clear Breakdown section, with ADM's Secrets Counter.
  */
 object ClearBreakdown {
     private val CONTROL_CODES = Regex("§.")
@@ -101,7 +101,7 @@ object ClearBreakdown {
 
     fun roomName(room: DungeonRoom): String = room.name ?: room.type.name
 
-    /** The room at a world position, from Odin's room grid. */
+    /** The room at a world position, from ADM's room grid. */
     fun roomAt(x: Double, z: Double): DungeonRoom? {
         val tx = (floor(x).toInt() + 201) shr 5
         val tz = (floor(z).toInt() + 201) shr 5
@@ -112,7 +112,7 @@ object ClearBreakdown {
     init {
         on<LevelEvent.Load> { EngineerClient.safely("clear breakdown reset") { reset(); closeSync(); SecretsCounter.reset() } }
         on<MessageEvent.Chat> { if (ClearInfo.secretsCounterOn) SecretsCounter.onChat(message) }
-        // Odin posts this one (and checkmarks) from the network thread: over to the client thread.
+        // ADM posts this one (and checkmarks) from the network thread: over to the client thread.
         on<FloorEnterEvent> { if (ClearInfo.clearBreakdownOn) mc.execute { EngineerClient.safely("clear breakdown sync") { OdinSync.connect(); syncOpen = true } } }
 
         // Chat straight off the network, as Splits takes it: a chat cleaner can't hide the run's lines.
@@ -174,7 +174,7 @@ object ClearBreakdown {
         OdinSync.onPayload = { player, tiles, found ->
             val key = tiles.sorted().joinToString(",")
             mc.execute {
-                EngineerClient.safely("clear breakdown odin sync") {
+                EngineerClient.safely("clear breakdown core sync") {
                     if (!active || player == me || player !in roster) return@safely
                     DungeonScan.rooms.firstOrNull { roomKey(it) == key }?.let { secrets.observe(key, roomName(it), found) }
                 }
@@ -234,7 +234,7 @@ object ClearBreakdown {
     /**
      * Once a second: what this client saw for the party - its secret sightings, and where it sees
      * players by their entity (room changes, and when it stops seeing someone; everything it sees
-     * when [full]). Map icons and Odin's counts aren't sent; every client has those. Nothing counts
+     * when [full]). Map icons and ADM's counts aren't sent; every client has those. Nothing counts
      * as told without a socket to tell it on.
      */
     private fun toParty(full: Boolean) {
@@ -285,7 +285,7 @@ object ClearBreakdown {
         val entity = if (p.name == me) mc.player else p.entity
         if (entity != null) return roomAt(entity.x, entity.z)?.let(::roomKey)
         relayed.roomOf(p.name, now)?.let { return it.ifEmpty { null } }
-        // Odin's map icon, the way its map draws it (RunRecorder's formula): not placed yet is 0.
+        // ADM's map icon, the way its map draws it (RunRecorder's formula): not placed yet is 0.
         if (p.mapPos.data == 0L) return null
         val x = ((p.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
         val z = ((p.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200

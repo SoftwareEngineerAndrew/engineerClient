@@ -44,7 +44,7 @@ import java.util.concurrent.Future
 import kotlin.random.Random
 
 /**
- * Water Board solver that plans from what is really on the board, on Odin's Puzzle Solvers: a flip late, early, wrong, extra
+ * Water Board solver that plans from what is really on the board, on ADM's Puzzle Solvers: a flip late, early, wrong, extra
  * or missed, a server freeze, water already flowing when you walk in, and the plan is worked out again from there.
  *
  * The board is read from the room's blocks ([Geometry]); the server's block packets keep a simulation of it in step with
@@ -133,14 +133,14 @@ object WaterBoardSolver {
     }
 
     /**
-     * Odin's Water Board solver stays quiet while this draws: once it has a plan, and from the first flip on (Odin's table no
+     * ADM's Water Board solver stays quiet while this draws: once it has a plan, and from the first flip on (ADM's table no
      * longer fits the board then, and would show its leftover flips once this has none left).
      */
 
 
     private fun active(): Boolean = on.value && PuzzleSolvers.enabled && DungeonUtils.inDungeons && !solved()
 
-    // Odin keeps the last run's status until the tab list names the puzzle again
+    // ADM keeps the last run's status until the tab list names the puzzle again
     private var carried = false
     private fun solved(): Boolean {
         val done = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed
@@ -426,7 +426,7 @@ object WaterBoardSolver {
         else -> null
     }
 
-    /** Gates closed, from their wool (Odin's check: anything in the middle of the corridor at y=56). */
+    /** Gates closed, from their wool (ADM's check: anything in the middle of the corridor at y=56). */
     private fun readGates(f: RoomFrame): Int {
         val level = mc.level ?: return 0
         var c = 0
@@ -444,7 +444,7 @@ object WaterBoardSolver {
         if (showSim.value) drawSim(event, f, tr)
         if (todo.isEmpty()) return
         fun center(lever: Int): Vec3 { val p = f.toWorld(Geometry.LEVER_POS[lever]); return Vec3(p.x + 0.5, p.y + 0.5, p.z + 0.5) }
-        // as Odin's solver: a tracer to the next lever, and a line on from it to the one after when that is another lever
+        // as ADM's solver: a tracer to the next lever, and a line on from it to the one after when that is another lever
         if (tracer.value) {
             val first = todo[0].lever
             event.drawTracer(center(first), firstColor.value, false)
@@ -480,7 +480,7 @@ object WaterBoardSolver {
         }
     }
 
-    /** Room coordinates (Odin's frame: rotated about the room's clay block) to the world and back. */
+    /** Room coordinates (ADM's frame: rotated about the room's clay block) to the world and back. */
     private class RoomFrame(val rotation: String, private val cx: Int, private val cz: Int) {
         fun toWorld(r: IntArray): BlockPos {
             val (x, y, z) = Triple(r[0], r[1], r[2])
@@ -502,7 +502,7 @@ object WaterBoardSolver {
                 val rot = room.rotation?.name ?: return null
                 val clay = room.clayPos ?: return null
                 val f = RoomFrame(rot, clay.x, clay.z)
-                // the same as Odin's own transform, or don't trust it
+                // the same as ADM's own transform, or don't trust it
                 val probe = room.getRealCoords(BlockPos(15, 60, 5))
                 if (probe == BlockPos.ZERO || probe != f.toWorld(intArrayOf(15, 60, 5))) return null
                 return f

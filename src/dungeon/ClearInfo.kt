@@ -62,7 +62,7 @@ object ClearInfo : Module(
     // ------------------------------------------------------------------ Clear Breakdown
     private val breakdownDrop by DropdownSetting("Clear Breakdown", false, desc = "Everyone's rooms and secrets at the end of a run.")
     val clearBreakdown by BooleanSetting("Enable Clear Breakdown", true, desc = "Rooms cleared alone - cleared and secrets; hover for each room.").withDependency { breakdownDrop }
-    val secretsCounter by BooleanSetting("Secrets Counter", false, desc = "Odin's per-teammate secret lines at the end of every run.").withDependency { breakdownDrop }
+    val secretsCounter by BooleanSetting("Secrets Counter", false, desc = "ADM's per-teammate secret lines at the end of every run.").withDependency { breakdownDrop }
 
     val mapInfoOn get() = enabled && mapInfo
     val scoreTimeOn get() = enabled && scoreTime

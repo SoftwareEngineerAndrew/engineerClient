@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 /**
- * Odin's Invincibility Timer HUD (InvincibilityTimer$hud$2) reads Show Spirit / Bonzo / Phoenix
+ * ADM's Invincibility Timer HUD (InvincibilityTimer$hud$2) reads Show Spirit / Bonzo / Phoenix
  * to pick what to draw; with Only Used on, an item not used this run reads as off ({@link MasksUsed}).
  */
 @Pseudo

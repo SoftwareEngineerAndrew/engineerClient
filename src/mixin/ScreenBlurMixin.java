@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * Keeps vanilla from marking a second blur once {@code GuiRenderStateBlurMixin} has marked the first.
  *
  * <p>A frame may be told to blur exactly once — the game throws otherwise. On a menu (pause,
- * options, Odin's click GUI) vanilla marks its own blur here, at the screen's background stratum,
+ * options, ADM's click GUI) vanilla marks its own blur here, at the screen's background stratum,
  * which is later than ours and would blur the HUD too. With "Blur In GUI" on, ours is already in
  * place, so this call is dropped: the screen still blurs, just at the earlier line, and the HUD
  * behind it stays sharp like it does behind a chest.

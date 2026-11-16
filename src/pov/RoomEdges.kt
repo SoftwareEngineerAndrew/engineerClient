@@ -20,10 +20,10 @@ import java.util.IdentityHashMap
 import java.util.concurrent.CompletableFuture
 
 /**
- * Rooms placed before their middle is in range: every column of every room design, hashed the way Odin hashes a room's core
+ * Rooms placed before their middle is in range: every column of every room design, hashed the way ADM hashes a room's core
  * column (RoomCore), indexed once from the room pack and kept on disk. A tile no room covers yet is read column by column as
  * its chunks come in (the edge of a room loads before its middle), and the design, turn and place that most of its columns
- * agree on, and that the rest don't contradict, is placed. Only until Odin or a teammate names the room.
+ * agree on, and that the rest don't contradict, is placed. Only until ADM or a teammate names the room.
  */
 object RoomEdges {
     /** A hash found at more places than this says nothing (plain walls and floors). */
@@ -190,7 +190,7 @@ object RoomEdges {
         return IntArray(keep.size) { (keep[it] shr 32).toInt() } to IntArray(keep.size) { keep[it].toInt() }
     }
 
-    // --- Odin's column hash -----------------------------------------------------------------------------------------------
+    // --- ADM's column hash -----------------------------------------------------------------------------------------------
 
     private val names = IdentityHashMap<Block, String>()
     private fun nameOf(b: Block): String = names.getOrPut(b) { BuiltInRegistries.BLOCK.getKey(b).toString() }

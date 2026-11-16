@@ -50,8 +50,8 @@ import java.util.Locale
  *
  * The device is its 4x4 obsidian grid in a wall of black wool, with the start button on the wool
  * left of the grid, placed where it is from the spot healers stand on to do it (108, 120, 94 in the
- * arena, facing +x) and turned to face whichever way you look. [solver] is Odin's Simon Says
- * solution drawn on it: Odin's own only works on the real one.
+ * arena, facing +x) and turned to face whichever way you look. [solver] is ADM's Simon Says
+ * solution drawn on it: ADM's own only works on the real one.
  *
  * How it plays: [SimonSaysDevice], the device as Hypixel runs it, the same one the P3 Sim uses.
  *  - The start button (left of the grid) works as in the game, your presses through the same ~50 ms limiter.
@@ -64,7 +64,7 @@ import java.util.Locale
  */
 object SimonSaysPractice {
 
-    /** Odin's Simon Says click sounds, always on: here and on the real device in P3. */
+    /** ADM's Simon Says click sounds, always on: here and on the real device in P3. */
     private val CORRECT_SOUND = Triple("entity.experience_orb.pickup", 1f, 1f)
     private val WRONG_SOUND = Triple("entity.blaze.hurt", 1f, 1f)
 
@@ -84,7 +84,7 @@ object SimonSaysPractice {
     /** Reference times for each round's clicking (skip, r3, r4): the fastest healers' medians from ADR runs. */
     private val TOP_ROUNDS = doubleArrayOf(1.10, 0.80, 1.05)
 
-    // Odin's Simon Says colours.
+    // ADM's Simon Says colours.
     private val FIRST = Colors.MINECRAFT_GREEN.withAlpha(0.5f)
     private val SECOND = Colors.MINECRAFT_GOLD.withAlpha(0.5f)
     private val THIRD = Colors.MINECRAFT_RED.withAlpha(0.5f)
@@ -296,7 +296,7 @@ object SimonSaysPractice {
     /** The last round of a run: 4 since Hypixel's Oct 2026 update removed round 5. */
     private const val FINAL_ROUND = SimonSaysDevice.MAX_ROUNDS
 
-    /** Odin's solver box for a cell (in front of its lamp): the button's size, or the whole face with Full Block. */
+    /** ADM's solver box for a cell (in front of its lamp): the button's size, or the whole face with Full Block. */
     private fun solverBox(p: Placement, lamp: BlockPos): AABB =
         if (fullBlock) p.box(lamp.x - 0.15, lamp.y + 0.0, lamp.z + 0.0, lamp.x + 0.05, lamp.y + 1.0, lamp.z + 1.0)
         else p.box(lamp.x - 0.15, lamp.y + 0.37, lamp.z + 0.3, lamp.x + 0.05, lamp.y + 0.63, lamp.z + 0.7)
@@ -932,13 +932,13 @@ object SimonSaysPractice {
             val next = device.next
             for (i in next until shown.size) {
                 val colour = when (i) { next -> FIRST; next + 1 -> SECOND; else -> THIRD }
-                // Odin's box: on the grid's face where the button sits, in the real device's frame.
+                // ADM's box: on the grid's face where the button sits, in the real device's frame.
                 val lamp = lampAt(shown[i])
                 drawStyledBox(v.box(solverBox(p, lamp)), colour, BoxStyle.FILLED_OUTLINE, true)
             }
         }
-        // The real device: the same sounds as here, right or wrong, read off Odin's solution. After
-        // Odin's own listener (priority -1) and even when it cancelled the press (ignoreCancelled
+        // The real device: the same sounds as here, right or wrong, read off ADM's solution. After
+        // ADM's own listener (priority -1) and even when it cancelled the press (ignoreCancelled
         // here means "skip cancelled ones"), so a press Block Wrong Clicks stopped still sounds wrong.
         on<BlockInteractEvent>(priority = -1) { if (Devices.ssPracticeOn) EngineerClient.safely("ss real sounds") { realClick(pos, isCancelled) } }
         on<BlockUpdateEvent> {

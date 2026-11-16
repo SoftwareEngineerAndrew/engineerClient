@@ -13,7 +13,7 @@ import net.minecraft.world.item.component.ItemLore
 
 /**
  * The three invincibility items, as Hypixel procs them on a hit that would kill you: Spirit Mask
- * (30 s), Bonzo's Mask (180 s) and Phoenix (60 s), with the game's chat lines (Odin's invincibility
+ * (30 s), Bonzo's Mask (180 s) and Phoenix (60 s), with the game's chat lines (ADM's invincibility
  * timer and Masks Used read them). With none left you die: back to the start of the section.
  *
  * Real Masks off: the first one off cooldown saves you. On: they're
@@ -42,9 +42,9 @@ object Masks {
     private const val BONZO_TEX = "eyJ0aW1lc3RhbXAiOjE1ODc5MDgzMDU4MjYsInByb2ZpbGVJZCI6IjJkYzc3YWU3OTQ2MzQ4MDI5NDI4MGM4NDIyNzRiNTY3IiwicHJvZmlsZU5hbWUiOiJzYWR5MDYxMCIsInNpZ25hdHVyZVJlcXVpcmVkIjp0cnVlLCJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTI3MTZlY2JmNWI4ZGEwMGIwNWYzMTZlYzZhZjYxZThiZDAyODA1YjIxZWI4ZTQ0MDE1MTQ2OGRjNjU2NTQ5YyJ9fX0="
     private const val SPIRIT_TEX = "eyJ0aW1lc3RhbXAiOjE1MDUyMjI5OTg3MzQsInByb2ZpbGVJZCI6IjBiZTU2MmUxNzIyODQ3YmQ5MDY3MWYxNzNjNjA5NmNhIiwicHJvZmlsZU5hbWUiOiJ4Y29vbHgzIiwic2lnbmF0dXJlUmVxdWlyZWQiOnRydWUsInRleHR1cmVzIjp7IlNLSU4iOnsibWV0YWRhdGEiOnsibW9kZWwiOiJzbGltIn0sInVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvOWJiZTcyMWQ3YWQ4YWI5NjVmMDhjYmVjMGI4MzRmNzc5YjUxOTdmNzlkYTRhZWEzZDEzZDI1M2VjZTlkZWMyIn19fQ=="
 
-    // Names and lore as Hypixel sends them; the "Cooldown: Ns" line stays for Odin's timer.
+    // Names and lore as Hypixel sends them; the "Cooldown: Ns" line stays for ADM's timer.
     val SPIRIT_MASK get() = mask(SPIRIT_TEX, "STARRED_SPIRIT_MASK", SimItems.Lore.STARRED_SPIRIT_MASK_NAME, SimItems.Lore.STARRED_SPIRIT_MASK, "mythic")
-    // Odin's invincibility timer reads Bonzo's cooldown from "Cooldown: Ns".
+    // ADM's invincibility timer reads Bonzo's cooldown from "Cooldown: Ns".
     val BONZO_MASK get() = mask(BONZO_TEX, "STARRED_BONZO_MASK", SimItems.Lore.STARRED_BONZO_MASK_NAME, SimItems.Lore.STARRED_BONZO_MASK, "epic")
 
     private fun mask(tex: String, id: String, name: String, lore: List<String>, style: String): ItemStack {
@@ -208,7 +208,7 @@ object Masks {
     /** Everyone's masks ready again, nobody a ghost (every start). */
     fun reset() {
         Sim.forEachPlayer { resetOne() }
-        // Odin's Invincibility Timer restarts with ours on every game (it only ever hears procs, not a sim restart).
+        // ADM's Invincibility Timer restarts with ours on every game (it only ever hears procs, not a sim restart).
         PartyClient.send("masksReset")
     }
 

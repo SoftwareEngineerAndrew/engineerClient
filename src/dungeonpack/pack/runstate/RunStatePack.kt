@@ -24,7 +24,7 @@ class RoomRun(
     val shape: String,
     /** Tile count (a 1x4 is 4, a 2x2 is 4, an L is 3): the counter weight. */
     val tiles: Int,
-    /** The number the action bar prints as M and the tab/Odin total use. Authoritative; never `secretsDb`. */
+    /** The number the action bar prints as M and the tab/ADM total use. Authoritative; never `secretsDb`. */
     val secretsMax: Int,
     val secretsMaxSource: String?,
     /** How many secrets the rooms pack can place for this design. When lower than [secretsMax] the rest are auto-credited. */

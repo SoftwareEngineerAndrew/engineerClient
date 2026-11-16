@@ -57,7 +57,7 @@ class TileRuleTest {
     }
 
     @Test fun aWorldThatIsNotADungeonIsLeftAlone() {
-        // a singleplayer world (Odin counts it as a dungeon): ground under every gap, so every slot reads as one room
+        // a singleplayer world (ADM counts it as a dungeon): ground under every gap, so every slot reads as one room
         assertEquals(0L, TileRule.relevantAt(-153, -153) { Link.JOIN })
         // nine tiles joined in a row and a column is no room either; eight still is (an entrance and a room, with room to spare)
         val nine = links(join = "E 0,0 E 1,0 E 2,0 E 3,0 E 4,0 S 5,0 S 5,1 S 5,2")

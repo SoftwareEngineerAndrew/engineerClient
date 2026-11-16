@@ -31,26 +31,26 @@ import net.minecraft.resources.Identifier
 import net.minecraft.world.entity.player.PlayerSkin
 
 /**
- * LCM Style on Odin's Dungeon Map: the map drawn the way LCM's map, dtMap (github.com/ricedotwho/dtMap), draws
- * its own, in its Legit Mode with its default look, from what Odin's map already knows.
+ * LCM Style on ADM's Dungeon Map: the map drawn the way LCM's map, dtMap (github.com/ricedotwho/dtMap), draws
+ * its own, in its Legit Mode with its default look, from what ADM's map already knows.
  *
  * - Background: dtMap's translucent black, no outline (both changed under LCM Colors), sized to the floor's rooms plus 5 on each side.
  * - Rooms: dtMap's colours (fairy pink, rare gold) unless changed under LCM Colors, drawn tile by tile with
  *   the gaps inside a room filled.
- *   A room nobody has opened shows only where Odin shows it: dark grey, dark red for blood, or the special
+ *   A room nobody has opened shows only where ADM shows it: dark grey, dark red for blood, or the special
  *   column's guess (one to three darkened colours in dtMap's split patterns), with no "?".
  * - Doors: 9 wide, coloured by the special room behind them; a door to a room nobody has opened is dark grey.
- * - Names: an opened room's name once someone has been in it, as Odin shows it (not entrance, blood or fairy),
+ * - Names: an opened room's name once someone has been in it, as ADM shows it (not entrance, blood or fairy),
  *   green when it's green-checked, white when cleared, grey before that, red when failed; dtMap's check marks
  *   before that; dtMap's crown on a Prince room (once its name shows) until a Prince is killed.
  * - Players: everyone else's head 10 wide on a square in their class colour, yours as dtMap's white marker
  *   (its MC Map Pointer); names while leaping.
  *
- * Only the look changes: every tile, guess and name is the one Odin's own map (or Room Prediction) would show.
- * Odin's Text Scaling, Player Name settings and Disable Prediction still apply. Room Prediction (ADM) still
+ * Only the look changes: every tile, guess and name is the one ADM's own map (or Room Prediction) would show.
+ * ADM's Text Scaling, Player Name settings and Disable Prediction still apply. Room Prediction (ADM) still
  * draws in place of the unopened tiles, in this look: its guesses as [guessTile]s in these colours, its chances
- * where Odin would put a "?". dtMap's icons are under its BSD licence (assets/engineerclient/dtmap/LICENSE-dtMap.txt).
- * `LcmStyleMixin` hands Odin's map HUD to [render].
+ * where ADM would put a "?". dtMap's icons are under its BSD licence (assets/engineerclient/dtmap/LICENSE-dtMap.txt).
+ * `LcmStyleMixin` hands ADM's map HUD to [render].
  */
 object LcmStyle {
 
@@ -110,11 +110,11 @@ object LcmStyle {
         for (s in listOf(borderWidth, ownMarkerColor)) DungeonMap.registerSetting(s)
     }
 
-    /** True while the map HUD is drawn here instead of by Odin (LcmStyleMixin). */
+    /** True while the map HUD is drawn here instead of by ADM (LcmStyleMixin). */
     @JvmStatic
     fun active(): Boolean = style.value
 
-    /** Draws the whole map HUD; its size, or null to leave this frame to Odin (it couldn't be drawn). */
+    /** Draws the whole map HUD; its size, or null to leave this frame to ADM (it couldn't be drawn). */
     @JvmStatic
     fun render(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int>? {
         if (!example && (!DungeonUtils.inDungeons || (disableInBoss() && DungeonUtils.inBoss))) return 0 to 0
@@ -132,10 +132,10 @@ object LcmStyle {
                 if (!DungeonUtils.inBoss) drawPlayers(g)
             }
         } catch (t: Throwable) {
-            // Odin fills its rooms in from map packets as they come: a read mid-change just draws the next frame
+            // ADM fills its rooms in from map packets as they come: a read mid-change just draws the next frame
             if (t !is ConcurrentModificationException && !failed) {
                 failed = true
-                EngineerClient.logger.error("[ec] dtMap style failed, Odin draws the map", t)
+                EngineerClient.logger.error("[ec] dtMap style failed, ADM draws the map", t)
             }
             return null
         } finally {
@@ -184,7 +184,7 @@ object LcmStyle {
         else -> UNOPENED
     }
 
-    /** The room type one of Odin's room or door colour settings stands for (the special column's guesses, Odin's example doors). */
+    /** The room type one of ADM's room or door colour settings stands for (the special column's guesses, ADM's example doors). */
     private fun typeOf(c: Color): RoomType = when (c.rgba) {
         DungeonMap.puzzleRoomColor.rgba -> RoomType.PUZZLE
         DungeonMap.trapRoomColor.rgba -> RoomType.TRAP
@@ -214,8 +214,8 @@ object LcmStyle {
     internal fun opened(room: DungeonRoom?): Boolean = room != null && room.isViewable && room.checkmark != MapCheckmark.QUESTION_MARK
 
     /**
-     * The room's name once it's open (as dtMap has it), not only once someone has walked in (Odin's [DungeonRoom.shouldShowName]):
-     * Odin knows it from the room's core as soon as it has scanned it, and only holds it back. Null until then.
+     * The room's name once it's open (as dtMap has it), not only once someone has walked in (ADM's [DungeonRoom.shouldShowName]):
+     * ADM knows it from the room's core as soon as it has scanned it, and only holds it back. Null until then.
      */
     internal fun knownName(room: DungeonRoom): String? = room.name?.takeIf { room.shouldShowName || opened(room) }
 
@@ -233,7 +233,7 @@ object LcmStyle {
         }
     }
 
-    /** Where the room's name goes: its middle, or the middle of an L's full row. Null before Odin has placed it. */
+    /** Where the room's name goes: its middle, or the middle of an L's full row. Null before ADM has placed it. */
     private fun center(room: DungeonRoom): Pair<Int, Int>? {
         val tiles = room.tiles
         if (tiles.isEmpty()) return room.center?.let { it.x to it.z }
@@ -257,9 +257,9 @@ object LcmStyle {
     }
 
     /**
-     * Odin's unknown tiles (its renderPathHints), the same tiles and guesses in this look: the tile a door leads
+     * ADM's unknown tiles (its renderPathHints), the same tiles and guesses in this look: the tile a door leads
      * to in a room nobody has opened is dark grey, blood dark red, a known 1x1 the special column's guess; and,
-     * like Odin, the special column's guess on every tile of a known 1x1 nobody has opened that isn't behind a door yet.
+     * like ADM, the special column's guess on every tile of a known 1x1 nobody has opened that isn't behind a door yet.
      */
     private fun drawUnopened(g: GuiGraphicsExtractor, hints: Collection<DungeonTile>) {
         for ((position, room) in hints) {
@@ -281,7 +281,7 @@ object LcmStyle {
         }
     }
 
-    /** Odin's special column guess for a tile in this column, in these colours and dtMap's order, darkened. */
+    /** ADM's special column guess for a tile in this column, in these colours and dtMap's order, darkened. */
     private fun specialGuess(column: Int): IntArray = SpecialColumn.colorGuessForUnknown(column).map { typeOf(it) }
         .sortedBy { guessOrder.indexOf(it).let { i -> if (i < 0) guessOrder.size else i } }.map { darker(roomColor(it)) }.toIntArray()
 
@@ -356,7 +356,7 @@ object LcmStyle {
     private fun drawName(g: GuiGraphicsExtractor, room: DungeonRoom) {
         if (!opened(room) || room.type == RoomType.ENTRANCE || room.type == RoomType.BLOOD || room.type == RoomType.FAIRY || room.type == RoomType.UNDISCOVERED) return
         val (cx, cz) = center(room) ?: return
-        // Room Text, as on Odin's map: the check mark until the name is known, or when the room has nothing else to show
+        // Room Text, as on ADM's map: the check mark until the name is known, or when the room has nothing else to show
         val option = DungeonMap.roomText
         val maxSecrets = room.data?.maxSecrets ?: 0
         val known = knownName(room)

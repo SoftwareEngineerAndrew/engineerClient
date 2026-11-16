@@ -7,7 +7,7 @@ import com.adm.utils.render.text
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.Minecraft
 
-/** Blade's Melody Alert, in Melody Message. */
+/** ADM's Melody Alert, in Melody Message. */
 object TerminalHuds {
     private val melodyHud = MelodyMessage.HUD("Melody Alert", "Who has melody and how far along they are.", true, 270, 45, 3.6f) { example ->
         val s = if (example) "§5§lARCHER§r§d has melody! 1/3" else melodyText() ?: return@HUD 0 to 0

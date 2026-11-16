@@ -15,18 +15,18 @@ object RegionEdits {
         for (r in rooms) for (b in r.design.blockEntities) {
             if (!b.marker) continue
             if (!r.volume.contains(b.pos.x, b.pos.y, b.pos.z) || r.volume.isAir(b.pos.x, b.pos.y, b.pos.z)) continue
-            // A tile's centre column is what Odin hashes to name the room: nothing in it is ever changed.
+            // A tile's centre column is what ADM hashes to name the room: nothing in it is ever changed.
             if (b.pos.x % 32 == 15 && b.pos.z % 32 == 15) continue
             val w = r.placement.toWorld(b.pos.x, b.pos.y, b.pos.z)
             add(Edit(w.x, w.y, w.z, AIR))
         }
     }
 
-    /** The blue terracotta Hypixel leaves at one corner of a Fairy room's roof; Odin reads the room's turn from it. */
+    /** The blue terracotta Hypixel leaves at one corner of a Fairy room's roof; ADM reads the room's turn from it. */
     const val CLAY = "minecraft:blue_terracotta"
 
     /**
-     * The Fairy room's rotation marker. The recorded capture has none, so Odin's scan of the pasted room finds no clay, falls back to
+     * The Fairy room's rotation marker. The recorded capture has none, so ADM's scan of the pasted room finds no clay, falls back to
      * the doors and reads the room as turned West. On Hypixel the clay stands at the roof (y [com.engineerclient.dungeonpack.pack.rooms.RoomDesign.roofY])
      * on the room's own canonical corner (0, 0): the tile's north-west corner for a room turned South.
      */
@@ -52,7 +52,7 @@ object RegionEdits {
             for (c in cells.distinct()) {
                 if (!r.volume.contains(c.x, c.y, c.z)) continue
                 if (r.volume.stateAt(c.x, c.y, c.z).substringBefore('[').removePrefix("minecraft:") !in SECRET_BLOCKS) continue
-                // The centre column Odin hashes is never changed (as [markerRemovals]).
+                // The centre column ADM hashes is never changed (as [markerRemovals]).
                 if (c.x % 32 == 15 && c.z % 32 == 15) continue
                 val w = r.placement.toWorld(c.x, c.y, c.z)
                 add(Edit(w.x, w.y, w.z, AIR))

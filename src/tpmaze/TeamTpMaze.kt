@@ -40,31 +40,31 @@ import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 
 /**
- * Team TP Maze, on Odin's Puzzle Solvers: one map of the Teleport Maze for the whole party, so a team stacked in the maze (leaping
+ * Team TP Maze, on ADM's Puzzle Solvers: one map of the Teleport Maze for the whole party, so a team stacked in the maze (leaping
  * in to whoever is there when it's the last room) splits up instead of trying the same pads.
  *
  * Every pad pair anyone learns goes into a shared [MazeMap] in pad numbers, which are the same on every client however the room is
  * turned ([MazePads]): your own teleports (the pad you stood on, the pad you landed beside, and where the landing turned you to
  * look, which is always at the final pad), teammates' teleports seen in the world (a guess until their own client says), and the
- * maps of teammates who run this too, over ADM's party link ([com.engineerclient.party.OdinLink]) and Odin's websocket for the rest.
- * The socket is Odin's lobby channel, a second one beside Odin's map
- * sync like [com.engineerclient.clearbreakdown.OdinSync]: the messages carry none of the fields Odin's map or Melody read, so their
+ * maps of teammates who run this too, over ADM's party link ([com.engineerclient.party.OdinLink]) and ADM's websocket for the rest.
+ * The socket is ADM's lobby channel, a second one beside ADM's map
+ * sync like [com.engineerclient.clearbreakdown.OdinSync]: the messages carry none of the fields ADM's map or Melody read, so their
  * handlers drop them. Each message is the sender's whole map (at most 15 pairs), sent when it changes; a client that comes in asks
  * for everyone's.
  *
  * From the map, [MazePlan] gives everyone in the maze a pad: the final pad once you're in its cell, a known way to its cell, else an
  * unused pad of your cell split by name between the teammates there who run this, else known pads to the nearest cell with unused ones. Your pad
- * is drawn with a tracer; teammates' pads in your cell carry their names; used pads say where they lead. Odin's own TP Maze solver
+ * is drawn with a tracer; teammates' pads in your cell carry their names; used pads say where they lead. ADM's own TP Maze solver
  * is switched off (TpMazeRenderMixin) and its settings are replaced by these, in the same spot.
  */
 object TeamTpMaze {
     private val dropdown = DropdownSetting("Team TP Maze", desc = "Settings for the shared TP Maze map. Added by engineerClient.")
     private val on = BooleanSetting("Team Maze Solver", true,
-        desc = "One TP Maze map for the whole party: every pad pair anyone learns is shared with the party, teammates in the same cell are given different unused pads, and you're shown yours. Replaces Odin's TP Maze solver. Added by engineerClient.").withDependency { dropdown.value }
+        desc = "One TP Maze map for the whole party: every pad pair anyone learns is shared with the party, teammates in the same cell are given different unused pads, and you're shown yours. Replaces ADM's TP Maze solver. Added by engineerClient.").withDependency { dropdown.value }
     private val tracer = BooleanSetting("Team Maze Tracer", true, desc = "A line to the pad you should take next.").withDependency { dropdown.value && on.value }
     private val labels = BooleanSetting("Team Maze Labels", true,
         desc = "Over each used pad, where it leads; over a teammate's next pad in your cell, their name.").withDependency { dropdown.value && on.value }
-    // Odin saves colours by setting name: these two are new names so the new defaults reach anyone who has the old ones saved.
+    // ADM saves colours by setting name: these two are new names so the new defaults reach anyone who has the old ones saved.
     private val nextColor = ColorSetting("Recommended Pad Color", Colors.MINECRAFT_YELLOW.withAlpha(.6f), true,
         desc = "The pad you should take next and the line to it, and the outlines while the answer could still be one of a few.").withDependency { dropdown.value && on.value }
     private val finalColor = ColorSetting("Known Answer Color", Colors.MINECRAFT_GREEN.withAlpha(.6f), true,
@@ -107,7 +107,7 @@ object TeamTpMaze {
     private val self: String get() = mc.player?.name?.string ?: ""
 
     fun install() {
-        replaceOdinSettings(listOf(dropdown, on, tracer, labels, nextColor, finalColor, usedColor, mateColor))
+        replaceCoreSettings(listOf(dropdown, on, tracer, labels, nextColor, finalColor, usedColor, mateColor))
         on<LevelEvent.Load> { EngineerClient.safely("team tp maze reset") { reset() } }
         on<RoomEnterEvent> { EngineerClient.safely("team tp maze room") { room?.takeIf { it.data?.name == ROOM }?.let { enter(it) } } }
         // A teammate's: every server position of theirs comes through here, so the last one is where they stood.
@@ -139,11 +139,11 @@ object TeamTpMaze {
         EngineerClient.safely("team tp maze teleport") { teleport(p.x, p.z, x, y, z, yaw.toDouble(), exact = true) }
     }
 
-    /** Odin's TP Maze settings, whose solver is switched off (TpMazeRenderMixin): ours go in their place in Puzzle Solvers. */
-    private val ODIN_MAZE = listOf("mazeDropDown", "tpMaze", "mazeColorOne", "mazeColorMultiple", "mazeColorVisited", "mazeShowTracer", "mazeTracerColor", "mazeReset")
+    /** ADM's TP Maze settings, whose solver is switched off (TpMazeRenderMixin): ours go in their place in Puzzle Solvers. */
+    private val CORE_MAZE = listOf("mazeDropDown", "tpMaze", "mazeColorOne", "mazeColorMultiple", "mazeColorVisited", "mazeShowTracer", "mazeTracerColor", "mazeReset")
 
-    private fun replaceOdinSettings(ours: List<Setting<*>>) {
-        val old = ODIN_MAZE.mapNotNull { n ->
+    private fun replaceCoreSettings(ours: List<Setting<*>>) {
+        val old = CORE_MAZE.mapNotNull { n ->
             runCatching { PuzzleSolvers::class.java.getDeclaredField("$n\$delegate").apply { isAccessible = true }.get(PuzzleSolvers) }.getOrNull()
         }.toSet()
         val settings = PuzzleSolvers.settings
@@ -184,7 +184,7 @@ object TeamTpMaze {
         connected = false; helloSent = false; waiting = 0
     }
 
-    /** The room's frame from three of its blocks, once Odin has found its corner and turn (all zero until then). */
+    /** The room's frame from three of its blocks, once ADM has found its corner and turn (all zero until then). */
     private fun frameOf(room: DungeonRoom): RoomFrame? {
         val o = room.getRealCoords(BlockPos(0, 69, 0))
         val x = room.getRealCoords(BlockPos(1, 69, 0))
@@ -251,7 +251,7 @@ object TeamTpMaze {
 
     // ---- the websocket ----------------------------------------------------------------------------------------------------------
 
-    /** Our map as a message. No "playerName", "username" or "roomName": Odin's map and Melody handlers drop it. */
+    /** Our map as a message. No "playerName", "username" or "roomName": ADM's map and Melody handlers drop it. */
     private fun message(hello: Boolean): String {
         val o = JsonObject()
         o.addProperty("ecTpMaze", 1)

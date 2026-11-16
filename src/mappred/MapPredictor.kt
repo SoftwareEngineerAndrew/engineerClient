@@ -173,8 +173,8 @@ class MapView(val w: Int, val h: Int, val puzzles: Int, val rules: FloorRules = 
     /**
      * Room [j] is of the kind [old] said, to the game process: the same kind, or a brown 1x1 with one door (a dead end)
      * that was normal and is rare or the other way round, which [GameSampler] (its specials shown) and [MapPredictor]
-     * (the names' pools) both read as a rare room. Odin has a room it has seen only on the map as rare until it has
-     * scanned its core, so a room can be read normal, then rare (MapPrediction reads Odin's unscanned rare as normal).
+     * (the names' pools) both read as a rare room. ADM has a room it has seen only on the map as rare until it has
+     * scanned its core, so a room can be read normal, then rare (MapPrediction reads ADM's unscanned rare as normal).
      */
     private fun sameKind(j: Int, old: Kind): Boolean {
         val k = kinds[j]
@@ -1060,7 +1060,7 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
             return FloatArray(p.size) { (s[it] / z * total).toFloat() }
         }
 
-        /** A puzzle room's name (Odin's map) is the tab's puzzle [tab]: the same, but both blaze rooms are "Higher Or Lower". */
+        /** A puzzle room's name (ADM's map) is the tab's puzzle [tab]: the same, but both blaze rooms are "Higher Or Lower". */
         fun isTabPuzzle(room: String?, tab: String): Boolean = room != null && (room == tab || tab == "Higher Or Lower" && room.endsWith(" Blaze"))
 
         /** A discovered room's name pool from its colour and shape; a brown 1x1 dead end is a rare room (a normal 1x1 never is one). */

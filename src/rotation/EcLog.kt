@@ -15,7 +15,7 @@ import java.time.format.DateTimeFormatter
  *
  * One event per line: `HH:mm:ss.SSS <TAG> <payload>`, tab-separated.
  *
- *   SESSION  mod/spec/Odin versions, local player, starting role
+ *   SESSION  mod/spec/ADM versions, local player, starting role
  *   SETUP    the setup check, one line per item
  *   CHAT     a raw chat line, exactly as received (only while in a dungeon)
  *   SECTION  phase-3 section transitions
