@@ -1,6 +1,7 @@
 package com.engineerclient.skyblock
 
 import com.engineerclient.EngineerClient
+import com.engineerclient.misc.DiskWrites
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 import com.mojang.brigadier.arguments.StringArgumentType
@@ -82,11 +83,15 @@ object RunsLogger {
     private fun save(run: Run) {
         pending = null
         runs.add(run)
-        try {
-            Files.createDirectories(file.parent)
-            Files.writeString(file, gson.toJson(runs))
-        } catch (t: Throwable) {
-            EngineerClient.logger.warn("[ec] runs log save failed", t)
+        val all = runs.toList()
+        val path = file
+        DiskWrites.write {
+            try {
+                Files.createDirectories(path.parent)
+                Files.writeString(path, gson.toJson(all))
+            } catch (t: Throwable) {
+                EngineerClient.logger.warn("[ec] runs log save failed", t)
+            }
         }
     }
 
