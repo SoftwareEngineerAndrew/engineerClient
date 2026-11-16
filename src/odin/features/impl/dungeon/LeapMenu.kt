@@ -22,7 +22,10 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils.leapTeammates
 import com.odtheking.odin.utils.ui.compose.Animatable
 import com.odtheking.odin.utils.ui.compose.Motion
 import com.odtheking.odin.utils.ui.widget.CustomGUIImpl
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.fabricmc.fabric.api.event.player.UseItemCallback
+import net.minecraft.resources.Identifier
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.PlayerFaceExtractor
 import net.minecraft.client.gui.screens.Screen
@@ -52,6 +55,8 @@ object LeapMenu : Module(
     private val onRelease by BooleanSetting("On Key Release", false, desc = "Whether to trigger the leap on key release instead of key press.")
     private val instant by BooleanSetting("Instant Leap", true, desc = "Opens as you use the leap and takes your pick before the server's menu is there.")
     private val moveView by BooleanSetting("Move View Early", true, desc = "Your view goes to the player you picked while the leap is on its way.").withDependency { instant }
+    private val vignette by BooleanSetting("Leap Vignette", false, desc = "The screen's edges glow until the leap lands.").withDependency { instant }
+    private val vignetteColor by ColorSetting("Leap Vignette Color", Color(170, 85, 255, 0.55f), true, desc = "The leap vignette's colour; its alpha is how strong.").withDependency { instant && vignette }
 
     private val keybindDropdown by DropdownSetting("Keybinds", desc = "Keybinds for the leap menu.").withDependency { type != Sorting.NONE }
     val keybindType by SelectorSetting("Mode", KeybindMode.CORNERS, desc = "How the keybinds should function.").withDependency { keybindDropdown }
@@ -178,6 +183,11 @@ object LeapMenu : Module(
                 return true
             })
         )
+
+        HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "leap_vignette")) { gfx, _ ->
+            if (enabled && instant && vignette && pending != null && !moved)
+                com.engineerclient.render.Vignette.draw(gfx, vignetteColor.rgba, (vignetteColor.alphaFloat * 255).toInt())
+        }
 
         UseItemCallback.EVENT.register { player, level, hand ->
             if (hand == InteractionHand.MAIN_HAND && level.isClientSide && player === mc.player) open(player.getItemInHand(hand).itemId)
