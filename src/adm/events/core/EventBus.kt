@@ -38,13 +38,21 @@ object EventBus {
     @JvmStatic
     fun hasListeners(eventClass: Class<out Event>): Boolean = invokers.containsKey(eventClass)
 
+    fun <T : Event> registerListener(
+        subscriberClass: Class<*>,
+        eventClass: Class<T>,
+        priority: Int,
+        ignoreCancelled: Boolean,
+        handler: (T) -> Unit
+    ) = registerListener(subscriberClass, eventClass, priority, ignoreCancelled, null, handler)
+
     @Synchronized
     fun <T : Event> registerListener(
         subscriberClass: Class<*>,
         eventClass: Class<T>,
         priority: Int,
         ignoreCancelled: Boolean,
-        packetClass: Class<*>? = null,
+        packetClass: Class<*>?,
         handler: (T) -> Unit
     ) {
         val name = subscriberClass.simpleName.ifEmpty { subscriberClass.name }
