@@ -430,19 +430,23 @@ object OdinMapPrediction {
             if (names.sumOf { it.chance.toDouble() } < SURE) continue
             if (tiles.all { known[it] }) { if (!namedOnMap(tiles[0])) roomText(g, tiles, names); continue }
             if (tiles.any { known[it] || exact[it] || it in blood }) continue
+            val byType = names.groupBy { typeOfPool(it.name.pool) }.mapValues { (_, n) -> n.sumOf { it.chance.toDouble() } }
+            val types = splitTypes(byType) ?: continue
             for (t in tiles) exact[t] = true
-            exactRoom(g, tiles, names)
+            exactFill(g, tiles, types.ifEmpty { listOf(typeOfPool(names.maxBy { it.chance }.name.pool)) })
+            roomText(g, tiles, names)
         }
         // anything shown at 100% (a room's size and place), named or not: drawn in full in its type's colour (or the
         // kinds a dead end can still be), keeping the split's label on its door's tile
         if (exactRooms.value) for (tiles in MapPredictor.certainShapes(p, SURE)) {
             if (tiles.any { known[it] || exact[it] || it in blood }) continue
-            for (t in tiles) exact[t] = true
             val q = (p.probs[tiles[0]] ?: p.raw[tiles[0]])?.let(::kept)
             val types = if (tiles.size > 1 || q == null) listOf(-1) else {
-                val room = q.sum()
-                (0 until Cls.COUNT).filter { q[it] >= 0.05f * room }.sortedByDescending { q[it] }.take(3).map { if (it == Cls.NORMAL || it == Cls.BIG) -1 else it }.distinct()
+                val byType = HashMap<Int, Double>()
+                for (c in 0 until Cls.COUNT) if (q[c] > 0f) byType.merge(if (c == Cls.NORMAL || c == Cls.BIG) -1 else c, q[c].toDouble(), Double::plus)
+                splitTypes(byType) ?: continue
             }
+            for (t in tiles) exact[t] = true
             exactFill(g, tiles, types)
             for (t in tiles) splits[t]?.let { overlay(g, (t % W) * TILE, (t / W) * TILE, it, null, false) }
         }
@@ -541,17 +545,14 @@ object OdinMapPrediction {
         else g.fill(x + half, y + ROOM, x + half + width, y + TILE, color.rgba)
     }
 
-    /**
-     * An exact last room: its shape in its type's colour (a little see-through, as nobody has opened it) and
-     * Odin's name text - its name when only one fits, else "?" (nothing in LCM Style, which draws no "?") with
-     * the secrets if every name that fits has the same count.
-     */
-    private fun exactRoom(g: GuiGraphicsExtractor, tiles: IntArray, names: List<NamedRoom>) {
-        // a dead end that can still be more than one kind (its names from more than one pool) shows each kind it can be
-        val byType = names.groupBy { typeOfPool(it.name.pool) }.mapValues { (_, n) -> n.sumOf { it.chance.toDouble() } }
-        val types = byType.filter { it.value >= 0.05 }.entries.sortedByDescending { it.value }.take(3).map { it.key }
-        exactFill(g, tiles, types.ifEmpty { listOf(typeOfPool(names.maxBy { it.chance }.name.pool)) })
-        roomText(g, tiles, names)
+    private val SPLITTABLE = setOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE, Cls.BLOOD)
+
+    /** The kinds an exact 1x1 shows (likeliest first); null when it can still be more than one and one of them isn't a dead end or blood. */
+    private fun splitTypes(byType: Map<Int, Double>): List<Int>? {
+        val possible = byType.filter { it.value > 0.0 }
+        if (possible.size > 1 && possible.keys.any { it !in SPLITTABLE }) return null
+        val room = possible.values.sum()
+        return possible.filter { it.value >= 0.05 * room }.entries.sortedByDescending { it.value }.take(3).map { it.key }
     }
 
     /** The classes not to guess anywhere while this frame is drawn ([draw]: blood and the fairy once the map shows them, or the prediction is the map before's). */
