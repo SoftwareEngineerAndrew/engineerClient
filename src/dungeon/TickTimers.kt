@@ -27,6 +27,7 @@ import com.adm.utils.playSoundAtPlayer
 import com.adm.utils.render.text
 import com.adm.utils.render.textDim
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.FormatCache
 import com.adm.utils.toFixed
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket
@@ -64,7 +65,7 @@ object TickTimers : Module(
     private val clearHud by HUD("Clear Countdown", "Counts down 54 s from blood opening to the boss; 4 s once the portal spawns.", true, 420, 200, 2f) { example ->
         val left = if (example) 41.3 else bossTicksLeft()?.let { it / 20.0 } ?: return@HUD 0 to 0
         val colour = when { left > 30 -> "§a"; left > 20 -> "§e"; else -> "§c" }
-        draw(colour + String.format(Locale.ROOT, "%.1f", left))
+        draw(colour + oneDecimal(left))
     }.withDependency { clearDropdown }
     private val portalHud by HUD("Portal Text", "\"PORTAL\" in pink for 1.8 s when the portal spawns.", true, 400, 160, 4f) { example ->
         if (!example && (!enabled || DungeonUtils.inBoss || portalUntil - serverTicks <= 0)) return@HUD 0 to 0
@@ -104,7 +105,7 @@ object TickTimers : Module(
     private val hideGigaTitle: Boolean by BooleanSetting("Hide Giga Title", true, desc = "Hides Storm's countdown title while Giga Lightning shows.").withDependency { stormDropdown && gigaHud.enabled }
     private val stormDeathHud by HUD("Storm Death Time", "At \"Storm is enraged!\", how long Storm took to die, in chat and here for 2 s.", true, 10, 145, 1.5f) { example ->
         if (!example && (!enabled || stormShownUntil - serverTicks <= 0)) return@HUD 0 to 0
-        draw("§5" + String.format(java.util.Locale.ROOT, "%.2f", (if (example) 31 * 20 + 7 else stormDiedTicks) / 20.0))
+        draw("§5" + fmt(if (example) 31 * 20 + 7 else stormDiedTicks))
     }.withDependency { stormDropdown }
 
     private val termsDropdown by DropdownSetting("Terminals", desc = "Term Start and Section Time.")
@@ -237,7 +238,11 @@ object TickTimers : Module(
     private var fireFreezeTime = -1
 
     private fun fmt(ticks: Int) = fmt(ticks / 20.0)
-    private fun fmt(seconds: Double) = String.format(Locale.ROOT, "%.2f", seconds)
+    private val twoDecimals = FormatCache { String.format(Locale.ROOT, "%.2f", it) }
+    private val oneDecimal = FormatCache(2) { String.format(Locale.ROOT, "%.1f", it) }
+    private val tickSeconds = FormatCache(8) { String.format(Locale.ROOT, "%.2fs", it / 20.0) }
+    private val fixed = FormatCache(2) { (it.toInt() / 20f).toFixed() }
+    private fun fmt(seconds: Double) = twoDecimals(seconds)
 
     private fun maxorText(): Pair<String, Color>? =
         if (maxorOn && phase == 1) fmt(maxorTicks) to maxorColor else null
@@ -310,7 +315,7 @@ object TickTimers : Module(
         else -> "§c"
     }
 
-    private fun time(ticks: Int): String = String.format(Locale.ROOT, "%.2fs", ticks / 20.0)
+    private fun time(ticks: Int): String = tickSeconds(ticks.toDouble())
 
     /** The time left; [label] only in the HUD editor ([example]), to tell the timers apart there. */
     private fun GuiGraphicsExtractor.timer(label: String, left: Int, total: Int, example: Boolean = false): Pair<Int, Int> =
@@ -322,7 +327,7 @@ object TickTimers : Module(
     }
 
     private fun formatTimer(time: Int, max: Int, prefix: String): String {
-        val timeDisplay = if (displayInTicks) "$time${if (symbolDisplay) "t" else ""}" else "${(time / 20f).toFixed()}${if (symbolDisplay) "s" else ""}"
+        val timeDisplay = if (displayInTicks) "$time${if (symbolDisplay) "t" else ""}" else "${fixed(time.toDouble())}${if (symbolDisplay) "s" else ""}"
         return "${if (showPrefix) "$prefix " else ""}${colour(time, max)}$timeDisplay"
     }
 

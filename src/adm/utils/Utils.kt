@@ -114,6 +114,23 @@ fun String.capitalizeWords(): String = split(" ").joinToString(" ") { word ->
 fun Number.toFixed(decimals: Int = 2): String =
     "%.${decimals}f".format(Locale.US, this)
 
+/** Remembers the last few texts [format] made, for HUD text drawn every frame from values that change per tick. Render thread only. */
+class FormatCache(size: Int = 4, private val format: (Double) -> String) {
+    private val keys = LongArray(size)
+    private val texts = arrayOfNulls<String>(size)
+    private var next = 0
+
+    operator fun invoke(v: Double): String {
+        val bits = java.lang.Double.doubleToRawLongBits(v)
+        for (i in keys.indices) if (keys[i] == bits) texts[i]?.let { return it }
+        val text = format(v)
+        keys[next] = bits
+        texts[next] = text
+        next = (next + 1) % keys.size
+        return text
+    }
+}
+
 fun formatTime(time: Long, decimalPlaces: Int = 2): String {
     if (time == 0L) return "0s"
     var remaining = time
