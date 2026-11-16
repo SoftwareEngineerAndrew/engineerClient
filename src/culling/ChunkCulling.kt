@@ -109,9 +109,47 @@ object ChunkCulling : Module(
         if (!enabled || !DungeonUtils.inDungeons || DungeonUtils.inBoss) return null
         val cache = links?.takeIf { it.level === level } ?: LinkCache(level).also { links = it; announced = false }
         val now = System.nanoTime() / 1_000_000
-        val tiles = TileRule.relevantAt(bx, bz) { cache.get(it, now) }
+        val tiles = memo.tiles(cache, TileRule.span(bx), TileRule.span(bz), now) ?: TileRule.relevantAt(bx, bz) { memo.read(cache, it, now) }.also { memo.done(it) }
         if (tiles == 0L) return null
         return CullState.mask?.takeIf { it.tiles == tiles } ?: CullMask(tiles)
+    }
+
+    private val memo = Memo()
+
+    /**
+     * The last tile set and the slots it read, in the order it read them. Asking those slots again in that order does what
+     * working it out again would, up to the first that reads differently: only then is it worked out again.
+     */
+    private class Memo {
+        private var cache: LinkCache? = null
+        private var spanX = 0
+        private var spanZ = 0
+        private var result = 0L
+        private var valid = false
+        private var count = 0
+        private var slots = IntArray(64)
+        private var read = arrayOfNulls<Link>(64)
+
+        fun tiles(cache: LinkCache, spanX: Int, spanZ: Int, now: Long): Long? {
+            if (valid && cache === this.cache && spanX == this.spanX && spanZ == this.spanZ) {
+                var same = true
+                for (i in 0 until count) if (cache.get(slots[i], now) !== read[i]) { same = false; break }
+                if (same) return result
+            }
+            this.cache = cache; this.spanX = spanX; this.spanZ = spanZ
+            valid = false
+            count = 0
+            return null
+        }
+
+        fun read(cache: LinkCache, slot: Int, now: Long): Link {
+            val link = cache.get(slot, now)
+            if (count == slots.size) { slots = slots.copyOf(count * 2); read = read.copyOf(count * 2) }
+            slots[count] = slot; read[count] = link; count++
+            return link
+        }
+
+        fun done(tiles: Long) { result = tiles; valid = true }
     }
 
     private fun statsLine(): String? {

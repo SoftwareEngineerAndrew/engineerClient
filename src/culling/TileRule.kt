@@ -30,6 +30,14 @@ object TileRule {
         return maxOf(0, t)..minOf(N - 1, next)
     }
 
+    /** [tilesAt] as one number, equal for equal ranges. */
+    fun span(block: Int): Int {
+        val t = Math.floorDiv(block - DungeonFrame.ORIGIN, DungeonFrame.PITCH)
+        val next = Math.floorDiv(block - DungeonFrame.ORIGIN + 1, DungeonFrame.PITCH)
+        val first = maxOf(0, t); val last = minOf(N - 1, next)
+        return if (first > last) -1 else first * N + last
+    }
+
     /**
      * Hypixel's rooms are 4 tiles at most (and one entrance reads as joined to the room in front of it: [Links]). Blocks
      * that join more tiles than this into one aren't a dungeon's: a singleplayer world, which ADM counts as a dungeon
