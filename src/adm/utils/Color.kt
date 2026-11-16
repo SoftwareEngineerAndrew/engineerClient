@@ -149,6 +149,10 @@ class Color(hue: Float, saturation: Float, brightness: Float, alpha: Float = 1f)
             return Color(red, green, blue, (alphaFloat * factor).coerceIn(0f, 1f))
         }
 
+        /** [multiplyAlpha]'s rgba without making the colour (RGB to HSB and back is exact for 8-bit channels). */
+        fun Color.multiplyAlphaRgba(factor: Float): Int =
+            (rgba and 0x00FFFFFF) or (((alphaFloat * factor).coerceIn(0f, 1f) * 255).toInt() shl 24)
+
         fun Color.hsbMax(): Color {
             return Color(hue, 1f, 1f)
         }

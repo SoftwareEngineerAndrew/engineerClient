@@ -5,7 +5,8 @@ import com.adm.events.RenderExtractEvent
 import com.adm.events.core.on
 import com.adm.features.Module
 import com.adm.utils.render.drawText
-import com.adm.utils.render.drawWireFrameBox
+import com.adm.utils.render.BoxBatch
+import com.adm.utils.render.drawBoxes
 import com.adm.utils.renderBoundingBox
 import com.adm.utils.renderPos
 import com.adm.utils.skyblock.dungeon.DungeonClass
@@ -52,13 +53,17 @@ object Highlight : Module(
         enabled && teammateName && entity is Player && DungeonUtils.inDungeons && entity !== mc.player &&
             DungeonUtils.dungeonTeammates.any { it.name == entity.name.string && it.clazz != DungeonClass.EMPTY }
 
+    private val boxes = BoxBatch()
+
     init {
         on<RenderExtractEvent> {
             if ((!teammateBox && !teammateName) || !DungeonUtils.inDungeons) return@on
+            boxes.clear()
             for ((p, mate) in teammates()) {
-                if (teammateBox) drawWireFrameBox(p.renderBoundingBox, mate.clazz.color, depth = false)
+                if (teammateBox) boxes.outline(p.renderBoundingBox, mate.clazz.color, depth = false)
                 if (teammateName) drawText("§${mate.clazz.colorCode}${mate.name} §e[${mate.clazz.name[0]}]", p.renderPos.add(0.0, 2.75, 0.0), 2f, false)
             }
+            drawBoxes(boxes)
         }
     }
 }
