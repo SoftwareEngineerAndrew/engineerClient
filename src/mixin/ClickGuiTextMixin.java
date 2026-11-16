@@ -22,6 +22,7 @@ public abstract class ClickGuiTextMixin {
     @ModifyArg(method = "textureSetup", at = @At(value = "INVOKE",
         target = "Lcom/mojang/blaze3d/systems/SamplerCache;getClampToEdge(Lcom/mojang/renderpearl/api/textures/FilterMode;)Lcom/mojang/renderpearl/api/textures/GpuSampler;"))
     private FilterMode ec$smoothInClickGui(FilterMode mode) {
+        if (!RandomStuff.INSTANCE.inClickGui()) return mode;
         Matrix3x2fc m = pose();
         return RandomStuff.INSTANCE.smoothsGuiText((float) Math.hypot(m.m00(), m.m01())) ? FilterMode.LINEAR : mode;
     }

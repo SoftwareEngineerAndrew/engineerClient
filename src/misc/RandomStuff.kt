@@ -85,8 +85,9 @@ object RandomStuff : Module(
      * Whether text drawn at pose scale [scale] should be sampled smoothly (ClickGuiTextMixin): only in
      * ADM's menu, and only where a font pixel doesn't land on a whole number of screen pixels.
      */
+    fun inClickGui(): Boolean = mc.gui.screen() === com.engineerclient.gui.AdmClickGui
+
     fun smoothsGuiText(scale: Float): Boolean {
-        if (mc.gui.screen() !== com.engineerclient.gui.AdmClickGui) return false
         val px = scale * mc.window.guiScale
         return kotlin.math.abs(px - kotlin.math.round(px)) > 0.01f
     }
