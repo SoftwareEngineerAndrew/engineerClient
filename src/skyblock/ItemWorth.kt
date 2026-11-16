@@ -14,7 +14,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
 import net.minecraft.client.Minecraft
+import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
+import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.ItemStack
 import java.util.Locale
 
@@ -41,7 +43,7 @@ object ItemWorth {
         ItemTooltipCallback.EVENT.register { stack, _, _, lines ->
             if (!Croesus.enabled || !LocationUtils.isInSkyblock) return@register
             if (onlyShift.value && !Minecraft.getInstance().hasShiftDown()) return@register
-            lines.addAll(tooltip(stack))
+            for (text in tooltipText(stack)) lines.add(Component.literal(text))
         }
     }
 
@@ -62,9 +64,25 @@ object ItemWorth {
     /** What one of [id] is worth: its bazaar instant-sell price, else its lowest BIN. */
     fun price(id: String): Double? = bazaarSell[id]?.takeIf { it > 0 } ?: lbin[id]
 
-    private fun tooltip(stack: ItemStack): List<Component> {
+    private class TooltipKey(val data: CustomData, val count: Int, val lbin: Map<String, Double>, val buy: Map<String, Double>, val sell: Map<String, Double>, val flags: Int) {
+        fun same(o: TooltipKey) = data === o.data && count == o.count && lbin === o.lbin && buy === o.buy && sell === o.sell && flags == o.flags
+    }
+
+    // The hovered item's tooltip is rebuilt every frame; its price lines only change with the item or the prices.
+    @Volatile private var lastTooltip: Pair<TooltipKey, List<String>>? = null
+
+    private fun tooltipText(stack: ItemStack): List<String> {
+        val flags = (if (showLbin.value) 1 else 0) or (if (showBazaar.value) 2 else 0) or (if (showWorth.value) 4 else 0)
+        val key = TooltipKey(stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY), stack.count, lbin, bazaarBuy, bazaarSell, flags)
+        lastTooltip?.let { (k, text) -> if (k.same(key)) return text }
+        val text = tooltip(stack)
+        lastTooltip = key to text
+        return text
+    }
+
+    private fun tooltip(stack: ItemStack): List<String> {
         val id = stack.itemId.ifEmpty { return emptyList() }
-        val out = ArrayList<Component>()
+        val out = ArrayList<String>()
         val count = stack.count
         if (showLbin.value) lbin[id]?.let { out += line("Lowest BIN", it, count) }
         if (showBazaar.value) {
@@ -75,9 +93,9 @@ object ItemWorth {
         return out
     }
 
-    private fun line(label: String, each: Double, count: Int): Component {
+    private fun line(label: String, each: Double, count: Int): String {
         val text = if (count > 1) "§6${coins(each * count)} §7(${coins(each)} each)" else "§6${coins(each)}"
-        return Component.literal("§7$label: $text")
+        return "§7$label: $text"
     }
 
     /** The estimated worth and what it's made of (name to coins); null when the base item has no price. */
