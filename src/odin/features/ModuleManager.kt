@@ -77,7 +77,7 @@ object ModuleManager {
             PlayerDisplay, Highlight, GyroWand,
 
             //skyblock
-            ChatCommands, NoCursorReset, Ragnarock, SpringBoots, MenuKeybinds, AutoSprint,
+            ChatCommands, Ragnarock, SpringBoots, MenuKeybinds,
             CommandKeybinds, SlotBinds, Splits,
 
             // nether

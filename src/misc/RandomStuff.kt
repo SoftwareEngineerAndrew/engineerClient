@@ -27,6 +27,15 @@ object RandomStuff : Module(
     description = "A collection of small unrelated QoL toggles.",
     key = null,
 ) {
+    private val autoSprint by BooleanSetting("Auto Sprint", false, desc = "Always sprints.")
+    fun sprints() = enabled && autoSprint
+    private val noCursorReset by BooleanSetting("No Cursor Reset", false, desc = "Keeps the cursor where it was when a menu opens.")
+    private val unhookTimeout by NumberSetting("Unhook Timeout", 150, 0..1000, 10, desc = "How long after a menu opens the cursor is kept.", unit = "ms").withDependency { noCursorReset }
+    private var cursorClock = 0L
+    private var hadScreen = false
+
+    @JvmStatic
+    fun shouldHookMouse(): Boolean = enabled && noCursorReset && System.currentTimeMillis() - cursorClock < unhookTimeout
     private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
 
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", true, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
@@ -95,6 +104,11 @@ object RandomStuff : Module(
             (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER)
 
     init {
+        on<com.odtheking.odin.events.TickEvent.End> {
+            val open = mc.gui.screen() != null
+            if (open || hadScreen) cursorClock = System.currentTimeMillis()
+            hadScreen = open
+        }
         on<MessageEvent.Chat> {
             // At most once per [BLESS_COOLDOWN_MS]: a party filling and emptying (or someone joining and
             // leaving over and over) would otherwise have the server mute you for spam.

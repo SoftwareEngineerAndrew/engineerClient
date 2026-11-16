@@ -2,7 +2,6 @@ package com.odtheking.mixin.mixins;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import com.odtheking.odin.OdinMod;
-import com.odtheking.odin.features.impl.skyblock.NoCursorReset;
 import net.minecraft.client.MouseHandler;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import org.objectweb.asm.Opcodes;
@@ -33,7 +32,7 @@ public class MouseHandlerMixin {
 
     @Inject(method = "releaseMouse", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;getWindow()Lcom/mojang/blaze3d/platform/Window;"))
     private void correctCursorPosition(CallbackInfo ci) {
-        if (OdinMod.getMc().gui.screen() instanceof ContainerScreen && NoCursorReset.shouldHookMouse()) {
+        if (OdinMod.getMc().gui.screen() instanceof ContainerScreen && com.engineerclient.misc.RandomStuff.shouldHookMouse()) {
             InputConstants.releaseMouse(OdinMod.getMc().getWindow(), this.beforeX, this.beforeY);
             this.xpos = this.beforeX;
             this.ypos = this.beforeY;

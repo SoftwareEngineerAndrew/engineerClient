@@ -1838,6 +1838,15 @@ object ConfigMigration {
 
         if (Files.exists(odinFile)) {
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val sprint = module(odin, "Auto Sprint")
+            val rs = module(modules, "Random Stuff")
+            if (sprint != null && rs != null && !settings(rs).has("Auto Sprint")) { settings(rs).addProperty("Auto Sprint", sprint["enabled"]?.asBoolean == true); changed = true }
+            val cursor = module(odin, "No Cursor Reset")
+            if (cursor != null && rs != null && !settings(rs).has("No Cursor Reset")) {
+                settings(rs).addProperty("No Cursor Reset", cursor["enabled"]?.asBoolean == true)
+                settings(cursor)["Unhook Timeout"]?.let { settings(rs).add("Unhook Timeout", it) }
+                changed = true
+            }
             val old = module(odin, "Menu Keybinds")
             if (old != null && module(odin, "LD WD Pet Keybinds") == null) { old.addProperty("name", "LD WD Pet Keybinds"); write(odinFile, odin) }
         }
