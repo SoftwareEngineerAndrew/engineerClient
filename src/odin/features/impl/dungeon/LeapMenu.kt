@@ -111,27 +111,49 @@ object LeapMenu : Module(
         return screen
     }
 
-    /** The player picked, while the view rides with them. */
-    private fun target(): Player? {
+    /** Where the picked player is and looks: your game's copy of them, else the pose a teammate with ADM shares. */
+    private class View(val pos: Vec3, val yaw: Float, val pitch: Float)
+
+    private fun view(partial: Float): View? {
         if (!enabled || !instant || !moveView) return null
         val p = pending ?: return null
-        return p.entity?.takeIf { it.isAlive } ?: mc.level?.players()?.firstOrNull { it.name.string == p.name }
+        val e = p.entity?.takeIf { it.isAlive } ?: mc.level?.players()?.firstOrNull { it.name.string == p.name }
+        if (e != null) return View(e.getPosition(partial), e.getViewYRot(partial), e.getViewXRot(partial))
+        val s = com.engineerclient.pov.PoseShare.pose(p.name, System.nanoTime()) ?: return null
+        return View(s.pos, s.yaw, s.pitch)
+    }
+
+    /** The view's own look while it isn't following theirs. */
+    private var freeYaw = 0f
+    private var freePitch = 0f
+
+    /** A leap is being shown before it lands: you can't move, turn or change slot until it does. */
+    @JvmStatic
+    fun locked(): Boolean = enabled && instant && moveView && pending != null
+
+    /** The mouse while [locked]: it turns the view only. */
+    @JvmStatic
+    fun turn(xo: Double, yo: Double) {
+        freeYaw += (xo * 0.15).toFloat()
+        freePitch = (freePitch + (yo * 0.15).toFloat()).coerceIn(-90f, 90f)
     }
 
     /** Where the view is while a picked leap is on its way: with the player picked. */
     @JvmStatic
-    fun visualPos(): Vec3? = target()?.getPosition(mc.deltaTracker.getGameTimeDeltaPartialTick(false))
+    fun visualPos(): Vec3? = view(mc.deltaTracker.getGameTimeDeltaPartialTick(false))?.pos
 
-    /** Their look too, until you're there and can move: yaw, pitch. */
+    /** Its look: theirs, or yours turned freely: yaw, pitch. */
     @JvmStatic
-    fun visualLook(partialTicks: Float): FloatArray? = if (!followLook) null else target()?.let { floatArrayOf(it.getViewYRot(partialTicks), it.getViewXRot(partialTicks)) }
+    fun visualLook(partialTicks: Float): FloatArray? {
+        val v = view(partialTicks) ?: return null
+        return if (followLook) floatArrayOf(v.yaw, v.pitch) else floatArrayOf(freeYaw, freePitch)
+    }
 
-    /** Arrived: you go on looking where they were, not back where you were before the leap. */
+    /** Arrived: you go on looking where the view was, not back where you were before the leap. */
     private fun takeLook() {
-        if (!followLook) return
-        val t = target() ?: return
+        val look = visualLook(1f) ?: return
         val me = mc.player ?: return
-        me.yRot = t.yRot; me.xRot = t.xRot
+        me.yRot = look[0]; me.xRot = look[1]
         me.yRotO = me.yRot; me.xRotO = me.xRot
     }
 
@@ -247,6 +269,7 @@ object LeapMenu : Module(
     /** [player] picked: the view goes to them; the click waits for the server's menu if it isn't here yet. */
     private fun pick(player: DungeonPlayer) {
         pending = player
+        mc.player?.let { freeYaw = it.yRot; freePitch = it.xRot }
         pickedAt = System.currentTimeMillis()
         clickedAt = 0L
         moved = false
