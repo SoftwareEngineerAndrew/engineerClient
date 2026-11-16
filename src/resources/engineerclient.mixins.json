@@ -114,7 +114,6 @@
     "RenderCleanupStuckArrowMixin",
     "RenderCleanupFireMixin",
     "RenderCleanupGlowMixin",
-    "RenderCleanupArrowMixin",
     "HoveredSlotAccessor",
     "ScrollableTooltipMixin",
     "DarkModeMixin",

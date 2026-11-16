@@ -3,6 +3,9 @@ package com.adm.mixin.mixins;
 import com.engineerclient.render.Visibility;
 import com.adm.features.impl.dungeon.Highlight;
 import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers;
+import com.engineerclient.misc.Zpew;
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.world.entity.Entity;
@@ -11,24 +14,23 @@ import net.minecraft.world.entity.decoration.ArmorStand;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(EntityRenderer.class)
 public abstract class EntityRendererMixin<T extends Entity> {
 
-    @Inject(method = "shouldRender", at = @At("RETURN"), cancellable = true)
-    private void onRender(T entity, Frustum culler, double camX, double camY, double camZ, float partialTicks, CallbackInfoReturnable<Boolean> cir) {
-        if (!cir.getReturnValueZ()) return;
+    @ModifyReturnValue(method = "shouldRender", at = @At("RETURN"))
+    private boolean onRender(boolean shown, T entity, Frustum culler, double camX, double camY, double camZ, float partialTicks) {
+        // Legit Zpew: your own model is drawn where the camera is, never culled from its old spot.
+        if (entity == Minecraft.getInstance().player && Zpew.cameraPos() != null) return true;
+        if (!shown) return false;
 
-        if (shouldHideDeadEntity(entity) ||
+        return !(shouldHideDeadEntity(entity) ||
                 PuzzleSolvers.shouldHideBlaze(entity) ||
                 Highlight.hidesTag(entity) ||
                 com.engineerclient.render.ScoreboardNametags.hidesMobDialogue(entity) ||
                 com.engineerclient.render.Visibility.hidesDamageNumber(entity) ||
                 !Visibility.INSTANCE.shouldRenderPlayer(entity) ||
-                shouldHideDyingArmorStand(entity)
-        ) cir.setReturnValue(false);
+                shouldHideDyingArmorStand(entity));
     }
 
     @Unique
