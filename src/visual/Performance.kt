@@ -12,6 +12,7 @@ import com.adm.utils.Color
 import com.adm.utils.Colors
 import com.adm.utils.ServerUtils
 import com.adm.utils.render.textDim
+import com.adm.utils.FormatCache
 import com.adm.utils.toFixed
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -81,7 +82,7 @@ object Performance : Module(
             }
         }
 
-        if (showTPS) renderMetric("TPS: ", "${ServerUtils.averageTps.toFixed(1)} ")
+        if (showTPS) renderMetric("TPS: ", "${tpsText(ServerUtils.averageTps.toDouble())} ")
         if (showFPS) renderMetric("FPS: ", "${mc.fps} ")
         if (showPing) renderMetric("Ping: ", "${ServerUtils.averagePing}ms ")
 
@@ -89,19 +90,13 @@ object Performance : Module(
     }
 
     private val clockHud by HUD("Clock HUD", "The system time.", true, 10, 10, 1f) {
-        val text = LocalTime.now().format(if (seconds) clockFormatSeconds else clockFormat)
+        val text = clockText()
         text(mc.font, text, 0, 0, clockColor.rgba)
         mc.font.width(text) to 9
     }
 
     private val cpsHud by HUD("CPS HUD", "Left and right clicks in the last second.", true, 10, 22, 1f) {
-        val comp = Component.empty().apply {
-            if (cpsLabelPosition == LabelPosition.LEFT) append(Component.literal("CPS ").withColor(cpsLabelColor.rgba))
-            append(Component.literal(cps(leftClicks).toString()).withColor(cpsNumberColor.rgba))
-            append(Component.literal(" | ").withColor(cpsSeparatorColor.rgba))
-            append(Component.literal(cps(rightClicks).toString()).withColor(cpsNumberColor.rgba))
-            if (cpsLabelPosition == LabelPosition.RIGHT) append(Component.literal(" CPS").withColor(cpsLabelColor.rgba))
-        }
+        val comp = cpsComponent()
         text(mc.font, comp, 0, 0, -1)
         mc.font.width(comp) to 9
     }
@@ -120,6 +115,44 @@ object Performance : Module(
         width += textDim(name, x, y, nameColor, true).first
         width += textDim(value, x + width, y, valueColor, true).first
         return width
+    }
+
+    private val tpsText = FormatCache(1) { it.toFloat().toFixed(1) }
+
+    private var clockSecond = Long.MIN_VALUE
+    private var clockSeconds = false
+    private var clockLast = ""
+
+    private fun clockText(): String {
+        val second = Math.floorDiv(System.currentTimeMillis(), 1000L)
+        if (second != clockSecond || seconds != clockSeconds) {
+            clockLast = LocalTime.now().format(if (seconds) clockFormatSeconds else clockFormat)
+            clockSecond = second
+            clockSeconds = seconds
+        }
+        return clockLast
+    }
+
+    private val cpsKey = IntArray(6) { -1 }
+    private var cpsLast: Component = Component.empty()
+
+    private fun cpsComponent(): Component {
+        val left = cps(leftClicks)
+        val right = cps(rightClicks)
+        val label = cpsLabelColor.rgba
+        val number = cpsNumberColor.rgba
+        val separator = cpsSeparatorColor.rgba
+        val k = cpsKey
+        if (k[0] == left && k[1] == right && k[2] == label && k[3] == number && k[4] == separator && k[5] == cpsLabelPosition.ordinal) return cpsLast
+        k[0] = left; k[1] = right; k[2] = label; k[3] = number; k[4] = separator; k[5] = cpsLabelPosition.ordinal
+        cpsLast = Component.empty().apply {
+            if (cpsLabelPosition == LabelPosition.LEFT) append(Component.literal("CPS ").withColor(label))
+            append(Component.literal(left.toString()).withColor(number))
+            append(Component.literal(" | ").withColor(separator))
+            append(Component.literal(right.toString()).withColor(number))
+            if (cpsLabelPosition == LabelPosition.RIGHT) append(Component.literal(" CPS").withColor(label))
+        }
+        return cpsLast
     }
 
     private fun cps(clicks: ArrayDeque<Long>): Int {
