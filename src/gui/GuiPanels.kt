@@ -34,14 +34,14 @@ object Placement {
         "Clear" to listOf("BR Roles", "Dungeon Map", "Clear Info", "Secrets", "Puzzles", "Door Highlight", "Block Instaclear", "Mimic", "Blood Camp"),
         "F7/M7 Boss" to listOf("Terminals", "Devices", "EE Highlight", "Recore", "Tick Timers", "Melody Message", "Positional Messages", "Invincibility Timer", "Wither Dragons", "Relics", "Spring Boots", "Explosive Shot", "Agro Sphere", "i4 Aim", "ADS"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
-        "Skyblock" to listOf("Arrows", "Chat Commands", "Command Aliases", "Command Keybinds", "Enchant Colors", "Etherwarp", "Fast Launch", "Gyro Wand", "Item Protection", "Item Tweaks", "No Cursor Reset", "Player Display", "Ragnarock", "Random Stuff", "Sound Collector", "Menu Keybinds"),
+        "Skyblock" to listOf("Etherwarp", "Command Keybinds", "Command Aliases", "LD WD Pet Keybinds", "Item Tweaks", "Item Protection", "Ragnarock", "Gyro Wand", "Player Display", "Arrows", "Random Stuff", "Enchant Colors", "No Cursor Reset", "Chat Commands", "Fast Launch", "Sound Collector"),
         "Render" to listOf("Search Bar", "Slot Binds", "Sounds", "Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Performance", "Player Size", "Render Tweaks", "Scrollable Tooltip", "Visibility"),
     )
 
     private val byName: Map<String, String> = lists.flatMap { (panel, names) -> names.map { it to panel } }.toMap()
 
     /** Panels listed in their own order rather than widest name first. */
-    private val ORDERED = setOf("Clear", "F7/M7 Boss")
+    private val ORDERED = setOf("Clear", "F7/M7 Boss", "Skyblock")
 
     /** Where [module] sits in its panel: its place in an ordered panel's list (unlisted last), else 0 (widest name first decides). */
     fun rank(module: Module): Int {

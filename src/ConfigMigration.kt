@@ -1836,6 +1836,12 @@ object ConfigMigration {
             if (moved) write(odinFile, odin)
         }
 
+        if (Files.exists(odinFile)) {
+            val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            val old = module(odin, "Menu Keybinds")
+            if (old != null && module(odin, "LD WD Pet Keybinds") == null) { old.addProperty("name", "LD WD Pet Keybinds"); write(odinFile, odin) }
+        }
+
         if (changed) {
 
             Files.createDirectories(file.parent)

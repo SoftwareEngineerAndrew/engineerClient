@@ -14,7 +14,7 @@ import com.odtheking.odin.utils.modMessage
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 
 object MenuKeybinds : Module(
-    name = "Menu Keybinds",
+    name = "LD WD Pet Keybinds",
     description = "Keybinds for the wardrobe, loadout and pets menus.",
     key = null
 ) {
