@@ -346,7 +346,10 @@ object Visibility : Module(
 
     fun withinHideRange(entity: Entity): Boolean {
         if (hideAllPlayers) return true
-        return entity.distanceToSqr(mc.player ?: return false) <= playerDistance * playerDistance
+        val r = playerDistance * playerDistance
+        if (entity.distanceToSqr(mc.player ?: return false) <= r) return true
+        // the view can be away from you (Legit Zpew, a leap on its way, third person): near it counts too
+        return entity.eyePosition.distanceToSqr(mc.gameRenderer.mainCamera().position()) <= r
     }
 
     fun shouldRenderPlayer(entity: Entity): Boolean =
