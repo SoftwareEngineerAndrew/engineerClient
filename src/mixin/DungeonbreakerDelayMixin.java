@@ -14,8 +14,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class DungeonbreakerDelayMixin {
     @Shadow private int destroyDelay;
 
-    @Inject(method = "continueDestroyBlock", at = @At("HEAD"))
+    @Inject(method = "continueDestroyBlock", at = @At("HEAD"), cancellable = true)
     private void ec$instantBreak(BlockPos pos, Direction direction, CallbackInfoReturnable<Boolean> cir) {
+        if (Dungeonbreaker.blocksBreak(pos)) { cir.setReturnValue(false); return; }
         if (destroyDelay > 0 && Dungeonbreaker.instantBreak()) destroyDelay = 0;
+    }
+
+    @Inject(method = "startDestroyBlock", at = @At("HEAD"), cancellable = true)
+    private void ec$guardStart(BlockPos pos, Direction direction, CallbackInfoReturnable<Boolean> cir) {
+        if (Dungeonbreaker.blocksBreak(pos)) cir.setReturnValue(false);
     }
 }

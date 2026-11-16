@@ -14,7 +14,19 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.world.level.BlockGetter
+import com.engineerclient.mixin.CarriedSlotAccessor
+import net.minecraft.tags.BlockTags
 import net.minecraft.world.level.block.AbstractSkullBlock
+import net.minecraft.world.level.block.BaseEntityBlock
+import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.BushBlock
+import net.minecraft.world.level.block.CauldronBlock
+import net.minecraft.world.level.block.CropBlock
+import net.minecraft.world.level.block.FlowerBlock
+import net.minecraft.world.level.block.HopperBlock
+import net.minecraft.world.level.block.RedstoneTorchBlock
+import net.minecraft.world.level.block.TrapDoorBlock
+import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.level.block.BaseTorchBlock
 import net.minecraft.world.level.block.ChestBlock
 import net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock
@@ -36,6 +48,7 @@ object Dungeonbreaker : Module(
     private val torchGuard by BooleanSetting("Torch Guard", true, desc = "Stops the Dungeon Breaker from hitting torches and the blocks they hang on.")
     private val secretGuard by BooleanSetting("Stop Breaking Secrets", true, desc = "Stops the Dungeon Breaker from hitting chests, levers, skulls and the blocks levers hang on.")
     private val instant by BooleanSetting("Instant Break", false, desc = "No wait between blocks while you hold left click.")
+    private val alphaZpdb by BooleanSetting("Alpha ZPDB", false, desc = "Zero ping: blocks break the moment you hit them. Only on alpha.hypixel.net.")
     private val chargesDisplay by BooleanSetting("Charges Display", true, desc = "Shows the charges left in your Dungeon Breaker.")
 
     private val chargesRegex = Regex("Charges: (\\d+)/(\\d+)⸕")
@@ -59,20 +72,61 @@ object Dungeonbreaker : Module(
     }
 
     @JvmStatic
-    fun instantBreak(): Boolean = enabled && instant && DungeonUtils.inDungeons && mc.player?.mainHandItem?.itemId == "DUNGEONBREAKER"
+    fun instantBreak(): Boolean = (enabled && instant && DungeonUtils.inDungeons && holding()) || zeroPing()
+
+    @JvmStatic
+    fun zeroPing(): Boolean = enabled && alphaZpdb && DungeonUtils.inDungeons && holding() && synced() && onAlpha()
+
+    private fun holding() = mc.player?.mainHandItem?.itemId == "DUNGEONBREAKER"
+
+    /** The server breaks with the slot it was last told about, not the one on screen. */
+    private fun synced(): Boolean = (mc.gameMode as? CarriedSlotAccessor)?.carriedIndex() == mc.player?.inventory?.selectedSlot
+
+    private fun onAlpha(): Boolean {
+        if (mc.hasSingleplayerServer()) return false
+        val host = mc.currentServer?.ip?.trim()?.lowercase()?.substringBefore(':')?.trimEnd('.') ?: return false
+        return host == "alpha.hypixel.net" || host.endsWith(".alpha.hypixel.net")
+    }
 
     @JvmStatic
     fun blocksAttack(): Boolean {
-        if (!enabled || (!torchGuard && !secretGuard) || !DungeonUtils.inDungeons) return false
-        val player = mc.player ?: return false
-        val level = mc.level ?: return false
         val hit = mc.hitResult as? BlockHitResult ?: return false
-        if (hit.type != HitResult.Type.BLOCK || player.mainHandItem.itemId != "DUNGEONBREAKER") return false
-        val pos = hit.blockPos
-        val block = level.getBlockState(pos).block
+        return hit.type == HitResult.Type.BLOCK && blocksBreak(hit.blockPos)
+    }
+
+    @JvmStatic
+    fun blocksBreak(pos: BlockPos): Boolean {
+        if (!enabled || !DungeonUtils.inDungeons || !holding()) return false
+        val level = mc.level ?: return false
+        val state = level.getBlockState(pos)
+        val block = state.block
+        if (zeroPing() && !canInstantMine(level, pos, state)) return true
         return (torchGuard && (block is BaseTorchBlock || holdsTorch(level, pos))) ||
             (secretGuard && (block is ChestBlock || block is LeverBlock || block is AbstractSkullBlock || holdsLever(level, pos)))
     }
+
+    private val UNBREAKABLE = setOf(
+        Blocks.BARRIER, Blocks.COMMAND_BLOCK, Blocks.IRON_BLOCK, Blocks.BEDROCK, Blocks.PISTON, Blocks.PISTON_HEAD, Blocks.MOVING_PISTON,
+        Blocks.STICKY_PISTON, Blocks.TNT, Blocks.END_PORTAL, Blocks.END_PORTAL_FRAME, Blocks.END_GATEWAY, Blocks.NETHER_PORTAL, Blocks.LADDER,
+        Blocks.PLAYER_HEAD, Blocks.CHEST, Blocks.TRAPPED_CHEST, Blocks.LEVER,
+    )
+    private val P3_LEVERS = setOf(
+        BlockPos(94, 124, 113), BlockPos(106, 124, 113), BlockPos(23, 132, 138), BlockPos(27, 124, 127),
+        BlockPos(2, 122, 55), BlockPos(14, 122, 55), BlockPos(84, 121, 34), BlockPos(86, 128, 46),
+    )
+    private const val REDSTONE_KEY = "fed95410-aba1-39df-9b95-1d4f361eb66e"
+
+    /** Blocks the Dungeon Breaker can take; anything else the server puts back, so it isn't hit at all. */
+    private fun canInstantMine(level: BlockGetter, pos: BlockPos, state: BlockState): Boolean {
+        if (pos in P3_LEVERS || (state.`is`(Blocks.PLAYER_HEAD) && isRedstoneKey(level, pos))) return true
+        val b = state.block
+        return b !in UNBREAKABLE && !state.`is`(BlockTags.BUTTONS) && !state.`is`(BlockTags.COPPER_CHESTS) &&
+            b !is RedstoneTorchBlock && b !is BushBlock && b !is CauldronBlock && b !is HopperBlock && b !is BaseEntityBlock &&
+            b !is CropBlock && b !is FlowerBlock && b !is TrapDoorBlock
+    }
+
+    private fun isRedstoneKey(level: BlockGetter, pos: BlockPos): Boolean =
+        (level.getBlockEntity(pos) as? SkullBlockEntity)?.ownerProfile?.partialProfile()?.id?.toString() == REDSTONE_KEY
 
     private fun holdsLever(level: BlockGetter, pos: BlockPos): Boolean = Direction.entries.any { dir ->
         val state = level.getBlockState(pos.relative(dir))
