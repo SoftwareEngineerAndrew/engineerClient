@@ -33,7 +33,7 @@ object OdinCustomKeybinds {
     private fun send(text: String) {
         if (!CommandKeybinds.enabled || text.isBlank()) return
         if (Minecraft.getInstance().player == null) return
-        sendCommand(text.trim().removePrefix("/").trim())
+        sendCommand(com.engineerclient.EngineerClient.admCommand(text.trim().removePrefix("/").trim()))
     }
 
     fun install() {

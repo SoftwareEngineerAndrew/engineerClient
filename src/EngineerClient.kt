@@ -256,6 +256,16 @@ object EngineerClient : ClientModInitializer {
         "§f /adm log§7 [mark <note>] — the session log; §f/adm memreport",
     )
 
+    private val OD = Regex("""^(?i)(od|odin)(\s+|$)""")
+    private val FLOOR = Regex("""^(?i)(e|[fm][1-7])$""")
+
+    /** A saved command written for /od: the same under /adm, floors as /f7. */
+    fun admCommand(command: String): String {
+        val m = OD.find(command) ?: return command
+        val rest = command.substring(m.range.last + 1).trim()
+        return if (FLOOR.matches(rest)) rest.lowercase() else "adm $rest".trim()
+    }
+
     /** More lines for /adm log mark to stamp under the note (other parts of the mod add theirs). */
     val markLines = mutableListOf<() -> List<String>>()
 
@@ -288,7 +298,7 @@ object EngineerClient : ClientModInitializer {
                 .executes { mc.schedule { type.simulator().open(com.engineerclient.terminals.Terminals.simPing.toLong()) }; 1 }
                 .then(sim { type.simulator().open(it) }))
             dispatcher.register(termsim)
-            // /adm on its own: the settings menu; Odin's /od commands live under it too.
+            // /adm on its own: the settings menu; Odin's commands live under it too.
             // Same tree under every alias (Brigadier literals are case-sensitive). Built fresh per
             // name — a bare redirect would not run the root executes on the alias itself.
             val odin = com.mojang.brigadier.CommandDispatcher<net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource>()

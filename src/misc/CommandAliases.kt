@@ -39,7 +39,7 @@ object CommandAliases : Module(
         val word = typed.substringBefore(' ')
         val rest = typed.substringAfter(' ', "")
         val slot = slots.firstOrNull { it.alias.value.trim().removePrefix("/").equals(word, ignoreCase = true) && it.command.value.isNotBlank() } ?: return false
-        val target = slot.command.value.trim().removePrefix("/")
+        val target = com.engineerclient.EngineerClient.admCommand(slot.command.value.trim().removePrefix("/"))
         // An alias whose command is itself an alias would loop.
         running = true
         try { mc.player?.connection?.sendCommand(if (rest.isBlank()) target else "$target $rest") } finally { running = false }

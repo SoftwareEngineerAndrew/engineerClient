@@ -102,10 +102,7 @@ object LeapOrder {
         on<ScreenEvent.KeyPress>(EventPriority.HIGHEST + 50) { EngineerClient.safely("leap order spots") { keepSpots() } }
         EventBus.subscribe(this)
 
-        // After Odin's commands, without adding or merging any node into /odin or /od (so nothing else under /od can
-        // be affected): Odin's own "leaporder" node just gets a run for the
-        // bare form, opening the screen. With names it is untouched, Odin's command as always. /od points at a copy
-        // of /odin's node whose children are the same node objects, so both see the one change.
+        // /adm leaporder with no names opens the screen; every /adm alias shares the one node.
         val afterOdin = Identifier.fromNamespaceAndPath("engineerclient", "after_odin")
         ClientCommandRegistrationCallback.EVENT.addPhaseOrdering(Event.DEFAULT_PHASE, afterOdin)
         ClientCommandRegistrationCallback.EVENT.register(afterOdin) { dispatcher, _ ->
