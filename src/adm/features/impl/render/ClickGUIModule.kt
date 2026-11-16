@@ -59,7 +59,6 @@ object ClickGUIModule : Module(
 
     val dungeonCoresLogging by BooleanSetting("Core loggings", false, desc = "")
 
-    private var firstJoin by BooleanSetting("First join", true, "").hide()
     val favoriteColors by MapSetting("Favorite Colors", mutableMapOf<Int, Color>())
 
     override fun onKeybind() {
@@ -84,110 +83,4 @@ object ClickGUIModule : Module(
             }
         }
     }
-
-    private const val RELEASE_LINK = "https://github.com/odtheking/Odin/releases/latest"
-    private const val MODRINTH_LINK = "https://modrinth.com/mod/odin/versions"
-    private val profileRegex = Regex("Profile ID:\\s*(.{36})")
-    private var latestVersionNumber: String? = null
-    private var hasSentUpdateMessage = false
-
-    init {
-        AdmMod.scope.launch {
-            val name = mc.user.name.takeIf { !it.matches(Regex("Player\\d{2,3}")) } ?: return@launch
-            postData("https://api.odtheking.com/tele/", """{"username": "$name", "version": "Fabric ${AdmMod.version}"}""")
-        }
-
-        on<MessageEvent.Chat> {
-            if (!profileRegex.matches(message)) return@on
-
-            if (firstJoin) {
-                firstJoin = false
-                ModuleManager.saveConfigurations()
-                modMessage(
-                    Component.literal(getChatBreak()).append(Component.literal("""
-                        §7Thanks for installing §3Odin ${AdmMod.version}§7!
-                
-                        §7Use §d§l/adm §r§7to access GUI settings.
-                             
-                        §7Join the discord for support and suggestions.
-                    """.trimIndent()))
-                        .append(Component.literal("\n"))
-                        .append(
-                            Component.literal("§9https://discord.gg/2nCbC9hkxT").withStyle {
-                                it.withClickEvent(ClickEvent.OpenUrl(URI("https://discord.gg/2nCbC9hkxT"))).withHoverEvent(
-                                    HoverEvent.ShowText(Component.literal("https://discord.gg/2nCbC9hkxT"))
-                                )
-                            }
-                        )
-                        .append(Component.literal("\n"))
-                        .append(Component.literal(getChatBreak())),
-                    "")
-            }
-
-            if (hasSentUpdateMessage || latestVersionNumber == null) return@on
-            hasSentUpdateMessage = true
-
-            modMessage(
-                Component.literal(getChatBreak())
-                    .append("\n")
-                    .append(Component.literal("§3Odin update available: §f$latestVersionNumber\n"))
-                    .append(Component.literal("§7Click the links below to download the latest version.\n\n"))
-                    .append(
-                        Component.literal("    §a§nModrinth Link").withStyle {
-                            it.withClickEvent(ClickEvent.OpenUrl(URI(MODRINTH_LINK))).withHoverEvent(
-                                HoverEvent.ShowText(Component.literal(MODRINTH_LINK))
-                            )
-                        }
-                    )
-                    .append(Component.literal("        "))
-                    .append(
-                        Component.literal("§b§nGitHub link").withStyle {
-                            it.withClickEvent(ClickEvent.OpenUrl(URI(RELEASE_LINK))).withHoverEvent(
-                                HoverEvent.ShowText(Component.literal(RELEASE_LINK))
-                            )
-                        }
-                    )
-                    .append(Component.literal("        "))
-                    .append(
-                        Component.literal("§9§nDiscord link").withStyle {
-                            it.withClickEvent(ClickEvent.OpenUrl(URI("https://discord.gg/2nCbC9hkxT"))).withHoverEvent(
-                                HoverEvent.ShowText(Component.literal("https://discord.gg/2nCbC9hkxT"))
-                            )
-                        }
-                    )
-                    .append(Component.literal("\n${getChatBreak()}§r")),
-                ""
-            )
-
-            alert("Odin Update Available")
-        }
-    }
-
-    private suspend fun checkNewerVersion(currentVersion: String): String? {
-        val newest = fetchJson<Release>("https://api.github.com/repos/odtheking/Odin/releases/latest").getOrElse { return null }
-
-        return if (isSecondNewer(currentVersion, newest.tagName)) newest.tagName else null
-    }
-
-    private fun isSecondNewer(currentVersion: String, previousVersion: String?): Boolean {
-        if (currentVersion.isEmpty() || previousVersion.isNullOrEmpty()) return false
-
-        val (major, minor, patch) = currentVersion.split(".").mapNotNull { it.toIntOrNull() }
-        val (major2, minor2, patch2) = previousVersion.split(".").mapNotNull { it.toIntOrNull() }
-
-        return when {
-            major > major2 -> false
-            major < major2 -> true
-            minor > minor2 -> false
-            minor < minor2 -> true
-            patch > patch2 -> false
-            patch < patch2 -> true
-            else -> false // equal, or something went wrong, either way it's best to assume it's false.
-        }
-    }
-
-    private data class Release(
-        @SerializedName("tag_name")
-        val tagName: String
-    )
 }

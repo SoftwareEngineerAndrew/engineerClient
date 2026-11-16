@@ -83,7 +83,7 @@ fun logError(throwable: Throwable, context: Any) {
         "${AdmMod.version} Caught an ${throwable::class.simpleName ?: "error"} at ${context::class.simpleName}."
     AdmMod.logger.error(message, throwable)
 
-    modMessage(Component.literal("$message §cPlease click this message to copy and send it in the Odin discord!").withStyle {
+    modMessage(Component.literal("$message §cClick to copy it.").withStyle {
         it
             .withClickEvent(
                 ClickEvent.RunCommand(

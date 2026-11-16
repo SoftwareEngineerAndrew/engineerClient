@@ -53,16 +53,6 @@ val devCommand = Commodore("oddev") {
         modMessage("§8Simulated message: ${greedyString.string}")
     }
 
-    literal("updatedevs").runs {
-        AdmMod.scope.launch {
-            devMessage(PlayerSize.updateCustomProperties())
-        }
-    }
-
-    literal("deletedevs").runs {
-        PlayerSize.clearCustomProperties()
-    }
-
     literal("generatefeaturelist").runs {
         fun generateFeatureList(): String {
             val featureList = StringBuilder()
