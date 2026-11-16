@@ -83,7 +83,7 @@ object LeapOrder {
         runCatching {
             if (Files.exists(autoFile)) {
                 val lines = Files.readAllLines(autoFile)
-                revertTo = LeapMenu.Sorting.entries.firstOrNull { it.name == lines.getOrNull(0)?.trim() }
+                revertTo = LeapMenu.Sorting.entries.firstOrNull { it.name == lines.getOrNull(0)?.trim()?.let(com.engineerclient.ConfigMigration::enumValue) }
                 orderParty = lines.getOrNull(1)?.takeIf { it.trim() != "?" }?.let { l -> l.split(' ').filter { it.isNotBlank() }.toSet() }
                 aloneSince = lines.getOrNull(2)?.trim()?.toLongOrNull()
             }
@@ -167,7 +167,7 @@ object LeapOrder {
         if (on == custom) return
         if (on) { useCustom(); return }
         // checkParty sees it's no longer Custom and forgets the rest.
-        s.value = revertTo ?: LeapMenu.Sorting.ODIN
+        s.value = revertTo ?: LeapMenu.Sorting.DEFAULT
         ModuleManager.saveConfigurations()
     }
 
@@ -179,7 +179,7 @@ object LeapOrder {
             s.value = LeapMenu.Sorting.CUSTOM
             ModuleManager.saveConfigurations()
             EngineerClient.msg("§7Leap Menu sorting: §fCustom§7 (back to ${label(revertTo!!)} once you're with a different party)")
-        } else if (revertTo == null) revertTo = LeapMenu.Sorting.ODIN
+        } else if (revertTo == null) revertTo = LeapMenu.Sorting.DEFAULT
         orderParty = party()
         aloneSince = null
         saveAuto()

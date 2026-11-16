@@ -25,12 +25,12 @@ object EnchantColors : Module(
     description = "Colours enchantments in item tooltips by level.",
     key = null,
 ) {
-    enum class Scheme { NOAM, DEVONIAN, CUSTOM }
+    enum class Scheme(private val label: String) { CLASSIC("Noam"), CHROMA("Devonian"), CUSTOM("Custom"); override fun toString() = label }
 
-    private val scheme by SelectorSetting("Scheme", Scheme.NOAM, desc = "Which mod's colours to use.")
+    private val scheme by SelectorSetting("Scheme", Scheme.CLASSIC, desc = "Which colour scheme to use.")
     private val boldMax by BooleanSetting("Bold Max Level", true, desc = "Max level enchants in bold.")
     private val chromaMax by BooleanSetting("Chroma Max Level", false, desc = "Max level enchants cycle through colours.")
-    private val chromaSpeed by NumberSetting("Chroma Speed", 1.0, 0.1..3.0, 0.1, desc = "How fast the colours cycle.").withDependency { chromaMax || scheme == Scheme.DEVONIAN }
+    private val chromaSpeed by NumberSetting("Chroma Speed", 1.0, 0.1..3.0, 0.1, desc = "How fast the colours cycle.").withDependency { chromaMax || scheme == Scheme.CHROMA }
     private val numbers by BooleanSetting("Levels as Numbers", false, desc = "Shows 5 instead of V.")
     private val maxColor by ColorSetting("Max Color", Color(255, 170, 0), false, desc = "Max level.").withDependency { scheme == Scheme.CUSTOM }
     private val highColor by ColorSetting("High Color", Color(255, 170, 0), false, desc = "Above the usual level.").withDependency { scheme == Scheme.CUSTOM }
@@ -79,14 +79,14 @@ object EnchantColors : Module(
         val maxed = level >= ench.max
         if (ench.ultimate) return Component.literal(text).withStyle(Style.EMPTY.withColor(rgb(if (scheme == Scheme.CUSTOM) ultimateColor.rgba else 0xFF55FF)).withBold(true))
         val bold = boldMax && maxed
-        if (maxed && (chromaMax || scheme == Scheme.DEVONIAN)) return chroma(text, bold, x, lineIndex)
+        if (maxed && (chromaMax || scheme == Scheme.CHROMA)) return chroma(text, bold, x, lineIndex)
         val color = when (scheme) {
-            Scheme.NOAM -> when {
+            Scheme.CLASSIC -> when {
                 level > ench.good -> 0xFFAA00
                 level == ench.good -> 0x00AAAA
                 else -> 0xAAAAAA
             }
-            Scheme.DEVONIAN -> when {
+            Scheme.CHROMA -> when {
                 level > ench.good -> 0xFFAA00
                 level == ench.good -> 0x5555FF
                 else -> 0xAAAAAA

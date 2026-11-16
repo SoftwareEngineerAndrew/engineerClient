@@ -186,7 +186,7 @@ object DungeonListener {
 
         leapTeammates =
             when (LeapMenu.type) {
-                LeapMenu.Sorting.ODIN -> odinSorting(dungeonTeammatesNoSelf.sortedBy { it.clazz.priority }).toList()
+                LeapMenu.Sorting.DEFAULT -> odinSorting(dungeonTeammatesNoSelf.sortedBy { it.clazz.priority }).toList()
                 LeapMenu.Sorting.CLASS -> dungeonTeammatesNoSelf.sortedWith(compareBy({ it.clazz.ordinal }, { it.name }))
                 LeapMenu.Sorting.NAME -> dungeonTeammatesNoSelf.sortedBy { it.name }
                 LeapMenu.Sorting.CUSTOM -> dungeonTeammatesNoSelf.sortedBy { DungeonUtils.customLeapOrder.indexOf(it.name.lowercase()).takeIf { index -> index != -1 } ?: Int.MAX_VALUE }

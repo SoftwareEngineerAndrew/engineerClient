@@ -60,10 +60,10 @@ import kotlin.math.roundToInt
  */
 object MapPrediction {
 
-    private enum class Mode { ADM, ODIN, OFF }
+    private enum class Mode { ADM, BASIC, OFF }
 
     private val mode = SelectorSetting("Room Prediction", Mode.ADM,
-        desc = "ADM: unknown rooms coloured by their chances, from the rules every recorded map of the floor follows, updated as rooms open. Odin: Odin's own guess. Off: no guesses, every unknown tile in the unknown room colour (the blood room behind a blood door still shows). Added by engineerClient.")
+        desc = "ADM: unknown rooms coloured by their chances, from the rules every recorded map of the floor follows, updated as rooms open. Basic: a simple guess. Off: no guesses, every unknown tile in the unknown room colour (the blood room behind a blood door still shows). Added by engineerClient.")
     private val on: Boolean get() = mode.value == Mode.ADM
     private val off: Boolean get() = mode.value == Mode.OFF
     private val threadsSetting = NumberSetting("Prediction Threads", 0, 0..4, 1,

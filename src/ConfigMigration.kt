@@ -174,6 +174,25 @@ object ConfigMigration {
 
      */
 
+    private val VALUE_RENAMES = mapOf("ODIN" to "DEFAULT", "NOAM" to "CLASSIC", "DEVONIAN" to "CHROMA")
+    private val RENAMED_VALUE_KEYS = mapOf("Sorting" to "DEFAULT", "Room Prediction" to "BASIC", "Overlay Style" to "CLASSIC", "Scheme" to null)
+
+    /** A saved choice under its current name. */
+    fun enumValue(saved: String) = VALUE_RENAMES[saved] ?: saved
+
+    private fun renameValues(list: JsonArray): Boolean {
+        var c = false
+        for (m in list.filterIsInstance<JsonObject>()) {
+            val s = m.getAsJsonObject("settings") ?: continue
+            for ((key, odinTo) in RENAMED_VALUE_KEYS) {
+                val v = s[key]?.takeIf { it.isJsonPrimitive }?.asString ?: continue
+                val to = (if (v == "ODIN") odinTo else null) ?: VALUE_RENAMES[v]?.takeIf { v != "ODIN" } ?: continue
+                s.addProperty(key, to); c = true
+            }
+        }
+        return c
+    }
+
     fun run(odinDir: Path): Boolean {
 
         val file = odinDir.resolve("addons").resolve("engineerclient.json")
@@ -1838,6 +1857,7 @@ object ConfigMigration {
 
         if (Files.exists(odinFile)) {
             val odin = JsonParser.parseString(Files.readString(odinFile)).asJsonArray
+            if (renameValues(odin)) write(odinFile, odin)
             val sprint = module(odin, "Auto Sprint")
             val rs = module(modules, "Random Stuff")
             if (sprint != null && rs != null && !settings(rs).has("Auto Sprint")) { settings(rs).addProperty("Auto Sprint", sprint["enabled"]?.asBoolean == true); changed = true }
@@ -1850,6 +1870,8 @@ object ConfigMigration {
             val old = module(odin, "Menu Keybinds")
             if (old != null && module(odin, "LD WD Pet Keybinds") == null) { old.addProperty("name", "LD WD Pet Keybinds"); write(odinFile, odin) }
         }
+
+        if (renameValues(modules)) changed = true
 
         if (changed) {
 

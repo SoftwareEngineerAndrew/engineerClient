@@ -29,17 +29,17 @@ object PuzzleOverlay {
     private val dropdown = DropdownSetting("Overlay", desc = "Shows settings for the puzzle overlay.")
     private val hud = PuzzleSolvers.HUD("Puzzle Overlay", "The dungeon's puzzles in the tab list's order: green done, red not, ??? not found yet.", true, 10, 60, 1f) { example ->
         val s = if (example) EXAMPLE else section?.takeIf { shown() } ?: return@HUD 0 to 0
-        if (styleSetting.value == Style.ODIN) drawOdin(s) else draw(s)
+        if (styleSetting.value == Style.CLASSIC) drawClassic(s) else draw(s)
     }.withDependency { dropdown.value }
     private val beforeStartSetting = BooleanSetting("Before Start", true, desc = "Shows before the run starts (dtmap's default).").withDependency { dropdown.value }
     private val duringClearSetting = BooleanSetting("During Clear", false, desc = "Shows during the clear too, until the boss.").withDependency { dropdown.value }
-    private val styleSetting = SelectorSetting("Overlay Style", Style.ADM, desc = "ADM: dtmap's list. Odin: Odin's Puzzle HUD.").withDependency { dropdown.value }
-    private val playerNamesSetting = BooleanSetting("Overlay Player Names", true, desc = "Shows who solved or failed each puzzle.").withDependency { dropdown.value && styleSetting.value == Style.ODIN }
+    private val styleSetting = SelectorSetting("Overlay Style", Style.ADM, desc = "ADM: dtmap's list. Classic: the Puzzle HUD.").withDependency { dropdown.value }
+    private val playerNamesSetting = BooleanSetting("Overlay Player Names", true, desc = "Shows who solved or failed each puzzle.").withDependency { dropdown.value && styleSetting.value == Style.CLASSIC }
     private val beforeStart get() = beforeStartSetting.value
     private val duringClear get() = duringClearSetting.value
     private val playerNames get() = playerNamesSetting.value
 
-    private enum class Style(private val label: String) { ADM("ADM"), ODIN("Odin"); override fun toString() = label }
+    private enum class Style(private val label: String) { ADM("ADM"), CLASSIC("Classic"); override fun toString() = label }
 
     /** The tab list's puzzle section, read once a tick. */
     private var section: TabPuzzles.Section? = null
@@ -72,7 +72,7 @@ object PuzzleOverlay {
         return width to rows.size * step - 2
     }
 
-    private fun GuiGraphicsExtractor.drawOdin(s: TabPuzzles.Section): Pair<Int, Int> {
+    private fun GuiGraphicsExtractor.drawClassic(s: TabPuzzles.Section): Pair<Int, Int> {
         val count = maxOf(s.count ?: s.slots.size, s.slots.size)
         if (count == 0) return 0 to 0
         val lineHeight = 12

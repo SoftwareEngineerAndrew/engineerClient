@@ -47,7 +47,7 @@ object LeapMenu : Module(
     description = "Renders a custom leap menu when in the Spirit Leap gui.",
     key = null
 ) {
-    val type by SelectorSetting("Sorting", Sorting.ODIN, desc = "How to sort the leap menu. /adm leaporder to configure custom sorting.")
+    val type by SelectorSetting("Sorting", Sorting.DEFAULT, desc = "How to sort the leap menu. /adm leaporder to configure custom sorting.")
     private val onlyClass by BooleanSetting("Only Classes", false, desc = "Renders classes instead of names.")
     private val colorStyle by BooleanSetting("Color Style", false, desc = "Which color style to use.")
     private val backgroundColor by ColorSetting("Background Color", Colors.gray38.withAlpha(0.75f), true, desc = "Color of the background of the leap menu.").withDependency { !colorStyle }
@@ -267,7 +267,7 @@ object LeapMenu : Module(
     }
 
     private fun mouseTrigger(player: DungeonPlayer, quadrant: Int) {
-        if (type != Sorting.ODIN && type != Sorting.NONE && leapTeammates.size < quadrant) return
+        if (type != Sorting.DEFAULT && type != Sorting.NONE && leapTeammates.size < quadrant) return
         if (player == EMPTY) return
         if (player.isDead) return modMessage("This player is dead, can't leap.")
         pick(player)
@@ -400,7 +400,7 @@ object LeapMenu : Module(
     }
 
     enum class Sorting(private val label: String) {
-        ODIN("Odin Sorting"),
+        DEFAULT("Default Sorting"),
         CLASS("A-Z Class"),
         NAME("A-Z Name"),
         CUSTOM("Custom sorting"),
