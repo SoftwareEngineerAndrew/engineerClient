@@ -132,6 +132,9 @@ object EngineerClient : ClientModInitializer {
         // (from Ascent Client, same names, so saved values carry over); Odin's configs are read again so they apply
         // (reading never writes the file).
         safely("lcm style") { com.engineerclient.lcm.LcmStyle.install() }
+        // Read on the first dungeon otherwise, on the render thread.
+        Thread({ safely("warm packs") { com.engineerclient.dungeonpack.pack.doors.DoorPack.bundled; com.engineerclient.dungeonpack.pack.secrets.SecretPack.bundled } }, "ec warm packs")
+            .apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
         safely("map prediction") { com.engineerclient.mappred.OdinMapPrediction.install() }
         safely("map icons") { com.engineerclient.mapicons.MapIcons.install() }
         safely("map sizes") { com.engineerclient.mapicons.MapSizes.install() }
