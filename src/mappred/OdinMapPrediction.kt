@@ -581,14 +581,14 @@ object OdinMapPrediction {
      * guess tile in their colours: dtMap's in LCM Style, else side by side as Odin's.
      */
     private fun exactFill(g: GuiGraphicsExtractor, tiles: IntArray, types: List<Int>) {
-        if (types.size <= 1 || tiles.size > 1) { fillTiles(g, tiles, exactColor(types.firstOrNull() ?: -1)); return }
         val x = (tiles[0] % W) * TILE; val y = (tiles[0] / W) * TILE
-        if (lcm) {
-            // dtMap's order: puzzle on the outside, trap, yellow in the middle
-            val order = listOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE, Cls.BLOOD, Cls.FAIRY, -1)
-            LcmStyle.guessTile(g, x, y, types.sortedBy { order.indexOf(it) }.map { exactColor(it) }.toIntArray())
+        if (lcm && tiles.size == 1 && types.isNotEmpty() && types.all { it in SPLITTABLE }) {
+            // a dead end (or blood) as LCM Style draws Odin's guesses: dtMap's tile, puzzle outside, trap, yellow in the middle
+            val order = listOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE, Cls.BLOOD)
+            LcmStyle.guessTile(g, x, y, types.sortedBy { order.indexOf(it) }.map { LcmStyle.darker(lcmColor(it)) }.toIntArray())
             return
         }
+        if (types.size <= 1 || tiles.size > 1) { fillTiles(g, tiles, exactColor(types.firstOrNull() ?: -1)); return }
         val part = ROOM / types.size
         types.forEachIndexed { i, c -> g.fill(x + i * part, y, if (i == types.lastIndex) x + ROOM else x + (i + 1) * part, y + ROOM, exactColor(c)) }
     }
