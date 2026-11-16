@@ -20,7 +20,7 @@ object PaulScore {
 
     private val paulField by lazy {
         runCatching {
-            Class.forName("com.odtheking.odin.utils.skyblock.dungeon.DungeonListener").getDeclaredField("paul").apply { isAccessible = true }
+            Class.forName("com.adm.utils.skyblock.dungeon.DungeonListener").getDeclaredField("paul").apply { isAccessible = true }
         }.getOrNull()
     }
 

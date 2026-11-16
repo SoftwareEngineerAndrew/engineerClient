@@ -3,19 +3,19 @@ package com.engineerclient.p3sim
 import com.engineerclient.index
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.render.text
-import com.odtheking.odin.utils.skyblock.Island
-import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonListener
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
-import com.odtheking.odin.utils.skyblock.dungeon.Floor
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.KeybindSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.render.text
+import com.adm.utils.skyblock.Island
+import com.adm.utils.skyblock.LocationUtils
+import com.adm.utils.skyblock.dungeon.DungeonClass
+import com.adm.utils.skyblock.dungeon.DungeonListener
+import com.adm.utils.skyblock.dungeon.DungeonPlayer
+import com.adm.utils.skyblock.dungeon.Floor
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
@@ -109,21 +109,21 @@ object P3Sim : Module(
             listOf("§6Practice $mode ${if (Practice.endTicks >= 0) "§a" else "§f"}${Practice.secs(Practice.ticks)}") +
                 Practice.tasks.map { t -> "§7${t.label} " + if (t.at >= 0) "§a${Practice.secs(t.at)}" else if (t === next) "§e..." else "§8-" }
         }
-        lines.forEachIndexed { i, l -> text(l, 0, i * 10, com.odtheking.odin.utils.Colors.WHITE, shadow = true) }
+        lines.forEachIndexed { i, l -> text(l, 0, i * 10, com.adm.utils.Colors.WHITE, shadow = true) }
         (lines.maxOf { mc.font.width(it) }) to lines.size * 10
     }
 
     /** Practice: the final time, large, as Term Info's section times look. */
     private val practiceTimeHud by HUD("Practice Time", "A practice's final time, large (as Term Info's Section Time), for 4 seconds.", true, 420, 300, 5f) { example ->
         val t = if (example) "§514.35" else Practice.endTicks.takeIf { inSim && Practice.active && it >= 0 && System.currentTimeMillis() - Practice.endMs < 4000 }?.let { "§5${Practice.secs(it)}" } ?: return@HUD 0 to 0
-        text(t, 0, 0, com.odtheking.odin.utils.Colors.WHITE, shadow = true)
+        text(t, 0, 0, com.adm.utils.Colors.WHITE, shadow = true)
         mc.font.width(t) to 10
     }
 
     /** Practice: the start timer counting down, large. */
     private val practiceStartHud by HUD("Practice Start Timer", "A practice's start timer counting down, large, until terminals and the rest are up.", true, 440, 250, 4f) { example ->
         val t = if (example) "§e2.4" else Practice.ticks.takeIf { inSim && Practice.active && it < 0 }?.let { "§e${"%.1f".format(java.util.Locale.ROOT, -it / 20.0)}" } ?: return@HUD 0 to 0
-        text(t, 0, 0, com.odtheking.odin.utils.Colors.WHITE, shadow = true)
+        text(t, 0, 0, com.adm.utils.Colors.WHITE, shadow = true)
         mc.font.width(t) to 10
     }
 

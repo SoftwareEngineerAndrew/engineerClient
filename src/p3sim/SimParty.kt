@@ -8,9 +8,9 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.JsonPrimitive
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.utils.skyblock.dungeon.DungeonClass
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
@@ -222,7 +222,7 @@ object Players {
         hostClassSeen = c
         // At once (this thread reads it next), saved on the client's.
         P3Sim.classS.index = Party.CLASSES.indexOf(c).coerceAtLeast(0)
-        mc.execute { com.odtheking.odin.features.ModuleManager.saveConfigurations() }
+        mc.execute { com.adm.features.ModuleManager.saveConfigurations() }
     }
 
     /** Server tick: the host picked a class in their menu that a joiner has: they swap. */
@@ -383,7 +383,7 @@ object PartyServer {
         val o = runCatching { JsonParser.parseString(data).asJsonObject }.getOrNull() ?: return
         mc.execute {
             PartySettings.apply(PartySettings.SHARED, o)
-            com.odtheking.odin.features.ModuleManager.saveConfigurations()
+            com.adm.features.ModuleManager.saveConfigurations()
         }
         val what = o.keySet().joinToString(", ")
         if (what.isNotEmpty()) Sim.everyone { Sim.note("§f${p.gameProfile.name}§7 changed: $what") }
@@ -515,7 +515,7 @@ object PartyClient {
         SimNet.onClient("set") { data ->
             PartySettings.apply(PartySettings.PERSONAL, JsonParser.parseString(data).asJsonObject)
             lastProfile = null
-            com.odtheking.odin.features.ModuleManager.saveConfigurations()
+            com.adm.features.ModuleManager.saveConfigurations()
         }
         SimNet.onClient("roster") { data ->
             val o = JsonParser.parseString(data).asJsonObject
@@ -543,7 +543,7 @@ object PartyClient {
         EngineerClient.safely("p3sim own settings restore") {
             if (!ownFile.exists()) return@safely
             runCatching { PartySettings.apply(PartySettings.SHARED, JsonParser.parseString(ownFile.readText()).asJsonObject) }
-            com.odtheking.odin.features.ModuleManager.saveConfigurations()
+            com.adm.features.ModuleManager.saveConfigurations()
             ownFile.delete()
         }
     }
@@ -630,7 +630,7 @@ object PartyClient {
         if (gotShared) ownShared?.let {
             PartySettings.apply(PartySettings.SHARED, it)
             // Saved as theirs again (the party's were saved while in it), and the crash copy is no longer needed.
-            EngineerClient.safely("p3sim own settings back") { com.odtheking.odin.features.ModuleManager.saveConfigurations() }
+            EngineerClient.safely("p3sim own settings back") { com.adm.features.ModuleManager.saveConfigurations() }
             ownFile.delete()
         }
         if (helloSent && !P3Sim.localSim) P3Plan.leaveParty()

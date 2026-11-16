@@ -3,18 +3,17 @@
   "id": "engineerclient",
   "version": "${version}",
   "name": "Engineer Client",
-  "description": "A Hypixel SkyBlock dungeons mod with Odin built in: M7 phase-3 role rotation, leap-menu POV previews, ADS (Advanced Dungeon Simulator) and Party Finder stats.",
+  "description": "A Hypixel SkyBlock dungeons mod: M7 phase-3 role rotation, leap-menu POV previews, ADS (Advanced Dungeon Simulator) and Party Finder stats.",
   "authors": ["engineerandrew"],
   "license": "All-Rights-Reserved",
   "environment": "client",
   "breaks": { "devgineerclient": "*" },
-  "provides": ["odin"],
-  "accessWidener": "odin.accesswidener",
-  "mixins": ["odin.mixins.json", "engineerclient.mixins.json", "engineerclient.odin.mixins.json", "engineerclient.sodium.mixins.json", "devgineerclient.mixins.json", "devgineerclient.odin.mixins.json"],
+  "accessWidener": "adm.accesswidener",
+  "mixins": ["adm.mixins.json", "engineerclient.mixins.json", "engineerclient.core.mixins.json", "engineerclient.sodium.mixins.json", "devgineerclient.mixins.json", "devgineerclient.core.mixins.json"],
   "entrypoints": {
-    "modmenu": ["com.odtheking.odin.clickgui.ModMenuIntegration"],
+    "modmenu": ["com.adm.clickgui.ModMenuIntegration"],
     "client": [
-      { "adapter": "kotlin", "value": "com.odtheking.odin.OdinMod" },
+      { "adapter": "kotlin", "value": "com.adm.AdmMod" },
       { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" },
       { "adapter": "kotlin", "value": "com.devgineerclient.DevgineerClient" }
     ]

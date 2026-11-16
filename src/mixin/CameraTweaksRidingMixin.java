@@ -11,6 +11,6 @@ public class CameraTweaksRidingMixin {
 
     @Inject(method = "onPassengerTurned", at = @At("HEAD"))
     private void ec$ridingInputFix(Entity passenger, CallbackInfo ci) {
-        com.odtheking.odin.features.impl.render.Camera.onPassengerTurned(passenger, ((Entity) (Object) this).getYRot());
+        com.adm.features.impl.render.Camera.onPassengerTurned(passenger, ((Entity) (Object) this).getYRot());
     }
 }

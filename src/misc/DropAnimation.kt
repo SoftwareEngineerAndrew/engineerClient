@@ -1,6 +1,6 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 

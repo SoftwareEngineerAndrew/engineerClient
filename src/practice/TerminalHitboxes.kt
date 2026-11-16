@@ -1,14 +1,14 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.events.RenderExtractEvent
-import com.odtheking.odin.events.core.on
+import com.adm.events.RenderExtractEvent
+import com.adm.events.core.on
 import com.engineerclient.terminals.Terminals
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.utils.Color.Companion.withAlpha
-import com.odtheking.odin.utils.render.drawFilledBox
-import com.odtheking.odin.utils.render.drawWireFrameBox
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.events.core.EventBus
+import com.adm.utils.Color.Companion.withAlpha
+import com.adm.utils.render.drawFilledBox
+import com.adm.utils.render.drawWireFrameBox
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.world.entity.player.Player
 

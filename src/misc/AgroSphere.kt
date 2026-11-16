@@ -1,16 +1,16 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.RenderExtractEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
+import com.adm.clickgui.settings.impl.ColorSetting
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.RenderExtractEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.Color
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.M7Phases
 import net.minecraft.client.renderer.rendertype.RenderTypes
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.player.Player

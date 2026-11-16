@@ -1,7 +1,7 @@
 package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.features.ModuleManager
+import com.adm.features.ModuleManager
 
 /**
  * Odin's HUDs never off screen (HudOnScreenMixin): Odin's HUD editor pulls the HUDs onto the screen when it opens and

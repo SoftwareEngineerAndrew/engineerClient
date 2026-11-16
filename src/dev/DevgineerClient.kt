@@ -8,8 +8,8 @@ import com.devgineerclient.recorder.DungeonRecorder
 import com.devgineerclient.splits.DungeonSplits
 import com.devgineerclient.splits.PaceTargets
 import com.devgineerclient.splits.Witherborn
-import com.odtheking.odin.config.ModuleConfig
-import com.odtheking.odin.features.ModuleManager
+import com.adm.config.ModuleConfig
+import com.adm.features.ModuleManager
 import net.fabricmc.api.ClientModInitializer
 import net.minecraft.client.Minecraft
 import net.minecraft.network.chat.Component

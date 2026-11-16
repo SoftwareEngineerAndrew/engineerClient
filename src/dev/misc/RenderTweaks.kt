@@ -1,8 +1,8 @@
 package com.devgineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.features.Category
+import com.adm.features.Module
 
 /**
  * Rendering experiments. Each one is read once, when the game's graphics device is created, so a change needs a

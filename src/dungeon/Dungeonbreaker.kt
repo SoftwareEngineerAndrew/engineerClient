@@ -1,16 +1,16 @@
 package com.engineerclient.dungeon
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.events.SetSlotEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.itemId
-import com.odtheking.odin.utils.lore
-import com.odtheking.odin.utils.render.textDim
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.events.SetSlotEvent
+import com.adm.events.core.on
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.Colors
+import com.adm.utils.itemId
+import com.adm.utils.lore
+import com.adm.utils.render.textDim
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.world.level.BlockGetter

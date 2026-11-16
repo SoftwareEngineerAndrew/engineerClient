@@ -1,7 +1,7 @@
 package com.engineerclient
 
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.DungeonClass
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 
 /**
  * Own-class detection, for Party Finder Classes' mark on your class. Odin already parses the

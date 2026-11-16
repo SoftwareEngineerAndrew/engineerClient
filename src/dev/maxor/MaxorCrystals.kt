@@ -3,13 +3,13 @@ package com.devgineerclient.maxor
 import com.devgineerclient.DevgineerClient
 import com.devgineerclient.maxor.CrystalCycles.From
 import com.devgineerclient.maxor.CrystalCycles.Side
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.sendCommand
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.sendCommand
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.common.ClientboundPingPacket
@@ -59,7 +59,7 @@ object MaxorCrystals : Module(
         if (switchedOn) return
         switchedOn = true
         if (!enabled) toggle()
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+        com.adm.features.ModuleManager.saveConfigurations()
     }
 
     private const val MAXOR_START = "[BOSS] Maxor: WELL! WELL! WELL! LOOK WHO'S HERE!"

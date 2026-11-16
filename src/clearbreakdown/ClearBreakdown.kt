@@ -7,25 +7,25 @@ import com.engineerclient.dungeon.ClearInfo
 import com.engineerclient.p3sim.P3Sim
 import com.engineerclient.p3sim.Practice
 import com.engineerclient.splits.SplitTracker
-import com.odtheking.odin.OdinMod
-import com.odtheking.odin.events.BlockInteractEvent
-import com.odtheking.odin.events.BlockUpdateEvent
-import com.odtheking.odin.events.CheckmarkUpdateEvent
-import com.odtheking.odin.events.FloorEnterEvent
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.SecretsUpdateEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
-import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
-import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
-import com.odtheking.odin.utils.network.hypixelapi.RequestUtils
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.AdmMod
+import com.adm.events.BlockInteractEvent
+import com.adm.events.BlockUpdateEvent
+import com.adm.events.CheckmarkUpdateEvent
+import com.adm.events.FloorEnterEvent
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.SecretsUpdateEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.features.impl.dungeon.map.tile.MapCheckmark
+import com.adm.features.impl.dungeon.map.tile.RoomType
+import com.adm.utils.network.hypixelapi.RequestUtils
+import com.adm.utils.skyblock.dungeon.DungeonPlayer
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
@@ -215,7 +215,7 @@ object ClearBreakdown {
         roster[p.name] = p.clazz.colorCode
         val name = p.name
         val into = before
-        OdinMod.scope.launch { RequestUtils.pullSecrets(name).onSuccess { into[name] = it } }
+        AdmMod.scope.launch { RequestUtils.pullSecrets(name).onSuccess { into[name] = it } }
     }
 
     private fun tick() {
@@ -302,7 +302,7 @@ object ClearBreakdown {
         if (now < nextPollMs) return
         nextPollMs = now + POLL_MS
         val into = latest
-        for (name in roster.keys) OdinMod.scope.launch { RequestUtils.pullSecrets(name).onSuccess { into[name] = it } }
+        for (name in roster.keys) AdmMod.scope.launch { RequestUtils.pullSecrets(name).onSuccess { into[name] = it } }
     }
 
     /**
@@ -321,7 +321,7 @@ object ClearBreakdown {
         }))
         val missing = names.keys.filter { !now.containsKey(it) && start.containsKey(it) }
         if (missing.isEmpty()) return postNow()
-        OdinMod.scope.launch {
+        AdmMod.scope.launch {
             withTimeoutOrNull(LAST_ASK_MS) {
                 missing.map { n -> async { RequestUtils.pullSecrets(n).onSuccess { now[n] = it } } }.awaitAll()
             }

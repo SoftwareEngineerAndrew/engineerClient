@@ -1,9 +1,9 @@
 package com.engineerclient.skyblock
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.customData
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.customData
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.ItemStack
@@ -45,5 +45,5 @@ object ItemTweaks : Module(
     /** In dungeons a shovel (AOTV and the like) right-clicked on grass makes no path on your side; the click still goes out. */
     @JvmStatic
     fun noShovelPath(stack: net.minecraft.world.item.ItemStack): Boolean =
-        com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils.inDungeons && stack.`is`(net.minecraft.tags.ItemTags.SHOVELS)
+        com.adm.utils.skyblock.dungeon.DungeonUtils.inDungeons && stack.`is`(net.minecraft.tags.ItemTags.SHOVELS)
 }

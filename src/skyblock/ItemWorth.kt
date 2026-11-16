@@ -1,15 +1,15 @@
 package com.engineerclient.skyblock
 
 import com.google.gson.JsonObject
-import com.odtheking.odin.OdinMod
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.features.impl.dungeon.Croesus
-import com.odtheking.odin.utils.customData
-import com.odtheking.odin.utils.itemId
-import com.odtheking.odin.utils.network.WebUtils.fetchJson
-import com.odtheking.odin.utils.skyblock.LocationUtils
+import com.adm.AdmMod
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.features.impl.dungeon.Croesus
+import com.adm.utils.customData
+import com.adm.utils.itemId
+import com.adm.utils.network.WebUtils.fetchJson
+import com.adm.utils.skyblock.LocationUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
@@ -32,7 +32,7 @@ object ItemWorth {
 
     fun install() {
         for (s in listOf(dropdown, showLbin, showBazaar, showWorth, onlyShift)) Croesus.registerSetting(s)
-        OdinMod.scope.launch {
+        AdmMod.scope.launch {
             while (true) {
                 refresh()
                 delay(REFRESH_MS)

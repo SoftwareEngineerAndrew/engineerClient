@@ -1,0 +1,101 @@
+package com.adm.features.impl.dungeon.puzzlesolvers
+
+import com.adm.events.RenderExtractEvent
+import com.adm.events.RoomEnterEvent
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers.onPuzzleComplete
+import com.adm.utils.Color
+import com.adm.utils.JsonResourceLoader
+import com.adm.utils.render.drawBeaconBeam
+import com.adm.utils.render.drawFilledBox
+import com.adm.utils.startsWithOneOf
+import net.minecraft.core.BlockPos
+import net.minecraft.resources.Identifier
+import net.minecraft.world.phys.AABB
+
+object QuizSolver {
+    private const val START_DURATION = 220
+    private const val QUESTION_DURATION = 100
+
+    private var answers: MutableMap<String, List<String>> = JsonResourceLoader.loadJson(Identifier.fromNamespaceAndPath("engineerclient", "puzzles/quiz-answers.json")) ?: mutableMapOf()
+    private var triviaAnswers: List<String>? = null
+
+    private var triviaOptions: MutableList<TriviaAnswer> = MutableList(3) { TriviaAnswer(null, false) }
+    private data class TriviaAnswer(var blockPos: BlockPos?, var isCorrect: Boolean)
+
+    var timer: Triple<Int, Int, Int> = Triple(0, 0, 0)
+        private set
+
+    fun onServerTick() {
+        val (tick, maxTick, stage) = timer
+        if (tick <= 0) return
+        timer = Triple(tick - 1, maxTick, stage)
+    }
+
+    fun onMessage(msg: String) {
+        when (msg) {
+            "[STATUE] Oruo the Omniscient: I am Oruo the Omniscient. I have lived many lives. I have learned all there is to know." -> timer = Triple(START_DURATION, START_DURATION, 1)
+            "[STATUE] Oruo the Omniscient: 2 questions left... Then you will have proven your worth to me!" -> if (timer.third != 2) timer = Triple(QUESTION_DURATION, QUESTION_DURATION, 2)
+            "[STATUE] Oruo the Omniscient: One more question!" -> if (timer.third != 3) timer = Triple(QUESTION_DURATION, QUESTION_DURATION, 3)
+        }
+
+        if (msg.startsWith("[STATUE] Oruo the Omniscient: ") && msg.endsWith("correctly!")) {
+            if (msg.contains("answered the final question")) {
+                onPuzzleComplete("Quiz")
+                reset()
+                return
+            }
+            if (msg.contains("answered Question #")) {
+                triviaOptions.forEach { it.isCorrect = false }
+                // Oruo's remark comes 40 ticks after a right answer (39 before "One more question!"), so the timer starts here.
+                val next = if (msg.contains("Question #1 ")) 2 else 3
+                val total = QUESTION_DURATION + if (next == 2) 40 else 39
+                timer = Triple(total, total, next)
+            }
+        }
+
+        if (msg.trim().startsWithOneOf("ⓐ", "ⓑ", "ⓒ", ignoreCase = true) && triviaAnswers?.any { msg.endsWith(it) } == true) {
+            when (msg.trim()[0]) {
+                'ⓐ' -> triviaOptions[0].isCorrect = true
+                'ⓑ' -> triviaOptions[1].isCorrect = true
+                'ⓒ' -> triviaOptions[2].isCorrect = true
+            }
+        }
+
+        triviaAnswers = when {
+            msg.trim() == "What SkyBlock year is it?" -> listOf("Year ${(((System.currentTimeMillis() / 1000) - 1560276000) / 446400).toInt() + 1}")
+            else -> answers.entries.find { msg.contains(it.key) }?.value ?: return
+        }
+    }
+
+    fun onRoomEnter(event: RoomEnterEvent) = with(event.room) {
+        if (this?.data?.name != "Quiz") return@with
+
+        triviaOptions[0].blockPos = getRealCoords(BlockPos(20, 70, 6))
+        triviaOptions[1].blockPos = getRealCoords(BlockPos(15, 70, 9))
+        triviaOptions[2].blockPos = getRealCoords(BlockPos(10, 70, 6))
+    }
+
+    fun onRenderWorld(event: RenderExtractEvent, quizColor: Color, quizDepth: Boolean) {
+        if (triviaAnswers == null || triviaOptions.isEmpty()) return
+        triviaOptions.forEach { answer ->
+            if (!answer.isCorrect) return@forEach
+            answer.blockPos?.offset(0, -1, 0)?.let {
+                event.drawFilledBox(AABB(it), quizColor, depth = quizDepth)
+                event.drawBeaconBeam(it, quizColor)
+            }
+        }
+    }
+
+    fun isWrongClick(pos: BlockPos): Boolean {
+        if (DungeonUtils.currentRoomName != "Quiz" || triviaOptions.none { it.isCorrect }) return false
+        val option = triviaOptions.firstOrNull { it.blockPos?.let { at -> at.distSqr(pos) <= 2.0 } == true } ?: return false
+        return !option.isCorrect
+    }
+
+    fun reset() {
+        triviaOptions = MutableList(3) { TriviaAnswer(null, false) }
+        triviaAnswers = null
+        timer = Triple(0, 0, 0)
+    }
+}

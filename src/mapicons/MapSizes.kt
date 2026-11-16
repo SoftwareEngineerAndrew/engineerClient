@@ -2,18 +2,18 @@ package com.engineerclient.mapicons
 
 import com.engineerclient.lcm.LcmStyle
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.features.impl.dungeon.map.buildExampleDoors
-import com.odtheking.odin.features.impl.dungeon.map.buildExampleRooms
-import com.odtheking.odin.features.impl.dungeon.map.renderMap
-import com.odtheking.odin.features.impl.dungeon.map.renderPlayers
-import com.odtheking.odin.utils.render.hollowFill
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
-import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonDoor
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.buildExampleDoors
+import com.adm.features.impl.dungeon.map.buildExampleRooms
+import com.adm.features.impl.dungeon.map.renderMap
+import com.adm.features.impl.dungeon.map.renderPlayers
+import com.adm.utils.render.hollowFill
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.features.impl.dungeon.map.DungeonMap
+import com.adm.features.impl.dungeon.map.tile.DungeonDoor
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 /**

@@ -1,7 +1,7 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.render.ScoreboardNametags;
-import com.odtheking.odin.features.impl.dungeon.Highlight;
+import com.adm.features.impl.dungeon.Highlight;
 import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 import net.minecraft.world.entity.Avatar;
 import org.spongepowered.asm.mixin.Mixin;

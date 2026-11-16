@@ -3,8 +3,8 @@ package com.devgineerclient.recorder
 import com.devgineerclient.DevgineerClient
 import com.mojang.renderpearl.api.buffers.GpuBuffer
 import com.mojang.blaze3d.systems.RenderSystem
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.onReceive
+import com.adm.events.core.EventBus
+import com.adm.events.core.onReceive
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket
 import java.awt.image.BufferedImage

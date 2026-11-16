@@ -1,14 +1,14 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.impl.dungeon.InvincibilityTimer
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.features.impl.dungeon.InvincibilityTimer
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 
 /**
  * "Only Used" for Odin's Invincibility Timer: its HUD lists only the masks (and Phoenix) that have
@@ -46,7 +46,7 @@ object OdinMasksUsed {
     fun resetTimers() {
         used.fill(false)
         com.engineerclient.EngineerClient.safely("odin invincibility reset") {
-            val type = Class.forName("com.odtheking.odin.features.impl.dungeon.InvincibilityTimer\$InvincibilityType")
+            val type = Class.forName("com.adm.features.impl.dungeon.InvincibilityTimer\$InvincibilityType")
             val reset = type.getMethod("reset").apply { isAccessible = true }
             type.enumConstants.forEach { reset.invoke(it) }
         }

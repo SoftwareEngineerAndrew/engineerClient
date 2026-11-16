@@ -1,18 +1,18 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.impl.dungeon.LeapMenu
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.render.roundedRect
-import com.odtheking.odin.utils.render.roundedRectOutlined
-import com.odtheking.odin.utils.render.text
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.ColorSetting
+import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.features.Module
+import com.adm.features.impl.dungeon.LeapMenu
+import com.adm.utils.Color
+import com.adm.utils.render.roundedRect
+import com.adm.utils.render.roundedRectOutlined
+import com.adm.utils.render.text
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.PlayerFaceExtractor
 import net.minecraft.client.gui.screens.Screen
@@ -230,6 +230,6 @@ class LeapHighlightLook(module: Module, dropdownName: String, private val shown:
     }
 
     companion object {
-        fun isLeapScreen(screen: Screen) = com.odtheking.odin.features.impl.dungeon.LeapMenu.isLeapScreen(screen)
+        fun isLeapScreen(screen: Screen) = com.adm.features.impl.dungeon.LeapMenu.isLeapScreen(screen)
     }
 }

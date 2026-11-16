@@ -2,9 +2,9 @@ package com.devgineerclient.misc
 
 import com.devgineerclient.DevgineerClient
 import com.devgineerclient.DevgineerClient.mc
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.onSend
-import com.odtheking.odin.utils.skyblock.LocationUtils
+import com.adm.events.core.EventBus
+import com.adm.events.core.onSend
+import com.adm.utils.skyblock.LocationUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationConnectionEvents

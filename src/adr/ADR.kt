@@ -1,20 +1,20 @@
 package com.engineerclient.adr
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.impl.ActionSetting
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.StringSetting
-import com.odtheking.odin.events.BlockInteractEvent
-import com.odtheking.odin.events.BlockUpdateEvent
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderExtractEvent
-import com.odtheking.odin.events.RoomEnterEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.adm.clickgui.settings.impl.ActionSetting
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.StringSetting
+import com.adm.events.BlockInteractEvent
+import com.adm.events.BlockUpdateEvent
+import com.adm.events.LevelEvent
+import com.adm.events.RenderExtractEvent
+import com.adm.events.RoomEnterEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.features.Category
+import com.adm.features.Module
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents
@@ -89,7 +89,7 @@ object ADR : Module(
         if (ownerToken.length < 32) {
             val r = java.security.SecureRandom()
             ownerToken = (1..32).joinToString("") { "0123456789abcdef"[r.nextInt(16)].toString() }
-            com.odtheking.odin.features.ModuleManager.saveConfigurations()
+            com.adm.features.ModuleManager.saveConfigurations()
         }
         return ownerToken
     }
@@ -565,7 +565,7 @@ object ADR : Module(
                     EngineerClient.msg("§7ADR: an update had switched §fUnlisted Runs§7 on - it's off again, as you had it${if (n > 0) ", and your $n runs since are listed again" else ""}.")
                 }
                 unlistedChecked = true
-                com.odtheking.odin.features.ModuleManager.saveConfigurations()
+                com.adm.features.ModuleManager.saveConfigurations()
             } catch (t: Throwable) {
                 EngineerClient.logger.warn("[ec] adr: unlisted check failed", t)
             }

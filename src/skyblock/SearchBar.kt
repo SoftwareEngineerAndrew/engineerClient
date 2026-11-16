@@ -1,12 +1,12 @@
 package com.engineerclient.skyblock
 
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.loreString
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.ColorSetting
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.Color
+import com.adm.utils.loreString
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents

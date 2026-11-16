@@ -3,11 +3,11 @@ package com.engineerclient.misc
 import com.engineerclient.EngineerClient
 import com.engineerclient.adr.ADR
 import com.google.gson.JsonObject
-import com.odtheking.odin.clickgui.settings.RenderableSetting
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.HUDSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
+import com.adm.clickgui.settings.RenderableSetting
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.HUDSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.loader.api.FabricLoader

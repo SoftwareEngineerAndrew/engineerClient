@@ -1,12 +1,12 @@
 package com.engineerclient.dungeon
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.events.MessageEvent
+import com.adm.events.core.on
+import com.adm.features.Category
+import com.adm.features.Module
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import java.text.DecimalFormat
 
 object ExplosiveShot : Module(

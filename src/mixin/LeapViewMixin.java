@@ -3,7 +3,7 @@ package com.engineerclient.mixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
-import com.odtheking.odin.features.impl.dungeon.LeapMenu;
+import com.adm.features.impl.dungeon.LeapMenu;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;

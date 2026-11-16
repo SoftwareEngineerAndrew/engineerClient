@@ -1,13 +1,13 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.ModuleManager
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.Colors
+import com.adm.clickgui.settings.impl.ColorSetting
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.features.ModuleManager
+import com.adm.utils.Color
+import com.adm.utils.Colors
 
 object OdinColors : Module(
     name = "Colors",

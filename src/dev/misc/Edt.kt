@@ -1,6 +1,6 @@
 package com.devgineerclient.misc
 
-import com.odtheking.odin.utils.sendCommand
+import com.adm.utils.sendCommand
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 

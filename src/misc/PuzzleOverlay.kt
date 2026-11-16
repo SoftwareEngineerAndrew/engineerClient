@@ -1,20 +1,20 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.render.text
-import com.odtheking.odin.utils.render.textDim
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
+import com.adm.utils.Color
+import com.adm.utils.Colors
+import com.adm.utils.render.text
+import com.adm.utils.render.textDim
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 

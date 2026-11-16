@@ -1,12 +1,12 @@
 package com.engineerclient.terminals.sim
 
-import com.odtheking.odin.OdinMod.mc
-import com.odtheking.odin.events.GuiEvent
-import com.odtheking.odin.events.ScreenCloseEvent
+import com.adm.AdmMod.mc
+import com.adm.events.GuiEvent
+import com.adm.events.ScreenCloseEvent
 import com.engineerclient.terminals.TerminalEvent
 import com.engineerclient.terminals.TermSounds
-import com.odtheking.odin.utils.handlers.schedule
-import com.odtheking.odin.utils.playSoundAtPlayer
+import com.adm.utils.handlers.schedule
+import com.adm.utils.playSoundAtPlayer
 import com.engineerclient.terminals.TerminalHandler
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
 import net.minecraft.core.component.DataComponents

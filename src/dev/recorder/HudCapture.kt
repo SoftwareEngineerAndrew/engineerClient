@@ -4,10 +4,10 @@ import com.devgineerclient.DevgineerClient
 import com.devgineerclient.mixin.RecBossOverlayAccessor
 import com.devgineerclient.mixin.RecGuiAccessor
 import com.devgineerclient.mixin.RecTabOverlayAccessor
-import com.odtheking.odin.events.RenderBossBarEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
+import com.adm.events.RenderBossBarEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
 import net.minecraft.client.gui.components.toasts.Toast
 import net.minecraft.client.multiplayer.chat.GuiMessage

@@ -1,7 +1,7 @@
 package com.engineerclient
 
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonListener
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.DungeonListener
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import java.lang.invoke.MethodHandle
 import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType

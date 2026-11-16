@@ -1,10 +1,10 @@
 package com.devgineerclient.recorder
 
 import com.devgineerclient.DevgineerClient
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
 import net.minecraft.network.protocol.Packet
 import java.util.IdentityHashMap
 

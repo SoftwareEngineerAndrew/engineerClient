@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.odtheking.odin.features.impl.dungeon.BetterPartyFinder;
+import com.adm.features.impl.dungeon.BetterPartyFinder;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;

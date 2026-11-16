@@ -1,16 +1,16 @@
 package com.engineerclient.misc
 
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.sendCommand
-import com.odtheking.odin.utils.skyblock.LocationUtils
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.events.MessageEvent
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.sendCommand
+import com.adm.utils.skyblock.LocationUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.client.gui.screens.ConnectScreen
 import net.minecraft.client.multiplayer.ServerData
@@ -104,7 +104,7 @@ object RandomStuff : Module(
             (key == InputConstants.KEY_RETURN || key == InputConstants.KEY_NUMPADENTER)
 
     init {
-        on<com.odtheking.odin.events.TickEvent.End> {
+        on<com.adm.events.TickEvent.End> {
             val open = mc.gui.screen() != null
             if (open || hadScreen) cursorClock = System.currentTimeMillis()
             hadScreen = open

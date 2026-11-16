@@ -1,14 +1,14 @@
 package com.engineerclient.render
 
-import com.odtheking.odin.OdinMod.mc
-import com.odtheking.odin.clickgui.settings.impl.ActionSetting
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.itemId
+import com.adm.AdmMod.mc
+import com.adm.clickgui.settings.impl.ActionSetting
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.events.LevelEvent
+import com.adm.events.core.on
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.itemId
 import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.math.Axis
 import net.minecraft.core.component.DataComponents

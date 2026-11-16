@@ -2,10 +2,10 @@ package com.engineerclient.terminals.sim
 
 import com.engineerclient.terminals.Terminals
 import com.engineerclient.terminals.TermSimulator.openRandomTerminal
-import com.odtheking.odin.utils.handlers.schedule
-import com.odtheking.odin.utils.modMessage
+import com.adm.utils.handlers.schedule
+import com.adm.utils.modMessage
 import com.engineerclient.terminals.TerminalTypes
-import com.odtheking.odin.utils.toFixed
+import com.adm.utils.toFixed
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.inventory.Slot

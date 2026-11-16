@@ -1,23 +1,23 @@
 package com.devgineerclient.recorder
 
 import com.devgineerclient.DevgineerClient
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RoomEnterEvent
-import com.odtheking.odin.events.SecretsUpdateEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.impl.boss.DragonCheck
-import com.odtheking.odin.features.impl.boss.WitherDragons
-import com.odtheking.odin.features.impl.boss.WitherDragonsEnum
-import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.features.impl.dungeon.map.SpecialColumn
-import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
-import com.odtheking.odin.utils.network.WebUtils
-import com.odtheking.odin.utils.skyblock.SplitsManager
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.events.LevelEvent
+import com.adm.events.RoomEnterEvent
+import com.adm.events.SecretsUpdateEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.features.Module
+import com.adm.features.impl.boss.DragonCheck
+import com.adm.features.impl.boss.WitherDragons
+import com.adm.features.impl.boss.WitherDragonsEnum
+import com.adm.features.impl.dungeon.map.DungeonMap
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.SpecialColumn
+import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.utils.network.WebUtils
+import com.adm.utils.skyblock.SplitsManager
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.Vec3i
 import net.minecraft.world.entity.Entity
 import java.lang.reflect.Field
@@ -95,9 +95,9 @@ internal object Reflect {
  */
 object OdinInternals {
 
-    private const val BOSS = "com.odtheking.odin.features.impl.boss."
-    private const val DUNGEON = "com.odtheking.odin.features.impl.dungeon."
-    private const val PUZZLE = "com.odtheking.odin.features.impl.dungeon.puzzlesolvers."
+    private const val BOSS = "com.adm.features.impl.boss."
+    private const val DUNGEON = "com.adm.features.impl.dungeon."
+    private const val PUZZLE = "com.adm.features.impl.dungeon.puzzlesolvers."
 
     /** One member of a group: its JSON name, whether it ticks on its own (left out of the change check), how to read it. */
     internal class M(val name: String, val ticking: Boolean = false, val read: () -> Any?)
@@ -357,7 +357,7 @@ object OdinInternals {
         val session = Rec.session ?: return
         Thread({
             DevgineerClient.safely("recorder odin roomdb") {
-                val path = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("odin").flatMap { it.findPath("assets/odin/rooms.json") }.orElse(null)
+                val path = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("engineerclient").flatMap { it.findPath("assets/engineerclient/rooms.json") }.orElse(null)
                 val bytes = path?.let { runCatching { java.nio.file.Files.readAllBytes(it) }.getOrNull() }
                 val count = bytes?.let { runCatching { com.google.gson.JsonParser.parseString(String(it, Charsets.UTF_8)).let { j -> if (j.isJsonArray) j.asJsonArray.size() else if (j.isJsonObject) j.asJsonObject.size() else null } }.getOrNull() }
                 if (Rec.session === session) Rec.emit("odin.roomdb", "\"sha1\":${RecorderFiles.q(bytes?.let { sha1(it) })},\"bytes\":${bytes?.size},\"count\":$count,\"cores\":$cores")
@@ -368,7 +368,7 @@ object OdinInternals {
     /** Odin's own tick counters side by side, so its tick-based numbers can be lined up with t and n. */
     private fun clocks() {
         fun r(read: () -> Any?): String = try { value(read()) } catch (t: Throwable) { "null" }
-        Rec.emit("odin.clocks", "\"splits\":${r { Reflect.field("com.odtheking.odin.utils.skyblock.SplitsManager", "tickCounter") }}" +
+        Rec.emit("odin.clocks", "\"splits\":${r { Reflect.field("com.adm.utils.skyblock.SplitsManager", "tickCounter") }}" +
             ",\"terminalTimes\":${r { Reflect.field("com.engineerclient.terminals.TermTimes", "currentTick") }}" +
             ",\"witherDragons\":${r { WitherDragons.currentTick }}" +
             ",\"bloodCamp\":${r { Reflect.field(DUNGEON + "BloodCamp", "currentTickTime") }}")

@@ -1,12 +1,12 @@
 package com.engineerclient.misc
 
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
-import com.odtheking.odin.clickgui.settings.impl.StringSetting
-import com.odtheking.odin.features.ModuleManager
-import com.odtheking.odin.features.impl.skyblock.CommandKeybinds
-import com.odtheking.odin.utils.sendCommand
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.KeybindSetting
+import com.adm.clickgui.settings.impl.StringSetting
+import com.adm.features.ModuleManager
+import com.adm.features.impl.skyblock.CommandKeybinds
+import com.adm.utils.sendCommand
 import net.minecraft.client.Minecraft
 
 object OdinCustomKeybinds {

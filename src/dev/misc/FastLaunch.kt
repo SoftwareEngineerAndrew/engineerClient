@@ -1,8 +1,8 @@
 package com.devgineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.features.Category
+import com.adm.features.Module
 
 /**
  * The switches for this client's launch-speed pieces (EarlyJoin, FastExit, LaunchTimeline). Each piece asks
@@ -31,6 +31,6 @@ object FastLaunch : Module(
         if (switchedOn) return
         switchedOn = true
         if (!enabled) toggle()
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+        com.adm.features.ModuleManager.saveConfigurations()
     }
 }

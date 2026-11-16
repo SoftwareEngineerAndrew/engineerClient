@@ -1,17 +1,17 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.features.impl.dungeon.MageBeam
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.events.LevelEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.events.core.EventBus
+import com.adm.features.impl.dungeon.MageBeam
 import net.minecraft.client.Minecraft
-import com.odtheking.odin.utils.alert
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.alert
+import com.adm.utils.skyblock.dungeon.DungeonClass
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.world.entity.boss.wither.WitherBoss
 
 /**

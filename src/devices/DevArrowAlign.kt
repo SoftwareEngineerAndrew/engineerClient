@@ -1,16 +1,16 @@
 package com.engineerclient.devices
 
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.clickgui.settings.impl.KeybindSetting.Companion.isDown
-import com.odtheking.odin.events.EntityInteractEvent
-import com.odtheking.odin.events.RenderExtractEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.utils.*
-import com.odtheking.odin.utils.render.drawText
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
+import com.adm.clickgui.settings.impl.KeybindSetting.Companion.isDown
+import com.adm.events.EntityInteractEvent
+import com.adm.events.RenderExtractEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.utils.*
+import com.adm.utils.render.drawText
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.M7Phases
 import net.minecraft.core.BlockPos
 import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.item.Items

@@ -2,10 +2,10 @@ package com.engineerclient.waypoints
 
 import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
-import com.odtheking.odin.OdinMod.mc
-import com.odtheking.odin.utils.sendCommand
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.AdmMod.mc
+import com.adm.utils.sendCommand
+import com.adm.utils.skyblock.dungeon.DungeonClass
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.HoverEvent

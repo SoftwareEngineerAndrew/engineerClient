@@ -1,17 +1,17 @@
 package com.engineerclient.devices
 
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.events.BlockInteractEvent
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.RenderExtractEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.utils.playSoundSettings
-import com.odtheking.odin.utils.render.drawStyledBox
-import com.odtheking.odin.utils.sendCommand
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
+import com.adm.events.BlockInteractEvent
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.RenderExtractEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.utils.playSoundSettings
+import com.adm.utils.render.drawStyledBox
+import com.adm.utils.sendCommand
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.M7Phases
 import net.minecraft.core.BlockPos
 import net.minecraft.world.phys.AABB
 

@@ -1,7 +1,7 @@
 package com.engineerclient.adr
 
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.tile.RoomType
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos

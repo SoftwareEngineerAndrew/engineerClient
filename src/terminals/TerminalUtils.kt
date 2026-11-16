@@ -2,12 +2,12 @@ package com.engineerclient.terminals
 
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.terminals.sim.TermSimGUI
-import com.odtheking.odin.events.*
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.EventPriority
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.events.core.onSend
+import com.adm.events.*
+import com.adm.events.core.EventBus
+import com.adm.events.core.EventPriority
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.events.core.onSend
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket

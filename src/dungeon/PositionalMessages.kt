@@ -1,19 +1,19 @@
 package com.engineerclient.dungeon
 
 import com.engineerclient.practice.TermInfo
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.render.text
-import com.odtheking.odin.utils.sendCommand
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.Colors
+import com.adm.utils.render.text
+import com.adm.utils.sendCommand
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.world.phys.AABB
 

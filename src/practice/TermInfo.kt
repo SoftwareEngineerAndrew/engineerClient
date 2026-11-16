@@ -1,11 +1,11 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
+import com.adm.events.LevelEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import java.util.Locale
 

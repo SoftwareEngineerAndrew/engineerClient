@@ -2,12 +2,12 @@ package com.engineerclient.terminals
 
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.terminals.sim.TermSimGUI
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.utils.modMessage
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.utils.modMessage
 import net.minecraft.network.chat.Component
 import java.util.Locale
 

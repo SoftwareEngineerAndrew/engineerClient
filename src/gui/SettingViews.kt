@@ -2,17 +2,17 @@ package com.engineerclient.gui
 
 import com.engineerclient.EngineerClient.mc
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.HudManager
-import com.odtheking.odin.clickgui.settings.RenderableSetting
-import com.odtheking.odin.clickgui.settings.Setting
-import com.odtheking.odin.clickgui.settings.impl.*
-import com.odtheking.odin.features.impl.render.ClickGUIModule
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.Color.Companion.darker
-import com.odtheking.odin.utils.Color.Companion.hsbMax
-import com.odtheking.odin.utils.Color.Companion.withAlpha
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.render.*
+import com.adm.clickgui.HudManager
+import com.adm.clickgui.settings.RenderableSetting
+import com.adm.clickgui.settings.Setting
+import com.adm.clickgui.settings.impl.*
+import com.adm.features.impl.render.ClickGUIModule
+import com.adm.utils.Color
+import com.adm.utils.Color.Companion.darker
+import com.adm.utils.Color.Companion.hsbMax
+import com.adm.utils.Color.Companion.withAlpha
+import com.adm.utils.Colors
+import com.adm.utils.render.*
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.resources.Identifier
 import kotlin.math.PI
@@ -286,7 +286,7 @@ class ColorView(override val setting: ColorSetting) : SettingView(setting) {
     }
 
     private companion object {
-        val HUE: Identifier = Identifier.fromNamespaceAndPath("odin", "textures/huegradient.png")
+        val HUE: Identifier = Identifier.fromNamespaceAndPath("engineerclient", "textures/huegradient.png")
         const val GAP = 3
         const val BAR = 10
         const val PICKER_H = 100
@@ -364,7 +364,7 @@ class DropdownView(override val setting: DropdownSetting) : SettingView(setting)
     }
 
     private companion object {
-        val CHEVRON: Identifier = Identifier.fromNamespaceAndPath("odin", "textures/chevron.png")
+        val CHEVRON: Identifier = Identifier.fromNamespaceAndPath("engineerclient", "textures/chevron.png")
     }
 }
 
@@ -386,7 +386,7 @@ class HudView(override val setting: HUDSetting) : SettingView(setting) {
     }
 
     private companion object {
-        val MOVE: Identifier = Identifier.fromNamespaceAndPath("odin", "textures/movementicon.png")
+        val MOVE: Identifier = Identifier.fromNamespaceAndPath("engineerclient", "textures/movementicon.png")
     }
 }
 

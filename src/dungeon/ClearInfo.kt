@@ -3,15 +3,15 @@ package com.engineerclient.dungeon
 import com.engineerclient.clearbreakdown.ClearBreakdown
 import com.engineerclient.lcm.LcmMapInfo
 import com.engineerclient.lcm.PaulScore
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.impl.boss.ExtraStats
-import com.odtheking.odin.features.impl.dungeon.MapInfo
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.features.impl.boss.ExtraStats
+import com.adm.features.impl.dungeon.MapInfo
 
 /** Score and stats through the clear, one section each; the logic lives in the section objects. */
 object ClearInfo : Module(

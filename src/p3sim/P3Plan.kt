@@ -2,7 +2,7 @@ package com.engineerclient.p3sim
 
 import com.engineerclient.EngineerClient
 import com.google.gson.GsonBuilder
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
+import com.adm.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.client.Minecraft
 import net.minecraft.world.phys.Vec3
 import java.io.File
@@ -241,8 +241,8 @@ object P3Plan {
     var odinSort = true
 
     private fun odinOrder(classes: List<DungeonClass>): List<DungeonClass>? = runCatching {
-        val players = classes.map { com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer(Roles.label(it), it, 50, null) }.sortedBy { it.clazz.priority }
-        com.odtheking.odin.features.impl.dungeon.LeapMenu.odinSorting(players).toList().map { it.clazz }.filter { it in classes }
+        val players = classes.map { com.adm.utils.skyblock.dungeon.DungeonPlayer(Roles.label(it), it, 50, null) }.sortedBy { it.clazz.priority }
+        com.adm.features.impl.dungeon.LeapMenu.odinSorting(players).toList().map { it.clazz }.filter { it in classes }
     }.getOrNull()?.takeIf { it.size == classes.size && it.toSet() == classes.toSet() }
 
     /** Slot [slot] (1-4) takes the next class ([back]: the one before): swaps with the slot that had it. */

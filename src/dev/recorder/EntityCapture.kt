@@ -1,10 +1,10 @@
 package com.devgineerclient.recorder
 
 import com.devgineerclient.DevgineerClient
-import com.odtheking.odin.events.EntityEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
+import com.adm.events.EntityEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
 import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.ints.IntArrayList

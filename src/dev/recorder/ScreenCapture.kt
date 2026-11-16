@@ -2,9 +2,9 @@ package com.devgineerclient.recorder
 
 import com.devgineerclient.DevgineerClient
 import com.devgineerclient.mixin.RecContainerScreenAccessor
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen

@@ -1,21 +1,21 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onSend
-import com.odtheking.odin.OdinMod.mc
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
-import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
-import com.odtheking.odin.features.impl.render.Etherwarp
-import com.odtheking.odin.utils.IVec2
-import com.odtheking.odin.utils.customData
-import com.odtheking.odin.utils.isEtherwarpItem
-import com.odtheking.odin.utils.itemId
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.events.core.onSend
+import com.adm.AdmMod.mc
+import com.adm.events.core.EventBus
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.features.impl.dungeon.map.tile.RoomType
+import com.adm.features.impl.render.Etherwarp
+import com.adm.utils.IVec2
+import com.adm.utils.customData
+import com.adm.utils.isEtherwarpItem
+import com.adm.utils.itemId
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -100,7 +100,7 @@ object Zpew {
     )
 
     /** Feet; ZpewCameraMixin adds the eye height. */
-    @JvmStatic fun cameraPos(): Vec3? = com.odtheking.odin.features.impl.dungeon.LeapMenu.visualPos() ?: if (enabled) camera else null
+    @JvmStatic fun cameraPos(): Vec3? = com.adm.features.impl.dungeon.LeapMenu.visualPos() ?: if (enabled) camera else null
 
     /** ZpewTeleportMixin: the game has just moved you for a server teleport. */
     /** Where you were just before the server's position packet ([ZpewTeleportMixin] HEAD), or null. */
@@ -280,7 +280,7 @@ object Zpew {
             ticks++
             // A teleport not made 70 ms past the usual answer time isn't coming: the camera goes back to you.
             // Odin's average ping can be stuck at a join-time spike (10 s), so the answers are timed here.
-            val ping = com.odtheking.odin.utils.ServerUtils.currentPing.takeIf { it in 1..1000 } ?: 250
+            val ping = com.adm.utils.ServerUtils.currentPing.takeIf { it in 1..1000 } ?: 250
             val limit = (queue.answerMs?.plus(70) ?: (ping + 100L)).coerceIn(100L, 1500L)
             if (queue.expire(serverTicks.get(), ticks, System.currentTimeMillis(), limit)) sync("expire")
             queue.oldestCounting()?.let { c ->
@@ -330,7 +330,7 @@ object Zpew {
                 if (land(from, c) != null) EtherSound.played(sound)
             }
             queue.click(c, serverTicks.get(), doubleArrayOf(p.x, p.y, p.z), counts, ticks)
-            log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking}${if (c.swimming) " swim" else ""} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.odtheking.odin.utils.ServerUtils.currentPing}")
+            log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking}${if (c.swimming) " swim" else ""} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.adm.utils.ServerUtils.currentPing}")
             sync("click")
         }
         EventBus.subscribe(this)

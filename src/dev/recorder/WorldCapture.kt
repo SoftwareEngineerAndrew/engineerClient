@@ -1,10 +1,10 @@
 package com.devgineerclient.recorder
 
 import com.devgineerclient.DevgineerClient
-import com.odtheking.odin.events.BlockUpdateEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
+import com.adm.events.BlockUpdateEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.registries.BuiltInRegistries

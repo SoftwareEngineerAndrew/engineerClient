@@ -1,6 +1,6 @@
 package com.engineerclient.visual
 
-import com.odtheking.odin.utils.itemId
+import com.adm.utils.itemId
 import net.minecraft.world.item.ItemStack
 
 enum class HellionShield(val cleanName: String, val chatColor: String, var active: Boolean = false) {

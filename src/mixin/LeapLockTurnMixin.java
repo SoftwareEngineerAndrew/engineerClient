@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.odtheking.odin.features.impl.dungeon.LeapMenu;
+import com.adm.features.impl.dungeon.LeapMenu;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;

@@ -1,7 +1,7 @@
 package com.engineerclient.pov
 
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.M7Phases
 
 /**
  * Where POV Previews may show: in Goldor (F7/M7 P3) or on blood rush (the dungeon starting until the blood door opens).

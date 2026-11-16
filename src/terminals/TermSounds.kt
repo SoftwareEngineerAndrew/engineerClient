@@ -1,14 +1,14 @@
 package com.engineerclient.terminals
 
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.TickEvent
+import com.adm.events.MessageEvent
+import com.adm.events.TickEvent
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.utils.playSoundAtPlayer
-import com.odtheking.odin.utils.playSoundSettings
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.utils.playSoundAtPlayer
+import com.adm.utils.playSoundSettings
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.sounds.SoundEvents
 

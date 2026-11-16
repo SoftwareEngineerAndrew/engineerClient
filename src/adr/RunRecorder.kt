@@ -2,11 +2,11 @@ package com.engineerclient.adr
 
 import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.utils.itemId
-import com.odtheking.odin.utils.skyblock.Island
-import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.utils.itemId
+import com.adm.utils.skyblock.Island
+import com.adm.utils.skyblock.LocationUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos

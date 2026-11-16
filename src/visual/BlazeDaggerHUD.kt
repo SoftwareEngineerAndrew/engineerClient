@@ -1,17 +1,17 @@
 package com.engineerclient.visual
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.events.core.onSend
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.itemId
-import com.odtheking.odin.utils.loreString
-import com.odtheking.odin.utils.skyblock.LocationUtils
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.events.MessageEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.events.core.onSend
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.itemId
+import com.adm.utils.loreString
+import com.adm.utils.skyblock.LocationUtils
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket
 

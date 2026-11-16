@@ -4,7 +4,7 @@ import com.google.gson.JsonElement
 import com.mojang.serialization.DynamicOps
 import com.mojang.serialization.Encoder
 import com.mojang.serialization.JsonOps
-import com.odtheking.odin.utils.itemId
+import com.adm.utils.itemId
 import net.minecraft.client.Minecraft
 import net.minecraft.core.component.DataComponentPatch
 import net.minecraft.core.component.DataComponentType

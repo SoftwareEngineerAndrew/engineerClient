@@ -1,11 +1,11 @@
 package com.engineerclient.clearbreakdown
 
-import com.odtheking.odin.OdinMod.scope
-import com.odtheking.odin.utils.handlers.schedule
-import com.odtheking.odin.utils.modMessage
-import com.odtheking.odin.utils.network.hypixelapi.RequestUtils
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.AdmMod.scope
+import com.adm.utils.handlers.schedule
+import com.adm.utils.modMessage
+import com.adm.utils.network.hypixelapi.RequestUtils
+import com.adm.utils.skyblock.dungeon.DungeonPlayer
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 

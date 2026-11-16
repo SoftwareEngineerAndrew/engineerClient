@@ -54,7 +54,7 @@ git -C "$TEAM" archive HEAD | tar x -C "$PUB"
 rm -rf "$PUB/src/dev" "$PUB/promote.sh" \
   "$PUB/docs" "$PUB/test" "$PUB/tools" \
   "$PUB/src/resources/devgineerclient.mixins.json" \
-  "$PUB/src/resources/devgineerclient.odin.mixins.json" \
+  "$PUB/src/resources/devgineerclient.core.mixins.json" \
   "$PUB/src/resources/rotation" \
   "$PUB/src/resources/assets/engineerclient/dungeonpack/packs"/{layouts.json.gz,mobs.json.gz,doors.json.gz,runstate.json.gz,traps.json,secrets.json.gz}
 # POV Previews keeps the room pack (rooms.index.json.gz, rooms.blocks.bin), its shaders and posepov/.

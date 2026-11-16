@@ -1,7 +1,7 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.misc.Zpew;
-import com.odtheking.odin.features.impl.render.Etherwarp;
+import com.adm.features.impl.render.Etherwarp;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

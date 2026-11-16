@@ -2,16 +2,16 @@ package com.engineerclient.gui
 
 import com.engineerclient.EngineerClient.mc
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.RenderableSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.ModuleManager
-import com.odtheking.odin.features.impl.render.ClickGUIModule
-import com.odtheking.odin.utils.Color.Companion.brighter
-import com.odtheking.odin.utils.Color.Companion.darker
-import com.odtheking.odin.utils.render.Corners
-import com.odtheking.odin.utils.render.roundedRect
-import com.odtheking.odin.utils.render.roundedShadow
+import com.adm.clickgui.settings.RenderableSetting
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.features.ModuleManager
+import com.adm.features.impl.render.ClickGUIModule
+import com.adm.utils.Color.Companion.brighter
+import com.adm.utils.Color.Companion.darker
+import com.adm.utils.render.Corners
+import com.adm.utils.render.roundedRect
+import com.adm.utils.render.roundedShadow
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -85,7 +85,7 @@ class ModuleView(val module: Module) {
     /** The settings [query] matches, unless the module's own name does. */
     fun settingMatches(query: String): Set<SettingView> =
         if (query.isEmpty() || module.name.contains(query, true)) emptySet()
-        else views.filter { it.setting !is com.odtheking.odin.clickgui.settings.impl.DropdownSetting && it.setting.name.contains(query, true) }.toSet()
+        else views.filter { it.setting !is com.adm.clickgui.settings.impl.DropdownSetting && it.setting.name.contains(query, true) }.toSet()
 
     fun matches(query: String) = query.isEmpty() || module.name.contains(query, true) || settingMatches(query).isNotEmpty()
 

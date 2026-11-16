@@ -1,0 +1,26 @@
+package com.engineerclient.mixin.core;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.server.MinecraftServer;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Pseudo;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+/**
+ * Odin posts its BlockUpdateEvent from LevelChunk.setBlockState, which in singleplayer (the P3 Sim)
+ * also runs on the integrated server's thread, so every block change would reach Odin twice, the
+ * server's copy early and off the client thread (which confuses the Simon Says and arrows device solvers).
+ * Only the client's own changes go through. On a server (Hypixel) there is no integrated server,
+ * so nothing changes there.
+ */
+@Pseudo
+@Mixin(targets = "com.adm.events.BlockUpdateEvent", remap = false)
+public class BlockUpdateServerThreadMixin {
+    @Inject(method = "postAndCatch()Z", at = @At("HEAD"), cancellable = true, remap = false)
+    private void ec$clientOnly(CallbackInfoReturnable<Boolean> cir) {
+        MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
+        if (server != null && server.isSameThread()) cir.setReturnValue(false);
+    }
+}

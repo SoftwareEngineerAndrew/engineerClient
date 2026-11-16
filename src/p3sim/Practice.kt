@@ -2,7 +2,7 @@ package com.engineerclient.p3sim
 
 import com.engineerclient.EngineerClient
 import com.google.gson.GsonBuilder
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
+import com.adm.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.client.Minecraft
 import java.io.File
 import java.util.Locale

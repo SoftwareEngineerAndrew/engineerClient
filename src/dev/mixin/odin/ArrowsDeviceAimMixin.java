@@ -16,7 +16,7 @@ import java.util.List;
  * it draws the spots for the bow you hold itself, so Odin gets none to draw; its target highlight stays.
  */
 @Pseudo
-@Mixin(targets = "com.odtheking.odin.features.impl.boss.ArrowsDevice", remap = false)
+@Mixin(targets = "com.adm.features.impl.boss.ArrowsDevice", remap = false)
 public class ArrowsDeviceAimMixin {
     @Inject(method = "calculateOptimalAimPositions(Lnet/minecraft/core/BlockPos;)Ljava/util/List;", at = @At("HEAD"), cancellable = true, remap = false)
     private void dc$aimsForYourBow(BlockPos target, CallbackInfoReturnable<List<?>> cir) {

@@ -2,10 +2,10 @@ package com.engineerclient.render
 
 import com.engineerclient.mixin.HoveredSlotAccessor
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.features.Category
+import com.adm.features.Module
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen

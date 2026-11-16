@@ -1,7 +1,7 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.utils.itemId
+import com.adm.utils.itemId
 
 /** SS Practice's keybind with Infinileap in your hand: /termsim inf ([InfNumbersSim]), the numbers that never ends. */
 object LeapNumbersSim {

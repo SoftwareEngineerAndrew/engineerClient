@@ -1,6 +1,6 @@
 package com.engineerclient.terminals
 
-import com.odtheking.odin.events.core.Event
+import com.adm.events.core.Event
 import net.minecraft.world.inventory.AbstractContainerMenu
 
 abstract class TerminalEvent(val terminal: TerminalHandler) : Event {

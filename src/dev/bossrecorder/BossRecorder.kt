@@ -1,15 +1,15 @@
 package com.devgineerclient.bossrecorder
 
 import com.devgineerclient.DevgineerClient
-import com.odtheking.odin.clickgui.settings.impl.ActionSetting
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.events.core.onSend
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.adm.clickgui.settings.impl.ActionSetting
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.events.LevelEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.events.core.onSend
+import com.adm.features.Category
+import com.adm.features.Module
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.network.protocol.Packet
@@ -53,7 +53,7 @@ object BossRecorder : Module(
         if (switchedOn) return
         switchedOn = true
         if (!enabled) toggle()
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+        com.adm.features.ModuleManager.saveConfigurations()
     }
 
     private val dir get() = DevgineerClient.mc.gameDirectory.toPath().resolve("config").resolve("devgineerclient").resolve("bossrecorder")

@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleArrows;
+import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleArrows;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;

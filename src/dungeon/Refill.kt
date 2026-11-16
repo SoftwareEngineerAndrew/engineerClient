@@ -2,13 +2,13 @@ package com.engineerclient.dungeon
 
 import com.engineerclient.EngineerClient
 import com.mojang.brigadier.arguments.IntegerArgumentType
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.itemId
-import com.odtheking.odin.utils.sendCommand
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.itemId
+import com.adm.utils.sendCommand
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal

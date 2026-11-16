@@ -1,10 +1,10 @@
 package com.engineerclient.dungeon
 
 import com.engineerclient.misc.OdinMelodyChat
-import com.odtheking.odin.features.impl.boss.MelodyMessage
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.render.text
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.features.impl.boss.MelodyMessage
+import com.adm.utils.Colors
+import com.adm.utils.render.text
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.Minecraft
 
 /** Blade's Melody Alert, in Melody Message. */

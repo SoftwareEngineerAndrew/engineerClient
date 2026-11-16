@@ -2,32 +2,32 @@ package com.engineerclient.splits
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.misc.Witherborn
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.StringSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.events.BlockUpdateEvent
-import com.odtheking.odin.events.EntityEvent
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.RenderExtractEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Color
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.ColorSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.StringSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.events.BlockUpdateEvent
+import com.adm.events.EntityEvent
+import com.adm.events.LevelEvent
+import com.adm.events.RenderExtractEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.Color
 import com.engineerclient.storm.StormCrush
 import com.engineerclient.storm.StormCrushView
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.render.text
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.texture
-import com.odtheking.odin.utils.sendCommand
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.tile.RoomType
+import com.adm.utils.Colors
+import com.adm.utils.render.text
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.texture
+import com.adm.utils.sendCommand
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal
@@ -156,7 +156,7 @@ object DungeonSplits : Module(
             val times = if (example) listOf(8_700L to 174L, 7_700L to 154L, 9_100L to 182L, 10_350L to 207L) else termSections()
             draw(this, times.mapIndexedNotNull { i, (ms, ticks) ->
                 if (!termShown.getOrElse(i) { true }) return@mapIndexedNotNull null
-                "§6S${i + 1} §a${SplitFormat.seconds(ms)}" + if (com.odtheking.odin.features.impl.skyblock.Splits.showTickTime) " §8(§7${SplitFormat.seconds(ticks * 50)}§8)" else ""
+                "§6S${i + 1} §a${SplitFormat.seconds(ms)}" + if (com.adm.features.impl.skyblock.Splits.showTickTime) " §8(§7${SplitFormat.seconds(ticks * 50)}§8)" else ""
             })
         }
     )
@@ -817,7 +817,7 @@ object DungeonSplits : Module(
         while (list.size > RECENT) list.removeAt(0)
         val text = all.entries.sortedBy { it.key }.joinToString(",") { (k, v) -> k + "=" + v.joinToString("|") { "${it.ms}:${it.ticks}" } }
         when (floor) { "F7" -> recentF7 = text; "M7" -> recentM7 = text; else -> return }
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+        com.adm.features.ModuleManager.saveConfigurations()
     }
 
     /**
@@ -843,7 +843,7 @@ object DungeonSplits : Module(
     private fun saveBests(floor: String?, bests: Map<String, Long>) {
         val text = SubSplitGrades.formatBests(bests)
         when (floor) { "F7" -> bestsF7 = text; "M7" -> bestsM7 = text; else -> return }
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+        com.adm.features.ModuleManager.saveConfigurations()
     }
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {

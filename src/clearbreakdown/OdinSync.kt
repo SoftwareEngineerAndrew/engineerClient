@@ -1,9 +1,9 @@
 package com.engineerclient.clearbreakdown
 
 import com.google.gson.Gson
-import com.odtheking.odin.features.impl.render.ClickGUIModule
-import com.odtheking.odin.utils.network.webSocket
-import com.odtheking.odin.utils.skyblock.LocationUtils
+import com.adm.features.impl.render.ClickGUIModule
+import com.adm.utils.network.webSocket
+import com.adm.utils.skyblock.LocationUtils
 
 /**
  * Odin's dungeon map sync, read by Clear Breakdown on a connection of its own: every Odin user in

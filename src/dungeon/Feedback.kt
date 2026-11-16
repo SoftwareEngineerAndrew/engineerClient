@@ -1,13 +1,13 @@
 package com.engineerclient.dungeon
 
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.ActionSetting
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.StringSetting
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.playSoundSettings
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.ActionSetting
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.StringSetting
+import com.adm.features.Module
+import com.adm.utils.playSoundSettings
 import net.minecraft.network.chat.Component
 
 internal fun showTitle(text: String, seconds: Double) {

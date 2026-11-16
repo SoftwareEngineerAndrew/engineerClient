@@ -2,7 +2,7 @@ package com.engineerclient.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import com.odtheking.odin.features.impl.dungeon.LeapMenu;
+import com.adm.features.impl.dungeon.LeapMenu;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Inventory;
 import org.spongepowered.asm.mixin.Mixin;

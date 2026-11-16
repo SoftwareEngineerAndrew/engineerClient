@@ -1,0 +1,153 @@
+@file:Suppress("unused")
+
+package com.adm.features
+
+import com.mojang.blaze3d.platform.InputConstants
+import com.adm.AdmMod
+import com.adm.AdmMod.mc
+import com.adm.clickgui.HudLayer
+import com.adm.clickgui.HudManager
+import com.adm.clickgui.settings.impl.HUDSetting
+import com.adm.clickgui.settings.impl.KeybindSetting
+import com.adm.config.ModuleConfig
+import com.adm.events.InputEvent
+import com.adm.events.core.on
+import com.adm.features.impl.boss.*
+import com.adm.features.impl.dungeon.*
+import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
+import com.adm.features.impl.dungeon.map.DungeonMap
+import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
+import com.adm.features.impl.nether.*
+import com.adm.features.impl.render.*
+import com.adm.features.impl.skyblock.*
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
+import net.fabricmc.loader.api.FabricLoader
+import net.minecraft.client.DeltaTracker
+import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.resources.Identifier
+import net.minecraft.resources.Identifier.fromNamespaceAndPath
+import java.io.File
+
+/**
+ * # Module Manager
+ *
+ * This object stores all [Modules][Module] and provides functionality to [HUDs][Module.HUD]
+ */
+object ModuleManager {
+
+    /**
+     * Map containing all modules in Odin,
+     * where the key is the modules name in lowercase.
+     */
+    val modules: HashMap<String, Module> = linkedMapOf()
+
+    /**
+     * Map containing all modules under their category.
+     */
+    val modulesByCategory: HashMap<Category, ArrayList<Module>> = hashMapOf()
+
+    /**
+     * List of all configurations handled by Odin.
+     */
+    val configs: ArrayList<ModuleConfig> = arrayListOf()
+
+    val keybindSettingsCache: ArrayList<KeybindSetting> = arrayListOf()
+    val hudSettingsCache: ArrayList<HUDSetting> = arrayListOf()
+
+    init {
+        com.adm.clickgui.settings.impl.HudElement.resolve = { id -> hudSettingsCache.firstOrNull { it.hud.id == id }?.hud }
+    }
+
+    private val HUD_LAYER: Identifier = fromNamespaceAndPath(AdmMod.MOD_ID, "adm_hud")
+
+    init {
+        registerModules(config = ModuleConfig(file = File(AdmMod.configFile, "config.json")),
+            // dungeon
+            PuzzleSolvers, BlessingDisplay, LeapMenu, SecretClicked, Mimic,
+            DoorHighlight, BloodCamp, TerracottaTimer, LividSolver,
+            InvincibilityTimer, SpiritBear, DungeonWaypoints, BetterPartyFinder, Croesus, MageBeam,
+            DungeonMap,
+
+            // boss
+            MelodyMessage, WitherDragons,
+
+            // render
+            ClickGUIModule, Camera, Etherwarp, PlayerSize,
+            PlayerDisplay, Highlight, GyroWand,
+
+            //skyblock
+            ChatCommands, Ragnarock, SpringBoots, MenuKeybinds,
+            CommandKeybinds, SlotBinds, Splits,
+
+            // nether
+            SupplyHelper, BuildHelper, RemovePerks, NoPre, PearlWaypoints, FreshTools, KuudraInfo, Misc, Vesuvius,
+            KuudraTracker,
+        )
+
+        // hashmap, but would need to keep track when setting values change
+        on<InputEvent> {
+            for (setting in keybindSettingsCache) {
+                if (setting.boundKey != InputConstants.UNKNOWN && setting.boundKey == key) setting.onPress?.invoke()
+            }
+        }
+
+        HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, HUD_LAYER, ModuleManager::render)
+    }
+
+    /**
+     * Registers modules to the [ModuleManager] and initializes them.
+     *
+     * @param config the config the [Module] is saved to,
+     * it is recommended that each unique mod that uses this has its own config
+     */
+    fun registerModules(config: ModuleConfig, vararg modules: Module) {
+        for (module in modules) {
+            if (module.isDevModule && !FabricLoader.getInstance().isDevelopmentEnvironment) continue
+
+            val lowercase = module.name.lowercase()
+            config.modules[lowercase] = module
+            this.modules[lowercase] = module
+            this.modulesByCategory.getOrPut(module.category) { arrayListOf() }.add(module)
+
+            module.key?.let { keybind ->
+                val setting = KeybindSetting("Keybind", keybind, "Toggles this module.")
+                setting.onPress = module::onKeybind
+                module.registerSetting(setting)
+            }
+
+            for ((_, setting) in module.settings) {
+                when (setting) {
+                    is KeybindSetting -> keybindSettingsCache.add(setting)
+                    is HUDSetting -> if (setting !in hudSettingsCache) hudSettingsCache.add(setting)
+                }
+            }
+        }
+        configs.add(config)
+        config.load()
+    }
+
+    /**
+     * Loads all [configs] from disk, into the respective modules.
+     */
+    fun loadConfigurations() {
+        for (config in configs) {
+            config.load()
+        }
+    }
+
+    /**
+     * Saves all [configs] to disk, from the respective modules.
+     */
+    fun saveConfigurations() {
+        for (config in configs) {
+            config.save()
+        }
+    }
+
+    fun render(guiGraphics: GuiGraphicsExtractor, tickCounter: DeltaTracker) {
+        if (mc.level == null || mc.player == null || mc.gui.screen() == HudManager) return
+
+        HudLayer.render(guiGraphics, example = false, mouseX = -1, mouseY = -1)
+    }
+}

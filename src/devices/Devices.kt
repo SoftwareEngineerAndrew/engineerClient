@@ -2,14 +2,14 @@ package com.engineerclient.devices
 
 import com.engineerclient.practice.SimonSaysPractice
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.*
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Color.Companion.withAlpha
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.createSoundSettings
-import com.odtheking.odin.utils.render.BoxStyle
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.*
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.Color.Companion.withAlpha
+import com.adm.utils.Colors
+import com.adm.utils.createSoundSettings
+import com.adm.utils.render.BoxStyle
 
 /** The P3 device solvers and SS Practice, one section each; the logic lives in the section objects ([DevSimonSays], [SimonSaysPractice], [DevArrowAlign], [DevArrows]). */
 object Devices : Module(

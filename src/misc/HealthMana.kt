@@ -1,18 +1,18 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.ColorSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.clickgui.settings.impl.HUDSetting
-import com.odtheking.odin.clickgui.settings.impl.HudElement
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.features.impl.skyblock.PlayerDisplay
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.Color.Companion.withAlpha
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.skyblock.ActionBarListener
-import com.odtheking.odin.utils.skyblock.LocationUtils
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.ColorSetting
+import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.clickgui.settings.impl.HUDSetting
+import com.adm.clickgui.settings.impl.HudElement
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.features.impl.skyblock.PlayerDisplay
+import com.adm.utils.Color
+import com.adm.utils.Color.Companion.withAlpha
+import com.adm.utils.Colors
+import com.adm.utils.skyblock.ActionBarListener
+import com.adm.utils.skyblock.LocationUtils
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 /**

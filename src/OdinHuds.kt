@@ -2,9 +2,9 @@ package com.engineerclient
 
 import com.engineerclient.misc.HealthMana
 import com.engineerclient.splits.OdinSplitsLook
-import com.odtheking.odin.clickgui.settings.impl.HUDSetting
-import com.odtheking.odin.clickgui.settings.impl.HudElement
-import com.odtheking.odin.clickgui.settings.impl.drawAtHud
+import com.adm.clickgui.settings.impl.HUDSetting
+import com.adm.clickgui.settings.impl.HudElement
+import com.adm.clickgui.settings.impl.drawAtHud
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 /**

@@ -5,10 +5,10 @@ import com.engineerclient.clearbreakdown.OdinSync
 import com.engineerclient.pov.PoseShare
 import com.engineerclient.tpmaze.TeamTpMaze
 import com.google.gson.JsonParser
-import com.odtheking.odin.features.impl.boss.MelodyMessage
-import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
-import com.odtheking.odin.utils.network.WebSocketConnection
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.features.impl.boss.MelodyMessage
+import com.adm.features.impl.dungeon.map.DungeonMap
+import com.adm.utils.network.WebSocketConnection
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 

@@ -1,15 +1,15 @@
 package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.impl.dungeon.SecretClicked
-import com.odtheking.odin.utils.playSoundSettings
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.events.LevelEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.features.impl.dungeon.SecretClicked
+import com.adm.utils.playSoundSettings
 import net.minecraft.world.entity.item.ItemEntity
 
 object OdinInstantChime {
@@ -42,7 +42,7 @@ object OdinInstantChime {
             val level = EngineerClient.mc.level ?: return@on
             val reach = player.boundingBox.inflate(1.0, 0.5, 1.0)
             // The item reached us half a ping after the server spawned it: it's that much older there.
-            val ready = (PICKUP_DELAY - com.odtheking.odin.utils.ServerUtils.averagePing / 100).coerceAtLeast(0)
+            val ready = (PICKUP_DELAY - com.adm.utils.ServerUtils.averagePing / 100).coerceAtLeast(0)
             for (entity in level.entitiesForRendering()) {
                 if (entity !is ItemEntity || entity.isRemoved || entity.id in chimed) continue
                 if (entity.tickCount < ready || !reach.intersects(entity.boundingBox) || !ItemHighlight.wanted(entity)) continue

@@ -1,9 +1,9 @@
 package com.engineerclient.mapicons
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting
-import com.odtheking.odin.clickgui.settings.Setting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
+import com.adm.clickgui.settings.RenderableSetting
+import com.adm.clickgui.settings.Setting
+import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.features.impl.dungeon.map.DungeonMap
 
 /** Dungeon Map's settings in sections: the switches first, then the map's look, colors, players and prediction. */
 object MapLayout {

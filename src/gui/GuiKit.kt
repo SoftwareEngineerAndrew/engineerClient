@@ -2,14 +2,14 @@ package com.engineerclient.gui
 
 import com.engineerclient.EngineerClient.mc
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.features.impl.render.ClickGUIModule
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.Color.Companion.brighter
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.render.Corners
-import com.odtheking.odin.utils.render.pushScissor
-import com.odtheking.odin.utils.render.roundedRectOutlined
-import com.odtheking.odin.utils.ui.animations.Easing
+import com.adm.features.impl.render.ClickGUIModule
+import com.adm.utils.Color
+import com.adm.utils.Color.Companion.brighter
+import com.adm.utils.Colors
+import com.adm.utils.render.Corners
+import com.adm.utils.render.pushScissor
+import com.adm.utils.render.roundedRectOutlined
+import com.adm.utils.ui.animations.Easing
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.input.CharacterEvent
 import net.minecraft.client.input.KeyEvent

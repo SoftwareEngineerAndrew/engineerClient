@@ -1,7 +1,7 @@
 package com.engineerclient.mapicons
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.features.impl.dungeon.map.DungeonMap
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.features.impl.dungeon.map.DungeonMap
 import net.minecraft.resources.Identifier
 
 /**
@@ -26,7 +26,7 @@ object MapIcons {
     /** Whether Odin's map may draw the icon [id] (its map/… textures); anything else is left alone. */
     @JvmStatic
     fun shows(id: Identifier): Boolean {
-        if (id.namespace != "odin") return true
+        if (id.namespace != "engineerclient") return true
         return when (id.path) {
             "map/question.png" -> questionMarks.value
             "map/green_check.png", "map/white_check.png", "map/cross.png" -> checkmarks.value

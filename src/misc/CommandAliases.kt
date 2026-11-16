@@ -1,9 +1,9 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.StringSetting
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.StringSetting
+import com.adm.features.Category
+import com.adm.features.Module
 import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents
 
 object CommandAliases : Module(

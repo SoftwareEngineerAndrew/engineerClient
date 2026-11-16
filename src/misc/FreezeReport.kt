@@ -1,9 +1,9 @@
 package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.events.PacketEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
+import com.adm.events.PacketEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 
 /** When the game stops ticking or packets stop coming for [STALL_MS], every thread's stack goes to the log once, so a freeze can be traced. */

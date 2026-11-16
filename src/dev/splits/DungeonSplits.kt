@@ -1,25 +1,25 @@
 package com.devgineerclient.splits
 
 import com.devgineerclient.DevgineerClient
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.StringSetting
-import com.odtheking.odin.clickgui.settings.impl.HUDSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.events.BlockUpdateEvent
-import com.odtheking.odin.events.EntityEvent
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.render.text
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.texture
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.StringSetting
+import com.adm.clickgui.settings.impl.HUDSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.events.BlockUpdateEvent
+import com.adm.events.EntityEvent
+import com.adm.events.LevelEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.tile.RoomType
+import com.adm.utils.Colors
+import com.adm.utils.render.text
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.texture
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundBossEventPacket
 import net.minecraft.network.protocol.game.ClientboundDamageEventPacket
@@ -833,7 +833,7 @@ object DungeonSplits : Module(
 
     /** Engineer Client's store of [floor]'s bests (its Sub Splits module), when it is installed. */
     private fun ecBests(floor: String?): StringSetting? =
-        com.odtheking.odin.features.ModuleManager.modules["sub splits"]?.settings?.get("Sub Split Bests $floor") as? StringSetting
+        com.adm.features.ModuleManager.modules["sub splits"]?.settings?.get("Sub Split Bests $floor") as? StringSetting
 
     private fun bests(floor: String?): MutableMap<String, Long> = SubSplitGrades.parseBests(
         ecBests(floor)?.value ?: when (floor) { "F7" -> bestsF7; "M7" -> bestsM7; else -> "" })
@@ -841,7 +841,7 @@ object DungeonSplits : Module(
     private fun saveBests(floor: String?, bests: Map<String, Long>) {
         val text = SubSplitGrades.formatBests(bests)
         ecBests(floor)?.let { it.value = text } ?: when (floor) { "F7" -> bestsF7 = text; "M7" -> bestsM7 = text; else -> return }
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+        com.adm.features.ModuleManager.saveConfigurations()
     }
 
     /**

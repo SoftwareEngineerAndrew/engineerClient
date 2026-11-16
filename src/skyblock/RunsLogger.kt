@@ -4,11 +4,11 @@ import com.engineerclient.EngineerClient
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 import com.mojang.brigadier.arguments.StringArgumentType
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback

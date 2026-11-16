@@ -1,6 +1,6 @@
 package com.engineerclient.mixin;
 
-import com.odtheking.odin.features.impl.dungeon.LeapMenu;
+import com.adm.features.impl.dungeon.LeapMenu;
 import net.minecraft.client.player.ClientInput;
 import net.minecraft.client.player.KeyboardInput;
 import net.minecraft.world.entity.player.Input;

@@ -1,13 +1,13 @@
 package com.engineerclient.culling
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.render.text
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.Colors
+import com.adm.utils.render.text
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.world.level.chunk.status.ChunkStatus
 

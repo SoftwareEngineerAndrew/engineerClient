@@ -10,11 +10,11 @@ import com.engineerclient.splits.DungeonSplits
 import com.engineerclient.splits.OdinSplitsLook
 import com.engineerclient.waypoints.BrWaypoints2
 import com.mojang.brigadier.arguments.StringArgumentType
-import com.odtheking.odin.config.ModuleConfig
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.ModuleManager
+import com.adm.config.ModuleConfig
+import com.adm.events.LevelEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.features.ModuleManager
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.loader.api.FabricLoader
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
@@ -72,7 +72,7 @@ object EngineerClient : ClientModInitializer {
     }
 
     /** Every module. */
-    val MODULES: List<com.odtheking.odin.features.Module> by lazy {
+    val MODULES: List<com.adm.features.Module> by lazy {
         listOf(
             PosePov, com.engineerclient.terminals.Terminals, com.engineerclient.devices.Devices, com.engineerclient.p3sim.P3Sim, ADR, BrWaypoints2, AgroSphere, DungeonSplits, com.engineerclient.practice.Recore, com.engineerclient.practice.EeHighlight,
             RandomStuff, com.engineerclient.misc.CommandAliases, com.engineerclient.dungeon.Refill,
@@ -101,7 +101,7 @@ object EngineerClient : ClientModInitializer {
 
     override fun onInitializeClient() {
         try { ConfigMigration.rename(mc.gameDirectory.toPath()) } catch (t: Throwable) { logger.warn("[ec] moving Engineer Client's settings to ADM failed", t) }
-        try { ConfigMigration.run(mc.gameDirectory.toPath().resolve("config").resolve("odin")) } catch (t: Throwable) { logger.warn("[ec] module settings migration failed", t) }
+        try { ConfigMigration.run(com.adm.AdmMod.configFile.toPath()) } catch (t: Throwable) { logger.warn("[ec] module settings migration failed", t) }
         val firstRun = EcConfig.load()
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { _, _, _ -> EcConfig.migrateRoleBindings() }
 
@@ -186,8 +186,7 @@ object EngineerClient : ClientModInitializer {
         com.engineerclient.misc.Zpew.register()
         com.engineerclient.misc.I4Complete.register()
         EcLog.open(mc.gameDirectory.toPath(), listOf(
-            "engineerclient ${FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")}" +
-                "  odin ${FabricLoader.getInstance().getModContainer("odin").map { it.metadata.version.friendlyString }.orElse("?")}",
+            "engineerclient ${FabricLoader.getInstance().getModContainer("engineerclient").map { it.metadata.version.friendlyString }.orElse("?")}",
         ))
         // The player is not known until they log in; record who this client is once they are.
         ClientTickEvents.END_CLIENT_TICK.register(object : ClientTickEvents.EndTick {
@@ -211,7 +210,7 @@ object EngineerClient : ClientModInitializer {
      * boxes, EE Highlight's Show Spots, Term Progress's labels; 2026-11-07, Odin 0.4.0). Call right after
      * registerModules: a later config load that turns one off then unsubscribes it as usual. Subscribing twice is nothing.
      */
-    fun subscribeEnabled(modules: Iterable<com.odtheking.odin.features.Module>) {
+    fun subscribeEnabled(modules: Iterable<com.adm.features.Module>) {
         val fixed = modules.filter { it.enabled && !it.alwaysActive && it !in EventBus.activeSubscribers }
         for (m in fixed) EventBus.subscribe(m)
         if (fixed.isNotEmpty()) logger.info("[ec] on but left off Odin's event bus, subscribed: ${fixed.joinToString { it.name }}")
@@ -285,9 +284,9 @@ object EngineerClient : ClientModInitializer {
             val floors = mapOf("e" to "catacombs_entrance") + (1..7).flatMap { n ->
                 listOf("f$n" to "catacombs_floor_${numbers[n - 1]}", "m$n" to "master_catacombs_floor_${numbers[n - 1]}")
             }
-            for ((name, instance) in floors) dispatcher.register(literal(name).executes { mc.schedule { com.odtheking.odin.utils.sendCommand("joininstance $instance") }; 1 })
+            for ((name, instance) in floors) dispatcher.register(literal(name).executes { mc.schedule { com.adm.utils.sendCommand("joininstance $instance") }; 1 })
             // /edt: #EndDungeonsToxicity in party chat.
-            dispatcher.register(literal("edt").executes { mc.schedule { com.odtheking.odin.utils.sendCommand("pc #EndDungeonsToxicity") }; 1 })
+            dispatcher.register(literal("edt").executes { mc.schedule { com.adm.utils.sendCommand("pc #EndDungeonsToxicity") }; 1 })
             // /termsim [ping], /termsim <terminal> [ping], /termsim inf.
             fun sim(open: (Long) -> Unit) = argument("ping", com.mojang.brigadier.arguments.LongArgumentType.longArg(0, 2000))
                 .executes { ctx -> val p = com.mojang.brigadier.arguments.LongArgumentType.getLong(ctx, "ping"); mc.schedule { open(p) }; 1 }
@@ -302,12 +301,12 @@ object EngineerClient : ClientModInitializer {
             // Same tree under every alias (Brigadier literals are case-sensitive). Built fresh per
             // name — a bare redirect would not run the root executes on the alias itself.
             val odin = com.mojang.brigadier.CommandDispatcher<net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource>()
-                .also { com.odtheking.odin.commands.mainCommand.register(it) }.root.getChild("adm").children
+                .also { com.adm.commands.mainCommand.register(it) }.root.getChild("adm").children
             for (name in COMMANDS) dispatcher.register(
                 literal(name).apply { odin.forEach { then(it) } }
                     .executes { mc.schedule { mc.setScreenAndShow(com.engineerclient.gui.AdmClickGui) }; 1 }
                     .then(literal("keybinds").executes {
-                        mc.schedule { com.engineerclient.gui.AdmClickGui.open(com.odtheking.odin.features.impl.skyblock.CommandKeybinds) }
+                        mc.schedule { com.engineerclient.gui.AdmClickGui.open(com.adm.features.impl.skyblock.CommandKeybinds) }
                         1
                     })
                     .then(literal("worth").executes { ctx ->
@@ -348,6 +347,6 @@ object EngineerClient : ClientModInitializer {
 }
 
 /** A selector's place in its option list (Odin's selectors hold the enum constant); setting it wraps around. */
-var <E : Enum<E>> com.odtheking.odin.clickgui.settings.impl.SelectorSetting<E>.index: Int
+var <E : Enum<E>> com.adm.clickgui.settings.impl.SelectorSetting<E>.index: Int
     get() = options.indexOf(value)
     set(i) { value = options[Math.floorMod(i, options.size)] }

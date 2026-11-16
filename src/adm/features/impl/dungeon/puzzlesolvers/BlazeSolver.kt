@@ -1,0 +1,104 @@
+package com.adm.features.impl.dungeon.puzzlesolvers
+
+import com.adm.AdmMod.mc
+import com.adm.events.EntityEvent
+import com.adm.events.RenderExtractEvent
+import com.adm.events.RoomEnterEvent
+import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers.onPuzzleComplete
+import com.adm.utils.Color
+import com.adm.utils.equalsOneOf
+import com.adm.utils.render.BoxStyle
+import com.adm.utils.render.drawLine
+import com.adm.utils.render.drawStyledBox
+import com.adm.utils.sendCommand
+import com.adm.utils.skyblock.dungeon.DungeonListener
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.Puzzle
+import com.adm.utils.skyblock.dungeon.PuzzleStatus
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.monster.Blaze
+
+object BlazeSolver {
+    private class BlazeTag(val entity: ArmorStand, val maxHealth: Int)
+
+    private val blazes = ArrayList<BlazeTag>(10)
+    private val blazeHealthRegex = Regex("^\\[Lv+\\d+]  Blaze [\\d,]+/([\\d,]+)❤$")
+
+    inline val inBlazeRoom get() = DungeonUtils.currentRoomName.equalsOneOf("Lower Blaze", "Higher Blaze")
+
+    fun isBlazeTag(entity: Entity): Boolean =
+        entity is ArmorStand && inBlazeRoom && blazes.any { it.entity.id == entity.id }
+
+    fun onEntityData(event: EntityEvent.SetData) {
+        if (!DungeonUtils.inClear) return
+        val entity = (event.entity as? ArmorStand)?.takeIf { !it.isDeadOrDying } ?: return
+        if (blazes.any { it.entity.uuid == entity.uuid }) return
+        val name = entity.name.string.takeIf { it.endsWith('❤') } ?: return
+        val maxHealth = blazeHealthRegex.find(name)?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull() ?: return
+        blazes.add(BlazeTag(entity, maxHealth))
+        sort(DungeonUtils.currentRoomName)
+    }
+
+    private fun sort(roomName: String?) {
+        if (roomName == "Lower Blaze") blazes.sortByDescending { it.maxHealth }
+        else blazes.sortBy { it.maxHealth }
+    }
+
+    fun onRoomEnter(event: RoomEnterEvent) {
+        sort(event.room?.data?.name)
+    }
+
+    fun onEntityRemove(event: EntityEvent.Remove) {
+        blazes.removeAll { it.entity.id == event.entity.id }
+    }
+
+    fun onEntityDeath(event: EntityEvent.Event, sendComplete: Boolean) {
+        if (event.id != 3.toByte() || event.entity !is Blaze) return
+        if (!blazes.removeAll { it.entity.id == event.entity.id + 1 } || blazes.isNotEmpty() || !inBlazeRoom) return
+
+        DungeonListener.puzzles.find { it == Puzzle.BLAZE }?.status = PuzzleStatus.Completed
+        onPuzzleComplete(DungeonUtils.currentRoomName)
+        if (sendComplete) sendCommand("pc Blaze puzzle solved!")
+    }
+
+    fun onRenderWorld(event: RenderExtractEvent, blazeLineNext: Boolean, blazeLineAmount: Int, blazeStyle: BoxStyle, blazeFirstColor: Color, blazeSecondColor: Color, blazeThirdColor: Color, blazeAllColor: Color, blazeLineWidth: Float) {
+        if (blazes.isEmpty() || !inBlazeRoom) return
+
+        blazes.forEachIndexed { index, tag ->
+            val color = when (index) {
+                0 -> blazeFirstColor
+                1 -> blazeSecondColor
+                2 -> blazeThirdColor
+                else -> blazeAllColor
+            }
+            val aabb = tag.entity.boundingBox.inflate(0.5, 1.0, 0.5).move(0.0, -1.0, 0.0)
+
+            event.drawStyledBox(aabb, color, blazeStyle, depth = true)
+
+            if (blazeLineNext && index > 0 && index <= blazeLineAmount)
+                event.drawLine(listOf(blazes[index - 1].entity.boundingBox.center, aabb.center), color = color, thickness = blazeLineWidth, depth = true)
+        }
+    }
+
+    // Each blaze has to be hit after every one before it: arrows already flying count, and they land first only on an earlier tick.
+    fun blocksShot(shot: List<PuzzleArrows.Flight>): Boolean {
+        if (!PuzzleSolvers.enabled || !PuzzleSolvers.blazeBlockWrong || !DungeonUtils.inClear || !inBlazeRoom || blazes.isEmpty()) return false
+        val level = mc.level ?: return false
+        val boxes = blazes.map { tag -> (level.getEntity(tag.entity.id - 1) as? Blaze)?.boundingBox?.inflate(0.3) ?: tag.entity.boundingBox.inflate(0.5, 1.0, 0.5).move(0.0, -1.0, 0.0) }
+
+        val landed = HashMap<Int, Int>()
+        for (arrow in PuzzleArrows.flying(own = false)) {
+            val land = PuzzleArrows.land(arrow, boxes)?.takeIf { it.box >= 0 } ?: continue
+            if (land.tick < (landed[land.box] ?: Int.MAX_VALUE)) landed[land.box] = land.tick
+        }
+        return shot.any { arrow ->
+            val land = PuzzleArrows.land(arrow, boxes)?.takeIf { it.box >= 0 } ?: return@any false
+            (0 until land.box).any { (landed[it] ?: Int.MAX_VALUE) >= land.tick }
+        }
+    }
+
+    fun reset() {
+        blazes.clear()
+    }
+}

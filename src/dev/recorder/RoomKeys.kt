@@ -1,10 +1,10 @@
 package com.devgineerclient.recorder
 
 import com.devgineerclient.DevgineerClient
-import com.odtheking.odin.features.impl.dungeon.map.WorldScan
-import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
-import com.odtheking.odin.features.impl.dungeon.map.tile.RoomShape
-import com.odtheking.odin.utils.IVec2
+import com.adm.features.impl.dungeon.map.WorldScan
+import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.features.impl.dungeon.map.tile.RoomShape
+import com.adm.utils.IVec2
 import net.minecraft.world.level.chunk.status.ChunkStatus
 
 /**

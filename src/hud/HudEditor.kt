@@ -6,12 +6,12 @@ import androidx.compose.runtime.setValue
 import com.engineerclient.EcConfig
 import com.engineerclient.OdinHuds
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.HudLayer
-import com.odtheking.odin.clickgui.HudManager
-import com.odtheking.odin.clickgui.settings.impl.HUDSetting
-import com.odtheking.odin.clickgui.settings.impl.HudElement
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.ModuleManager
+import com.adm.clickgui.HudLayer
+import com.adm.clickgui.HudManager
+import com.adm.clickgui.settings.impl.HUDSetting
+import com.adm.clickgui.settings.impl.HudElement
+import com.adm.features.Category
+import com.adm.features.ModuleManager
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.Screen
@@ -101,7 +101,7 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
 
     /** Pulls [hud] onto the nearest edge of another HUD within the snap distance, on each axis. */
     private fun snap(hud: HudElement) {
-        val reach = com.odtheking.odin.features.impl.render.ClickGUIModule.hudSnap
+        val reach = com.adm.features.impl.render.ClickGUIModule.hudSnap
         if (reach <= 0) return
         val w = hud.scaledWidth
         val h = hud.scaledHeight

@@ -1,10 +1,10 @@
 package com.devgineerclient.splits
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.StringSetting
-import com.odtheking.odin.features.impl.skyblock.Splits
-import com.odtheking.odin.utils.skyblock.dungeon.Floor
-import com.odtheking.odin.utils.skyblock.floor7SplitGroup
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.StringSetting
+import com.adm.features.impl.skyblock.Splits
+import com.adm.utils.skyblock.dungeon.Floor
+import com.adm.utils.skyblock.floor7SplitGroup
 import java.util.Locale
 
 /**
@@ -30,7 +30,7 @@ object PaceTargets {
     fun paceTarget(label: String, master: Boolean): SplitPace.Clocks? {
         val i = SplitPace.ORDER.indexOf(label).takeIf { it >= 0 } ?: return null
         // Engineer Client's Pace From Recent Runs: its typical time for the split, when it has one.
-        if ((Splits.settings["Pace From"] as? com.odtheking.odin.clickgui.settings.impl.SelectorSetting<*>)?.value?.toString() == "Recent Runs")
+        if ((Splits.settings["Pace From"] as? com.adm.clickgui.settings.impl.SelectorSetting<*>)?.value?.toString() == "Recent Runs")
             com.engineerclient.splits.DungeonSplits.typical(if (master) "M7" else "F7", label)?.let { return SplitPace.Clocks(it.ms, it.ticks) }
         val box = LABELS.getOrNull(i)?.let { Splits.settings["${if (master) "M7" else "F7"} $it"] as? StringSetting }
         box?.value?.let { parseSeconds(it) }?.let { return secs(it) }

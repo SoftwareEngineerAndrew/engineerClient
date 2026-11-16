@@ -3,7 +3,7 @@ package com.engineerclient.render
 import com.engineerclient.mixin.HudSidebarInvoker
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.chat.Style
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.decoration.ArmorStand

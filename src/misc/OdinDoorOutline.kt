@@ -1,8 +1,8 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.features.impl.dungeon.DoorHighlight
-import com.odtheking.odin.utils.render.BoxStyle
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.features.impl.dungeon.DoorHighlight
+import com.adm.utils.render.BoxStyle
 
 object OdinDoorOutline {
 

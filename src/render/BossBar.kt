@@ -1,13 +1,13 @@
 package com.engineerclient.render
 
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.events.EntityEvent
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.events.EntityEvent
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.core.on
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.features.Category
+import com.adm.features.Module
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.world.BossEvent
 import net.minecraft.world.entity.LivingEntity

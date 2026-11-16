@@ -1,7 +1,7 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.gui.AdmClickGui;
-import com.odtheking.odin.clickgui.ClickGUI;
+import com.adm.clickgui.ClickGUI;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.screens.Screen;
 import org.spongepowered.asm.mixin.Mixin;

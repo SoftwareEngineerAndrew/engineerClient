@@ -12,11 +12,11 @@ import com.engineerclient.adr.ADR
 import com.engineerclient.adr.RunRecorder
 import com.mojang.blaze3d.platform.InputConstants
 import com.mojang.brigadier.arguments.StringArgumentType
-import com.odtheking.odin.clickgui.settings.impl.ActionSetting
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.adm.clickgui.settings.impl.ActionSetting
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.events.core.onReceive
+import com.adm.features.Category
+import com.adm.features.Module
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
@@ -28,7 +28,7 @@ import net.minecraft.client.player.LocalPlayer
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow
 import com.devgineerclient.mixin.BrecArrowAccessor
-import com.odtheking.odin.utils.itemId
+import com.adm.utils.itemId
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import java.nio.file.Files
 import java.nio.file.Path
@@ -61,7 +61,7 @@ object BetterRecorder : Module(
         if (switchedOn) return
         switchedOn = true
         if (!enabled) toggle()
-        com.odtheking.odin.features.ModuleManager.saveConfigurations()
+        com.adm.features.ModuleManager.saveConfigurations()
     }
 
     private val dir: Path get() = DevgineerClient.mc.gameDirectory.toPath().resolve("devgineerclient-recordings").resolve("better")

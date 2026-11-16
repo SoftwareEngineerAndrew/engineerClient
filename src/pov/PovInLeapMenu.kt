@@ -1,14 +1,14 @@
 package com.engineerclient.pov
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.DropdownSetting
-import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.impl.dungeon.LeapMenu
+import com.adm.clickgui.settings.RenderableSetting
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.clickgui.settings.impl.KeybindSetting
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.features.impl.dungeon.LeapMenu
 
 /** POV Previews as a section of Leap Menu: its switch and settings live there, the module itself stays out of the GUI. */
 object PovInLeapMenu {

@@ -4,8 +4,8 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.renderpearl.api.commands.GpuQueryPool
-import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.LocationUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import java.io.BufferedWriter
 import java.lang.management.ManagementFactory
 import java.nio.file.Files

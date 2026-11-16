@@ -3,17 +3,17 @@ package com.engineerclient.terminals
 import com.engineerclient.party.TermProgress
 import com.engineerclient.practice.TerminalHitboxes
 import com.mojang.blaze3d.platform.InputConstants
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.*
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.Color.Companion.darker
-import com.odtheking.odin.utils.Color.Companion.withAlpha
-import com.odtheking.odin.utils.Colors
-import com.odtheking.odin.utils.PersonalBest
-import com.odtheking.odin.utils.createSoundSettings
-import com.odtheking.odin.utils.modMessage
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.*
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.Color
+import com.adm.utils.Color.Companion.darker
+import com.adm.utils.Color.Companion.withAlpha
+import com.adm.utils.Colors
+import com.adm.utils.PersonalBest
+import com.adm.utils.createSoundSettings
+import com.adm.utils.modMessage
 import net.minecraft.world.inventory.Slot
 
 /** Every P3 terminal feature, one section each; the logic lives in the section objects ([TermSolver], [TermTimes], ...). */

@@ -2,8 +2,8 @@ package com.devgineerclient.misc
 
 import com.devgineerclient.DevgineerClient
 import com.mojang.brigadier.arguments.IntegerArgumentType
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
+import com.adm.features.Category
+import com.adm.features.Module
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal

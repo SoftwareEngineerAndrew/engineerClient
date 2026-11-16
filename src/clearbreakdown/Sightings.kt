@@ -1,7 +1,7 @@
 package com.engineerclient.clearbreakdown
 
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.world.entity.ambient.Bat
 import net.minecraft.world.entity.item.ItemEntity

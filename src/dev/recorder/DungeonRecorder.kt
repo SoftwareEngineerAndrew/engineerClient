@@ -1,19 +1,19 @@
 package com.devgineerclient.recorder
 
 import com.devgineerclient.DevgineerClient
-import com.odtheking.odin.clickgui.settings.impl.ActionSetting
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.KeybindSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.impl.SelectorSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onSend
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.clickgui.settings.impl.ActionSetting
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.KeybindSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.events.LevelEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.on
+import com.adm.events.core.onSend
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.utils.skyblock.LocationUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.mojang.brigadier.arguments.StringArgumentType
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
@@ -273,12 +273,12 @@ object DungeonRecorder : Module(
 
     internal fun wanted(): Boolean = when (where) {
         Where.DUNGEONS -> DungeonUtils.inDungeons
-        Where.DUNGEONS_AND_HUB -> (DungeonUtils.inDungeons) || LocationUtils.isCurrentArea(com.odtheking.odin.utils.skyblock.Island.DungeonHub)
+        Where.DUNGEONS_AND_HUB -> (DungeonUtils.inDungeons) || LocationUtils.isCurrentArea(com.adm.utils.skyblock.Island.DungeonHub)
         Where.EVERYWHERE -> DevgineerClient.mc.level != null
     }
 
     /** Odin knows where we are, and it is not a place to record. */
-    internal fun knownUnwanted(): Boolean = where != Where.EVERYWHERE && LocationUtils.currentArea != com.odtheking.odin.utils.skyblock.Island.Unknown && !wanted()
+    internal fun knownUnwanted(): Boolean = where != Where.EVERYWHERE && LocationUtils.currentArea != com.adm.utils.skyblock.Island.Unknown && !wanted()
 
     private fun onTick() {
         Rec.tick++

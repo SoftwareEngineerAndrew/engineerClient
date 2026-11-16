@@ -1,11 +1,11 @@
 package com.engineerclient.dungeon
 
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.events.core.EventBus
+import com.adm.events.core.onReceive
+import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.Minecraft
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.sounds.SoundEvents

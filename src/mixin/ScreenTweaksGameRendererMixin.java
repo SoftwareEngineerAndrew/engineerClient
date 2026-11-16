@@ -13,6 +13,6 @@ public class ScreenTweaksGameRendererMixin {
 
     @Inject(method = "bobHurt", at = @At("HEAD"), cancellable = true)
     private void ec$noHurtCamera(CameraRenderState cameraState, PoseStack poseStack, CallbackInfo ci) {
-        if (com.odtheking.odin.features.impl.render.Camera.noHurtCamera()) ci.cancel();
+        if (com.adm.features.impl.render.Camera.noHurtCamera()) ci.cancel();
     }
 }

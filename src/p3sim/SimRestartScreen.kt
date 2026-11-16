@@ -3,7 +3,7 @@ package com.engineerclient.p3sim
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.index
-import com.odtheking.odin.features.ModuleManager
+import com.adm.features.ModuleManager
 import net.minecraft.world.phys.Vec3
 import net.minecraft.client.gui.components.AbstractSliderButton
 import net.minecraft.client.gui.components.Button
@@ -391,7 +391,7 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
     }
 
     /** A luck setting ([s]: Terminal Luck, SS Luck), -100 to 100% in fives. */
-    private inner class LuckSlider(w: Int, private val name: String = "Luck", private val s: com.odtheking.odin.clickgui.settings.impl.NumberSetting<*> = P3Sim.termLuckS) :
+    private inner class LuckSlider(w: Int, private val name: String = "Luck", private val s: com.adm.clickgui.settings.impl.NumberSetting<*> = P3Sim.termLuckS) :
         AbstractSliderButton(0, 0, w, 20, Component.empty(), (s.value.toDouble() / 100 + 1) / 2) {
         init {
             updateMessage()
@@ -399,7 +399,7 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
         }
         private fun luck() = Math.round(value * 40).toInt() * 5 - 100
         override fun updateMessage() { message = Component.literal("$name: ${if (luck() < 0) "§c" else ""}${luck()}%") }
-        override fun applyValue() { @Suppress("UNCHECKED_CAST") (s as com.odtheking.odin.clickgui.settings.impl.NumberSetting<Int>).value = luck(); ModuleManager.saveConfigurations() }
+        override fun applyValue() { @Suppress("UNCHECKED_CAST") (s as com.adm.clickgui.settings.impl.NumberSetting<Int>).value = luck(); ModuleManager.saveConfigurations() }
     }
 
     /** Practice's start timer, 0 to 5 s in tenths. */

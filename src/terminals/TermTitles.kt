@@ -1,12 +1,12 @@
 package com.engineerclient.terminals
 
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.events.PacketEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.utils.noControlCodes
-import com.odtheking.odin.utils.setSubtitle
-import com.odtheking.odin.utils.setTitle
+import com.adm.events.PacketEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.onReceive
+import com.adm.utils.noControlCodes
+import com.adm.utils.setSubtitle
+import com.adm.utils.setTitle
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket
 

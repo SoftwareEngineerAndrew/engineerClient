@@ -46,7 +46,7 @@ object ConfigMigration {
 
         if (NAME == OLD) return
 
-        val addons = gameDir.resolve("config").resolve("odin").resolve("addons")
+        val addons = gameDir.resolve("config").resolve("adm").resolve("addons")
 
         val oldJson = addons.resolve("$OLD.json")
 
@@ -178,7 +178,7 @@ object ConfigMigration {
 
         val file = odinDir.resolve("addons").resolve("engineerclient.json")
 
-        val odinFile = odinDir.resolve("odin-config.json")
+        val odinFile = odinDir.resolve("config.json")
 
         if (!Files.exists(file)) return false
 

@@ -1,6 +1,6 @@
 package com.engineerclient.practice
 
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
+import com.adm.utils.skyblock.dungeon.DungeonPlayer
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.world.entity.Entity
 

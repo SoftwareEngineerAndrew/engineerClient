@@ -3,7 +3,7 @@ package com.devgineerclient.bossrecorder
 import com.devgineerclient.DevgineerClient
 import com.google.gson.JsonParser
 import com.google.gson.JsonPrimitive
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.SharedConstants
 import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos

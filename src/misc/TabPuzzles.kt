@@ -1,6 +1,6 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.OdinMod.mc
+import com.adm.AdmMod.mc
 import net.minecraft.client.multiplayer.PlayerInfo
 import net.minecraft.world.level.GameType
 

@@ -1,7 +1,7 @@
 package com.engineerclient.terminals.sim
 
-import com.odtheking.odin.utils.hasGlint
-import com.odtheking.odin.utils.modMessage
+import com.adm.utils.hasGlint
+import com.adm.utils.modMessage
 import com.engineerclient.terminals.TerminalTypes
 import com.engineerclient.terminals.TerminalUtils
 import net.minecraft.core.component.DataComponents

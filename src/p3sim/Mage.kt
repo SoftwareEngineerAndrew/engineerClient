@@ -1,6 +1,6 @@
 package com.engineerclient.p3sim
 
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
+import com.adm.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.sounds.SoundEvents

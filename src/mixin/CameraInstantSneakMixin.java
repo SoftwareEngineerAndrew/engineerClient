@@ -17,7 +17,7 @@ public class CameraInstantSneakMixin {
 
     @Inject(method = "tick", at = @At("TAIL"))
     private void ec$instantSneak(CallbackInfo ci) {
-        if (entity == null || !com.odtheking.odin.features.impl.render.Camera.instantSneak()) return;
+        if (entity == null || !com.adm.features.impl.render.Camera.instantSneak()) return;
         eyeHeight = entity.getEyeHeight();
         eyeHeightOld = eyeHeight;
     }

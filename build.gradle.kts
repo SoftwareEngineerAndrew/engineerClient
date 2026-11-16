@@ -80,7 +80,7 @@ configurations.named("include") {
 }
 
 extensions.configure<net.fabricmc.loom.api.LoomGradleExtensionAPI>("loom") {
-    accessWidenerPath.set(file("src/resources/odin.accesswidener"))
+    accessWidenerPath.set(file("src/resources/adm.accesswidener"))
 }
 
 tasks {

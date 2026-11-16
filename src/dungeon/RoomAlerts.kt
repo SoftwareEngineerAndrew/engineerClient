@@ -6,16 +6,16 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.resources.Identifier
-import com.odtheking.odin.events.CheckmarkUpdateEvent
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.features.impl.dungeon.map.tile.DoorType
-import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
-import com.odtheking.odin.features.impl.dungeon.map.tile.MapCheckmark
-import com.odtheking.odin.features.impl.dungeon.map.tile.RoomType
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.events.CheckmarkUpdateEvent
+import com.adm.events.LevelEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.tile.DoorType
+import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.features.impl.dungeon.map.tile.MapCheckmark
+import com.adm.features.impl.dungeon.map.tile.RoomType
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import java.util.Collections
 import java.util.IdentityHashMap
 

@@ -1,7 +1,7 @@
 package com.engineerclient.splits
 
-import com.odtheking.odin.utils.skyblock.SplitsGroup
-import com.odtheking.odin.utils.skyblock.SplitsManager
+import com.adm.utils.skyblock.SplitsGroup
+import com.adm.utils.skyblock.SplitsManager
 
 /**
  * The P3 Sim's run in Odin's Splits. The sim starts partway (P1, P2, P3, a section, the core, P4),

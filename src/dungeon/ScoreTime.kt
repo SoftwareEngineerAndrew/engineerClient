@@ -2,12 +2,12 @@ package com.engineerclient.dungeon
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.ScoreUpdateEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.events.LevelEvent
+import com.adm.events.ScoreUpdateEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 
 /** Clear Info's Score Time: the run time when it reaches S (270) and the S+ secrets. */
 object ScoreTime {

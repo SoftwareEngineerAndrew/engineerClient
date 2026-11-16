@@ -3,16 +3,16 @@ package com.engineerclient.misc
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.practice.TermInfo
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.impl.boss.MelodyMessage
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonClass
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.features.impl.boss.MelodyMessage
+import com.adm.utils.skyblock.dungeon.DungeonClass
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.M7Phases
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 import java.util.concurrent.ConcurrentHashMap
@@ -68,7 +68,7 @@ object OdinMelodyChat {
             val field = MelodyMessage::class.java.getDeclaredField("melodies").apply { isAccessible = true }
             @Suppress("UNCHECKED_CAST")
             val map = field.get(MelodyMessage) as MutableMap<String, Any>
-            val data = Class.forName("com.odtheking.odin.features.impl.boss.MelodyMessage\$MelodyData")
+            val data = Class.forName("com.adm.features.impl.boss.MelodyMessage\$MelodyData")
             val int = Int::class.javaObjectType
             val make = data.getDeclaredConstructor(int, int, int, DungeonClass::class.java).apply { isAccessible = true }
             val getClay = data.getDeclaredMethod("getClay").apply { isAccessible = true }

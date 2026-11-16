@@ -11,24 +11,24 @@ import com.mojang.renderpearl.api.commands.RenderPassDescriptor
 import net.minecraft.client.renderer.texture.TextureAtlas
 import com.mojang.renderpearl.api.pipeline.PrimitiveTopology
 import com.mojang.renderpearl.api.textures.FilterMode
-import com.odtheking.odin.clickgui.settings.impl.BooleanSetting
-import com.odtheking.odin.clickgui.settings.impl.NumberSetting
-import com.odtheking.odin.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.ScreenEvent
-import com.odtheking.odin.events.core.EventPriority
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
-import com.odtheking.odin.features.impl.dungeon.LeapMenu
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.utils.Color
-import com.odtheking.odin.utils.equalsOneOf
-import com.odtheking.odin.utils.itemId
-import com.odtheking.odin.utils.render.text
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.events.LevelEvent
+import com.adm.events.ScreenEvent
+import com.adm.events.core.EventPriority
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.features.Category
+import com.adm.features.Module
+import com.adm.features.impl.dungeon.LeapMenu
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.utils.Color
+import com.adm.utils.equalsOneOf
+import com.adm.utils.itemId
+import com.adm.utils.render.text
+import com.adm.utils.skyblock.dungeon.DungeonPlayer
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.engineerclient.terminals.TerminalTypes
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
@@ -137,7 +137,7 @@ object PosePov : Module(
     private val onlyTerms by BooleanSetting("Only In Terms", false, desc = "Shows the views in terms: F7/M7 phase 3, the terminals, devices and levers, and the Goldor split after them until you drop to Necron. Adds to the other Only In place; neither ticked is everywhere.")
     private val places get() = buildList { if (onlyBloodRush) add(ShowIn.Place.BLOOD_RUSH); if (onlyTerms) add(ShowIn.Place.GOLDOR) }
     private enum class HudsOver { NONE, MOD_HUDS, ALL }
-    private val hudsOver by com.odtheking.odin.clickgui.settings.impl.SelectorSetting("HUDs Over Views", HudsOver.MOD_HUDS, desc = "What's drawn over the views. None: just the views. Mod HUDs: every mod's HUD (the HUD editor's timers, Term Progress..., other mods' HUDs, and titles such as alerts), one that turns up while the menu is open too, but not Odin's Dungeon Map or the rest of vanilla's HUD (hotbar, health, chat, scoreboard...). All: everything, maps and vanilla's HUD too. The leap menu's own boxes and names stay on top either way.")
+    private val hudsOver by com.adm.clickgui.settings.impl.SelectorSetting("HUDs Over Views", HudsOver.MOD_HUDS, desc = "What's drawn over the views. None: just the views. Mod HUDs: every mod's HUD (the HUD editor's timers, Term Progress..., other mods' HUDs, and titles such as alerts), one that turns up while the menu is open too, but not Odin's Dungeon Map or the rest of vanilla's HUD (hotbar, health, chat, scoreboard...). All: everything, maps and vanilla's HUD too. The leap menu's own boxes and names stay on top either way.")
     /** All and Mod HUDs: the views go under the whole GUI (PosePovUnderGuiMixin), so every mod's HUD, and one that turns up while the menu is open, is drawn over them. */
     private val showHuds get() = hudsOver != HudsOver.NONE
     /** Mod HUDs: vanilla's own HUD (but titles, which mods' alerts use) and Odin's Dungeon Map are left out while the views cover the screen ([hidesVanilla], [hidesHud]). */
@@ -302,7 +302,7 @@ object PosePov : Module(
 
     /** Mod HUDs: every HUD on in the HUD editor, again over the views where Odin puts it (not the map). */
     private fun redrawModHuds(gfx: GuiGraphicsExtractor) {
-        for (hud in com.odtheking.odin.features.ModuleManager.hudSettingsCache) {
+        for (hud in com.adm.features.ModuleManager.hudSettingsCache) {
             if (!hud.isEnabled || hud.name in NOT_OVER_VIEWS) continue
             EngineerClient.safely("pose pov hud ${hud.name}") { com.engineerclient.OdinHuds.redraw(gfx, hud) }
         }

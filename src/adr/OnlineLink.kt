@@ -3,7 +3,7 @@ package com.engineerclient.adr
 import com.engineerclient.EngineerClient
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest

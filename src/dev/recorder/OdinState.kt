@@ -1,29 +1,29 @@
 package com.devgineerclient.recorder
 
 import com.devgineerclient.DevgineerClient
-import com.odtheking.odin.clickgui.settings.Setting
-import com.odtheking.odin.clickgui.settings.RenderableSetting
-import com.odtheking.odin.clickgui.settings.impl.StringSetting
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.MessageEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onReceive
-import com.odtheking.odin.features.ModuleManager
-import com.odtheking.odin.features.impl.dungeon.LeapMenu
-import com.odtheking.odin.features.impl.dungeon.map.DungeonScan
-import com.odtheking.odin.features.impl.dungeon.map.WorldScan
-import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonDoor
-import com.odtheking.odin.features.impl.dungeon.map.tile.DungeonRoom
-import com.odtheking.odin.utils.ServerUtils
-import com.odtheking.odin.utils.skyblock.ActionBarListener
-import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.odtheking.odin.utils.skyblock.PartyUtils
-import com.odtheking.odin.utils.skyblock.dungeon.Blessing
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonListener
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonPlayer
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.clickgui.settings.Setting
+import com.adm.clickgui.settings.RenderableSetting
+import com.adm.clickgui.settings.impl.StringSetting
+import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.features.ModuleManager
+import com.adm.features.impl.dungeon.LeapMenu
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.WorldScan
+import com.adm.features.impl.dungeon.map.tile.DungeonDoor
+import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.utils.ServerUtils
+import com.adm.utils.skyblock.ActionBarListener
+import com.adm.utils.skyblock.LocationUtils
+import com.adm.utils.skyblock.PartyUtils
+import com.adm.utils.skyblock.dungeon.Blessing
+import com.adm.utils.skyblock.dungeon.DungeonListener
+import com.adm.utils.skyblock.dungeon.DungeonPlayer
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.engineerclient.terminals.TerminalUtils
 import com.engineerclient.terminals.TerminalHandler
 import net.fabricmc.loader.api.FabricLoader
@@ -461,7 +461,7 @@ object OdinState {
     private val gson = com.google.gson.Gson()
 
     // Odin's Saving interface (a setting's saved form) is Kotlin-internal: public in bytecode, reached by reflection.
-    private val saving: Class<*>? by lazy { runCatching { Class.forName("com.odtheking.odin.clickgui.settings.Saving") }.getOrNull() }
+    private val saving: Class<*>? by lazy { runCatching { Class.forName("com.adm.clickgui.settings.Saving") }.getOrNull() }
     private val savingWrite by lazy { runCatching { saving?.getMethod("write", com.google.gson.Gson::class.java) }.getOrNull() }
 
     private fun hidden(s: Setting<*>): Boolean = (s as? RenderableSetting<*>)?.hidden ?: false

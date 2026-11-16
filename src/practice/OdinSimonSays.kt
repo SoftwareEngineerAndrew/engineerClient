@@ -1,16 +1,16 @@
 package com.engineerclient.practice
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.events.BlockUpdateEvent
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.PacketEvent
-import com.odtheking.odin.events.TickEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
+import com.adm.events.BlockUpdateEvent
+import com.adm.events.LevelEvent
+import com.adm.events.PacketEvent
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
 import com.engineerclient.devices.DevSimonSays
 import com.engineerclient.devices.Devices
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
-import com.odtheking.odin.utils.skyblock.dungeon.M7Phases
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.M7Phases
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket

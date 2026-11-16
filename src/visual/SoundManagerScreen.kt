@@ -1,7 +1,7 @@
 package com.engineerclient.visual
 
-import com.odtheking.odin.OdinMod.mc
-import com.odtheking.odin.features.ModuleManager
+import com.adm.AdmMod.mc
+import com.adm.features.ModuleManager
 import com.mojang.blaze3d.platform.InputConstants
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.EditBox

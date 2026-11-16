@@ -104,7 +104,7 @@ object UpdateCheck {
         if (alerted == u.version) return
         alerted = u.version
         tell(u, "§c§l")
-        com.odtheking.odin.utils.alert("§c§lUpdate ADM")
+        com.adm.utils.alert("§c§lUpdate ADM")
     }
 
     private fun tell(u: Update, colour: String) {

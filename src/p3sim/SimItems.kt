@@ -1252,7 +1252,7 @@ object SimItems {
     /** The drop key from a player's game ([clientDrop]), as theirs: in P3, Ctrl+Q is the class ability. */
     fun serverDrop(p: ServerPlayer, fullStack: Boolean) {
         if (!fullStack) return
-        if (P3Sim.myClass == com.odtheking.odin.utils.skyblock.dungeon.DungeonClass.ARCHER) asClicked(p, "archer ability") { volley(p) }
+        if (P3Sim.myClass == com.adm.utils.skyblock.dungeon.DungeonClass.ARCHER) asClicked(p, "archer ability") { volley(p) }
         // The Mage's: Guided Sheep.
         else if (Mage.isMage()) Fight.afterPing("guided sheep") { Mage.ability(p) }
     }
@@ -2374,7 +2374,7 @@ object SimItems {
      * One row of the leap or Haunt window: a head with a name, and where it takes you. A boss-sim mate ([of]).
      */
     class LeapRow(
-        val name: String, val clazz: com.odtheking.odin.utils.skyblock.dungeon.DungeonClass?, val profile: GameProfile, val posNow: () -> Vec3, val yaw: Float, val pitch: Float,
+        val name: String, val clazz: com.adm.utils.skyblock.dungeon.DungeonClass?, val profile: GameProfile, val posNow: () -> Vec3, val yaw: Float, val pitch: Float,
         /** The colour code of the name when the member's rank is known (a run's bots carry theirs); null: a colour drawn from the name. */
         val colour: String? = null,
     ) {

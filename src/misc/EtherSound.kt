@@ -1,8 +1,8 @@
 package com.engineerclient.misc
 
-import com.odtheking.odin.features.impl.render.Etherwarp
-import com.odtheking.odin.utils.playSoundAtPlayer
-import com.odtheking.odin.utils.playSoundSettings
+import com.adm.features.impl.render.Etherwarp
+import com.adm.utils.playSoundAtPlayer
+import com.adm.utils.playSoundSettings
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.sounds.SoundEvents
 

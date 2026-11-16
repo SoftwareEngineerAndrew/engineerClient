@@ -13,11 +13,11 @@ public class ScreenTweaksCameraMixin {
 
     @WrapOperation(method = "alignWithEntity", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;getViewXRot(F)F"))
     private float ec$ridingPitch(Entity entity, float partialTick, Operation<Float> original) {
-        return com.odtheking.odin.features.impl.render.Camera.fixRidingCamera(entity) ? entity.getXRot() : original.call(entity, partialTick);
+        return com.adm.features.impl.render.Camera.fixRidingCamera(entity) ? entity.getXRot() : original.call(entity, partialTick);
     }
 
     @WrapOperation(method = "alignWithEntity", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;getViewYRot(F)F"))
     private float ec$ridingYaw(Entity entity, float partialTick, Operation<Float> original) {
-        return com.odtheking.odin.features.impl.render.Camera.fixRidingCamera(entity) ? entity.getYRot() : original.call(entity, partialTick);
+        return com.adm.features.impl.render.Camera.fixRidingCamera(entity) ? entity.getYRot() : original.call(entity, partialTick);
     }
 }

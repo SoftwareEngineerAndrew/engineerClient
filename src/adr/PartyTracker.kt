@@ -1,8 +1,8 @@
 package com.engineerclient.adr
 
 import com.engineerclient.EngineerClient
-import com.odtheking.odin.utils.sendCommand
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.sendCommand
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 
 /**
  * Your party, live, for ADR Online: [PartyState] reading Hypixel's chat, plus the dungeon's

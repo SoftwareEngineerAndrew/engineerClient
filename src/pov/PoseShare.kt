@@ -4,8 +4,8 @@ import com.engineerclient.EngineerClient
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.odtheking.odin.utils.skyblock.LocationUtils
-import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.LocationUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.engineerclient.terminals.TerminalTypes
 import com.engineerclient.terminals.TerminalUtils
 import net.minecraft.client.Minecraft

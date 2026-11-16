@@ -1,6 +1,6 @@
 package com.engineerclient.terminals
 
-import com.odtheking.odin.utils.hasGlint
+import com.adm.utils.hasGlint
 import net.minecraft.core.component.DataComponents
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.world.item.BlockItem

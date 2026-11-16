@@ -2,10 +2,10 @@ package com.engineerclient.terminals
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.terminals.sim.TermSimGUI
-import com.odtheking.odin.events.LevelEvent
-import com.odtheking.odin.events.core.EventBus
-import com.odtheking.odin.events.core.on
-import com.odtheking.odin.events.core.onSend
+import com.adm.events.LevelEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
+import com.adm.events.core.onSend
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.common.ClientboundPingPacket
 import net.minecraft.network.protocol.game.ClientboundBundlePacket
