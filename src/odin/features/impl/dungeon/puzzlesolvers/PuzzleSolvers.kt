@@ -21,6 +21,7 @@ import net.minecraft.network.chat.HoverEvent
 import net.minecraft.network.chat.Style
 import net.minecraft.network.protocol.game.ClientboundBlockEventPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
+import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.monster.Blaze
 import net.minecraft.world.level.block.Blocks
@@ -67,6 +68,7 @@ object PuzzleSolvers : Module(
     private val beamStyle by SelectorSetting("Beams Style", BoxStyle.FILLED_OUTLINE, desc = "Whether or not the box should be filled.").withDependency { beamsSolver && beamsDropDown }
     private val beamsTracer by BooleanSetting("Beams Tracer", false, desc = "Shows a tracer to the next lantern.").withDependency { beamsSolver && beamsDropDown }
     private val beamsAlpha by NumberSetting("Beams Color Alpha", .7f, 0.0..1.0, .05f, desc = "The alpha of the color.").withDependency { beamsSolver && beamsDropDown }
+    val beamsBlockWrong by BooleanSetting("Beams Block Wrong Hits", true, desc = "Blocks shots and punches on lanterns that aren't the solution's next one.").withDependency { beamsDropDown }
     private val beamsReset by ActionSetting("Reset Beams", desc = "Resets the solver.") { BeamsSolver.reset() }.withDependency { beamsSolver && beamsDropDown }
 
     private val weirdosDropDown by DropdownSetting("Three Weirdos", desc = "Shows settings for the Three Weirdos puzzle solver.")
@@ -74,6 +76,7 @@ object PuzzleSolvers : Module(
     private val weirdosColor by ColorSetting("Weirdos Correct Color", Colors.MINECRAFT_GREEN.withAlpha(0.7f), true, desc = "Color for the weirdos solver.").withDependency { weirdosSolver && weirdosDropDown }
     private val weirdosWrongColor by ColorSetting("Weirdos Wrong Color", Colors.MINECRAFT_RED.withAlpha(.7f), true,  desc = "Color for the incorrect Weirdos.").withDependency { weirdosSolver && weirdosDropDown }
     private val weirdosStyle by SelectorSetting("Weirdos Style", BoxStyle.FILLED_OUTLINE, desc = "Whether or not the box should be filled.").withDependency { weirdosSolver && weirdosDropDown }
+    private val weirdosBlockWrong by BooleanSetting("Weirdos Block Wrong Clicks", true, desc = "Blocks opening a chest that isn't the right one.").withDependency { weirdosDropDown }
     private val weirdosReset by ActionSetting("Reset Weirdos", desc = "Resets the solver.") { WeirdosSolver.reset() }.withDependency { weirdosSolver && weirdosDropDown }
 
     private val quizDropdown by DropdownSetting("Quiz", desc = "Shows settings for the trivia puzzle solver.")
@@ -84,6 +87,7 @@ object PuzzleSolvers : Module(
         val timer = if (example) Triple(220, 220, 1) else QuizSolver.timer
         if (quizSolver && timer.first > 0) textDim(formatQuizTimer(timer), 0, 0, Colors.WHITE) else 0 to 0
     }.withDependency { quizDropdown && quizSolver }
+    private val quizBlockWrong by BooleanSetting("Quiz Block Wrong Clicks", true, desc = "Blocks clicking an answer that isn't the right one.").withDependency { quizDropdown }
     private val quizReset by ActionSetting("Reset Quiz", desc = "Resets the solver.") { QuizSolver.reset() }.withDependency { quizDropdown && quizSolver }
 
     private val boulderDropDown by DropdownSetting("Boulder", desc = "Shows settings for the boulder puzzle solver.")
@@ -181,6 +185,13 @@ object PuzzleSolvers : Module(
 
         on<ParticleEvent> {
             if (blazeSolver && hideBlazes && particle == ParticleTypes.LARGE_SMOKE && BlazeSolver.inBlazeRoom) cancel()
+        }
+
+        onReceive<ClientboundSoundPacket> { BeamsSolver.onSound(this) }
+
+        on<BlockInteractEvent> {
+            if (!DungeonUtils.inClear) return@on
+            if ((weirdosBlockWrong && WeirdosSolver.isWrongClick(pos)) || (quizBlockWrong && QuizSolver.isWrongClick(pos))) { cancel(); blocked() }
         }
 
         onReceive<ClientboundPlayerPositionPacket> {

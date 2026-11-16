@@ -10,6 +10,7 @@ import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.AABB
 import java.util.concurrent.CopyOnWriteArraySet
 
@@ -36,6 +37,11 @@ object WeirdosSolver {
         wrongPositions.forEach {
             event.drawStyledBox(AABB(it), weirdosWrongColor, weirdosStyle)
         }
+    }
+
+    fun isWrongClick(pos: BlockPos): Boolean {
+        if (DungeonUtils.currentRoomName != "Three Weirdos" || mc.level?.getBlockState(pos)?.block != Blocks.CHEST) return false
+        return correctPos?.let { it != pos } ?: (pos in wrongPositions)
     }
 
     fun reset() {

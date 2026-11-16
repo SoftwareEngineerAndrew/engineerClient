@@ -2,6 +2,7 @@ package com.odtheking.odin.features.impl.dungeon.puzzlesolvers
 
 import com.odtheking.odin.events.RenderExtractEvent
 import com.odtheking.odin.events.RoomEnterEvent
+import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import com.odtheking.odin.features.impl.dungeon.puzzlesolvers.PuzzleSolvers.onPuzzleComplete
 import com.odtheking.odin.utils.Color
 import com.odtheking.odin.utils.JsonResourceLoader
@@ -84,6 +85,12 @@ object QuizSolver {
                 event.drawBeaconBeam(it, quizColor)
             }
         }
+    }
+
+    fun isWrongClick(pos: BlockPos): Boolean {
+        if (DungeonUtils.currentRoomName != "Quiz" || triviaOptions.none { it.isCorrect }) return false
+        val option = triviaOptions.firstOrNull { it.blockPos?.let { at -> at.distSqr(pos) <= 2.0 } == true } ?: return false
+        return !option.isCorrect
     }
 
     fun reset() {
