@@ -55,6 +55,7 @@ object LeapMenu : Module(
     private val onRelease by BooleanSetting("On Key Release", false, desc = "Whether to trigger the leap on key release instead of key press.")
     private val instant by BooleanSetting("Instant Leap", true, desc = "Opens as you use the leap and takes your pick before the server's menu is there.")
     private val moveView by BooleanSetting("Move View Early", true, desc = "Your view goes to the player you picked while the leap is on its way.").withDependency { instant }
+    private val followLook by BooleanSetting("Follow Their Look", true, desc = "Looks where they look until you land; off, you aim the view yourself.").withDependency { instant && moveView }
     private val vignette by BooleanSetting("Leap Vignette", false, desc = "The screen's edges glow until the leap lands.").withDependency { instant }
     private val vignetteColor by ColorSetting("Leap Vignette Color", Color(170, 85, 255, 0.55f), true, desc = "The leap vignette's colour; its alpha is how strong.").withDependency { instant && vignette }
 
@@ -123,10 +124,11 @@ object LeapMenu : Module(
 
     /** Their look too, until you're there and can move: yaw, pitch. */
     @JvmStatic
-    fun visualLook(partialTicks: Float): FloatArray? = target()?.let { floatArrayOf(it.getViewYRot(partialTicks), it.getViewXRot(partialTicks)) }
+    fun visualLook(partialTicks: Float): FloatArray? = if (!followLook) null else target()?.let { floatArrayOf(it.getViewYRot(partialTicks), it.getViewXRot(partialTicks)) }
 
     /** Arrived: you go on looking where they were, not back where you were before the leap. */
     private fun takeLook() {
+        if (!followLook) return
         val t = target() ?: return
         val me = mc.player ?: return
         me.yRot = t.yRot; me.xRot = t.xRot
