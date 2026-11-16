@@ -255,7 +255,7 @@ object EngineerClient : ClientModInitializer {
         "§f /adm log§7 [mark <note>] — the session log; §f/adm memreport",
     )
 
-    private val OD = Regex("""^(?i)(od|core)(\s+|$)""")
+    private val OD = Regex("""^(?i)(od|odin)(\s+|$)""")
     private val FLOOR = Regex("""^(?i)(e|[fm][1-7])$""")
 
     /** A saved command written for /od: the same under /adm, floors as /f7. */

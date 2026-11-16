@@ -58,13 +58,12 @@ object AdmMod : ClientModInitializer {
 
     /** Settings from before the folder was config/adm, copied over once. */
     private fun moveOldConfig(dir: File) {
-        val old = File(mc.gameDirectory, "config/" + "core")
-        if (dir.exists() || !old.isDirectory) return
-        val tmp = File(dir.parentFile, dir.name + ".tmp")
-        tmp.deleteRecursively()
-        old.copyRecursively(tmp)
-        File(tmp, "core-config.json").takeIf { it.exists() }?.renameTo(File(tmp, "config.json"))
-        tmp.renameTo(dir)
+        val old = File(mc.gameDirectory, "config/odin")
+        if (!File(old, "odin-config.json").isFile) return
+        old.copyRecursively(dir, overwrite = true)
+        File(dir, "odin-config.json").copyTo(File(dir, "config.json"), overwrite = true)
+        File(dir, "odin-config.json").delete()
+        old.renameTo(File(old.parentFile, "odin-moved"))
     }
 
     override fun onInitializeClient() {

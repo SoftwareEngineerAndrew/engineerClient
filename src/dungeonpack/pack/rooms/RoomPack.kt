@@ -320,7 +320,7 @@ class RoomPack internal constructor(
                 puzzle = o.obj("puzzle")?.let { p ->
                     RoomPuzzle(p.str("kind") ?: "unknown", p.obj("anchors")?.entrySet()?.associate { (k, v) -> k to anchorList(v) }.orEmpty())
                 },
-                core = o.obj("core"),
+                core = o.obj("odin"),
                 variants = o.arr("variants").objects().mapNotNull { v ->
                     RoomVariant(v.str("id") ?: return@mapNotNull null, v.str("kind") ?: "state", v.int("core"), v.str("srcFile"), v.int("changedCells") ?: 0,
                         parseBlob(v.obj("vol") ?: return@mapNotNull null))

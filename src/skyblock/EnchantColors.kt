@@ -25,7 +25,7 @@ object EnchantColors : Module(
     description = "Colours enchantments in item tooltips by level.",
     key = null,
 ) {
-    enum class Scheme(private val label: String) { CLASSIC("ADM"), CHROMA("ADM"), CUSTOM("Custom"); override fun toString() = label }
+    enum class Scheme(private val label: String) { CLASSIC("Noam"), CHROMA("Devonian"), CUSTOM("Custom"); override fun toString() = label }
 
     private val scheme by SelectorSetting("Scheme", Scheme.CLASSIC, desc = "Which colour scheme to use.")
     private val boldMax by BooleanSetting("Bold Max Level", true, desc = "Max level enchants in bold.")

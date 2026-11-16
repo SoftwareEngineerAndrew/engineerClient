@@ -202,7 +202,7 @@ class LayoutPack internal constructor(
                     tiles = r.get("tiles").asTiles(),
                     rot = Rot.fromWord(r.str("rot")),
                     rotSource = r.str("rotSource"),
-                    rotCore = r.str("rotCore"),
+                    rotCore = r.str("rotOdin"),
                     secretsMax = r.int("secretsMax"),
                     secretsFound = r.int("secretsFound"),
                     tSeen = r.int("tSeen"), tNone = r.int("tNone"), tWhite = r.int("tWhite"), tGreen = r.int("tGreen"), tRed = r.int("tRed"),
