@@ -35,13 +35,13 @@ object Placement {
         "F7/M7 Boss" to listOf("Terminals", "Devices", "EE Highlight", "Recore", "Tick Timers", "Melody Message", "Positional Messages", "Invincibility Timer", "Wither Dragons", "Relics", "Spring Boots", "Explosive Shot", "Agro Sphere", "i4 Aim", "ADS"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),
         "Skyblock" to listOf("Etherwarp", "Command Keybinds", "Command Aliases", "LD WD Pet Keybinds", "Item Tweaks", "Item Protection", "Ragnarock", "Gyro Wand", "Player Display", "Arrows", "Random Stuff", "Enchant Colors", "No Cursor Reset", "Chat Commands", "Fast Launch", "Sound Collector"),
-        "Render" to listOf("Search Bar", "Slot Binds", "Sounds", "Block Overlay", "Camera", "Chunk Culling", "Click GUI", "Colors", "Item Animations", "Performance", "Player Size", "Render Tweaks", "Scrollable Tooltip", "Visibility"),
+        "Render" to listOf("Visibility", "Sounds", "Camera", "Item Animations", "Chunk Culling", "Performance", "Player Size", "Search Bar", "Slot Binds", "Block Overlay", "Colors", "Click GUI", "Render Tweaks", "Scrollable Tooltip"),
     )
 
     private val byName: Map<String, String> = lists.flatMap { (panel, names) -> names.map { it to panel } }.toMap()
 
     /** Panels listed in their own order rather than widest name first. */
-    private val ORDERED = setOf("Clear", "F7/M7 Boss", "Skyblock")
+    private val ORDERED = setOf("Clear", "F7/M7 Boss", "Skyblock", "Render")
 
     /** Where [module] sits in its panel: its place in an ordered panel's list (unlisted last), else 0 (widest name first decides). */
     fun rank(module: Module): Int {
