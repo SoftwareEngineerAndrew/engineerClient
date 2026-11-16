@@ -30,7 +30,7 @@ object Placement {
     }
 
     private val lists = listOf(
-        "Dungeons" to listOf("Refill", "ADR", "Boss Bar", "Highlights", "Waypoints", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Runs Logger", "Splits", "Sub Splits", "All Sub Splits", "Leap Menu", "Blessing Display", "Dungeon Queue", "Lag Warning", "Croesus", "Box Iced Mobs", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay", "Livid Solver", "Maxor Crystals", "Spirit Bear", "Terracotta Timer"),
+        "Dungeons" to listOf("Refill", "ADR", "Boss Bar", "Highlights", "Waypoints", "Better Recorder", "Dungeon Recorder", "Boss Recorder", "Splits", "Sub Splits", "All Sub Splits", "Leap Menu", "Blessing Display", "Dungeon Queue", "Lag Warning", "Croesus", "Box Iced Mobs", "Better Party Finder", "Mage Beam", "Dungeonbreaker", "Salvage Overlay", "Livid Solver", "Maxor Crystals", "Spirit Bear", "Terracotta Timer"),
         "Clear" to listOf("BR Roles", "Dungeon Map", "Clear Info", "Secrets", "Puzzles", "Door Highlight", "Block Instaclear", "Mimic", "Blood Camp"),
         "F7/M7 Boss" to listOf("Terminals", "Devices", "EE Highlight", "Recore", "Tick Timers", "Melody Message", "Positional Messages", "Invincibility Timer", "Wither Dragons", "Relics", "Spring Boots", "Explosive Shot", "Agro Sphere", "i4 Aim", "ADS"),
         "Crimson Isle" to listOf("Build Helper", "Fresh Tools", "Kuudra Info", "Kuudra Tracker", "Misc", "Pearl Waypoints", "Pre-Spot Alert", "Remove Perks", "Supply Helper", "Vesuvius", "Blaze Dagger HUD"),

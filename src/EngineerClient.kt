@@ -84,7 +84,6 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.skyblock.ItemTweaks,
             com.engineerclient.skyblock.EnchantColors,
             com.engineerclient.skyblock.ItemProtection,
-            com.engineerclient.skyblock.RunsLogger,
             com.engineerclient.render.BossBar,
             com.engineerclient.skyblock.Arrows,
             com.engineerclient.skyblock.SearchBar,
@@ -161,6 +160,7 @@ object EngineerClient : ClientModInitializer {
         runCatching { com.engineerclient.misc.LaunchStats.install() }
         runCatching { com.engineerclient.misc.UpdateCheck.install() }
         safely("leap order") { com.engineerclient.misc.LeapOrder.install() }
+        safely("runs logger") { com.engineerclient.skyblock.RunsLogger.install() }
         safely("p3sim") { com.engineerclient.p3sim.P3Sim.init() }
 
         // Modules default OFF and only ModuleConfig.load() toggles saved state — on a
@@ -270,7 +270,7 @@ object EngineerClient : ClientModInitializer {
             // /adr online: ADR Online in your browser, signed in.
             for (name in listOf("adr", "ADR")) dispatcher.register(literal(name).executes { ADR.myRunsLink(); 1 }
                 .then(literal("online").executes { com.engineerclient.adr.OnlineLink.openPage(); 1 }))
-            // /e, /f1-/f7, /m1-/m7: join that floor, like /od f7.
+            // /e, /f1-/f7, /m1-/m7: join that floor, joininstance.
             val numbers = listOf("one", "two", "three", "four", "five", "six", "seven")
             val floors = mapOf("e" to "catacombs_entrance") + (1..7).flatMap { n ->
                 listOf("f$n" to "catacombs_floor_${numbers[n - 1]}", "m$n" to "master_catacombs_floor_${numbers[n - 1]}")
@@ -288,11 +288,13 @@ object EngineerClient : ClientModInitializer {
                 .executes { mc.schedule { type.simulator().open(com.engineerclient.terminals.Terminals.simPing.toLong()) }; 1 }
                 .then(sim { type.simulator().open(it) }))
             dispatcher.register(termsim)
-            // /adm on its own: Odin's settings menu, as its /od opens it; /adm help lists the rest.
+            // /adm on its own: the settings menu; Odin's /od commands live under it too.
             // Same tree under every alias (Brigadier literals are case-sensitive). Built fresh per
             // name — a bare redirect would not run the root executes on the alias itself.
+            val odin = com.mojang.brigadier.CommandDispatcher<net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource>()
+                .also { com.odtheking.odin.commands.mainCommand.register(it) }.root.getChild("adm").children
             for (name in COMMANDS) dispatcher.register(
-                literal(name)
+                literal(name).apply { odin.forEach { then(it) } }
                     .executes { mc.schedule { mc.setScreenAndShow(com.engineerclient.gui.AdmClickGui) }; 1 }
                     .then(literal("keybinds").executes {
                         mc.schedule { com.engineerclient.gui.AdmClickGui.open(com.odtheking.odin.features.impl.skyblock.CommandKeybinds) }

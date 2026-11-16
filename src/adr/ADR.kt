@@ -74,6 +74,7 @@ object ADR : Module(
     private val hideInventory by BooleanSetting("Hide Inventory", false, desc = "Leaves every window you open out of recordings except terminals: your inventory, chests, menus and what's in them (and your clicks and mouse there) are never saved. Terminals are still recorded, so the viewer can show them.")
     private val hidePartyChat by BooleanSetting("Hide Party Chat", false, desc = "Leaves party chat out of recordings and uploads. Off, the viewer shows what your party said during the run.")
     // The chat lines each run brings. Errors (a failed upload or save) always show.
+    val runsLogger by BooleanSetting("Runs Logger", true, desc = "Saves every finished run; /runslog <floor> shows your stats, /runslog today reads today's from your recordings.")
     val savedMessage by BooleanSetting("Saved Message", true, desc = "Says \"saved run\" in chat, with the file's size, when a run's recording is saved.")
     private val uploadedMessage by BooleanSetting("Uploaded Message", true, desc = "Says in chat, with the link, when a run has been uploaded. A failed upload is always said.")
     /**

@@ -6,9 +6,8 @@ import com.google.gson.reflect.TypeToken
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.odtheking.odin.events.LevelEvent
 import com.odtheking.odin.events.MessageEvent
+import com.odtheking.odin.events.core.EventBus
 import com.odtheking.odin.events.core.on
-import com.odtheking.odin.features.Category
-import com.odtheking.odin.features.Module
 import com.odtheking.odin.utils.skyblock.dungeon.DungeonUtils
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
@@ -16,12 +15,8 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import java.nio.file.Files
 import java.time.LocalDate
 
-object RunsLogger : Module(
-    name = "Runs Logger",
-    category = Category.DUNGEON,
-    description = "Saves every finished run; /runslog <floor> shows your stats, /runslog today reads today's from your ADR recordings.",
-    key = null,
-) {
+/** ADR's Runs Logger setting: saves every finished run; /runslog <floor> shows your stats. */
+object RunsLogger {
     data class Run(
         val date: String = "",
         val at: Long = 0,
@@ -44,9 +39,9 @@ object RunsLogger : Module(
 
     private var pending: Run? = null
 
-    init {
+    fun install() {
         on<MessageEvent.Chat> {
-            if (!enabled || !DungeonUtils.inDungeons) return@on
+            if (!com.engineerclient.adr.ADR.runsLogger || !DungeonUtils.inDungeons) return@on
             val text = message.replace(Regex("§."), "")
             scoreRegex.find(text)?.let { m ->
                 if (pending != null) return@on
@@ -81,6 +76,7 @@ object RunsLogger : Module(
                     .executes { show(StringArgumentType.getString(it, "floor").uppercase(), false); 1 }
                     .then(literal("today").executes { show(StringArgumentType.getString(it, "floor").uppercase(), true); 1 })))
         }
+        EventBus.subscribe(this)
     }
 
     private fun save(run: Run) {
