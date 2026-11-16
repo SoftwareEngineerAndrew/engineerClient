@@ -62,7 +62,7 @@ object ModuleManager {
     private val HUD_LAYER: Identifier = fromNamespaceAndPath(AdmMod.MOD_ID, "adm_hud")
 
     init {
-        registerModules(config = ModuleConfig(file = File(AdmMod.configFile, "config.json")),
+        registerModules(config = ModuleConfig(file = File(AdmMod.configFile, "adm-config.json")),
             // dungeon
             PuzzleSolvers, BlessingDisplay, LeapMenu, SecretClicked, Mimic,
             DoorHighlight, BloodCamp, TerracottaTimer, LividSolver,

@@ -197,7 +197,7 @@ object ConfigMigration {
 
         val file = coreDir.resolve("addons").resolve("engineerclient.json")
 
-        val coreFile = coreDir.resolve("config.json")
+        val coreFile = coreDir.resolve("adm-config.json")
 
         if (!Files.exists(file)) return false
 
