@@ -18,9 +18,10 @@ import java.util.concurrent.Executors
 
 // Cells are the 7x6 boulder grid (x 6..24, z 9..24, step 3), bit i = column i % 7, row i / 7.
 // Players walk on the ground between boulders: a strip north of row 0 they drop into, a strip south of row 5 that leads to the chest.
-// A click on a face centre (the button) pushes that boulder 3 away from the face, deleting any boulder it lands on.
+// A click on a face centre (the button or sign 2 blocks out from the boulder's centre) pushes that boulder 3 away from the face,
+// into an empty cell of the grid, or toward -x into another boulder, which is deleted. Every other push does nothing.
 object BoulderSolver {
-    enum class Mode(private val label: String) { CLICKS("Least Clicks"), MOVEMENT("Least Movement"); override fun toString() = label }
+    enum class Mode(private val label: String) { CLICKS("Least Clicks"), MOVEMENT("Least Blocks Traveled"), BALANCED("Balanced"); override fun toString() = label }
 
     data class Step(val cell: Int, val dc: Int, val dr: Int, val after: Long)
 
@@ -117,7 +118,73 @@ object BoulderSolver {
     private fun facePos(step: Step): BlockPos {
         val x = 6 + 3 * (step.cell % 7)
         val z = 9 + 3 * (step.cell / 7)
-        return BlockPos(x - step.dc, 65, z - step.dr)
+        return BlockPos(x - 2 * step.dc, 65, z - 2 * step.dr)
+    }
+
+    /** The board after pushing [cell] by ([dc], [dr]), or null when that click doesn't push. */
+    private fun push(b: Long, cell: Int, dc: Int, dr: Int): Long? {
+        val tc = cell % 7 + dc
+        val tr = cell / 7 + dr
+        if (tc !in 0..6 || tr !in 0..5) return null
+        val target = tc + 7 * tr
+        if (b shr target and 1L == 1L && dc != -1) return null
+        return b and (1L shl cell).inv() or (1L shl target)
+    }
+
+    private val solvable = ConcurrentHashMap<Long, Boolean>()
+
+    /** Whether anyone dropping in from the north can still open the way to the chest from [start]. Unknown counts as yes. */
+    private fun canSolve(start: Long): Boolean = solvable.getOrPut(start) {
+        val seen = HashSet<Long>()
+        val queue = ArrayDeque<Long>()
+        seen.add(start); queue.add(start)
+        while (queue.isNotEmpty()) {
+            val b = queue.removeFirst()
+            val dist = distances(NORTH, b, allNorth = true)
+            if (dist[CHEST] != -1) return@getOrPut true
+            if (seen.size > MAX_STATES) return@getOrPut true
+            for (cell in 0 until 42) {
+                if (b shr cell and 1L == 0L) continue
+                for ((dc, dr) in PUSHES) {
+                    if (dist[frontOf(cell, dc, dr) ?: continue] == -1) continue
+                    val after = push(b, cell, dc, dr) ?: continue
+                    if (seen.add(after)) queue.add(after)
+                }
+            }
+        }
+        false
+    }
+
+    /** The cell (or north strip spot) a player stands in to push [cell] by ([dc], [dr]). */
+    private fun frontOf(cell: Int, dc: Int, dr: Int): Int? {
+        val fc = cell % 7 - dc
+        val fr = cell / 7 - dr
+        return when {
+            fc in 0..6 && fr in 0..5 -> fc + 7 * fr
+            fr == -1 && fc in 0..6 -> NORTH + fc
+            else -> null
+        }
+    }
+
+    /** A right click on [pos]: true when it would leave Boulder unsolvable. */
+    fun blocksClick(pos: BlockPos): Boolean {
+        val room = findRoom() ?: return false
+        if (DungeonUtils.currentRoomName != "Boulder") return false
+        val b = readBoard(room) ?: return false
+        if (!canSolve(b)) return false
+        val rel = room.getRelativeCoords(pos)
+        if (rel.y != 65) return false
+        for ((dc, dr) in PUSHES) {
+            val x = rel.x + 2 * dc
+            val z = rel.z + 2 * dr
+            if ((x - 6) % 3 != 0 || (z - 9) % 3 != 0) continue
+            val c = (x - 6) / 3
+            val r = (z - 9) / 3
+            if (c !in 0..6 || r !in 0..5 || b shr (c + 7 * r) and 1L == 0L) continue
+            val after = push(b, c + 7 * r, dc, dr) ?: return false
+            return !canSolve(after)
+        }
+        return false
     }
 
     private fun readBoard(room: DungeonRoom): Long? {
@@ -171,14 +238,14 @@ object BoulderSolver {
         return k
     }
 
-    private fun distances(from: Int, b: Long): IntArray {
+    private fun distances(from: Int, b: Long, allNorth: Boolean = false): IntArray {
         val dist = IntArray(SOUTH + 7) { -1 }
         val queue = IntArray(SOUTH + 7)
         val nb = IntArray(4)
         var head = 0
         var tail = 0
-        dist[from] = 0
-        queue[tail++] = from
+        if (allNorth) for (c in 0 until 7) { dist[NORTH + c] = 0; queue[tail++] = NORTH + c }
+        else { dist[from] = 0; queue[tail++] = from }
         while (head < tail) {
             val n = queue[head++]
             for (j in 0 until neighbours(n, b, nb)) {
@@ -198,7 +265,12 @@ object BoulderSolver {
 
     // Dijkstra over (board, where the player stands). Each push costs a click plus the walk to its face; finishing costs the walk to the chest.
     private fun solve(start: Long, from: Int, mode: Mode): List<Step>? {
-        fun cost(clicks: Int, walk: Int): Long = if (mode == Mode.CLICKS) clicks * 1000L + walk else walk * 1000L + clicks
+        // Balanced: a click takes about as long as walking three cells.
+        fun cost(clicks: Int, walk: Int): Long = when (mode) {
+            Mode.CLICKS -> clicks * 1000L + walk
+            Mode.MOVEMENT -> walk * 1000L + clicks
+            Mode.BALANCED -> (3L * clicks + walk) * 1000L + clicks
+        }
         val queue = PriorityQueue<Node>(compareBy<Node> { it.cost }.thenBy { it.lean })
         val closed = HashSet<Long>()
         queue.add(Node(0, start, from, null, null))
@@ -214,18 +286,9 @@ object BoulderSolver {
                 val c = cell % 7
                 val r = cell / 7
                 for ((dc, dr) in PUSHES) {
-                    val tc = c + dc
-                    val tr = r + dr
-                    if (tc !in 0..6 || tr !in 0..5) continue
-                    val fc = c - dc
-                    val fr = r - dr
-                    val front = when {
-                        fc in 0..6 && fr in 0..5 -> fc + 7 * fr
-                        fr == -1 -> NORTH + fc
-                        else -> continue
-                    }
+                    val front = frontOf(cell, dc, dr) ?: continue
                     if (dist[front] == -1) continue
-                    val after = node.board and (1L shl cell).inv() or (1L shl (tc + 7 * tr))
+                    val after = push(node.board, cell, dc, dr) ?: continue
                     queue.add(Node(node.cost + cost(1, dist[front]), after, front, node, Step(cell, dc, dr, after), node.lean + 6 - c))
                 }
             }

@@ -92,9 +92,10 @@ object PuzzleSolvers : Module(
 
     private val boulderDropDown by DropdownSetting("Boulder", desc = "Shows settings for the boulder puzzle solver.")
     private val boulderSolver by BooleanSetting("Boulder Solver", true, desc = "Solver for the boulder puzzle.").withDependency { boulderDropDown }
-    private val boulderMode by SelectorSetting("Boulder Mode", BoulderSolver.Mode.CLICKS, desc = "Solve for the fewest clicks or the least walking.").withDependency { boulderDropDown && boulderSolver }
+    private val boulderMode by SelectorSetting("Boulder Mode", BoulderSolver.Mode.CLICKS, desc = "Fewest clicks, fewest blocks walked, or the fastest mix of both.").withDependency { boulderDropDown && boulderSolver }
     private val showAllBoulderClicks by BooleanSetting("Show All Boulder Clicks", false, desc = "Shows all the clicks or only the first.").withDependency { boulderDropDown && boulderSolver }
     private val boulderStyle by SelectorSetting("Boulder Style", BoxStyle.OUTLINE, desc = "Whether or not the box should be filled.").withDependency { boulderDropDown && boulderSolver }
+    private val boulderBlockWrong by BooleanSetting("Boulder Block Wrong Clicks", true, desc = "Blocks pushes that would leave Boulder unsolvable.").withDependency { boulderDropDown }
     private val boulderColor by ColorSetting("Boulder Color", Colors.MINECRAFT_GREEN, true, desc = "The color of the box.").withDependency { boulderDropDown && boulderSolver }
 
     private val puzzleTimers by BooleanSetting("Puzzle Timers", true, desc = "Shows the time it took to solve each puzzle.")
@@ -191,7 +192,8 @@ object PuzzleSolvers : Module(
 
         on<BlockInteractEvent> {
             if (!DungeonUtils.inClear) return@on
-            if ((weirdosBlockWrong && WeirdosSolver.isWrongClick(pos)) || (quizBlockWrong && QuizSolver.isWrongClick(pos))) { cancel(); blocked() }
+            if ((weirdosBlockWrong && WeirdosSolver.isWrongClick(pos)) || (quizBlockWrong && QuizSolver.isWrongClick(pos)) ||
+                (boulderBlockWrong && BoulderSolver.blocksClick(pos))) { cancel(); blocked() }
         }
 
         onReceive<ClientboundPlayerPositionPacket> {
