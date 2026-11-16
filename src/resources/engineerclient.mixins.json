@@ -85,6 +85,7 @@
     "FirstPersonDropAnimationMixin",
     "DropAnimationAttackMixin",
     "ZpewCameraMixin",
+    "LeapViewMixin",
     "ZpewTeleportMixin",
     "ZpewEtherwarpOverlayMixin",
     "ZpewPlayerRenderMixin",

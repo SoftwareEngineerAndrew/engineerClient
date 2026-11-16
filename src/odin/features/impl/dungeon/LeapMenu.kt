@@ -31,6 +31,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
+import net.minecraft.world.entity.player.Player
 import net.minecraft.world.phys.Vec3
 
 /**
@@ -104,13 +105,27 @@ object LeapMenu : Module(
         return screen
     }
 
-    /** Where the view is while a picked leap is on its way: the player picked. */
-    @JvmStatic
-    fun visualPos(): Vec3? {
+    /** The player picked, while the view rides with them. */
+    private fun target(): Player? {
         if (!enabled || !instant || !moveView) return null
         val p = pending ?: return null
-        val target = p.entity?.takeIf { it.isAlive } ?: mc.level?.players()?.firstOrNull { it.name.string == p.name } ?: return null
-        return target.getPosition(mc.deltaTracker.getGameTimeDeltaPartialTick(false))
+        return p.entity?.takeIf { it.isAlive } ?: mc.level?.players()?.firstOrNull { it.name.string == p.name }
+    }
+
+    /** Where the view is while a picked leap is on its way: with the player picked. */
+    @JvmStatic
+    fun visualPos(): Vec3? = target()?.getPosition(mc.deltaTracker.getGameTimeDeltaPartialTick(false))
+
+    /** Their look too, until you're there and can move: yaw, pitch. */
+    @JvmStatic
+    fun visualLook(partialTicks: Float): FloatArray? = target()?.let { floatArrayOf(it.getViewYRot(partialTicks), it.getViewXRot(partialTicks)) }
+
+    /** Arrived: you go on looking where they were, not back where you were before the leap. */
+    private fun takeLook() {
+        val t = target() ?: return
+        val me = mc.player ?: return
+        me.yRot = t.yRot; me.xRot = t.xRot
+        me.yRotO = me.yRot; me.xRotO = me.xRot
     }
 
     init {
@@ -186,7 +201,7 @@ object LeapMenu : Module(
             }
             val me = mc.player ?: return@on clear()
             val there = visualPos()
-            if (moved && (there == null || me.position().distanceToSqr(there) < 9.0) || now - clickedAt > ARRIVE_WAIT_MS) clear()
+            if (moved && (there == null || me.position().distanceToSqr(there) < 9.0) || now - clickedAt > ARRIVE_WAIT_MS) { if (moved) takeLook(); clear() }
             if (p.isDead) clear()
         }
 
