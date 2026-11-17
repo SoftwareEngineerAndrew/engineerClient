@@ -140,10 +140,23 @@ object BetterPartyFinder : Module(
         }
     }
 
-    // The Party Finder of other activities shares the title; only the dungeon one shows Combat Level nowhere on its nether star.
+    private var finderScreen: AbstractContainerScreen<*>? = null
+    private var finderStar: ItemStack? = null
+    private var finderOpen = false
+
     private fun inDungeonFinder(screen: AbstractContainerScreen<*>): Boolean {
-        if (screen.title.string != "Party Finder") return false
-        val star = screen.menu.slots.getOrNull(50)?.item?.takeIf { it.`is`(Items.NETHER_STAR) } ?: return false
+        val star = screen.menu.slots.getOrNull(50)?.item
+        if (screen !== finderScreen || star !== finderStar) {
+            finderScreen = screen
+            finderStar = star
+            finderOpen = isDungeonFinder(screen, star)
+        }
+        return finderOpen
+    }
+
+    // The Party Finder of other activities shares the title; only the dungeon one shows Combat Level nowhere on its nether star.
+    private fun isDungeonFinder(screen: AbstractContainerScreen<*>, star: ItemStack?): Boolean {
+        if (star == null || !star.`is`(Items.NETHER_STAR) || screen.title.string != "Party Finder") return false
         val line = star.lore.getOrNull(5)?.string ?: return false
         return !line.contains("Combat Level: ")
     }
@@ -154,12 +167,11 @@ object BetterPartyFinder : Module(
 
     private fun classNamed(name: String) = classes.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
-    fun drawSlot(screen: AbstractContainerScreen<*>, graphics: GuiGraphicsExtractor, slot: Slot) {
-        if (!showLevelReq && !showMissingOverlay) return
-        if (slot.index !in listingSlots) return
-        val stack = slot.item.takeUnless { it.isEmpty || !it.`is`(Items.PLAYER_HEAD) } ?: return
-        if (!enabled || !inDungeonFinder(screen)) return
+    private class Marks(val stack: ItemStack, val levelReq: String?, val missingTop: String, val missingBottom: String)
+    private val marks = arrayOfNulls<Marks>(35)
 
+    private fun marksOf(index: Int, stack: ItemStack): Marks {
+        marks[index]?.takeIf { it.stack === stack }?.let { return it }
         var levelRequired = 0
         val taken = HashSet<DungeonClass>()
         for (line in stack.lore) {
@@ -167,17 +179,28 @@ object BetterPartyFinder : Module(
             levelRequiredRegex.find(clean)?.let { levelRequired = it.groupValues[1].toInt() }
             partyMemberRegex.matchEntire(clean)?.let { m -> classNamed(m.groupValues[2])?.let(taken::add) }
         }
+        val missing = classes.filter { it !in taken }.map { "§${headColors[it]}§l${it.name[0]}" }
+        return Marks(
+            stack,
+            if (levelRequired != 0) "§c$levelRequired" else null,
+            missing.take(2).joinToString(""),
+            missing.drop(2).take(2).joinToString(""),
+        ).also { marks[index] = it }
+    }
 
-        if (showLevelReq && levelRequired != 0) {
-            val str = "§c$levelRequired"
-            drawScaled(graphics, str, slot.x + 16f - mc.font.width(str) * 0.6f, slot.y.toFloat(), 0.6f)
-        }
+    fun drawSlot(screen: AbstractContainerScreen<*>, graphics: GuiGraphicsExtractor, slot: Slot) {
+        if (!showLevelReq && !showMissingOverlay) return
+        if (slot.index !in listingSlots) return
+        val stack = slot.item.takeUnless { it.isEmpty || !it.`is`(Items.PLAYER_HEAD) } ?: return
+        if (!enabled || !inDungeonFinder(screen)) return
+
+        val m = marksOf(slot.index, stack)
+        if (showLevelReq && m.levelReq != null)
+            drawScaled(graphics, m.levelReq, slot.x + 16f - mc.font.width(m.levelReq) * 0.6f, slot.y.toFloat(), 0.6f)
 
         if (showMissingOverlay) {
-            val missing = classes.filter { it !in taken }.map { "§${headColors[it]}§l${it.name[0]}" }
-            listOf(missing.take(2).joinToString(""), missing.drop(2).take(2).joinToString(""))
-                .filter { it.isNotEmpty() }
-                .forEachIndexed { i, line -> drawScaled(graphics, line, slot.x.toFloat(), slot.y + 10f - i * 6f, 0.65f) }
+            if (m.missingTop.isNotEmpty()) drawScaled(graphics, m.missingTop, slot.x.toFloat(), slot.y + 10f, 0.65f)
+            if (m.missingBottom.isNotEmpty()) drawScaled(graphics, m.missingBottom, slot.x.toFloat(), slot.y + 4f, 0.65f)
         }
     }
 
