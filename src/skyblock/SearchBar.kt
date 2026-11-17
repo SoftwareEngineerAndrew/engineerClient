@@ -16,6 +16,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.world.inventory.Slot
+import java.util.Locale
 import java.util.Stack
 
 object SearchBar : Module(
@@ -83,15 +84,25 @@ object SearchBar : Module(
         value = text
         val lower = text.lowercase()
         result = MathParser.parse(lower)
+        resultLine = null
         terms = lower.split(",").map { it.trim() }.filter { it.isNotEmpty() }
     }
 
     private fun render(edit: EditBox, graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, delta: Float) {
         edit.extractRenderState(graphics, mouseX, mouseY, delta)
         if (result.isNaN()) return
-        val shownResult = if (formatMath) format(result) else result.toLong().toString()
-        graphics.text(mc.font, "  §e= §2$shownResult", edit.x + mc.font.width(value) + 4, edit.y + (edit.height - 8) / 2, -1, true)
+        val formatted = formatMath
+        if (resultLine == null || formatted != resultFormatted) {
+            resultFormatted = formatted
+            resultLine = "  §e= §2" + (if (formatted) format(result) else result.toLong().toString())
+            resultX = mc.font.width(value) + 4
+        }
+        graphics.text(mc.font, resultLine!!, edit.x + resultX, edit.y + (edit.height - 8) / 2, -1, true)
     }
+
+    private var resultLine: String? = null
+    private var resultFormatted = false
+    private var resultX = 0
 
     fun shadeSlot(graphics: GuiGraphicsExtractor, slot: Slot) {
         if (!active() || box == null || terms.isEmpty() || !result.isNaN()) return
@@ -102,9 +113,9 @@ object SearchBar : Module(
     }
 
     private fun format(num: Double): String = when {
-        num >= 1e9 -> "%.1fB".format(num / 1e9)
-        num >= 1e6 -> "%.1fM".format(num / 1e6)
-        num >= 1e3 -> "%.1fK".format(num / 1e3)
+        num >= 1e9 -> "%.1fB".format(Locale.ROOT, num / 1e9)
+        num >= 1e6 -> "%.1fM".format(Locale.ROOT, num / 1e6)
+        num >= 1e3 -> "%.1fK".format(Locale.ROOT, num / 1e3)
         else -> num.toFloat().toString()
     }
 
