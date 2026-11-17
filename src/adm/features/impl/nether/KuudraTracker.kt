@@ -6,10 +6,8 @@ import com.adm.events.MessageEvent
 import com.adm.events.core.on
 import com.adm.features.Module
 import com.adm.features.ModuleManager
-import com.adm.features.impl.nether.Vesuvius.getPriceOfKey
-import com.adm.features.impl.nether.Vesuvius.keys
+import com.adm.features.impl.dungeon.Croesus
 import com.adm.utils.Colors
-import com.adm.utils.equalsOneOf
 import com.adm.utils.lore
 import com.adm.utils.render.text
 import net.minecraft.ChatFormatting
@@ -29,226 +27,235 @@ object KuudraTracker : Module(
         multiItems.clear()
         paid = 0
         free = 0
-        last = LastAdded(mutableListOf(), mutableListOf(), 0)
-
-        updateDisplay()
-        ModuleManager.saveConfigurations()
+        lastChest = null
+        changed()
     }
-
-    private val chestRegex = Regex("(Free|Paid) Chest")
-    private val hudRegex = Regex("^((Free|Paid) Chest)|(Kuudra - .+)|(.+)?Vesuvius$")
-    private val uselessLinesRegex = Regex("^Contents|Cost|Click to open!|FREE|Already opened!|Can't open another chest!|Paid Chest$")
-    private val amountRegex = Regex("(.+)? x(\\d+)$")
-
-    private val lightPurpleRegex = Regex("Fatal Tempo|Inferno|Crimson Essence")
-    private val whiteRegex = Regex("Book")
-    private val darkPurpleRegex = Regex("Kuudra Teeth|Fire Eel Shard|Kuudra Mandible|Barbarian Duke X Shard|XYZ Shard|Hellstorm Wand|Tentacle Dye")
-    private val blueRegex = Regex("Kada Knight Shard|Wheel of Fate|Ananke Feather|Burning Kuudra Core|Matcho Shard|Kuudra Tentacle|Lava Flame Shard|Wither Spectre Shard")
-    private val goldRegex = Regex("Boots|Leggings|Chestplate|Helmet|Cloak|Aurora Staff|Hollow Wand|Heavy Pearl|Kraken Shard|Hellwisp Shard|Ananke Shard|Moltenfish Shard|Tormentor")
 
     val profitHud by HUD("Kuudra Tracker HUD", "Displays the profit of all your Kudura chests.") {
         if (!it) return@HUD 0 to 0
-        drawOverlay(true)
+        draw(view(true))
     }
 
-    private var singleItems by MapSetting("Single Items",mutableMapOf<String, Int>())
+    private var singleItems by MapSetting("Single Items", mutableMapOf<String, Int>())
     private var multiItems by MapSetting("Multi Items", mutableMapOf<String, Int>())
 
     private var paid by NumberSetting("Paid Chests", 0, 0..Int.MAX_VALUE, 1, "Amount of Paid Chests opened.").hide()
     private var free by NumberSetting("Free Chests", 0, 0..Int.MAX_VALUE, 1, "Amount of Paid Chests opened").hide()
 
-    private var toDisplay = mutableListOf<Pair<MutableComponent, Double>>()
-    private var totalKeys by ListSetting("Total Keys", mutableListOf(0, 0, 0, 0, 0)) //Tier 1-5
+    private var totalKeys by ListSetting("Total Keys", mutableListOf(0, 0, 0, 0, 0))
 
-    private var last = LastAdded(mutableListOf(), mutableListOf(), 0)
+    private val countedSuffix = Regex("(.+)? x(\\d+)$")
+    private val skippedLines = hashSetOf("Contents", "Cost", "Click to open!", "FREE", "Already opened!", "Can't open another chest!", "Paid Chest", "")
+
+    private val whiteNames = listOf("Book")
+    private val goldNames = listOf("Boots", "Leggings", "Chestplate", "Helmet", "Cloak", "Aurora Staff", "Hollow Wand", "Heavy Pearl", "Kraken Shard", "Hellwisp Shard", "Ananke Shard", "Moltenfish Shard", "Tormentor")
+    private val darkPurpleNames = listOf("Kuudra Teeth", "Fire Eel Shard", "Kuudra Mandible", "Barbarian Duke X Shard", "XYZ Shard", "Hellstorm Wand", "Tentacle Dye")
+    private val lightPurpleNames = listOf("Fatal Tempo", "Inferno", "Crimson Essence")
+    private val blueNames = listOf("Kada Knight Shard", "Wheel of Fate", "Ananke Feather", "Burning Kuudra Core", "Matcho Shard", "Kuudra Tentacle", "Lava Flame Shard", "Wither Spectre Shard")
+
+    /** What the last opened chest added, so a refused purchase can be taken back. */
+    private class Opened(val singles: List<String>, val counted: List<Pair<String, Int>>, val keyTier: Int)
+
+    private var lastChest: Opened? = null
+
+    private class Row(val name: Component, val price: Double) {
+        val priceText: String = "%,.0f".format(price)
+    }
+
+    private class View(val rows: List<Row>, val keyCost: String, val profit: String, val chests: String, val average: String)
+
+    private var rows: List<Row> = emptyList()
+    private var shown: View? = null
+    private var sampleShown: View? = null
+    private var pricesSeen: Map<String, Double>? = null
+    private var stale = true
+
+    private val sampleRows by lazy {
+        listOf(
+            Row(Component.literal("Fervor Helmet").withStyle(ChatFormatting.GOLD), 748000.0),
+            Row(
+                Component.literal("Enchanted Book (").withStyle(ChatFormatting.WHITE)
+                    .append(Component.literal("Ferocious Mana V").withStyle(ChatFormatting.LIGHT_PURPLE))
+                    .append(Component.literal(")").withStyle(ChatFormatting.WHITE)),
+                118500000.0
+            ),
+            Row(Component.literal("Crimson Essence").withStyle(ChatFormatting.LIGHT_PURPLE).append(Component.literal(" x2000").withStyle(ChatFormatting.DARK_GRAY)), 2420000.0),
+            Row(Component.literal("Kuudra Teeth").withStyle(ChatFormatting.DARK_PURPLE).append(Component.literal(" x4").withStyle(ChatFormatting.DARK_GRAY)), 35480.0),
+            Row(Component.literal("Kraken Shard").withStyle(ChatFormatting.GOLD).append(Component.literal(" x2").withStyle(ChatFormatting.DARK_GRAY)), 821226.0),
+        ).sortedByDescending { it.price }
+    }
+
+    private var titleSeen: Component? = null
+    private var titleKind = 0
 
     init {
-        updateDisplay()
-
         on<GuiEvent.DrawTooltip> {
-            val title = screen.title.string
-            if (enabled && title.matches(hudRegex)) guiGraphics.drawAtHud(profitHud) { drawOverlay(false) }
+            if (enabled && kindOf(screen.title) != 0) guiGraphics.drawAtHud(profitHud) { draw(view(false)) }
         }
 
         on<MessageEvent.Chat> {
-            val title = mc.gui.screen()?.title?.string ?: return@on
-            if (message.equalsOneOf("You cannot afford this!", "Whoa! Slow down there!") && title.matches(chestRegex)) {
-                for (single in last.single) {
-                    singleItems[single] = (singleItems.getOrDefault(single, 0) - 1).coerceAtLeast(0)
-                }
-                for ((itemComponent, amount) in last.multi) {
-                    multiItems[itemComponent] = (multiItems.getOrDefault(itemComponent, 0) - amount).coerceAtLeast(0)
-                }
-                totalKeys[last.key - 1]--
-                paid--
-
-                updateDisplay()
-                ModuleManager.saveConfigurations()
-            }
+            if (message != "You cannot afford this!" && message != "Whoa! Slow down there!") return@on
+            val title = mc.gui.screen()?.title ?: return@on
+            if (kindOf(title) != CHEST) return@on
+            undoLastChest()
         }
 
         on<GuiEvent.SlotClick> {
-            if (!screen.title.string.matches(chestRegex)) return@on
+            if (kindOf(screen.title) != CHEST) return@on
+            val carried = mc.player?.containerMenu?.carried ?: return@on
+            if (!carried.`is`(Items.CHEST)) return@on
+            val lore = carried.lore
+            if (lore.any { it.string == "Already opened!" || it.string == "Can't open another chest!" }) return@on
+            recordChest(lore.map { it.string }, screen.title.string)
+        }
+    }
 
-            val cursorStack = mc.player?.containerMenu?.carried ?: return@on
-            if (!cursorStack.`is`(Items.CHEST)) return@on
+    private const val CHEST = 1
+    private const val OTHER_REWARD = 2
 
-            val loreLines = cursorStack.lore
-            updateDisplay()
+    private fun kindOf(title: Component): Int {
+        if (title !== titleSeen) {
+            titleSeen = title
+            val s = title.string
+            titleKind = when {
+                s == "Free Chest" || s == "Paid Chest" -> CHEST
+                s.startsWith("Kuudra - ") && s.length > 9 || s.endsWith("Vesuvius") -> OTHER_REWARD
+                else -> 0
+            }
+        }
+        return titleKind
+    }
 
-            if (loreLines.any { it.string.equalsOneOf("Already opened!", "Can't open another chest!")}) return@on
-
-            last = LastAdded(mutableListOf(), mutableListOf(), 0)
-
-            for (lore in loreLines) {
-                if (lore.string.matches(uselessLinesRegex)) continue
-
-                if (lore.string.contains("Kuudra Key")) {
-                    keys.find { it.type == lore.string }?.let { key ->
-                        totalKeys[key.tier - 1]++
-                        last.key = key.tier
-                        continue
-                    }
-                }
-
-                amountRegex.find(lore.string)?.destructured?.let { (name, amount) ->
-                    multiItems[name] = multiItems.getOrDefault(name, 0) + (amount.toIntOrNull() ?: 0)
+    private fun recordChest(lines: List<String>, title: String) {
+        val singles = ArrayList<String>()
+        val counted = ArrayList<Pair<String, Int>>()
+        var keyTier = 0
+        for (line in lines) {
+            if (line in skippedLines) continue
+            if ("Kuudra Key" in line) {
+                val key = Vesuvius.keyNamed(line)
+                if (key != null) {
+                    totalKeys[key.tier - 1]++
+                    keyTier = key.tier
                     continue
                 }
-
-                singleItems[lore.string] = singleItems.getOrDefault(lore.string, 0) + 1
             }
-
-            if (screen.title.string == "Paid Chest") paid++
-            if (screen.title.string == "Free Chest") free++
-
-            updateDisplay()
-            ModuleManager.saveConfigurations()
+            val match = countedSuffix.find(line)
+            if (match != null) {
+                val name = match.groupValues[1]
+                val amount = match.groupValues[2].toIntOrNull() ?: 0
+                multiItems[name] = multiItems.getOrDefault(name, 0) + amount
+                counted.add(name to amount)
+                continue
+            }
+            singleItems[line] = singleItems.getOrDefault(line, 0) + 1
+            singles.add(line)
         }
+        if (title == "Paid Chest") paid++
+        if (title == "Free Chest") free++
+        lastChest = Opened(singles, counted, keyTier)
+        changed()
     }
 
-    private fun updateDisplay() {
-        toDisplay.clear()
-
-        singleItems.forEach { (name, amount) ->
-            if (amount == 0) return@forEach
-
-            val price = Vesuvius.parseItemValue(Component.literal(name))?.times(amount) ?: return@forEach
-
-            toDisplay.add(Component.literal(name).withStyle(getColor(name)).append(Component.literal(" x$amount").withStyle(ChatFormatting.DARK_GRAY)) to price)
-        }
-
-        multiItems.forEach { (name, amount) ->
-            if (amount == 0) return@forEach
-
-            val built = Component.literal(name).append(Component.literal(" x$amount").withStyle(ChatFormatting.DARK_GRAY))
-
-            val price = Vesuvius.parseItemValue(built) ?: return@forEach
-
-            toDisplay.add(built.withStyle(getColor(name)) to price)
-        }
+    private fun undoLastChest() {
+        val last = lastChest ?: return
+        lastChest = null
+        for (name in last.singles) singleItems[name] = (singleItems.getOrDefault(name, 0) - 1).coerceAtLeast(0)
+        for ((name, amount) in last.counted) multiItems[name] = (multiItems.getOrDefault(name, 0) - amount).coerceAtLeast(0)
+        if (last.keyTier > 0) {
+            totalKeys[last.keyTier - 1] = (totalKeys[last.keyTier - 1] - 1).coerceAtLeast(0)
+            paid = (paid - 1).coerceAtLeast(0)
+        } else free = (free - 1).coerceAtLeast(0)
+        changed()
     }
 
-    private fun getKeyPrices(): Double {
-        return getPriceOfKey("Kuudra Key") * totalKeys[0] +
-                getPriceOfKey("Hot Kuudra Key") * totalKeys[1] +
-                getPriceOfKey("Burning Kuudra Key") * totalKeys[2] +
-                getPriceOfKey("Fiery Kuudra Key") * totalKeys[3] +
-                getPriceOfKey("Infernal Kuudra Key") * totalKeys[4]
+    private fun changed() {
+        stale = true
+        ModuleManager.saveConfigurations()
     }
 
-    private fun GuiGraphicsExtractor.drawOverlay(isEditing: Boolean): Pair<Int, Int> {
-        var yOffset = 0
-        val maxWidth = 300
+    private fun buildRows(): List<Row> {
+        val built = ArrayList<Row>()
+        for ((name, amount) in singleItems) {
+            if (amount == 0) continue
+            val price = Vesuvius.parseItemValue(Component.literal(name))?.times(amount) ?: continue
+            built.add(Row(Component.literal(name).withStyle(colorOf(name)).append(counter(amount)), price))
+        }
+        for ((name, amount) in multiItems) {
+            if (amount == 0) continue
+            val label = Component.literal(name).append(counter(amount))
+            val price = Vesuvius.parseItemValue(label) ?: continue
+            built.add(Row(label.withStyle(colorOf(name)), price))
+        }
+        built.sortByDescending { it.price }
+        return built
+    }
 
+    private fun counter(amount: Int): MutableComponent = Component.literal(" x$amount").withStyle(ChatFormatting.DARK_GRAY)
+
+    private fun keyCosts(): Double {
+        var total = 0.0
+        for (key in Vesuvius.kuudraKeys) total += Vesuvius.getPriceOfKey(key.name) * totalKeys[key.tier - 1]
+        return total
+    }
+
+    private fun view(sample: Boolean): View {
+        if (stale || Croesus.cachedPrices !== pricesSeen) {
+            pricesSeen = Croesus.cachedPrices
+            stale = false
+            rows = buildRows()
+            shown = null
+            sampleShown = null
+        }
+        return if (sample) sampleShown ?: makeView(sampleRows, true).also { sampleShown = it }
+        else shown ?: makeView(rows, false).also { shown = it }
+    }
+
+    private fun makeView(rows: List<Row>, sample: Boolean): View {
         var profit = 0.0
-
-        val display = if (isEditing) { sampleProfitData } else toDisplay
-
-        for ((index, pair) in display
-            .sortedByDescending { it.second }
-            .withIndex()
-        ) {
-            val price = "%,.0f".format(pair.second)
-
-            profit += pair.second
-
-            if (index >= lineAmount) continue
-
-            text(mc.font, pair.first, 0, yOffset, -1)
-            text(mc.font, price, maxWidth - mc.font.width(price), yOffset, Colors.MINECRAFT_DARK_GRAY.rgba)
-
-            yOffset += 9
-        }
-
-        yOffset += 6
-
-        val keyPrices = if (isEditing) getPriceOfKey("Infernal Kuudra Key").toString() else "%,.0f".format(getKeyPrices())
-
-        text(mc.font, "§cTotal Key Costs:", 0, yOffset, -1)
-        text(mc.font, keyPrices, maxWidth - mc.font.width(keyPrices), yOffset, Colors.MINECRAFT_RED.rgba)
-
-        yOffset += 12
-
-        val profitStr = "%,.0f".format(profit - getKeyPrices())
-
-        text("§aProfit:", 0, yOffset)
-        text(profitStr, maxWidth - mc.font.width(profitStr), yOffset, Colors.MINECRAFT_GREEN)
-
-        yOffset += 15
-
-        val freeChests = if (isEditing) 0 else free
-        val paidChests = if (isEditing) 1 else paid
-
-        val avg = "%,.0f".format((profit - getKeyPrices()) / (freeChests + paidChests))
-
-        text(mc.font, "Total Chests: Free [$freeChests], Paid [$paidChests]", 0, yOffset, Colors.MINECRAFT_YELLOW.rgba)
-        text(mc.font, "Avg [$avg]", maxWidth - mc.font.width("Avg [$avg]"), yOffset, Colors.MINECRAFT_GOLD.rgba)
-
-        yOffset += 9
-
-        return maxWidth to yOffset
-    }
-
-    private fun getColor(name: String): ChatFormatting {
-        if (name.contains(whiteRegex)) return ChatFormatting.WHITE
-        if (name.contains(goldRegex)) return ChatFormatting.GOLD
-        if (name.contains(darkPurpleRegex)) return ChatFormatting.DARK_PURPLE
-        if (name.contains(lightPurpleRegex)) return ChatFormatting.LIGHT_PURPLE
-        if (name.contains(blueRegex)) return ChatFormatting.BLUE
-
-        return ChatFormatting.WHITE
-    }
-
-    data class LastAdded(var single: MutableList<String>, var multi: MutableList<Multi>, var key: Int)
-    data class Multi(val component: String, val amount: Int)
-
-    private val sampleProfitData = listOf(
-        Pair(
-            Component.literal("Fervor Helmet")
-                .withStyle(ChatFormatting.GOLD),
-            748000.0
-        ),
-        Pair(
-            Component.literal("Enchanted Book (").withStyle(ChatFormatting.WHITE)
-                .append(Component.literal("Ferocious Mana V").withStyle(ChatFormatting.LIGHT_PURPLE))
-                .append(Component.literal(")").withStyle(ChatFormatting.WHITE)),
-            118500000.0
-        ),
-        Pair(
-            Component.literal("Crimson Essence").withStyle(ChatFormatting.LIGHT_PURPLE)
-                .append(Component.literal(" x2000").withStyle(ChatFormatting.DARK_GRAY)),
-            2420000.0
-        ),
-        Pair(
-            Component.literal("Kuudra Teeth").withStyle(ChatFormatting.DARK_PURPLE)
-                .append(Component.literal(" x4").withStyle(ChatFormatting.DARK_GRAY)),
-            35480.0
-        ),
-        Pair(
-            Component.literal("Kraken Shard").withStyle(ChatFormatting.GOLD)
-                .append(Component.literal(" x2").withStyle(ChatFormatting.DARK_GRAY)),
-            821226.0
+        for (row in rows) profit += row.price
+        val keys = keyCosts()
+        val freeChests = if (sample) 0 else free
+        val paidChests = if (sample) 1 else paid
+        return View(
+            rows,
+            if (sample) Vesuvius.getPriceOfKey("Infernal Kuudra Key").toString() else "%,.0f".format(keys),
+            "%,.0f".format(profit - keys),
+            "Total Chests: Free [$freeChests], Paid [$paidChests]",
+            "Avg [${"%,.0f".format((profit - keys) / (freeChests + paidChests))}]"
         )
-    )
+    }
+
+    private fun GuiGraphicsExtractor.draw(view: View): Pair<Int, Int> {
+        val right = 300
+        val font = mc.font
+        var y = 0
+        val limit = minOf(lineAmount, view.rows.size)
+        for (i in 0 until limit) {
+            val row = view.rows[i]
+            text(font, row.name, 0, y, -1)
+            text(font, row.priceText, right - font.width(row.priceText), y, Colors.MINECRAFT_DARK_GRAY.rgba)
+            y += 9
+        }
+        y += 6
+        text(font, "§cTotal Key Costs:", 0, y, -1)
+        text(font, view.keyCost, right - font.width(view.keyCost), y, Colors.MINECRAFT_RED.rgba)
+        y += 12
+        text("§aProfit:", 0, y)
+        text(view.profit, right - font.width(view.profit), y, Colors.MINECRAFT_GREEN)
+        y += 15
+        text(font, view.chests, 0, y, Colors.MINECRAFT_YELLOW.rgba)
+        text(font, view.average, right - font.width(view.average), y, Colors.MINECRAFT_GOLD.rgba)
+        y += 9
+        return right to y
+    }
+
+    private fun colorOf(name: String): ChatFormatting = when {
+        whiteNames.any { it in name } -> ChatFormatting.WHITE
+        goldNames.any { it in name } -> ChatFormatting.GOLD
+        darkPurpleNames.any { it in name } -> ChatFormatting.DARK_PURPLE
+        lightPurpleNames.any { it in name } -> ChatFormatting.LIGHT_PURPLE
+        blueNames.any { it in name } -> ChatFormatting.BLUE
+        else -> ChatFormatting.WHITE
+    }
 }
