@@ -25,8 +25,17 @@ object ScoreboardNametags {
     fun namesOn(): Boolean = enabled && v.nameChanger
     fun serverOn(): Boolean = enabled && v.serverIdHider
 
-    fun showsOwn(entity: Entity): Boolean = enabled && v.showOwn && entity === mc.player
-    fun hidesDinnerbone(entity: Entity): Boolean = enabled && v.hideDinnerbone && entity.customName?.string.equals("Dinnerbone", ignoreCase = true)
+    @JvmStatic
+    fun ownTag(entity: Entity): Boolean = enabled && v.showOwn && entity === mc.player
+
+    @JvmStatic
+    fun dinnerbone(entity: Entity): Boolean {
+        if (!enabled || !v.hideDinnerbone) return false
+        val name = entity.customName ?: return false
+        return dinnerbones[entity, name]
+    }
+
+    private val dinnerbones = NameMemo { it.string.equals("Dinnerbone", ignoreCase = true) }
     private val DIALOGUE_END = Regex("[?!.]$")
 
     /** Mobs' gold lines ("What was that?"), bosses' bold dark red ones, and "JERRY! RUN!" / "???" over fleeing mobs. */
@@ -49,8 +58,8 @@ object ScoreboardNametags {
             color == "dark_red" && style?.isBold == true && text.any { it.isLetter() }
     }
 
-    fun background(color: Int): Int = if (enabled && v.noBackground) 0 else color
-    fun shadow(original: Boolean): Boolean = original || (enabled && v.shadow)
+    @JvmStatic fun tagBackdrop(): Boolean = enabled && v.noBackground
+    @JvmStatic fun tagShadow(): Boolean = enabled && v.shadow
 
     @JvmStatic
     fun sidebarFill(color: Int): Int =

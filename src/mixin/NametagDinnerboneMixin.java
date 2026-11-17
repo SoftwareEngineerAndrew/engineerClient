@@ -8,9 +8,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(LivingEntityRenderer.class)
-public class NametagLivingMixin {
+public class NametagDinnerboneMixin {
     @ModifyReturnValue(method = "shouldShowName(Lnet/minecraft/world/entity/LivingEntity;D)Z", at = @At("RETURN"))
-    private boolean ec$hideDinnerbone(boolean shown, LivingEntity entity, double distanceSq) {
-        return shown && !ScoreboardNametags.INSTANCE.hidesDinnerbone(entity);
+    private boolean ec$dinnerbone(boolean shown, LivingEntity entity, double distanceSq) {
+        return shown && !ScoreboardNametags.dinnerbone(entity);
     }
 }

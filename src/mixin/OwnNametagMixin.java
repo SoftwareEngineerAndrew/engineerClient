@@ -9,10 +9,10 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(AvatarRenderer.class)
-public class NametagAvatarMixin {
+public class OwnNametagMixin {
     @ModifyReturnValue(method = "shouldShowName(Lnet/minecraft/world/entity/Avatar;D)Z", at = @At("RETURN"))
-    private boolean ec$showOwn(boolean shown, Avatar entity, double distanceSq) {
-        if (ScoreboardNametags.INSTANCE.showsOwn(entity)) return true;
+    private boolean ec$nameShown(boolean shown, Avatar entity, double distanceSq) {
+        if (ScoreboardNametags.ownTag(entity)) return true;
         return shown && !Highlight.hidesTeammateName(entity);
     }
 }
