@@ -40,7 +40,7 @@ object Camera : Module(
     @JvmStatic fun offsetBlocks(): Float = if (enabled) offset.toFloat() else 0f
     @JvmStatic fun instantSneak() = enabled && instantSneak
     @JvmStatic fun noHurtCamera() = enabled && noHurtCamera
-    @JvmStatic fun fixRidingCamera(entity: Entity) = enabled && fixRidingCamera && entity === mc.player && entity.isPassenger
+    @JvmStatic fun usesLiveRideAngles(viewer: Entity) = enabled && fixRidingCamera && viewer.isPassenger && viewer === mc.player
 
     @JvmStatic
     fun onPassengerTurned(passenger: Entity, vehicleYaw: Float) {

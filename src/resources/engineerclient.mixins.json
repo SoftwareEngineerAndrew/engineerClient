@@ -109,7 +109,7 @@
     "ScreenTweaksTextShadowMixin",
     "ScreenTweaksSlotMixin",
     "SearchBarSlotMixin",
-    "ScreenTweaksCameraMixin",
+    "CameraRideMixin",
     "RenderCleanupParticleMixin",
     "RenderCleanupStuckArrowMixin",
     "RenderCleanupFireMixin",
