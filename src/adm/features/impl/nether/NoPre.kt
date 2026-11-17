@@ -20,65 +20,25 @@ object NoPre : Module(
     private val showCratePriority by BooleanSetting("Show Crate Priority", false, desc = "Shows the crate priority.")
     private val advanced by BooleanSetting("Advanced Mode", false, desc = "Provides harder crate priority in certain situations.").withDependency { showCratePriority }
 
-    private val partyRegex =
-        Regex("^Party > (\\[[^]]*?])? ?(\\w{1,16}): No ?(Triangle|X|Equals|Slash|xCannon|Square|Shop)!$")
-    private val preRegex = Regex("^\\[NPC] Elle: Head over to the main platform, I will join you when I get a bite!$")
-    private val startRegex = Regex("^\\[NPC] Elle: Not again!$")
+    private val partyCall = Regex("^Party > (\\[[^]]*?])? ?(\\w{1,16}): No ?(Triangle|X|Equals|Slash|xCannon|Square|Shop)!$")
 
     private var preSpot = Supply.None
     var missing = Supply.None
+        private set
 
     init {
         on<MessageEvent.Chat> {
             if (!KuudraUtils.inKuudra) return@on
-
-            when {
-                preRegex.matches(message) -> {
-                    val playerLocation = mc.player?.blockPosition() ?: return@on
-                    preSpot = when {
-                        Supply.Triangle.pickUpSpot.closerThan(playerLocation, 15.0) -> Supply.Triangle
-                        Supply.X.pickUpSpot.closerThan(playerLocation, 30.0) -> Supply.X
-                        Supply.Equals.pickUpSpot.closerThan(playerLocation, 15.0) -> Supply.Equals
-                        Supply.Slash.pickUpSpot.closerThan(playerLocation, 15.0) -> Supply.Slash
-                        else -> Supply.None
+            when (message) {
+                "[NPC] Elle: Head over to the main platform, I will join you when I get a bite!" -> registerPreSpot()
+                "[NPC] Elle: Not again!" -> if (preSpot != Supply.None) checkSpawns()
+                else -> if (message.startsWith("Party > ") && message.endsWith("!")) {
+                    val called = partyCall.matchEntire(message)?.groupValues?.last() ?: return@on
+                    missing = Supply.valueOf(called)
+                    if (showCratePriority) advice(missing)?.let {
+                        alert(it)
+                        modMessage("Crate Priority: $it")
                     }
-                    modMessage(if (preSpot == Supply.None) "§cDidn't register your pre-spot because you didn't get there in time." else "Pre-spot: ${preSpot.name}")
-                }
-
-                startRegex.matches(message) -> {
-                    if (preSpot == Supply.None) return@on
-                    var second = false
-                    var pre = false
-                    var msg = ""
-                    KuudraUtils.giantZombies.forEach { supply ->
-                        val supplyLoc = Vec3(supply.x, 76.0, supply.z)
-                        when {
-                            preSpot.pickUpSpot.closerToCenterThan(supplyLoc, 18.0) -> pre = true
-                            preSpot == Supply.Triangle && Supply.Shop.pickUpSpot.closerToCenterThan(supplyLoc, 18.0) -> second = true
-                            preSpot == Supply.X && Supply.xCannon.pickUpSpot.closerToCenterThan(supplyLoc, 16.0) -> second = true
-                            preSpot == Supply.Slash && Supply.Square.pickUpSpot.closerToCenterThan(supplyLoc, 20.0) -> second = true
-                        }
-                    }
-                    if (second && pre) return@on
-                    if (!pre && preSpot != Supply.None) msg = "No ${preSpot.name}!"
-                    else if (!second) {
-                        msg = when (preSpot) {
-                            Supply.Triangle -> "No Shop!"
-                            Supply.X -> "No xCannon!"
-                            Supply.Slash -> "No Square!"
-                            else -> return@on
-                        }
-                    }
-                    if (msg.isNotEmpty()) sendCommand("pc $msg")
-                }
-
-                partyRegex.matches(message) -> {
-                    val match = partyRegex.find(message)?.groupValues ?: return@on
-                    missing = Supply.valueOf(match.lastOrNull() ?: return@on)
-                    if (!showCratePriority) return@on
-                    val cratePriority = cratePriority(missing).ifEmpty { return@on }
-                    alert(cratePriority)
-                    modMessage("Crate Priority: $cratePriority")
                 }
             }
         }
@@ -89,66 +49,56 @@ object NoPre : Module(
         }
     }
 
-    private fun cratePriority(missing: Supply): String {
-        return when (missing) {
-            // Shop Missing
-            Supply.Shop -> when (preSpot) {
-                Supply.Triangle, Supply.X -> "Go X Cannon"
-                Supply.Equals, Supply.Slash -> "Go Square, place on Shop"
-                else -> ""
-            }
+    private fun registerPreSpot() {
+        val at = mc.player?.blockPosition() ?: return
+        preSpot = when {
+            Supply.Triangle.pickUpSpot.closerThan(at, 15.0) -> Supply.Triangle
+            Supply.X.pickUpSpot.closerThan(at, 30.0) -> Supply.X
+            Supply.Equals.pickUpSpot.closerThan(at, 15.0) -> Supply.Equals
+            Supply.Slash.pickUpSpot.closerThan(at, 15.0) -> Supply.Slash
+            else -> Supply.None
+        }
+        modMessage(if (preSpot == Supply.None) "§cDidn't register your pre-spot because you didn't get there in time." else "Pre-spot: ${preSpot.name}")
+    }
 
-            // Triangle Missing
-            Supply.Triangle -> when (preSpot) {
-                Supply.Triangle -> if (advanced) "Pull Square and X Cannon. Next: collect Shop" else "Pull Square. Next: collect Shop"
-                Supply.X -> "Go X Cannon"
-                Supply.Equals -> if (advanced) "Go Shop" else "Go X Cannon"
-                Supply.Slash -> "Go Square, place on Triangle"
-                else -> ""
-            }
+    private fun checkSpawns() {
+        val (partner, partnerRange) = when (preSpot) {
+            Supply.Triangle -> Supply.Shop to 18.0
+            Supply.X -> Supply.xCannon to 16.0
+            Supply.Slash -> Supply.Square to 20.0
+            else -> Supply.None to 0.0
+        }
+        var atPre = false
+        var atPartner = false
+        for (giant in KuudraUtils.giantZombies) {
+            val spawn = Vec3(giant.x, 76.0, giant.z)
+            if (preSpot.pickUpSpot.closerToCenterThan(spawn, 18.0)) atPre = true
+            else if (partner != Supply.None && partner.pickUpSpot.closerToCenterThan(spawn, partnerRange)) atPartner = true
+        }
+        val missingSpot = when {
+            !atPre -> preSpot
+            !atPartner && partner != Supply.None -> partner
+            else -> return
+        }
+        sendCommand("pc No ${missingSpot.name}!")
+    }
 
-            // Equals Missing
-            Supply.Equals -> when (preSpot) {
-                Supply.Triangle -> if (advanced) "Go Shop" else "Go X Cannon"
-                Supply.X -> "Go X Cannon"
-                Supply.Equals -> if (advanced) "Pull Square and X Cannon. Next: collect Shop" else "Pull Square. Next: collect Shop"
-                Supply.Slash -> "Go Square, place on Equals"
-                else -> ""
-            }
-
-            // Slash Missing
-            Supply.Slash -> when (preSpot) {
-                Supply.Triangle -> "Go Square, place on Slash"
-                Supply.X -> "Go X Cannon"
-                Supply.Equals -> if (advanced) "Go Shop" else "Go X Cannon"
-                Supply.Slash -> if (advanced) "Pull Square and X Cannon. Next: collect Shop" else "Pull Square. Next: collect Shop"
-                else -> ""
-            }
-
-            // Square Missing
-            Supply.Square -> when (preSpot) {
-                Supply.Triangle, Supply.Equals -> "Go Shop"
-                Supply.X, Supply.Slash -> "Go X Cannon"
-                else -> ""
-            }
-
-            // X Cannon Missing
-            Supply.xCannon -> when (preSpot) {
-                Supply.Triangle, Supply.Equals -> "Go Shop"
-                Supply.Slash, Supply.X -> "Go Square, place on X Cannon"
-                else -> ""
-            }
-
-            // X Missing
-            Supply.X -> when (preSpot) {
-                Supply.Triangle -> "Go X Cannon"
-                Supply.X -> if (advanced) "Pull Square and X Cannon. Next: collect Shop" else "Pull Square. Next: collect Shop"
-                Supply.Equals -> if (advanced) "Go Shop" else "Go X Cannon"
-                Supply.Slash -> "Go Square, place on X"
-                else -> ""
-            }
-
-            else -> ""
+    private fun advice(missing: Supply): String? {
+        val pre = preSpot
+        val cannon = "Go X Cannon"
+        val shopOrCannon = if (advanced) "Go Shop" else cannon
+        return when {
+            pre == Supply.None || missing == Supply.None -> null
+            missing == pre -> if (advanced) "Pull Square and X Cannon. Next: collect Shop" else "Pull Square. Next: collect Shop"
+            missing == Supply.Shop -> if (pre == Supply.Triangle || pre == Supply.X) cannon else "Go Square, place on Shop"
+            missing == Supply.Square -> if (pre == Supply.Triangle || pre == Supply.Equals) "Go Shop" else cannon
+            missing == Supply.xCannon -> if (pre == Supply.Triangle || pre == Supply.Equals) "Go Shop" else "Go Square, place on X Cannon"
+            pre == Supply.Slash -> "Go Square, place on ${missing.name}"
+            pre == Supply.X -> cannon
+            pre == Supply.Equals -> shopOrCannon
+            missing == Supply.Slash -> "Go Square, place on Slash"
+            missing == Supply.Equals -> shopOrCannon
+            else -> cannon
         }
     }
 }
