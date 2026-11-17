@@ -15,9 +15,24 @@ import com.adm.utils.render.roundedOutline
 import com.adm.utils.render.roundedRect
 import com.adm.utils.ui.compose.*
 
+// One label array per enum class, by ordinal: names are fixed, so each is worked out once.
+private val enumLabels = object : ClassValue<Array<String?>>() {
+    override fun computeValue(type: Class<*>): Array<String?> = arrayOfNulls(type.enumConstants?.size ?: 0)
+}
+
+private fun spell(constant: Enum<*>): String {
+    val shown = constant.toString()
+    if (shown != constant.name) return shown
+    return constant.name.split('_').joinToString(" ") { it.lowercase().capitalizeFirst() }
+}
+
 val Enum<*>.label: String
-    get() = toString().takeIf { it != name }
-        ?: name.split('_').joinToString(" ") { it.lowercase().capitalizeFirst() }
+    get() {
+        val type = javaClass
+        val known = enumLabels.get(if (type.isEnum) type else type.superclass)
+        if (ordinal >= known.size) return spell(this)
+        return known[ordinal] ?: spell(this).also { known[ordinal] = it }
+    }
 
 class SelectorSetting<E : Enum<E>>(
     name: String,
@@ -29,24 +44,27 @@ class SelectorSetting<E : Enum<E>>(
     override var value: E by SettingState(default)
 
     fun cycle() {
-        value = options[(options.indexOf(value) + 1) % options.size]
+        val next = options.indexOf(value) + 1
+        value = options[if (next >= options.size) 0 else next]
     }
 
     @Composable
     override fun Content() {
-        var expanded by remember { mutableStateOf(false) }
-        OnDismiss { expanded = false }
+        var open by remember { mutableStateOf(false) }
+        OnDismiss { open = false }
 
         Column {
-            SettingRow { Pill(value.label, onClick = { expanded = !expanded }, onRightClick = ::cycle) }
-            AnimatedVisibility(expanded) {
+            SettingRow { Pill(value.label, onClick = { open = !open }, onRightClick = ::cycle) }
+            AnimatedVisibility(open) {
                 Column {
                     Gap(1)
                     Column {
-                        options.forEachIndexed { index, option ->
-                            Option(option, last = index == options.lastIndex) {
+                        val last = options.lastIndex
+                        for (i in options.indices) {
+                            val option = options[i]
+                            Choice(option, i == last) {
                                 value = option
-                                expanded = false
+                                open = false
                             }
                         }
                     }
@@ -59,12 +77,14 @@ class SelectorSetting<E : Enum<E>>(
     }
 
     @Composable
-    private fun Option(option: E, last: Boolean, onClick: () -> Unit) = Box().size(LIST_WIDTH, OPTION_HEIGHT)
-        .clickable(onClick = onClick).drawBehind { graphics ->
+    private fun Choice(option: E, last: Boolean, onPick: () -> Unit): UiNode {
+        val text = option.label
+        return Box().size(LIST_WIDTH, OPTION_HEIGHT).clickable(onClick = onPick).drawBehind { graphics ->
             if (!last) graphics.fill(x + SEPARATOR_INSET, bottom, right - SEPARATOR_INSET, bottom + 1, Colors.MINECRAFT_DARK_GRAY.rgba)
             if (Pointer.isOver(x, y, width, height)) graphics.roundedOutline(x, y, right, bottom + 1, GuiTheme.accent.rgba, 1.5f, GuiTheme.RADIUS)
-            graphics.textCentered(option.label, x, y, right, bottom)
+            graphics.textCentered(text, x, y, right, bottom)
         }
+    }
 
     override fun write(gson: Gson): JsonElement = JsonPrimitive(value.name)
 
