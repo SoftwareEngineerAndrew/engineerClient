@@ -15,149 +15,171 @@ import kotlin.math.max
 import kotlin.math.min
 
 class SoundManagerScreen(private val previous: Screen?) : Screen(Component.literal("Sound Manager")) {
-    private enum class Group(val label: String) {
+    private enum class Tab(val label: String) {
         All("All"), Recent("Recent"), Blocks("Blocks"), HostileMobs("Hostile Mobs"), NeutralMobs("Neutral Mobs"),
-        Music("Music"), Ambient("Ambient"), Items("Items"), UI("UI"), Misc("Misc")
+        Music("Music"), Ambient("Ambient"), Items("Items"), UI("UI"), Misc("Misc");
+
+        val heading = "§l$label"
     }
 
-    private sealed interface Row
-    private data class Header(val name: String) : Row
-    private data class Sound(val id: String, val cleanName: String, val group: Group, val sound: SoundEvent) : Row {
-        val searchText = "$id $cleanName"
+    private class Entry(val id: String, val label: String, val tab: Tab, val event: SoundEvent) {
+        val haystack = "$id $label"
+        var fitWidth = -1
+        var fitted = label
     }
 
-    private val allSounds = BuiltInRegistries.SOUND_EVENT.entrySet().map { (key, sound) ->
-        val id = key.identifier().toString()
-        Sound(id, cleanName(id), group(id), sound)
-    }.sortedBy(Sound::id)
-    private val soundsById = allSounds.associateBy(Sound::id)
-    private val rows = mutableListOf<Row>()
+    // A header's sounds are the rows after it up to [end].
+    private class Heading(val text: String) {
+        var end = 0
+    }
 
-    private var selected = Group.All
-    private var recentVersion = -1L
+    private val rows = ArrayList<Any>()
+    private var tab = Tab.All
+    private var shownRecent = -1L
     private var scroll = 0
-    private var draggingId: String? = null
+    private var dragging: Entry? = null
     private lateinit var search: EditBox
 
     private val winW get() = min(540, width - 20)
     private val winH get() = min(285, height - 20)
     private val winX get() = (width - winW) / 2
     private val winY get() = (height - winH) / 2
-    private val viewX get() = winX + SIDEBAR + 10
-    private val viewY get() = winY + 26
-    private val viewW get() = winW - SIDEBAR - 34
-    private val viewH get() = winH - 62
+    private val listX get() = winX + SIDEBAR + 10
+    private val listY get() = winY + 26
+    private val listW get() = winW - SIDEBAR - 34
+    private val listH get() = winH - 62
+    private val playX get() = listX + listW - PLAY_W - 8
+    private val sliderX get() = playX - SLIDER_W - 8
+    private val muteX get() = listX + listW - MUTE_W - 8
 
     override fun init() {
-        search = EditBox(font, viewX + viewW / 2 - 100, winY + winH - 28, 200, 18, Component.literal("Search"))
+        search = EditBox(font, listX + listW / 2 - 100, winY + winH - 28, 200, 18, Component.literal("Search"))
         search.setHint(Component.literal("Search..."))
-        search.setResponder { updateFilter() }
+        search.setResponder { fill(true) }
         addRenderableWidget(search)
-        updateFilter()
+        fill(true)
+    }
+
+    private fun fill(toTop: Boolean) {
+        val query = if (::search.isInitialized) search.value.lowercase() else ""
+        rows.clear()
+        if (tab == Tab.Recent) {
+            val heading = Heading(Tab.Recent.heading)
+            rows.add(heading)
+            for (id in Sounds.getRecentSoundIds()) {
+                val e = byId[id] ?: continue
+                if (query.isEmpty() || e.haystack.contains(query)) rows.add(e)
+            }
+            if (rows.size == 1) rows.clear() else heading.end = rows.size
+            shownRecent = Sounds.recentSoundsVersion
+        } else {
+            for (group in Tab.entries) {
+                if (group == Tab.All || group == Tab.Recent || tab != Tab.All && tab != group) continue
+                val heading = Heading(group.heading)
+                val start = rows.size
+                rows.add(heading)
+                for (e in catalog) if (e.tab == group && (query.isEmpty() || e.haystack.contains(query))) rows.add(e)
+                if (rows.size == start + 1) rows.removeAt(start) else heading.end = rows.size
+            }
+        }
+        if (toTop) scroll = 0
+    }
+
+    private fun muted(at: Int): Boolean {
+        val end = (rows[at] as Heading).end
+        if (end <= at + 1) return false
+        for (i in at + 1 until end) if (Sounds.getVolumePercent((rows[i] as Entry).id) != 0) return false
+        return true
     }
 
     override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, a: Float) {
-        if (selected == Group.Recent && recentVersion != Sounds.recentSoundsVersion) updateFilter(resetScroll = false)
+        if (tab == Tab.Recent && shownRecent != Sounds.recentSoundsVersion) fill(false)
 
-        graphics.fill(winX, winY, winX + winW, winY + winH, 0xF0141414.toInt())
-        graphics.fill(winX, winY, winX + SIDEBAR, winY + winH, 0xC80F0F0F.toInt())
-        graphics.fill(winX, winY, winX + winW, winY + 2, ACCENT)
-        graphics.centeredText(font, "§lSound Manager", winX + (winW + SIDEBAR) / 2, winY + 8, -1)
+        val x = winX
+        val y = winY
+        val w = winW
+        val h = winH
+        graphics.fill(x, y, x + w, y + h, 0xF0141414.toInt())
+        graphics.fill(x, y, x + SIDEBAR, y + h, 0xC80F0F0F.toInt())
+        graphics.fill(x, y, x + w, y + 2, ACCENT)
+        graphics.centeredText(font, "§lSound Manager", x + (w + SIDEBAR) / 2, y + 8, -1)
 
-        Group.entries.forEachIndexed { i, group ->
-            val y = winY + 30 + i * 20
-            val hovered = mouseX in winX..winX + SIDEBAR && mouseY in y..y + 20
-            if (group == selected) graphics.fill(winX, y, winX + SIDEBAR, y + 20, 0x2855AAFF)
-            else if (hovered) graphics.fill(winX, y, winX + SIDEBAR, y + 20, 0x0AFFFFFF)
-            graphics.text(font, group.label, winX + 10, y + 6, if (group == selected) ACCENT else 0xFFAAAAAA.toInt())
+        for (t in Tab.entries) {
+            val ty = y + 30 + t.ordinal * 20
+            if (t == tab) graphics.fill(x, ty, x + SIDEBAR, ty + 20, 0x2855AAFF)
+            else if (mouseX in x..x + SIDEBAR && mouseY in ty..ty + 20) graphics.fill(x, ty, x + SIDEBAR, ty + 20, 0x0AFFFFFF)
+            graphics.text(font, t.label, x + 10, ty + 6, if (t == tab) ACCENT else 0xFFAAAAAA.toInt())
         }
 
-        clampScroll()
-        graphics.enableScissor(viewX, viewY, viewX + viewW, viewY + viewH)
-        val start = max(0, scroll / ROW_H)
-        val end = min(rows.size, start + viewH / ROW_H + 2)
-        for (i in start until end) {
-            val y = viewY - scroll + i * ROW_H
+        val lx = listX
+        val ly = listY
+        val lw = listW
+        val lh = listH
+        scroll = scroll.coerceIn(0, max(0, rows.size * ROW_H - lh))
+        graphics.enableScissor(lx, ly, lx + lw, ly + lh)
+        val first = max(0, scroll / ROW_H)
+        val last = min(rows.size, first + lh / ROW_H + 2)
+        for (i in first until last) {
+            val ry = ly - scroll + i * ROW_H
             when (val row = rows[i]) {
-                is Header -> {
-                    graphics.fill(viewX, y, viewX + viewW, y + ROW_H, 0x05FFFFFF)
-                    graphics.centeredText(font, "§l${row.name}", viewX + viewW / 2, y + 9, ACCENT)
-                    val bx = viewX + viewW - MUTE_W - 8
-                    val hovered = mouseX in bx..bx + MUTE_W && mouseY in y + 6..y + 21
-                    graphics.fill(bx, y + 6, bx + MUTE_W, y + 21, if (hovered) 0x6455AAFF else 0x12FFFFFF)
-                    graphics.centeredText(font, if (allMuted(i)) "Reset" else "Mute all", bx + MUTE_W / 2, y + 10, if (hovered) -1 else 0xFFC0C0C0.toInt())
-                }
-                is Sound -> drawSound(graphics, row, y, mouseX, mouseY)
+                is Heading -> drawHeading(graphics, row, i, lx, ry, lw, mouseX, mouseY)
+                is Entry -> drawEntry(graphics, row, lx, ry, lw, mouseX, mouseY)
             }
         }
         graphics.disableScissor()
 
-        val content = rows.size * ROW_H
-        if (content > viewH) {
-            val barX = winX + winW - 18
-            val thumbH = max(28, viewH * viewH / content)
-            val thumbY = viewY + (viewH - thumbH) * scroll / (content - viewH)
-            graphics.fill(barX, viewY, barX + 6, viewY + viewH, 0x18FFFFFF)
+        val total = rows.size * ROW_H
+        if (total > lh) {
+            val barX = x + w - 18
+            val thumbH = max(28, lh * lh / total)
+            val thumbY = ly + (lh - thumbH) * scroll / (total - lh)
+            graphics.fill(barX, ly, barX + 6, ly + lh, 0x18FFFFFF)
             graphics.fill(barX, thumbY, barX + 6, thumbY + thumbH, ACCENT)
         }
 
         super.extractRenderState(graphics, mouseX, mouseY, a)
     }
 
-    private fun drawSound(graphics: GuiGraphicsExtractor, sound: Sound, y: Int, mouseX: Int, mouseY: Int) {
-        val playX = viewX + viewW - PLAY_W - 8
-        val sliderX = playX - SLIDER_W - 8
-        if (draggingId == sound.id) setVolume(sound.id, mouseX, sliderX)
-
-        val volume = Sounds.getVolumePercent(sound.id)
-        val filled = SLIDER_W * volume / 200
-        val playHovered = mouseX in playX..playX + PLAY_W && mouseY in y + 6..y + 21
-        if (mouseX in viewX..viewX + viewW && mouseY in y..y + ROW_H) graphics.fill(viewX, y, viewX + viewW, y + ROW_H, 0x0FFFFFFF)
-
-        val maxName = sliderX - viewX - 12
-        val name = if (font.width(sound.cleanName) <= maxName) sound.cleanName else font.plainSubstrByWidth(sound.cleanName, maxName - font.width("...")) + "..."
-        graphics.text(font, name, viewX + 5, y + 9, -1)
-        graphics.fill(sliderX, y + 17, sliderX + SLIDER_W, y + 22, 0x18FFFFFF)
-        graphics.fill(sliderX, y + 17, sliderX + filled, y + 22, ACCENT)
-        graphics.fill(sliderX + filled - 2, y + 15, sliderX + filled + 2, y + 24, -1)
-        graphics.fill(playX, y + 6, playX + PLAY_W, y + 21, if (playHovered) 0x6455AAFF else 0x12FFFFFF)
-        graphics.centeredText(font, "Play", playX + PLAY_W / 2, y + 10, if (playHovered) -1 else 0xFFC0C0C0.toInt())
-        val text = "$volume%"
-        graphics.text(font, text, sliderX + SLIDER_W - font.width(text), y + 5, 0xFF808080.toInt())
+    private fun drawHeading(graphics: GuiGraphicsExtractor, row: Heading, index: Int, lx: Int, ry: Int, lw: Int, mouseX: Int, mouseY: Int) {
+        graphics.fill(lx, ry, lx + lw, ry + ROW_H, 0x05FFFFFF)
+        graphics.centeredText(font, row.text, lx + lw / 2, ry + 9, ACCENT)
+        val bx = muteX
+        val over = mouseX in bx..bx + MUTE_W && mouseY in ry + 6..ry + 21
+        graphics.fill(bx, ry + 6, bx + MUTE_W, ry + 21, if (over) 0x6455AAFF else 0x12FFFFFF)
+        graphics.centeredText(font, if (muted(index)) "Reset" else "Mute all", bx + MUTE_W / 2, ry + 10, if (over) -1 else 0xFFC0C0C0.toInt())
     }
 
-    private fun updateFilter(resetScroll: Boolean = true) {
-        val query = if (::search.isInitialized) search.value.lowercase() else ""
-        val sounds = when (selected) {
-            Group.Recent -> Sounds.getRecentSoundIds().mapNotNull(soundsById::get)
-            else -> allSounds.filter { selected == Group.All || it.group == selected }
-        }.filter { query.isEmpty() || it.searchText.contains(query) }
+    private fun drawEntry(graphics: GuiGraphicsExtractor, e: Entry, lx: Int, ry: Int, lw: Int, mouseX: Int, mouseY: Int) {
+        val px = playX
+        val sx = sliderX
+        if (dragging === e) drag(e, mouseX, sx)
 
-        rows.clear()
-        if (selected == Group.Recent) {
-            if (sounds.isNotEmpty()) rows.add(Header(Group.Recent.label))
-            rows.addAll(sounds)
-            recentVersion = Sounds.recentSoundsVersion
-        } else sounds.groupBy(Sound::group).toSortedMap().forEach { (group, list) ->
-            rows.add(Header(group.label))
-            rows.addAll(list)
+        val percent = Sounds.getVolumePercent(e.id)
+        val filled = SLIDER_W * percent / 200
+        if (mouseX in lx..lx + lw && mouseY in ry..ry + ROW_H) graphics.fill(lx, ry, lx + lw, ry + ROW_H, 0x0FFFFFFF)
+
+        graphics.text(font, fitted(e, sx - lx - 12), lx + 5, ry + 9, -1)
+        graphics.fill(sx, ry + 17, sx + SLIDER_W, ry + 22, 0x18FFFFFF)
+        graphics.fill(sx, ry + 17, sx + filled, ry + 22, ACCENT)
+        graphics.fill(sx + filled - 2, ry + 15, sx + filled + 2, ry + 24, -1)
+        val over = mouseX in px..px + PLAY_W && mouseY in ry + 6..ry + 21
+        graphics.fill(px, ry + 6, px + PLAY_W, ry + 21, if (over) 0x6455AAFF else 0x12FFFFFF)
+        graphics.centeredText(font, "Play", px + PLAY_W / 2, ry + 10, if (over) -1 else 0xFFC0C0C0.toInt())
+        val label = percentLabel(percent)
+        graphics.text(font, label, sx + SLIDER_W - font.width(label), ry + 5, 0xFF808080.toInt())
+    }
+
+    private fun fitted(e: Entry, room: Int): String {
+        if (e.fitWidth != room) {
+            e.fitWidth = room
+            e.fitted = if (font.width(e.label) <= room) e.label else font.plainSubstrByWidth(e.label, room - font.width("...")) + "..."
         }
-        if (resetScroll) scroll = 0
+        return e.fitted
     }
 
-    /** The sounds listed under the header at [index]. */
-    private fun section(index: Int): List<Sound> =
-        rows.drop(index + 1).takeWhile { it is Sound }.filterIsInstance<Sound>()
-
-    private fun allMuted(index: Int) = section(index).let { s -> s.isNotEmpty() && s.all { Sounds.getVolumePercent(it.id) == 0 } }
-
-    private fun clampScroll() {
-        scroll = scroll.coerceIn(0, max(0, rows.size * ROW_H - viewH))
-    }
-
-    private fun setVolume(id: String, mouseX: Int, sliderX: Int) {
-        val progress = ((mouseX - sliderX).toFloat() / SLIDER_W).coerceIn(0f, 1f)
-        Sounds.setVolumePercent(id, (progress * 200).toInt())
+    private fun drag(e: Entry, mouseX: Int, sx: Int) {
+        val progress = ((mouseX - sx).toFloat() / SLIDER_W).coerceIn(0f, 1f)
+        Sounds.setVolumePercent(e.id, (progress * 200).toInt())
     }
 
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean {
@@ -165,57 +187,56 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
         val mx = event.x().toInt()
         val my = event.y().toInt()
 
-        if (mx in winX..winX + SIDEBAR) Group.entries.forEachIndexed { i, group ->
-            val y = winY + 30 + i * 20
-            if (my in y..y + 20) {
-                if (selected != group) {
-                    selected = group
-                    updateFilter()
-                    Sounds.playPreview(SoundEvents.UI_BUTTON_CLICK.value())
-                }
-                return true
+        if (mx in winX..winX + SIDEBAR) for (t in Tab.entries) {
+            val ty = winY + 30 + t.ordinal * 20
+            if (my !in ty..ty + 20) continue
+            if (tab != t) {
+                tab = t
+                fill(true)
+                click()
             }
+            return true
         }
 
-        if (mx in viewX until viewX + viewW && my in viewY until viewY + viewH) {
-            val index = (my - viewY + scroll) / ROW_H
-            val row = rows.getOrNull(index)
-            if (row is Header) {
-                val y = viewY - scroll + index * ROW_H
-                val bx = viewX + viewW - MUTE_W - 8
-                if (mx in bx..bx + MUTE_W && my in y + 6..y + 21) {
-                    val to = if (allMuted(index)) 100 else 0
-                    for (s in section(index)) Sounds.setVolumePercent(s.id, to)
-                    Sounds.playPreview(SoundEvents.UI_BUTTON_CLICK.value())
+        val lx = listX
+        val ly = listY
+        if (mx in lx until lx + listW && my in ly until ly + listH) {
+            val index = (my - ly + scroll) / ROW_H
+            val ry = ly - scroll + index * ROW_H
+            when (val row = rows.getOrNull(index)) {
+                is Heading -> if (mx in muteX..muteX + MUTE_W && my in ry + 6..ry + 21) {
+                    val to = if (muted(index)) 100 else 0
+                    for (i in index + 1 until row.end) Sounds.setVolumePercent((rows[i] as Entry).id, to)
+                    click()
                     return true
                 }
-            }
-            if (row is Sound) {
-                val y = viewY - scroll + index * ROW_H
-                val playX = viewX + viewW - PLAY_W - 8
-                val sliderX = playX - SLIDER_W - 8
-                if (mx in playX..playX + PLAY_W && my in y + 6..y + 21) {
-                    Sounds.playPreview(row.sound)
-                    return true
-                }
-                if (mx in sliderX - 5..sliderX + SLIDER_W + 5) {
-                    draggingId = row.id
-                    setVolume(row.id, mx, sliderX)
-                    return true
+                is Entry -> {
+                    val px = playX
+                    val sx = sliderX
+                    if (mx in px..px + PLAY_W && my in ry + 6..ry + 21) {
+                        Sounds.playPreview(row.event)
+                        return true
+                    }
+                    if (mx in sx - 5..sx + SLIDER_W + 5) {
+                        dragging = row
+                        drag(row, mx, sx)
+                        return true
+                    }
                 }
             }
         }
         return super.mouseClicked(event, doubleClick)
     }
 
+    private fun click() = Sounds.playPreview(SoundEvents.UI_BUTTON_CLICK.value())
+
     override fun mouseReleased(event: MouseButtonEvent): Boolean {
-        draggingId = null
+        dragging = null
         return super.mouseReleased(event)
     }
 
     override fun mouseScrolled(mouseX: Double, mouseY: Double, horizontal: Double, vertical: Double): Boolean {
-        scroll -= (vertical * ROW_H * 2).toInt()
-        clampScroll()
+        scroll = (scroll - (vertical * ROW_H * 2).toInt()).coerceIn(0, max(0, rows.size * ROW_H - listH))
         return true
     }
 
@@ -226,30 +247,6 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
         mc.gui.setScreen(previous)
     }
 
-    private fun cleanName(id: String): String {
-        val path = id.removePrefix("minecraft:")
-        return when {
-            path.startsWith("entity.hostile.") -> path.removePrefix("entity.hostile.")
-            path.startsWith("entity.") -> path.removePrefix("entity.")
-            path.contains(".") -> path.substringAfter(".")
-            else -> path
-        }.replace(".", " ").replace("_", " ")
-    }
-
-    private fun group(id: String): Group {
-        val path = id.removePrefix("minecraft:")
-        return when {
-            path.startsWith("block") -> Group.Blocks
-            path.startsWith("entity.hostile") -> Group.HostileMobs
-            path.startsWith("entity") -> Group.NeutralMobs
-            path.startsWith("music") -> Group.Music
-            path.startsWith("ambient") -> Group.Ambient
-            path.startsWith("item") -> Group.Items
-            path.startsWith("ui") -> Group.UI
-            else -> Group.Misc
-        }
-    }
-
     private companion object {
         const val SIDEBAR = 108
         const val ROW_H = 26
@@ -257,5 +254,41 @@ class SoundManagerScreen(private val previous: Screen?) : Screen(Component.liter
         const val PLAY_W = 34
         const val MUTE_W = 50
         const val ACCENT = 0xFF55AAFF.toInt()
+
+        private val percentLabels = arrayOfNulls<String>(201)
+
+        fun percentLabel(p: Int): String {
+            if (p !in 0..200) return "$p%"
+            return percentLabels[p] ?: "$p%".also { percentLabels[p] = it }
+        }
+
+        // The sound registry is fixed once the game has started.
+        val catalog: List<Entry> by lazy {
+            BuiltInRegistries.SOUND_EVENT.entrySet().map { (key, event) ->
+                val id = key.identifier().toString()
+                val path = id.removePrefix("minecraft:")
+                Entry(id, labelOf(path), tabOf(path), event)
+            }.sortedBy(Entry::id)
+        }
+
+        val byId: Map<String, Entry> by lazy { catalog.associateBy(Entry::id) }
+
+        fun labelOf(path: String): String = when {
+            path.startsWith("entity.hostile.") -> path.substring(15)
+            path.startsWith("entity.") -> path.substring(7)
+            '.' in path -> path.substringAfter('.')
+            else -> path
+        }.replace('.', ' ').replace('_', ' ')
+
+        fun tabOf(path: String): Tab = when {
+            path.startsWith("block") -> Tab.Blocks
+            path.startsWith("entity.hostile") -> Tab.HostileMobs
+            path.startsWith("entity") -> Tab.NeutralMobs
+            path.startsWith("music") -> Tab.Music
+            path.startsWith("ambient") -> Tab.Ambient
+            path.startsWith("item") -> Tab.Items
+            path.startsWith("ui") -> Tab.UI
+            else -> Tab.Misc
+        }
     }
 }

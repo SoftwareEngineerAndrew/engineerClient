@@ -14,6 +14,7 @@ import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.itemId
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.client.resources.sounds.AbstractSoundInstance
 import net.minecraft.client.resources.sounds.SimpleSoundInstance
 import net.minecraft.client.resources.sounds.SoundInstance
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
@@ -202,8 +203,13 @@ object Sounds : Module(
         AL10.alSource3f(source, AL10.AL_POSITION, 0f, 0f, -distance.toFloat())
     }
 
+    // Tickable sounds ask for their volume every tick, so the id string is only built when some volume is set.
     @JvmStatic
-    fun getMultiplier(id: String): Float = if (enabled) volumes[id] ?: 1f else 1f
+    fun scaleVolume(sound: AbstractSoundInstance, volume: Float): Float {
+        if (!enabled || volumes.isEmpty()) return volume
+        val multiplier = volumes[sound.identifier.toString()] ?: return volume
+        return if (multiplier != 1f) volume * multiplier else volume
+    }
 
     @JvmStatic
     fun recordPlayedSound(sound: SoundInstance) {
