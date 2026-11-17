@@ -30,10 +30,9 @@ object WitherDragons : Module(
     private val hud by HUD("Dragon Timer HUD", "Displays the dragon timer in the HUD.") { example ->
         if (example) textDim("§5P §a4.5s", 0, 0, Colors.WHITE)
         else {
-            priorityDragon?.let { dragon ->
-                if (dragon.timeToSpawn <= 0) return@HUD 0 to 0
-                textDim("§${dragon.colorCode}${dragon.name.first()}: ${getDragonTimer(dragon.timeToSpawn)}", 0, 0, Colors.WHITE)
-            } ?: (0 to 0)
+            val dragon = priorityDragon
+            if (dragon == null || dragon.timeToSpawn <= 0) 0 to 0
+            else textDim(timerLabel(dragon), 0, 0, Colors.WHITE)
         }
     }.withDependency { dragonTimerDropDown }
 
@@ -87,32 +86,7 @@ object WitherDragons : Module(
         }
 
         on<RenderExtractEvent> {
-            if (DungeonUtils.getF7Phase() != M7Phases.P5) return@on
-
-            if (dragonHealth) {
-                DragonCheck.dragonHealthMap.toList().forEach { (_, data) ->
-                    if (data.second > 0) drawText(colorHealth(data.second), data.first.renderPos, 5f, false)
-                }
-            }
-
-            boxes.clear()
-            WitherDragonsEnum.entries.forEach { dragon ->
-                if (dragonTimer && dragon.timeToSpawn > 0) {
-                    drawText(
-                        "§${dragon.colorCode}${dragon.name.first()}: ${getDragonTimer(dragon.timeToSpawn)}",
-                        dragon.spawnPos.center, 5f, false
-                    )
-                }
-
-                if (dragonBoxes && dragon.state != WitherDragonState.DEAD)
-                    boxes.outline(dragon.aabbDimensions, dragon.color, depth = true)
-            }
-            drawBoxes(boxes)
-
-            priorityDragon?.let { dragon ->
-                if (dragonTracers && dragon.state == WitherDragonState.SPAWNING)
-                    mc.player?.let { drawTracer(dragon.spawnPos.center, dragon.color, true) }
-            }
+            if (DungeonUtils.getF7Phase() == M7Phases.P5) drawDragons()
         }
 
         on<LevelEvent.Load> {
@@ -121,33 +95,66 @@ object WitherDragons : Module(
         }
     }
 
-    private fun getDragonTimer(spawnTime: Int): String = when {
-        spawnTime <= 20 -> "§c"
-        spawnTime <= 60 -> "§e"
-        else -> "§a"
-    } + when (dragonTimerStyle) {
-        TimerStyle.MILLISECONDS -> "${spawnTime * 50}${if (showSymbol) "ms" else ""}"
-        TimerStyle.SECONDS -> "${(spawnTime / 20f).toFixed(1)}${if (showSymbol) "s" else ""}"
-        TimerStyle.TICKS -> "${spawnTime}${if (showSymbol) "t" else ""}"
+    private val dragons = WitherDragonsEnum.entries
+    private val spawnCenters = Array(dragons.size) { dragons[it].spawnPos.center }
+    private val labelKeys = IntArray(dragons.size) { -1 }
+    private val labels = arrayOfNulls<String>(dragons.size)
+    private val healthTexts = FormatCache(8) { healthText(it.toFloat()) }
+
+    private fun RenderExtractEvent.drawDragons() {
+        if (dragonHealth) for (tracked in DragonCheck.dragonHealthMap.values) {
+            val hp = tracked.second
+            val dragon = tracked.first
+            if (hp > 0 && !dragon.isRemoved) drawText(healthTexts(hp.toDouble()), dragon.renderPos, 5f, false)
+        }
+
+        boxes.clear()
+        for (i in dragons.indices) {
+            val dragon = dragons[i]
+            if (dragonTimer && dragon.timeToSpawn > 0) drawText(timerLabel(dragon), spawnCenters[i], 5f, false)
+            if (dragonBoxes && dragon.state != WitherDragonState.DEAD) boxes.outline(dragon.aabbDimensions, dragon.color, depth = true)
+        }
+        drawBoxes(boxes)
+
+        val priority = priorityDragon ?: return
+        if (dragonTracers && priority.state == WitherDragonState.SPAWNING && mc.player != null)
+            drawTracer(spawnCenters[priority.ordinal], priority.color, true)
+    }
+
+    private fun timerLabel(dragon: WitherDragonsEnum): String {
+        val ticks = dragon.timeToSpawn
+        val key = (ticks shl 3) or (dragonTimerStyle.ordinal shl 1) or (if (showSymbol) 1 else 0)
+        val i = dragon.ordinal
+        if (labelKeys[i] != key || labels[i] == null) {
+            labelKeys[i] = key
+            labels[i] = "§${dragon.colorCode}${dragon.name.first()}: ${timerText(ticks)}"
+        }
+        return labels[i]!!
+    }
+
+    private fun timerText(ticks: Int): String {
+        val colour = if (ticks <= 20) "§c" else if (ticks <= 60) "§e" else "§a"
+        return when (dragonTimerStyle) {
+            TimerStyle.MILLISECONDS -> "$colour${ticks * 50}${if (showSymbol) "ms" else ""}"
+            TimerStyle.SECONDS -> "$colour${(ticks / 20f).toFixed(1)}${if (showSymbol) "s" else ""}"
+            TimerStyle.TICKS -> "$colour$ticks${if (showSymbol) "t" else ""}"
+        }
     }
 
     enum class TimerStyle { MILLISECONDS, SECONDS, TICKS }
 
-    private fun colorHealth(health: Float): String {
-        return when {
-            health >= 750_000_000 -> "§a${formatHealth(health)}"
-            health >= 500_000_000 -> "§e${formatHealth(health)}"
-            health >= 250_000_000 -> "§6${formatHealth(health)}"
-            else -> "§c${formatHealth(health)}"
+    private fun healthText(health: Float): String {
+        val colour = when {
+            health >= 750_000_000 -> "§a"
+            health >= 500_000_000 -> "§e"
+            health >= 250_000_000 -> "§6"
+            else -> "§c"
         }
-    }
-
-    private fun formatHealth(health: Float): String {
         return when {
-            health >= 1_000_000_000 -> "${(health / 1_000_000_000).toFixed(1)}b"
-            health >= 1_000_000 -> "${(health / 1_000_000).toFixed(1)}m"
-            health >= 1_000 -> "${(health / 1_000).toFixed(1)}k"
-            else -> "${health.toInt()}"
+            health >= 1_000_000_000 -> "$colour${(health / 1_000_000_000).toFixed(1)}b"
+            health >= 1_000_000 -> "$colour${(health / 1_000_000).toFixed(1)}m"
+            health >= 1_000 -> "$colour${(health / 1_000).toFixed(1)}k"
+            else -> "$colour${health.toInt()}"
         }
     }
 }
