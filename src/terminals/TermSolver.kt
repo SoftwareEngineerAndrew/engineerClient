@@ -154,7 +154,7 @@ object TermSolver {
             g.roundedRect(0, grid.step, 5 * grid.step - Terminals.gap, 4 * grid.step - Terminals.gap, lanes, radius)
             g.roundedRect(6 * grid.step, grid.step, 6 * grid.step + CELL, 4 * grid.step - Terminals.gap, lanes, radius)
         }
-        if (t.ready) for (r in 0 until grid.rows) for (c in 0 until grid.cols) {
+        if (t.ready || t.early) for (r in 0 until grid.rows) for (c in 0 until grid.cols) {
             val slot = (grid.top + r) * 9 + grid.left + c
             val look = t.look(slot) ?: continue
             val x = c * grid.step

@@ -45,8 +45,11 @@ abstract class TerminalHandler(val type: TerminalTypes) {
     private var lastSlots: List<Slot>? = null
 
     /** Content bounds, for the custom grid. */
-    var top = 1; var left = 1; var rows = 1; var cols = 1
+    var top = type.layout[0]; var left = type.layout[1]; var rows = type.layout[2]; var cols = type.layout[3]
         private set
+
+    /** Instant GUI: a terminal whose slots don't depend on each other is shown and clicked slot by slot as they arrive. */
+    val early get() = !ready && type.orderFree && Terminals.instantGui && Terminals.style == Terminals.Style.CUSTOM
 
     protected abstract fun key(item: ItemStack): Int
     /** The key a slot has after a click on it. */
@@ -79,7 +82,7 @@ abstract class TerminalHandler(val type: TerminalTypes) {
             lastSlots = slots
             if (received.all { it }) becomeReady() else filling = true
         }
-        if (pending.size != before || ready) recompute()
+        if (pending.size != before || ready || early) recompute()
     }
 
     /** The answer [newKey] for slot [i]: returns the latest answered click's seq, or -1. */
@@ -139,7 +142,7 @@ abstract class TerminalHandler(val type: TerminalTypes) {
         for (p in pending) clickedSlots.add(p.slot to containerButton(p.button))
     }
 
-    fun canClick(slot: Int, button: Int) = ready && slot in 0 until area && canClickShown(slot, button)
+    fun canClick(slot: Int, button: Int) = slot in 0 until area && (ready || (early && received[slot])) && canClickShown(slot, button)
 
     /**
      * A click as the player made it ([LEFT] or [RIGHT]); only one the solver asks for goes out. True if it was sent.

@@ -32,6 +32,7 @@ object Terminals : Module(
     val melodySize by NumberSetting("Melody Size", 1.5f, 1.0..4.0, 0.1, desc = "Size of the custom melody grid.").withDependency { solverDrop && style == Style.CUSTOM }
     val gap by NumberSetting("Slot Gap", 2, 0..8, 1, desc = "Gap between custom grid slots.").withDependency { solverDrop && style == Style.CUSTOM }
     val roundness by NumberSetting("Roundness", 4f, 0.0..12.0, 1.0, desc = "Corner roundness of the custom grid.").withDependency { solverDrop && style == Style.CUSTOM }
+    val instantGui by BooleanSetting("Instant GUI", false, desc = "Draws the grid as a terminal opens and fills in each slot the moment Hypixel sends it.").withDependency { solverDrop && style == Style.CUSTOM }
     val vanillaScale by NumberSetting("Vanilla Scale", 3, 1..6, 1, desc = "GUI scale while a terminal is open (6 is auto).").withDependency { solverDrop && style == Style.VANILLA }
     val hideItems by BooleanSetting("Hide Items", true, desc = "Vanilla: only the slots to click are drawn.").withDependency { solverDrop && style == Style.VANILLA }
     val rubixMode by SelectorSetting("Rubix Mode", RubixMode.FEWEST_CLICKS, desc = "Fewest Clicks and Least Movement mix in right clicks; Least Movement marks the next pane on the shortest mouse path.").withDependency { solverDrop }
