@@ -10,11 +10,6 @@ import com.adm.utils.ui.animations.Easing
 import net.minecraft.resources.Identifier
 import kotlin.math.PI
 
-/**
- * A setting intended to show or hide other settings in the GUI.
- *
- * @author Bonsai
- */
 class DropdownSetting(
     name: String,
     override val default: Boolean = false,

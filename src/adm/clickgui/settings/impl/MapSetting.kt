@@ -7,13 +7,6 @@ import com.adm.clickgui.settings.Saving
 import com.adm.clickgui.settings.Setting
 import java.lang.reflect.Type
 
-/**
- * This [Setting] is designed to store values within a [map][MutableMap].
- *
- * @param name Name of the setting (This is required to identify it while saving/loading)
- * @param default The map instance
- * @param type Type of the map (This is required due to kotlin erasing types, you can avoid this by using the Function)
- */
 class MapSetting<K : Any, V : Any, T : MutableMap<K, V>>(
     name: String,
     override val default: T,

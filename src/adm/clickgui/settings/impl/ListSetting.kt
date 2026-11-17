@@ -7,11 +7,6 @@ import com.adm.clickgui.settings.Saving
 import com.adm.clickgui.settings.Setting
 import java.lang.reflect.Type
 
-/**
- * This setting is only designed to store values as a list.
- *
- * @author Stivais
- */
 class ListSetting<E, T : MutableCollection<E>>(
     name: String,
     override val default: T,
