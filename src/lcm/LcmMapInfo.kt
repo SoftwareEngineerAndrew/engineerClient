@@ -1,39 +1,12 @@
-/*
- * The score calculator and score text below are dtMap's (github.com/ricedotwho/dtMap, its Scoreboard.TabData and
- * Score), which are in turn ADM's (github.com/odtheking/ADM, DungeonUtils and DungeonListener).
- *
- * Copyright (c) 2026, rice.who
- * Original code Copyright (c) 2026, odtheking
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that
- * the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the
- *    following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
- *    following disclaimer in the documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote
- *    products derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
 package com.engineerclient.lcm
 
 import com.engineerclient.EngineerClient
-import com.engineerclient.CoreCompat
 import com.engineerclient.dungeon.ClearInfo
 import com.engineerclient.mappred.FloorRules
 import com.adm.AdmMod.mc
 import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.features.impl.dungeon.map.tile.RoomType
+import com.adm.utils.skyblock.dungeon.DungeonListener
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.Floor
 import com.adm.utils.skyblock.dungeon.PuzzleStatus
@@ -42,86 +15,140 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 /**
- * Clear Info's Map Info HUD, drawn the way LCM's map, dtMap, draws its score (Score Calculation),
- * worked out by dtMap's score calculator in its Legit Mode with its default score settings, from the tab list
- * stats ADM reads:
- *
- * - secrets found (aqua), the secrets still missing for 300 (yellow; the bonus score so far and Paul's +10 count,
- *   as in ADM's needed secrets and dtMap's "Missing secrets calculate paul") and
- *   the total (red), then the unknown secrets (the total less the rooms someone has walked into: yours, and your
- *   teammates' from ADM's map websocket; green while at least the 300 needs, else gold - dtMap shows it only when
- *   solo clearing) and the score: red under 270, yellow under 300, green from 300
- * - what's still missing from the bonus: deaths, the Mimic (F6/F7), the Prince (until every room but blood is
- *   open on the map and none is a Prince room), bats (until every player in the run has one, at most 5) and
- *   crypts (up to 5)
- * - one line when it's narrower than the map, else the score's line over the bonus's, centred
- *
- * Disable in boss applies.
+ * Clear Info's Map Info HUD: secrets found, still needed for 300 and total, the unknown secrets and the score,
+ * then the missing bonus (deaths, Mimic, Prince, bats, crypts); one line when it fits under the map, else two.
  */
 object LcmMapInfo {
 
+    private val EXAMPLE = listOf("§b10§7-§e49§7-§c55     §a300", "§7D: §c1  §7M: §c✖  §7P: §c✖  §7B: §c✖  §c0§7/§a5")
+    private val NONE = 0 to 0
+
     private var failed = false
 
-    /** Draws the HUD and returns its size. */
+    // The numbers the text is made of; it is rebuilt only when one changes.
+    private val state = IntArray(STATE_SIZE)
+    private val built = IntArray(STATE_SIZE) { Int.MIN_VALUE }
+    private var lines: List<String> = emptyList()
+    private var size = NONE
+
     fun render(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
-        if (!example && (!DungeonUtils.inDungeons || (ClearInfo.disableInBoss && DungeonUtils.inBoss))) return 0 to 0
+        if (!example && (!DungeonUtils.inDungeons || (ClearInfo.disableInBoss && DungeonUtils.inBoss))) return NONE
         return try {
-            if (example) centred(g, listOf("§b10§7-§e49§7-§c55     §a300", "§7D: §c1  §7M: §c✖  §7P: §c✖  §7B: §c✖  §c0§7/§a5"), 2, LcmStyle.mapWidth(true))
-            else centred(g, lines(), 0, LcmStyle.mapWidth(false))
+            if (example) draw(g, EXAMPLE, 2, LcmStyle.mapWidth(true))
+            else {
+                readState()
+                if (!state.contentEquals(built)) rebuild()
+                draw(g, lines, 0, LcmStyle.mapWidth(false))
+            }
         } catch (t: Throwable) {
             if (!failed) {
                 failed = true
                 EngineerClient.logger.error("[ec] dtMap score failed", t)
             }
-            0 to 0
+            NONE
         }
     }
 
-    /** dtMap's score text (its Score.actualRender): one line if it's narrower than the map, else two. */
-    private fun lines(): List<String> {
-        val score = calculateScore()
-        val totalSecrets = calculateTotalSecrets()
-        val secrets = "§b${DungeonUtils.secretCount}§7-§e${calculateMinimumSecrets()}§7-§c$totalSecrets"
-        val scoreText = "§${if (score < 270) "c" else if (score < 300) "e" else "a"}$score"
-        val unknown = if (totalSecrets != 0) {
+    // The HUD is placed by its left edge, so it is as wide as the map and each line is centred on the map's middle.
+    private fun draw(g: GuiGraphicsExtractor, text: List<String>, gap: Int, width: Int): Pair<Int, Int> {
+        val step = mc.font.lineHeight + gap
+        for (i in text.indices) g.centeredText(mc.font, text[i], width / 2, i * step, -1)
+        val height = text.size * step - gap
+        if (size.first != width || size.second != height) size = width to height
+        return size
+    }
+
+    private fun readState() {
+        val stats = DungeonListener.dungeonStats
+        val found = stats.secretsFound
+        val bats = stats.numBatsKilled
+        val crypts = stats.crypts
+        val deaths = stats.deaths
+        val floorNumber = DungeonUtils.floor?.floorNumber ?: 0
+        val factor = secretFactor(DungeonUtils.floor)
+
+        val percent = stats.secretsPercent
+        val totalSecrets = if (found == 0 || percent == 0f) 0 else floor(100 / percent * found + 0.5).toInt()
+
+        val bonus = (if (stats.mimicKilled) 2 else 0) + (if (stats.princeKilled) 1 else 0) + bats.coerceAtMost(5) + crypts.coerceAtMost(5)
+        val paul = if (DungeonUtils.isPaul) 10 else 0
+        val deathPenalty = (deaths * 2 - 1).coerceAtLeast(0)
+        val needed = ceil(totalSecrets * factor * (40 - bonus - paul + deathPenalty) / 40f).toInt().coerceAtLeast(0)
+
+        val completedRooms = stats.completedRooms
+        val cleared = stats.percentCleared
+        val totalRooms = if (completedRooms == 0 || cleared == 0) 0 else floor((completedRooms / (cleared * 0.01).toFloat()) + 0.4).toInt()
+        val completed = completedRooms + (if (!stats.bloodDone) 1 else 0) + if (!DungeonListener.inBoss) 1 else 0
+        val total = if (totalRooms != 0) totalRooms else 36
+        val secretScore = if (totalSecrets > 0) floor(found.toDouble() / (totalSecrets.toDouble() * factor) * 40.0).toInt().coerceIn(0, 40) else 0
+        val exploration = secretScore + floor(completed.toFloat() / total * 60f).coerceIn(0f, 60f).toInt()
+        val skillRooms = floor(completed.toFloat() / total * 80f).coerceIn(0f, 80f).toInt()
+        val puzzlePenalty = (stats.puzzleCount - completedPuzzles()) * 10
+        val score = exploration + (20 + skillRooms - puzzlePenalty - deathPenalty).coerceIn(20, 100) + 100 + bonus + paul
+
+        val teammates = DungeonListener.dungeonTeammates.size
+        val batsPossible = if (teammates > 0) teammates.coerceAtMost(5) else 5
+
+        state[0] = found
+        state[1] = (needed - found).coerceAtLeast(0)
+        state[2] = totalSecrets
+        if (totalSecrets != 0) {
             val unknown = (totalSecrets - knownRoomSecrets()).coerceAtLeast(0)
-            "${if (unknown >= calculateNeededSecrets()) "§a" else "§6"}$unknown   "
-        } else ""
-        val line1 = "$secrets   $unknown$scoreText"
-        val line2 = buildString {
-            if (DungeonUtils.deathCount > 0) append("§7D: §c${DungeonUtils.deathCount}   ")
-            if (!DungeonUtils.mimicKilled && floorNumber() >= 6) append("§7M: §c✖   ")
-            if (!DungeonUtils.princeKilled && princeLeft()) append("§7P: §c✖   ")
-            if (CoreCompat.batsKilled() < batsPossible()) append("§7B: §c${CoreCompat.batsKilled().coerceAtMost(5)}   ")
-            if (DungeonUtils.cryptCount < 5) append("§c${DungeonUtils.cryptCount}§7/§a5")
-        }.trim()
-        // as wide as dtMap's map: its rooms down, 16 each and 4 between, and its 5 of background either side
-        val rows = LcmStyle.mapSize(false).second
+            state[3] = unknown
+            state[4] = if (unknown >= needed) 1 else 0
+        } else {
+            state[3] = -1
+            state[4] = 0
+        }
+        state[5] = score
+        state[6] = deaths
+        state[7] = if (!stats.mimicKilled && floorNumber >= 6) 1 else 0
+        state[8] = if (!stats.princeKilled && princeLeft(floorNumber)) 1 else 0
+        state[9] = if (bats < batsPossible) bats.coerceAtMost(5) else -1
+        state[10] = crypts
+        state[11] = LcmStyle.mapSize(false).second
+    }
+
+    private fun rebuild() {
+        state.copyInto(built)
+        val secrets = "§b${state[0]}§7-§e${state[1]}§7-§c${state[2]}"
+        val score = state[5]
+        val scoreText = "§${if (score < 270) "c" else if (score < 300) "e" else "a"}$score"
+        val unknown = if (state[3] >= 0) "${if (state[4] == 1) "§a" else "§6"}${state[3]}   " else ""
+        val first = "$secrets   $unknown$scoreText"
+        val bonus = StringBuilder()
+        if (state[6] > 0) bonus.append("§7D: §c").append(state[6]).append("   ")
+        if (state[7] == 1) bonus.append("§7M: §c✖   ")
+        if (state[8] == 1) bonus.append("§7P: §c✖   ")
+        if (state[9] >= 0) bonus.append("§7B: §c").append(state[9]).append("   ")
+        if (state[10] < 5) bonus.append("§c").append(state[10]).append("§7/§a5")
+        val second = bonus.toString().trim()
+        // as wide as the map's rooms (16 each, 4 between) and 5 of background either side
+        val rows = state[11]
         val mapWidth = rows * 16 + (rows - 1) * 4 + 10
-        return if (mc.font.width("$line1   $line2") < mapWidth) listOf("$secrets   ${if (line2.isNotEmpty()) "$line2   " else ""}$unknown$scoreText")
-            else listOf(line1, line2)
+        lines = if (mc.font.width("$first   $second") < mapWidth) listOf("$secrets   ${if (second.isNotEmpty()) "$second   " else ""}$unknown$scoreText")
+            else listOf(first, second)
     }
 
-    /** The secrets in the rooms the map names: every open room ADM has scanned ([LcmStyle.knownName]). */
-    private fun knownRoomSecrets(): Int = DungeonScan.rooms.sumOf { if (LcmStyle.knownName(it) != null) it.data?.maxSecrets ?: 0 else 0 }
-
-    /** One bat per player in the run, at most 5 (dtMap: 5, or 1 when solo clearing); 5 until the tab list has the team. */
-    private fun batsPossible(): Int = DungeonUtils.dungeonTeammates.size.takeIf { it > 0 }?.coerceAtMost(5) ?: 5
-
-    /**
-     * The lines centred on the map's middle, [gap] between them (dtMap's: none, 2 on its example). The HUD is placed by
-     * its left edge, so it's as wide as the map (a box as wide as the text moved the middle whenever the text changed);
-     * a line wider than the map runs over both sides evenly.
-     */
-    private fun centred(g: GuiGraphicsExtractor, lines: List<String>, gap: Int, mapWidth: Int): Pair<Int, Int> {
-        for ((i, line) in lines.withIndex()) g.centeredText(mc.font, line, mapWidth / 2, i * (mc.font.lineHeight + gap), -1)
-        return mapWidth to lines.size * (mc.font.lineHeight + gap) - gap
+    private fun completedPuzzles(): Int {
+        val puzzles = DungeonListener.puzzles
+        var n = 0
+        for (i in puzzles.indices) if (puzzles[i].status == PuzzleStatus.Completed) n++
+        return n
     }
 
-    private fun floorNumber(): Int = DungeonUtils.floor?.floorNumber ?: 0
+    // Secrets in every room the map can already name.
+    private fun knownRoomSecrets(): Int {
+        val rooms = DungeonScan.rooms
+        var sum = 0
+        for (i in 0 until rooms.size) {
+            val room = rooms[i]
+            if (LcmStyle.knownName(room) != null) sum += room.data?.maxSecrets ?: 0
+        }
+        return sum
+    }
 
-    /** dtMap's floor secret factor: the share of the secrets a floor needs for full exploration score. */
-    private fun secretFactor(): Float = when (DungeonUtils.floor) {
+    private fun secretFactor(floor: Floor?): Float = when (floor) {
         Floor.E, Floor.F1 -> 0.3f
         Floor.F2 -> 0.4f
         Floor.F3 -> 0.5f
@@ -131,64 +158,20 @@ object LcmMapInfo {
         else -> 1f
     }
 
-    private fun calculateTotalSecrets(): Int {
-        val found = DungeonUtils.secretCount; val percent = DungeonUtils.secretPercentage
-        return if (found == 0 || percent == 0f) 0 else floor(100 / percent * found + 0.5).toInt()
-    }
-
-    private fun calculateTotalRooms(): Int {
-        val completed = DungeonUtils.completedRoomCount; val percent = DungeonUtils.percentCleared
-        return if (completed == 0 || percent == 0) 0 else floor((completed / (percent * 0.01).toFloat()) + 0.4).toInt()
-    }
-
-    private fun deathPenalty(): Int = (DungeonUtils.deathCount * 2 - 1).coerceAtLeast(0)
-
-    private fun calculateScore(): Int {
-        val totalRooms = calculateTotalRooms()
-        val completed = DungeonUtils.completedRoomCount + (if (!DungeonUtils.bloodDone) 1 else 0) + if (!DungeonUtils.inBoss) 1 else 0
-        val total = if (totalRooms != 0) totalRooms else 36
-        val totalSecrets = calculateTotalSecrets()
-
-        val secretScore = if (totalSecrets > 0) {
-            floor(DungeonUtils.secretCount.toDouble() / (totalSecrets.toDouble() * secretFactor()) * 40.0).toInt().coerceIn(0, 40)
-        } else 0
-        val exploration = secretScore + floor(completed.toFloat() / total * 60f).coerceIn(0f, 60f).toInt()
-
-        val skillRooms = floor(completed.toFloat() / total * 80f).coerceIn(0f, 80f).toInt()
-        val puzzlePenalty = (DungeonUtils.puzzleCount - DungeonUtils.puzzles.count { it.status == PuzzleStatus.Completed }) * 10
-
-        return exploration + (20 + skillRooms - puzzlePenalty - deathPenalty()).coerceIn(20, 100) + 100 + calculateBonusScoreNoPaul() + calculatePaulScore()
-    }
-
-    private fun calculateBonusScoreNoPaul(): Int =
-        (if (DungeonUtils.mimicKilled) 2 else 0) + (if (DungeonUtils.princeKilled) 1 else 0) + CoreCompat.batsKilled().coerceAtMost(5) + DungeonUtils.cryptCount.coerceAtMost(5)
-
-    /** Paul's +10: ADM's Paul check, which Clear Info's Paul Score (Auto / On / Off) overrides ([PaulScore]). */
-    private fun calculatePaulScore(): Int = if (DungeonUtils.isPaul) 10 else 0
-
-    /**
-     * The secrets 300 needs in all: the bonus score so far and Paul's +10 both count (ADM's needed secrets, and
-     * dtMap with "Missing secrets calculate paul" on; dtMap's default leaves Paul out, which asked for 10 bonus
-     * points' worth of secrets too many whenever Paul is mayor).
-     */
-    private fun calculateNeededSecrets(): Int =
-        ceil(calculateTotalSecrets() * secretFactor() * (40 - calculateBonusScoreNoPaul() - calculatePaulScore() + deathPenalty()) / 40f).toInt().coerceAtLeast(0)
-
-    /** The secrets still missing for 300. */
-    private fun calculateMinimumSecrets(): Int = (calculateNeededSecrets() - DungeonUtils.secretCount).coerceAtLeast(0)
-
-    /**
-     * dtMap's Legit Mode Prince: there may still be one until the map has every room but blood open (the floor's
-     * main grid, all of it; the puzzle column only has puzzles) and none of them is a Prince room.
-     */
-    private fun princeLeft(): Boolean {
+    // A Prince may be left until every main-grid room but blood is open and none of them is a Prince room.
+    private fun princeLeft(floorNumber: Int): Boolean {
         val rooms = DungeonScan.rooms
-        if (rooms.any { LcmStyle.opened(it) && it.name in LcmStyle.princeRooms }) return true
-        val rules = FloorRules.of(floorNumber()) ?: return true
+        for (i in 0 until rooms.size) {
+            val room = rooms[i]
+            if (LcmStyle.opened(room) && room.name in LcmStyle.princeRooms) return true
+        }
+        val rules = FloorRules.of(floorNumber) ?: return true
         for (z in 0 until rules.h) for (x in 0 until rules.w) {
             val room = DungeonScan.tiles.getOrNull(z * 6 + x)?.room ?: return true
             if (room.type != RoomType.BLOOD && !LcmStyle.opened(room)) return true
         }
         return false
     }
+
+    private const val STATE_SIZE = 12
 }
