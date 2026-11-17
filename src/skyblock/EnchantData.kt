@@ -2,155 +2,40 @@ package com.engineerclient.skyblock
 
 internal class Ench(val ultimate: Boolean, val good: Int, val max: Int)
 
-internal val ENCHANTS: Map<String, Ench> = mapOf(
-    "Dragon Tracer" to Ench(false, 5, 5),
-    "Angler" to Ench(false, 5, 6),
-    "Aqua Affinity" to Ench(false, 1, 1),
-    "Bane of Arthropods" to Ench(false, 5, 7),
-    "Big Brain" to Ench(false, 5, 5),
-    "Blast Protection" to Ench(false, 5, 7),
-    "Blessing" to Ench(false, 5, 6),
-    "Caster" to Ench(false, 5, 6),
-    "Cayenne" to Ench(false, 4, 5),
-    "Chance" to Ench(false, 3, 5),
-    "Cleave" to Ench(false, 5, 6),
-    "Counter-Strike" to Ench(false, 0, 5),
-    "Critical" to Ench(false, 5, 7),
-    "Cubism" to Ench(false, 5, 6),
-    "Charm" to Ench(false, 4, 6),
-    "Corruption" to Ench(false, 4, 5),
-    "Delicate" to Ench(false, 0, 5),
-    "Depth Strider" to Ench(false, 3, 3),
-    "Divine Gift" to Ench(false, 3, 3),
-    "Gravity" to Ench(false, 5, 6),
-    "Efficiency" to Ench(false, 5, 10),
-    "Ender Slayer" to Ench(false, 5, 7),
-    "Execute" to Ench(false, 5, 6),
-    "Experience" to Ench(false, 3, 5),
-    "Feather Falling" to Ench(false, 5, 10),
-    "Fire Aspect" to Ench(false, 2, 3),
-    "Fire Protection" to Ench(false, 5, 7),
-    "First Strike" to Ench(false, 4, 5),
-    "Flame" to Ench(false, 1, 2),
-    "Fortune" to Ench(false, 3, 4),
-    "Frail" to Ench(false, 5, 7),
-    "Frost Walker" to Ench(false, 2, 2),
-    "Ferocious Mana" to Ench(false, 9, 10),
-    "Giant Killer" to Ench(false, 5, 7),
-    "Growth" to Ench(false, 5, 7),
-    "Harvesting" to Ench(false, 5, 6),
-    "Hardened Mana" to Ench(false, 9, 10),
-    "Impaling" to Ench(false, 5, 5),
-    "Infinite Quiver" to Ench(false, 5, 10),
-    "Knockback" to Ench(false, 2, 2),
-    "Lethality" to Ench(false, 5, 6),
-    "Life Steal" to Ench(false, 3, 5),
-    "Looting" to Ench(false, 3, 5),
-    "Luck" to Ench(false, 5, 7),
-    "Luck Of The Sea" to Ench(false, 5, 7),
-    "Lure" to Ench(false, 5, 6),
-    "Pyroclasm" to Ench(false, 5, 6),
-    "Magnet" to Ench(false, 5, 6),
-    "Mana Steal" to Ench(false, 0, 3),
-    "Mana Vampire" to Ench(false, 9, 10),
-    "Overload" to Ench(false, 0, 5),
-    "Piercing" to Ench(false, 1, 1),
-    "Power" to Ench(false, 5, 7),
-    "Prismatic" to Ench(false, 0, 5),
-    "Projectile Protection" to Ench(false, 5, 7),
-    "Prosecute" to Ench(false, 5, 6),
-    "Protection" to Ench(false, 5, 7),
-    "Punch" to Ench(false, 2, 2),
-    "Rainbow" to Ench(false, 1, 2),
-    "Rejuvenate" to Ench(false, 0, 5),
-    "Replenish" to Ench(false, 1, 1),
-    "Respiration" to Ench(false, 3, 4),
-    "Respite" to Ench(false, 5, 5),
-    "Scavenger" to Ench(false, 3, 6),
-    "Sharpness" to Ench(false, 5, 7),
-    "Silk Touch" to Ench(false, 1, 1),
-    "Smarty Pants" to Ench(false, 0, 5),
-    "Smelting Touch" to Ench(false, 1, 1),
-    "Smite" to Ench(false, 5, 7),
-    "Snipe" to Ench(false, 3, 4),
-    "Spiked Hook" to Ench(false, 5, 7),
-    "Sugar Rush" to Ench(false, 0, 3),
-    "Drain" to Ench(false, 3, 5),
-    "Smoldering" to Ench(false, 4, 5),
-    "Strong Mana" to Ench(false, 9, 10),
-    "Tabasco" to Ench(false, 2, 3),
-    "Thorns" to Ench(false, 3, 3),
-    "Thunderbolt" to Ench(false, 5, 6),
-    "Thunderlord" to Ench(false, 5, 7),
-    "Titan Killer" to Ench(false, 5, 7),
-    "Triple-Strike" to Ench(false, 4, 5),
-    "True Protection" to Ench(false, 0, 1),
-    "Turbo-Cacti" to Ench(false, 0, 5),
-    "Turbo-Cane" to Ench(false, 0, 5),
-    "Turbo-Carrot" to Ench(false, 0, 5),
-    "Turbo-Cocoa" to Ench(false, 0, 5),
-    "Turbo-Melon" to Ench(false, 0, 5),
-    "Turbo-Mushrooms" to Ench(false, 0, 5),
-    "Turbo-Potato" to Ench(false, 0, 5),
-    "Turbo-Pumpkin" to Ench(false, 0, 5),
-    "Turbo-Warts" to Ench(false, 0, 5),
-    "Turbo-Wheat" to Ench(false, 0, 5),
-    "Turbo-Sunflower" to Ench(false, 0, 5),
-    "Turbo-Rose" to Ench(false, 0, 5),
-    "Turbo-Moonflower" to Ench(false, 0, 5),
-    "Vampirism" to Ench(false, 5, 6),
-    "Venomous" to Ench(false, 5, 7),
-    "Vicious" to Ench(false, 0, 5),
-    "Piscary" to Ench(false, 5, 7),
-    "Prosperity" to Ench(false, 0, 5),
-    "Sunder" to Ench(false, 0, 6),
-    "Dedication" to Ench(false, 3, 4),
-    "Green Thumb" to Ench(false, 0, 5),
-    "Reflection" to Ench(false, 0, 5),
-    "Quantum" to Ench(false, 3, 5),
-    "Transylvanian" to Ench(false, 3, 5),
-    "Pesterminator" to Ench(false, 4, 6),
-    "Ice Cold" to Ench(false, 0, 5),
-    "Paleontologist" to Ench(false, 0, 5),
-    "Lapidary" to Ench(false, 0, 5),
-    "Small Brain" to Ench(false, 3, 5),
-    "Tidal" to Ench(false, 2, 3),
-    "Quick Bite" to Ench(false, 0, 5),
-    "Woodsplitter" to Ench(false, 5, 6),
-    "Forest Pledge" to Ench(false, 3, 5),
-    "Scuba" to Ench(false, 3, 5),
-    "Stealth" to Ench(false, 0, 1),
-    "Great Spook" to Ench(false, 0, 1),
-    "Telekinesis" to Ench(false, 0, 1),
-    "Bank" to Ench(true, 0, 5),
-    "Chimera" to Ench(true, 0, 5),
-    "Combo" to Ench(true, 0, 5),
-    "Duplex" to Ench(true, 0, 5),
-    "Flash" to Ench(true, 0, 5),
-    "Last Stand" to Ench(true, 0, 5),
-    "Fatal Tempo" to Ench(true, 0, 5),
-    "Habanero Tactics" to Ench(true, 0, 5),
-    "Inferno" to Ench(true, 0, 5),
-    "Ultimate Jerry" to Ench(true, 0, 5),
-    "Legion" to Ench(true, 0, 5),
-    "No Pain No Gain" to Ench(true, 0, 5),
-    "One For All" to Ench(true, 0, 5),
-    "Rend" to Ench(true, 0, 5),
-    "Soul Eater" to Ench(true, 0, 5),
-    "Swarm" to Ench(true, 0, 5),
-    "Ultimate Wise" to Ench(true, 0, 5),
-    "Wisdom" to Ench(true, 0, 5),
-    "The One" to Ench(true, 0, 5),
-    "Refrigerate" to Ench(true, 0, 5),
-    "Flowstate" to Ench(true, 0, 3),
-    "First Impression" to Ench(true, 0, 5),
-    "Missile" to Ench(true, 0, 5),
-    "Crop Fever" to Ench(true, 0, 5),
-    "Compact" to Ench(false, 0, 10),
-    "Cultivating" to Ench(false, 0, 10),
-    "Expertise" to Ench(false, 0, 10),
-    "Hecatomb" to Ench(false, 0, 10),
-    "Champion" to Ench(false, 0, 10),
-    "Toxophilite" to Ench(false, 0, 10),
-    "Absorb" to Ench(false, 0, 10),
-).mapKeys { it.key.lowercase().replace("'", "") }
+// Name=<good><max>: good is the usual level, u marks an ultimate, X is 10.
+private const val TABLE =
+    "Absorb=0X;Angler=56;Aqua Affinity=11;Bane of Arthropods=57;Bank=u5;Big Brain=55;Blast Protection=57;" +
+    "Blessing=56;Bobbin' Time=u5;Bug Blender=15;Caster=56;Cayenne=45;Champion=0X;Chance=35;Charm=46;Chimera=u5;" +
+    "Cleave=56;Combo=u5;Compact=0X;Corruption=45;Counter-Strike=05;Critical=57;Crop Fever=u5;Cubism=56;" +
+    "Cultivating=0X;Dedication=34;Delicate=05;Depth Strider=33;Divine Gift=33;Dragon Tracer=55;Drain=35;Duplex=u5;" +
+    "Efficiency=5X;Ender Slayer=57;Execute=56;Experience=35;Expertise=0X;Fatal Tempo=u5;Feast=15;" +
+    "Feather Falling=5X;Fire Aspect=23;Fire Protection=57;First Impression=u5;First Strike=45;Flame=22;Flash=u5;" +
+    "Flowstate=u3;Forest Pledge=36;Fortune=34;Frail=57;Giant Killer=57;Gravity=56;Great Spook=01;Green Thumb=05;" +
+    "Growth=57;Habanero Tactics=u5;Hardened Vitality=5X;Harvesting=56;Hecatomb=0X;Ice Cold=05;Impaling=55;" +
+    "Inferno=u5;Infinite Quiver=5X;Karma=16;Knockback=22;Lapidary=05;Last Stand=u5;Legion=u5;Lethality=56;" +
+    "Life Steal=35;Looting=35;Luck=57;Luck of the Sea=57;Lure=56;Magnet=56;Mana Steal=03;Missile=u5;" +
+    "No Pain No Gain=u5;One For All=u1;Overload=05;Paleontologist=05;Pesterminator=46;Petalfall=15;Piercing=11;" +
+    "Piscary=57;Power=57;Prismatic=05;Projectile Protection=57;Prosecute=56;Prosperity=05;Protection=57;Punch=22;" +
+    "Pyroclasm=56;Quantum=35;Quick Bite=05;Rainbow=13;Reflection=05;Refrigerate=u5;Rejuvenate=05;Rend=u5;" +
+    "Replenish=11;Respiration=34;Respite=55;Scavenger=36;Scuba=36;Sharpness=57;Silk Touch=11;Small Brain=35;" +
+    "Smarty Pants=05;Smelting Touch=11;Smite=57;Smoldering=45;Snipe=34;Soul Eater=u5;Spiked Hook=57;Stealth=06;" +
+    "Strong Vitality=5X;Sugar Rush=03;Sunset=u5;Swarm=u5;Tabasco=23;The One=u5;Thorns=34;Thunderbolt=57;" +
+    "Thunderlord=57;Tidal=23;Titan Killer=57;Toxophilite=0X;Transylvanian=35;Triple-Strike=45;True Protection=01;" +
+    "Turbo-Cacti=07;Turbo-Cane=07;Turbo-Carrot=07;Turbo-Cocoa=07;Turbo-Melon=07;Turbo-Moonflower=07;" +
+    "Turbo-Mushrooms=07;Turbo-Potato=07;Turbo-Pumpkin=07;Turbo-Rose=07;Turbo-Sunflower=07;Turbo-Warts=07;" +
+    "Turbo-Wheat=07;Ultimate Jerry=u5;Ultimate Wise=u5;Vampiric Vitality=5X;Vampirism=56;Venomous=57;Vicious=25;" +
+    "Vivacious Vitality=5X;Wisdom=u5;Woodsplitter=56"
+
+private val byKey: HashMap<String, Ench> by lazy(LazyThreadSafetyMode.NONE) {
+    val out = HashMap<String, Ench>(256)
+    for (entry in TABLE.split(';')) {
+        val eq = entry.indexOf('=')
+        val g = entry[eq + 1]
+        val m = entry[eq + 2]
+        out[entry.substring(0, eq).lowercase().replace("'", "")] =
+            Ench(g == 'u', if (g == 'u') 0 else g - '0', if (m == 'X') 10 else m - '0')
+    }
+    out
+}
+
+internal fun enchantInfo(key: String): Ench? = byKey[key]

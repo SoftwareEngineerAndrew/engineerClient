@@ -58,7 +58,7 @@ object EnchantColors : Module(
         var x = 0f
         for (m in pattern.findAll(text)) {
             val name = m.groupValues[1]
-            val ench = ENCHANTS[name.lowercase().replace("'", "")] ?: continue
+            val ench = enchantInfo(name.lowercase().replace("'", "")) ?: continue
             found = true
             val roman = m.groupValues[2]
             val level = romanToInt(roman)
