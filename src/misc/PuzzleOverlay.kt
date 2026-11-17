@@ -13,16 +13,14 @@ import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
 import com.adm.utils.Color
 import com.adm.utils.Colors
 import com.adm.utils.render.text
-import com.adm.utils.render.textDim
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 /**
- * Puzzle Overlay: dtmap's puzzle HUD (github.com/ricedotwho/dtMap, PuzzleHud.kt), "Puzzles(N):" then a line per puzzle,
- * green once completed and red otherwise, "???" for one not found yet. Always in the tab list's order: each line stays
- * where the tab list has it, so a puzzle found later fills its own "???" instead of moving to the bottom (dtmap's
- * default lists them in map scan order). The ADM style draws it the way ADM's Puzzle HUD did, in the same order.
+ * Puzzle Overlay: "Puzzles(N):" then a line per puzzle, green once completed and red otherwise, "???" for one not found
+ * yet. Always in the tab list's order: each line stays where the tab list has it, so a puzzle found later fills its own
+ * "???" instead of moving to the bottom. The Classic style draws it the way ADM's Puzzle HUD did, in the same order.
  */
 object PuzzleOverlay {
     private val mc: Minecraft get() = Minecraft.getInstance()
@@ -52,42 +50,74 @@ object PuzzleOverlay {
         TabPuzzles.Slot(null, TabPuzzles.Status.INCOMPLETE),
     ))
 
-    /** dtmap's colours (java.awt.Color.GREEN and RED). */
     private val GREEN = Color(0, 255, 0)
     private val RED = Color(255, 0, 0)
+
+    // shown() before the run starts, and also when the run starting would show it.
+    private fun mayShow(): Boolean {
+        if (!DungeonUtils.inDungeons || DungeonUtils.inBoss) return false
+        return if (started) duringClear else beforeStart || duringClear
+    }
 
     private fun shown(): Boolean {
         if (!DungeonUtils.inDungeons || DungeonUtils.inBoss) return false
         return if (started) duringClear else beforeStart
     }
 
+    // Lines of the last section drawn, made again only when the section (or the player names setting) changes.
+    private var linesFor: TabPuzzles.Section? = null
+    private var linesClassic = false
+    private var linesNames = false
+    private var lines = emptyArray<String>()
+    private var lineColors = emptyArray<Color>()
+
+    private fun linesOf(s: TabPuzzles.Section, classic: Boolean): Array<String> {
+        val names = classic && playerNames
+        if (s === linesFor && classic == linesClassic && names == linesNames) return lines
+        linesFor = s; linesClassic = classic; linesNames = names
+        if (classic) {
+            val count = maxOf(s.count ?: s.slots.size, s.slots.size)
+            lines = if (count == 0) emptyArray() else Array(count + 1) { i ->
+                if (i == 0) return@Array "§5Puzzles §8(§3$count§8)"
+                val slot = s.slots.getOrNull(i - 1)
+                val (icon, color) = when (slot?.status ?: TabPuzzles.Status.INCOMPLETE) {
+                    TabPuzzles.Status.COMPLETED -> "✔" to "§a"
+                    TabPuzzles.Status.FAILED -> "✖" to "§c"
+                    TabPuzzles.Status.INCOMPLETE -> "✦" to "§6"
+                }
+                val player = if (names && slot?.player != null) " §7(§6${slot.player}§7)" else ""
+                "§e${slot?.name ?: "???"}§8: [$color$icon§8]$player"
+            }
+        } else {
+            val rows = TabPuzzles.overlayLines(s)
+            lines = Array(rows.size) { rows[it].first }
+            lineColors = Array(rows.size) { when (rows[it].second) { null -> Colors.WHITE; true -> GREEN; false -> RED } }
+        }
+        return lines
+    }
+
     private fun GuiGraphicsExtractor.draw(s: TabPuzzles.Section): Pair<Int, Int> {
-        val rows = TabPuzzles.overlayLines(s)
+        val rows = linesOf(s, false)
+        val colors = lineColors
         val step = mc.font.lineHeight + 2
         var width = 0
-        rows.forEachIndexed { i, (label, done) ->
-            text(label, 0, i * step, when (done) { null -> Colors.WHITE; true -> GREEN; false -> RED }, shadow = true)
-            width = maxOf(width, mc.font.width(label))
+        for (i in rows.indices) {
+            text(rows[i], 0, i * step, colors[i], shadow = true)
+            width = maxOf(width, mc.font.width(rows[i]))
         }
         return width to rows.size * step - 2
     }
 
     private fun GuiGraphicsExtractor.drawClassic(s: TabPuzzles.Section): Pair<Int, Int> {
-        val count = maxOf(s.count ?: s.slots.size, s.slots.size)
-        if (count == 0) return 0 to 0
+        val rows = linesOf(s, true)
+        if (rows.isEmpty()) return 0 to 0
         val lineHeight = 12
-        var width = textDim("§5Puzzles §8(§3$count§8)", 0, 0, Colors.WHITE).first
-        val slots = s.slots + List(count - s.slots.size) { TabPuzzles.Slot(null, TabPuzzles.Status.INCOMPLETE) }
-        slots.forEachIndexed { i, slot ->
-            val (icon, color) = when (slot.status) {
-                TabPuzzles.Status.COMPLETED -> "✔" to "§a"
-                TabPuzzles.Status.FAILED -> "✖" to "§c"
-                TabPuzzles.Status.INCOMPLETE -> "✦" to "§6"
-            }
-            val player = if (playerNames && slot.player != null) " §7(§6${slot.player}§7)" else ""
-            width = maxOf(width, textDim("§e${slot.name ?: "???"}§8: [$color$icon§8]$player", 0, (i + 1) * lineHeight, Colors.WHITE).first)
+        var width = 0
+        for (i in rows.indices) {
+            text(rows[i], 0, i * lineHeight, Colors.WHITE)
+            width = maxOf(width, mc.font.width(rows[i]))
         }
-        return width to (slots.size + 1) * lineHeight
+        return width to rows.size * lineHeight
     }
 
     fun install() {
@@ -96,7 +126,9 @@ object PuzzleOverlay {
         for (s in listOf(dropdown, hud, beforeStartSetting, duringClearSetting, styleSetting, playerNamesSetting)) PuzzleSolvers.registerSetting(s)
         on<LevelEvent.Load> { started = false; section = null }
         on<MessageEvent.Chat> { if (message.contains(MORT_START)) started = true }
-        on<TickEvent.End> { section = if (PuzzleSolvers.enabled && hud.value.enabled && DungeonUtils.inDungeons) TabPuzzles.read() else null }
+        on<TickEvent.End> {
+            section = if (PuzzleSolvers.enabled && hud.value.enabled && mayShow()) TabPuzzles.read().takeIf { it != section } ?: section else null
+        }
         EventBus.subscribe(this)
     }
 
