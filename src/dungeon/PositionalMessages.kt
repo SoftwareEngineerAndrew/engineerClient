@@ -14,7 +14,6 @@ import com.adm.utils.Colors
 import com.adm.utils.render.text
 import com.adm.utils.sendCommand
 import com.adm.utils.skyblock.dungeon.DungeonUtils
-import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.world.phys.AABB
 
 object PositionalMessages : Module(
@@ -30,101 +29,144 @@ object PositionalMessages : Module(
     private val soundRepeats by NumberSetting("Sound Repeats", 10, 0..20, 1, desc = "How many times the alert sound plays.").withDependency { locationAlerts }
     private val sound = SoundOption(this, "minecraft:block.note_block.pling")
 
+    private const val EXAMPLE = "§6Someone§e is At <location>!"
+    private val NONE = 0 to 0
+
     private val locationHud by HUD("Location Alert", "A teammate's location message.", false, 300, 90, 2.1f) { example ->
-        if (example) return@HUD draw("§6Someone§e is At <location>!")
-        if (!locationAlerts || alertLeft <= 0) return@HUD 0 to 0
-        draw(alertText)
+        when {
+            example -> {
+                text(EXAMPLE, 0, 0, Colors.WHITE, true)
+                mc.font.width(EXAMPLE) to 9
+            }
+            !locationAlerts || alertTicksLeft <= 0 -> NONE
+            else -> {
+                text(alert, 0, 0, Colors.WHITE, true)
+                alertSize
+            }
+        }
     }
 
-    private class Spot(val message: String, val checks: List<String>, val box: AABB, val sections: Set<Int>) {
-        var sent = true
-        var sentByMe = true
-        fun reset(to: Boolean) { sent = to; sentByMe = to }
+    // Bit 0 of [phases] is "Storm or terminals", bit n is terminal section n.
+    private class Place(val call: String, val box: AABB, val phases: Int, vararg val names: String) {
+        var heard = true
+        var said = true
     }
 
-    private val SS = Spot("At SS!", listOf("ss"), AABB(107.0, 120.0, 93.0, 110.0, 121.0, 95.0), setOf(0, 1))
-    private val SPOTS = listOf(
+    private const val STORM_OR_TERMINALS = 1
+    private fun sections(vararg n: Int): Int = n.fold(0) { acc, s -> acc or (1 shl s) }
+
+    private val SS = Place("At SS!", AABB(107.0, 120.0, 93.0, 110.0, 121.0, 95.0), sections(0, 1), "ss")
+    private val PLACES = arrayOf(
         SS,
-        Spot("At EE2!", listOf("ee2", "early enter 2"), AABB(57.0, 109.0, 130.0, 59.0, 110.0, 132.0), setOf(1, 2)),
-        Spot("At High EE2!", listOf("high ee2", "highee2", "hee2"), AABB(59.0, 132.0, 138.0, 62.0, 133.0, 140.0), setOf(1, 2)),
-        Spot("At EE3!", listOf("ee3", "early enter 3", "early entry 3"), AABB(1.0, 109.0, 103.0, 3.0, 110.0, 106.0), setOf(2, 3)),
-        Spot("At Core!", listOf("core"), AABB(53.0, 115.0, 51.0, 56.0, 116.0, 54.0), setOf(2, 3, 4)),
-        Spot("Inside Goldor Tunnel!", listOf("tunnel"), AABB(52.0, 114.0, 55.0, 57.0, 116.0, 58.0), setOf(4, 5)),
-        Spot("At 2 Safespot!", listOf("2 safespot", "ee2 safespot", "safespot ee2", "s2 safespot", "safespot s2"), AABB(46.0, 109.0, 121.987, 49.0, 110.0, 121.988), setOf(1, 2)),
-        Spot("At 3 Safespot!", listOf("3 safespot", "ee3 safespot", "freaky ee3", "freak ee", "safespot s3", "safespot 3"), AABB(18.0, 121.0, 91.0, 19.0, 126.0, 99.0), setOf(2, 3)),
-        Spot("At Split ee2!", listOf("split ee2", "splitee2", "mage term"), AABB(58.0, 119.0, 124.0, 60.0, 123.0, 126.0), setOf(1, 2)),
-        Spot("At High 2 Safespot!", listOf("2 safespot"), AABB(57.0, 127.0, 143.7, 70.0, 133.0, 146.7), setOf(1, 2)),
+        Place("At EE2!", AABB(57.0, 109.0, 130.0, 59.0, 110.0, 132.0), sections(1, 2), "ee2", "early enter 2"),
+        Place("At High EE2!", AABB(59.0, 132.0, 138.0, 62.0, 133.0, 140.0), sections(1, 2), "high ee2", "highee2", "hee2"),
+        Place("At EE3!", AABB(1.0, 109.0, 103.0, 3.0, 110.0, 106.0), sections(2, 3), "ee3", "early enter 3", "early entry 3"),
+        Place("At Core!", AABB(53.0, 115.0, 51.0, 56.0, 116.0, 54.0), sections(2, 3, 4), "core"),
+        Place("Inside Goldor Tunnel!", AABB(52.0, 114.0, 55.0, 57.0, 116.0, 58.0), sections(4, 5), "tunnel"),
+        Place("At 2 Safespot!", AABB(46.0, 109.0, 121.987, 49.0, 110.0, 121.988), sections(1, 2), "2 safespot", "ee2 safespot", "safespot ee2", "s2 safespot", "safespot s2"),
+        Place("At 3 Safespot!", AABB(18.0, 121.0, 91.0, 19.0, 126.0, 99.0), sections(2, 3), "3 safespot", "ee3 safespot", "freaky ee3", "freak ee", "safespot s3", "safespot 3"),
+        Place("At Split ee2!", AABB(58.0, 119.0, 124.0, 60.0, 123.0, 126.0), sections(1, 2), "split ee2", "splitee2", "mage term"),
+        Place("At High 2 Safespot!", AABB(57.0, 127.0, 143.7, 70.0, 133.0, 146.7), sections(1, 2), "high 2 safespot", "2 safespot"),
     )
 
     private const val STORM_START = "[BOSS] Storm: Pathetic Maxor, just like expected."
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
     private const val CORE_OPEN = "The Core entrance is opening!"
+    private const val PARTY_PREFIX = "Party > "
     private val PARTY = Regex("^Party > (?:\\[[^]]*] )?(\\w{1,16}): (.*)$")
-    private val AT = Regex("^(At |Inside )")
+    private val COLOR_CODE = Regex("§.")
 
-    /** 2 Storm, 3 terminals, 0 otherwise. */
-    private var phase = 0
-    private var alertText = ""
-    private var alertLeft = 0
+    private const val OUTSIDE = 0
+    private const val STORM = 2
+    private const val TERMINALS = 3
+    private var phase = OUTSIDE
+
+    private var alert = ""
+    private var alertSize = NONE
+    private var alertTicksLeft = 0
     private var soundsLeft = 0
 
-    private fun GuiGraphicsExtractor.draw(s: String): Pair<Int, Int> {
-        text(s, 0, 0, Colors.WHITE, true)
-        return mc.font.width(s) to 9
+    private fun markAll(value: Boolean) {
+        for (p in PLACES) { p.heard = value; p.said = value }
     }
 
-    private fun inSection(n: Int): Boolean {
-        if (n == 0) return phase == 2 || phase == 3
-        return phase == 3 && TermInfo.sectionNumber() == n
-    }
-
-    /** Someone already called this spot: true. Otherwise marks it called. */
-    private fun alreadyCalled(location: String): Boolean {
-        val lower = location.lowercase()
-        for (spot in SPOTS) {
-            if (spot.checks.none { lower.contains(it) }) continue
-            if (spot.sent) return true
-            spot.sent = true
-            return false
+    // The most specific name wins, so "high ee2" is High EE2 and not EE2.
+    private fun placeIn(text: String): Place? {
+        var best: Place? = null
+        var bestLength = 0
+        for (p in PLACES) for (name in p.names) {
+            if (name.length > bestLength && text.contains(name)) {
+                best = p
+                bestLength = name.length
+            }
         }
-        return false
+        return best
     }
 
-    private fun onParty(sender: String, text: String) {
+    private fun onPartyLine(sender: String, said: String) {
         if (!locationAlerts || !DungeonUtils.inDungeons) return
-        val trimmed = text.trim()
-        val formatted = if (trimmed.length < 2) text else trimmed.take(1).uppercase() + trimmed.drop(1).lowercase()
-        val action = AT.find(formatted)?.groupValues?.get(1) ?: return
-        val location = formatted.substring(formatted.indexOf(action) + action.length).replace(Regex("§."), "")
-        if (alreadyCalled(location)) return
+        val body = said.trim()
+        val line = if (body.length < 2) said else body.substring(0, 1).uppercase() + body.substring(1).lowercase()
+        val verb = when {
+            line.startsWith("At ") -> "At "
+            line.startsWith("Inside ") -> "Inside "
+            else -> return
+        }
+        val where = COLOR_CODE.replace(line.substring(verb.length), "")
+        val place = placeIn(where.lowercase())
+        if (place != null) {
+            if (place.heard) return
+            place.heard = true
+        }
         if (hideOwn && sender == mc.user.name) return
-        alertText = "§6$sender§e is $action$location!"
-        alertLeft = alertTicks
+        alert = "§6$sender§e is $verb$where!"
+        alertSize = mc.font.width(alert) to 9
+        alertTicksLeft = alertTicks
         soundsLeft = soundRepeats
+    }
+
+    private fun activePhases(): Int {
+        if (phase != STORM && phase != TERMINALS) return 0
+        if (phase == STORM) return STORM_OR_TERMINALS
+        val section = TermInfo.sectionNumber() ?: return STORM_OR_TERMINALS
+        return if (section in 1..30) STORM_OR_TERMINALS or (1 shl section) else STORM_OR_TERMINALS
     }
 
     init {
         on<MessageEvent.Chat> {
             when (message) {
-                STORM_START -> { phase = 2; SS.reset(false) }
-                GOLDOR_START -> { phase = 3; SPOTS.forEach { if (it !== SS) it.reset(false) } }
-                CORE_OPEN -> { phase = 0; SPOTS.forEach { it.reset(true) } }
-                else -> PARTY.matchEntire(message)?.let { onParty(it.groupValues[1], it.groupValues[2]) }
+                STORM_START -> { phase = STORM; SS.heard = false; SS.said = false }
+                GOLDOR_START -> {
+                    phase = TERMINALS
+                    for (p in PLACES) if (p !== SS) { p.heard = false; p.said = false }
+                }
+                CORE_OPEN -> { phase = OUTSIDE; markAll(true) }
+                else -> if (message.startsWith(PARTY_PREFIX)) {
+                    PARTY.matchEntire(message)?.let { onPartyLine(it.groupValues[1], it.groupValues[2]) }
+                }
             }
         }
 
         on<TickEvent.End> {
-            if (alertLeft > 0) alertLeft--
+            if (alertTicksLeft > 0) alertTicksLeft--
             if (soundsLeft > 0) { soundsLeft--; sound.play() }
-            if (!positional || phase == 0) return@on
-            val p = mc.player ?: return@on
-            for (spot in SPOTS) {
-                if (spot.sent || spot.sentByMe || spot.sections.none(::inSection) || !spot.box.contains(p.position())) continue
-                sendCommand("pc ${spot.message}")
-                spot.sentByMe = true
+            if (!positional || phase == OUTSIDE) return@on
+            val player = mc.player ?: return@on
+            var active = -1
+            for (p in PLACES) {
+                if (p.heard || p.said) continue
+                if (active == -1) active = activePhases()
+                if ((p.phases and active) == 0 || !p.box.contains(player.x, player.y, player.z)) continue
+                sendCommand("pc ${p.call}")
+                p.said = true
             }
         }
 
-        on<LevelEvent.Load> { phase = 0; alertLeft = 0; soundsLeft = 0; SPOTS.forEach { it.reset(true) } }
+        on<LevelEvent.Load> {
+            phase = OUTSIDE
+            alertTicksLeft = 0
+            soundsLeft = 0
+            markAll(true)
+        }
     }
 }
