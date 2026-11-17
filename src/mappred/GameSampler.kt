@@ -1059,7 +1059,10 @@ internal class GameSampler(
             val v = rEntry[path[i + 1]]; val u = parent[v]
             kind[minOf(u, v) * n + maxOf(u, v)] = if (i == 0) Edge.DOOR else if (i == path.size - 2) Edge.BLOOD else Edge.WITHER
         }
-        for (i in shownA.indices) if ((kind[shownA[i] * n + shownB[i]] ?: Edge.DOOR) != shownKind[i]) return false
+        for (i in shownA.indices) {
+            val k = kind[shownA[i] * n + shownB[i]] ?: Edge.DOOR
+            if (if (shownKind[i] == Edge.FAIRY) k == Edge.BLOOD else k != shownKind[i]) return false
+        }
         return true
     }
 

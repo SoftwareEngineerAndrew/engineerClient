@@ -33,7 +33,8 @@ object Edge {
     const val WITHER: Byte = 3
     const val BLOOD: Byte = 4
     const val SAME: Byte = 5     // the same room
-    fun isDoor(k: Byte) = k == DOOR || k == WITHER || k == BLOOD
+    const val FAIRY: Byte = 6    // a door touching the fairy: a wither door on the path, or a plain one
+    fun isDoor(k: Byte) = k == DOOR || k == WITHER || k == BLOOD || k == FAIRY
 }
 
 /**
@@ -671,19 +672,31 @@ class MapPredictor(private val view: MapView, gameProcess: Boolean = true) {
         for (step in 0 until 40) {
             if (view.kinds[cur] == Kind.FAIRY) fairyDist = dist
             var next: IntArray? = null // to room, my tile, their tile
+            val fairyWays = ArrayList<IntArray>()
             loop@ for (q in view.roomTiles[cur]) for (nb in neighbours(q)) {
                 val o = view.roomAt[nb]
                 if (o == cur) continue
                 val k = view.edge(q, nb)
                 if (!Edge.isDoor(k)) continue
-                if (step > 0 && k != Edge.WITHER && k != Edge.BLOOD) continue
                 if (o >= 0 && o in onPath) continue
+                if (step > 0 && k == Edge.FAIRY) { fairyWays += intArrayOf(o, q, nb); continue }
+                if (step > 0 && k != Edge.WITHER && k != Edge.BLOOD) continue
                 next = intArrayOf(o, q, nb); break@loop
             }
-            val d = next ?: break
+            // a fairy door is the path's when it's the one way on, or the one into a room the wither path leaves
+            val d = next ?: fairyWays.singleOrNull()
+                ?: fairyWays.filter { it[0] >= 0 && witherOut(it[0], cur) }.singleOrNull() ?: break
             val nd = dist + inRoom(view.roomTiles[cur], at, d[1]) + 1
             if (d[0] < 0) { head = d[2]; headDist = nd; break }
             onPath += d[0]; cur = d[0]; at = d[2]; dist = nd
+        }
+    }
+
+    /** Room [r] has a wither or blood door to anywhere but [from]. */
+    private fun witherOut(r: Int, from: Int): Boolean = view.roomTiles[r].any { q ->
+        neighbours(q).any { nb ->
+            val o = view.roomAt[nb]
+            o != r && o != from && view.edge(q, nb).let { it == Edge.WITHER || it == Edge.BLOOD }
         }
     }
 

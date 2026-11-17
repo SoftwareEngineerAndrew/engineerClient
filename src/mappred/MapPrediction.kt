@@ -230,7 +230,7 @@ object MapPrediction {
             val p = door.position; val o = door.rotation.offset
             val a = p.z * W + p.x; val b = (p.z + o.z) * W + p.x + o.x
             if (a !in 0 until W * W || b !in 0 until W * W) continue
-            val k = when (door.type) { DoorType.Wither -> Edge.WITHER; DoorType.Blood -> Edge.BLOOD; else -> Edge.DOOR }
+            val k = when (door.type) { DoorType.Wither -> Edge.WITHER; DoorType.Blood -> Edge.BLOOD; DoorType.Fairy -> Edge.FAIRY; else -> Edge.DOOR }
             doors[pair(a, b)] = k
             if (k != Edge.DOOR) pathDoors[pair(a, b)] = k
         }
