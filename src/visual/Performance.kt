@@ -63,8 +63,8 @@ object Performance : Module(
     private val clockFormat = DateTimeFormatter.ofPattern("HH:mm")
     private val clockFormatSeconds = DateTimeFormatter.ofPattern("HH:mm:ss")
 
-    private val leftClicks = ArrayDeque<Long>()
-    private val rightClicks = ArrayDeque<Long>()
+    private val leftClicks = ClickWindow()
+    private val rightClicks = ClickWindow()
 
     private val hud by HUD("Performance HUD", "Shows performance information on the screen.", true) {
         if (!showFPS && !showTPS && !showPing) return@HUD 0 to 0
@@ -90,15 +90,15 @@ object Performance : Module(
     }
 
     private val clockHud by HUD("Clock HUD", "The system time.", true, 10, 10, 1f) {
-        val text = clockText()
-        text(mc.font, text, 0, 0, clockColor.rgba)
-        mc.font.width(text) to 9
+        refreshClock()
+        text(mc.font, clockLine, 0, 0, clockColor.rgba)
+        clockSize
     }
 
     private val cpsHud by HUD("CPS HUD", "Left and right clicks in the last second.", true, 10, 22, 1f) {
-        val comp = cpsComponent()
-        text(mc.font, comp, 0, 0, -1)
-        mc.font.width(comp) to 9
+        refreshCps()
+        text(mc.font, cpsLine, 0, 0, -1)
+        cpsSize
     }
 
     init {
@@ -120,54 +120,95 @@ object Performance : Module(
     private val tpsText = FormatCache(1) { it.toFloat().toFixed(1) }
 
     private var clockSecond = Long.MIN_VALUE
-    private var clockSeconds = false
-    private var clockLast = ""
+    private var clockWithSeconds = false
+    private var clockLine = ""
+    private var clockSize = 0 to 9
 
-    private fun clockText(): String {
+    private fun refreshClock() {
         val second = Math.floorDiv(System.currentTimeMillis(), 1000L)
-        if (second != clockSecond || seconds != clockSeconds) {
-            clockLast = LocalTime.now().format(if (seconds) clockFormatSeconds else clockFormat)
-            clockSecond = second
-            clockSeconds = seconds
-        }
-        return clockLast
+        val withSeconds = seconds
+        if (second == clockSecond && withSeconds == clockWithSeconds) return
+        clockSecond = second
+        clockWithSeconds = withSeconds
+        val line = LocalTime.now().format(if (withSeconds) clockFormatSeconds else clockFormat)
+        if (line == clockLine) return
+        clockLine = line
+        clockSize = mc.font.width(line) to 9
     }
 
-    private val cpsKey = IntArray(6) { -1 }
-    private var cpsLast: Component = Component.empty()
+    private var cpsKey = Long.MIN_VALUE
+    private val cpsColors = IntArray(3)
+    private var cpsLine: Component = Component.empty()
+    private var cpsSize = 0 to 9
 
-    private fun cpsComponent(): Component {
-        val left = cps(leftClicks)
-        val right = cps(rightClicks)
+    private fun refreshCps() {
+        val now = System.currentTimeMillis()
+        val left = leftClicks.count(now)
+        val right = rightClicks.count(now)
         val label = cpsLabelColor.rgba
         val number = cpsNumberColor.rgba
         val separator = cpsSeparatorColor.rgba
-        val k = cpsKey
-        if (k[0] == left && k[1] == right && k[2] == label && k[3] == number && k[4] == separator && k[5] == cpsLabelPosition.ordinal) return cpsLast
-        k[0] = left; k[1] = right; k[2] = label; k[3] = number; k[4] = separator; k[5] = cpsLabelPosition.ordinal
-        cpsLast = Component.empty().apply {
-            if (cpsLabelPosition == LabelPosition.LEFT) append(Component.literal("CPS ").withColor(label))
-            append(Component.literal(left.toString()).withColor(number))
-            append(Component.literal(" | ").withColor(separator))
-            append(Component.literal(right.toString()).withColor(number))
-            if (cpsLabelPosition == LabelPosition.RIGHT) append(Component.literal(" CPS").withColor(label))
-        }
-        return cpsLast
+        val position = cpsLabelPosition
+        val key = left.toLong() shl 32 or (right.toLong() shl 2) or position.ordinal.toLong()
+        val colors = cpsColors
+        if (key == cpsKey && colors[0] == label && colors[1] == number && colors[2] == separator) return
+        cpsKey = key
+        colors[0] = label
+        colors[1] = number
+        colors[2] = separator
+        val line = Component.empty()
+        if (position == LabelPosition.LEFT) line.append(Component.literal("CPS ").withColor(label))
+        line.append(Component.literal(left.toString()).withColor(number))
+        line.append(Component.literal(" | ").withColor(separator))
+        line.append(Component.literal(right.toString()).withColor(number))
+        if (position == LabelPosition.RIGHT) line.append(Component.literal(" CPS").withColor(label))
+        cpsLine = line
+        cpsSize = mc.font.width(line) to 9
     }
 
-    private fun cps(clicks: ArrayDeque<Long>): Int {
-        val now = System.currentTimeMillis()
-        while (clicks.isNotEmpty() && now - clicks.first() > 1000) clicks.removeFirst()
-        return clicks.size
+    // Click times of the last second, oldest first; trimmed on every add so it stays small with the HUD off.
+    private class ClickWindow {
+        private var times = LongArray(16)
+        private var head = 0
+        private var size = 0
+
+        fun add(now: Long) {
+            drop(now)
+            if (size == times.size) {
+                val grown = LongArray(size * 2)
+                for (i in 0 until size) grown[i] = times[(head + i) % times.size]
+                times = grown
+                head = 0
+            }
+            times[(head + size) % times.size] = now
+            size++
+        }
+
+        fun count(now: Long): Int {
+            drop(now)
+            return size
+        }
+
+        fun clear() {
+            head = 0
+            size = 0
+        }
+
+        private fun drop(now: Long) {
+            while (size > 0 && now - times[head] > 1000) {
+                head = (head + 1) % times.size
+                size--
+            }
+        }
     }
 
     @JvmStatic
     fun addLeftClick() {
-        if (enabled) leftClicks.addLast(System.currentTimeMillis())
+        if (enabled) leftClicks.add(System.currentTimeMillis())
     }
 
     @JvmStatic
     fun addRightClick() {
-        if (enabled) rightClicks.addLast(System.currentTimeMillis())
+        if (enabled) rightClicks.add(System.currentTimeMillis())
     }
 }
