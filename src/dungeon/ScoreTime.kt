@@ -4,50 +4,70 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.adm.events.LevelEvent
 import com.adm.events.ScoreUpdateEvent
-import com.adm.events.TickEvent
 import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 
 /** Clear Info's Score Time: the run time when it reaches S (270) and the S+ secrets. */
 object ScoreTime {
-    private var sDone = false
-    private var minDone = false
+    private var saidS = false
+    private var saidSecrets = false
 
     fun install() {
-        on<LevelEvent.Load> { sDone = false; minDone = false }
-        on<ScoreUpdateEvent> {
-            if (score < 270 || sDone || !ClearInfo.scoreTimeOn || !ClearInfo.showS || !DungeonUtils.inDungeons) return@on
-            sDone = true
-            mc.execute { announce("&eS") }
+        on<LevelEvent.Load> {
+            saidS = false
+            saidSecrets = false
         }
-        on<TickEvent.End> {
-            if (minDone || !ClearInfo.scoreTimeOn || !ClearInfo.showMinSecrets || !DungeonUtils.inClear) return@on
-            val needed = DungeonUtils.neededSecretsAmount
-            if (needed <= 0 || DungeonUtils.secretCount < needed || (seconds() ?: 0) < 20) return@on
-            minDone = true
-            announce("&bMin Secrets")
+        // The secret count, the secrets needed and the boss state all move the score, so a score change is when to look.
+        on<ScoreUpdateEvent> {
+            if (!ClearInfo.scoreTimeOn) return@on
+            if (!saidS && score >= 270 && ClearInfo.showS && DungeonUtils.inDungeons) {
+                saidS = true
+                mc.execute { say("&eS") }
+            }
+            if (!saidSecrets && ClearInfo.showMinSecrets && DungeonUtils.inClear && secretsMet()) {
+                saidSecrets = true
+                mc.execute { say("&bMin Secrets") }
+            }
         }
         EventBus.subscribe(this)
     }
 
-    private fun announce(what: String) {
-        val text = "$what &breached at &a${time()} &7(${DungeonUtils.floor?.name ?: "?"})"
+    private fun secretsMet(): Boolean {
+        val needed = DungeonUtils.neededSecretsAmount
+        return needed > 0 && DungeonUtils.secretCount >= needed && runSeconds(DungeonUtils.dungeonTime) >= 20
+    }
+
+    private fun say(what: String) {
+        val time = DungeonUtils.dungeonTime
+        val seconds = runSeconds(time)
+        val shown = if (seconds < 0) time else "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
+        val text = "$what &breached at &a$shown &7(${DungeonUtils.floor?.name ?: "?"})"
         EngineerClient.chat(text.replace('&', '§'))
         if (ClearInfo.scoreTitle) showTitle(text, 1.5)
         ClearInfo.scoreSound.play()
     }
 
-    private val PART = Regex("""(\d+)([hms])""")
-
-    private fun seconds(): Int? {
-        val parts = PART.findAll(DungeonUtils.dungeonTime).toList()
-        if (parts.isEmpty()) return null
-        return parts.sumOf { m -> m.groupValues[1].toInt() * when (m.groupValues[2]) { "h" -> 3600; "m" -> 60; else -> 1 } }
-    }
-
-    private fun time(): String {
-        val s = seconds() ?: return DungeonUtils.dungeonTime
-        return "%d:%02d".format(s / 60, s % 60)
+    // "1h 2m 3s" style; -1 when there is no number followed by h, m or s.
+    private fun runSeconds(time: String): Int {
+        var total = 0
+        var value = 0
+        var digits = false
+        var any = false
+        for (c in time) {
+            if (c in '0'..'9') {
+                value = value * 10 + (c - '0')
+                digits = true
+                continue
+            }
+            val unit = when (c) { 'h' -> 3600; 'm' -> 60; 's' -> 1; else -> 0 }
+            if (digits && unit != 0) {
+                total += value * unit
+                any = true
+            }
+            value = 0
+            digits = false
+        }
+        return if (any) total else -1
     }
 }
