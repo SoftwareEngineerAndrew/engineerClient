@@ -32,7 +32,7 @@ import java.awt.Color.HSBtoRGB
 private const val GRID = 20
 private const val ICON = 12
 
-private val frameMarker = Identifier.withDefaultNamespace("textures/map/decorations/frame.png")
+private val playerMarker = Identifier.withDefaultNamespace("textures/map/decorations/player.png")
 private val crossIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/cross.png")
 private val greenIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/green_check.png")
 private val whiteIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/white_check.png")
@@ -283,7 +283,7 @@ fun GuiGraphicsExtractor.renderPlayers() {
         }
     } else {
         pose().translate(-0.5f, -0.5f).scale(DungeonMap.playerPointerScale)
-        blit(RenderPipelines.GUI_TEXTURED, frameMarker, -2, -4, 2f, 0f, 5, 7, 8, 8, LcmStyle.ownMarkerColor.value.rgba)
+        blit(RenderPipelines.GUI_TEXTURED, playerMarker, -2, -4, 2f, 0f, 5, 7, 8, 8, LcmStyle.ownMarkerColor.value.rgba)
     }
     pose().popMatrix()
 }
