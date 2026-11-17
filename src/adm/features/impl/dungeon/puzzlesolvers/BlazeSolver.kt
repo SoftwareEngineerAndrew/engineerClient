@@ -19,11 +19,10 @@ import net.minecraft.world.entity.monster.Blaze
 import net.minecraft.world.phys.AABB
 
 object BlazeSolver {
-    private class Target(val stand: ArmorStand, val hp: Int)
+    private class Target(val stand: ArmorStand, var hp: Int)
 
     // In shooting order; a stand's blaze is the entity one id below it.
     private val blazes = ArrayList<Target>(10)
-    private val tagName = Regex("^\\[Lv+\\d+]  Blaze [\\d,]+/([\\d,]+)❤$")
 
     val inBlazeRoom: Boolean
         get() {
@@ -42,13 +41,34 @@ object BlazeSolver {
         val stand = event.entity as? ArmorStand ?: return
         if (!DungeonUtils.inClear || stand.isDeadOrDying) return
         val custom = stand.customName ?: return
+        val hp = maxHealth(custom.string) ?: return
         val uuid = stand.uuid
-        for (i in blazes.indices) if (blazes[i].stand.uuid == uuid) return
-        val text = custom.string
-        if (!text.endsWith('❤')) return
-        val hp = tagName.find(text)?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull() ?: return
+        // Some tags read a 600/600 placeholder for a few ticks before their real health
+        for (i in blazes.indices) {
+            val known = blazes[i]
+            if (known.stand.uuid != uuid) continue
+            if (known.hp == hp) return
+            known.hp = hp
+            order(DungeonUtils.currentRoom?.data?.name)
+            return
+        }
         blazes.add(Target(stand, hp))
         order(DungeonUtils.currentRoom?.data?.name)
+    }
+
+    // "[Lv11] <icon> Blaze 120/1,200❤": the icon is a resource-pack glyph, so only the level, name and health are fixed
+    private fun maxHealth(tag: String): Int? {
+        if (!tag.endsWith('❤') || !tag.startsWith("[Lv") || !tag.contains(" Blaze ")) return null
+        val slash = tag.lastIndexOf('/')
+        if (slash < 0 || slash + 1 >= tag.length - 1) return null
+        var hp = 0
+        for (i in slash + 1 until tag.length - 1) {
+            val c = tag[i]
+            if (c == ',') continue
+            if (c !in '0'..'9') return null
+            hp = hp * 10 + (c - '0')
+        }
+        return hp
     }
 
     private fun order(room: String?) {
