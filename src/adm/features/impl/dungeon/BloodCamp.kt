@@ -9,20 +9,20 @@ import com.adm.events.*
 import com.adm.events.core.on
 import com.adm.features.Module
 import com.adm.utils.*
-import com.adm.utils.handlers.schedule
+import com.adm.utils.render.BoxBatch
+import com.adm.utils.render.drawBoxes
 import com.adm.utils.render.drawLine
 import com.adm.utils.render.drawText
-import com.adm.utils.render.drawWireFrameBox
 import com.adm.utils.render.textDim
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.chat.Component
+import net.minecraft.world.BossEvent
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.monster.zombie.Zombie
 import net.minecraft.world.item.Items
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -32,8 +32,9 @@ object BloodCamp : Module(
 ) {
     private val sendMoveTime by BooleanSetting("Move alert", true, desc = "Sends a message & title indicating when the watcher will move.")
     private val moveTimer by HUD("Move HUD", "Displays the time until the watcher moves.") { example ->
-        if (example) return@HUD textDim("Move Timer: 0.50s", 0, 0, Colors.MINECRAFT_RED)
-        moveTimeSeconds?.let { if (it > 0f) textDim("Move Timer: ${it.toFixed()}s", 0, 0, Colors.MINECRAFT_RED) else null } ?: return@HUD 0 to 0
+        val ticks = if (example) 10 else moveTicks
+        if (ticks <= 0) return@HUD 0 to 0
+        textDim(moveText(ticks), 0, 0, Colors.MINECRAFT_RED)
     }
 
     private val assistDropdown by DropdownSetting("Blood Assist Dropdown", desc = "Shows settings for rendering boxes on mobs spawning in the blood room.")
@@ -48,162 +49,198 @@ object BloodCamp : Module(
     private val advanced by DropdownSetting("Advanced", desc = "Shows advanced timing settings for the blood camp assist.").withDependency { bloodAssist && assistDropdown }
     private val offset by NumberSetting("Offset", 40, -100..100, desc = "Tick offset to adjust between ticks.").withDependency { advanced && bloodAssist && assistDropdown }
     private val tick by NumberSetting("Tick", 38, 35..41, desc = "Tick to assume spawn. Adjust offset to offset this value to the ms.").withDependency { advanced && bloodAssist && assistDropdown }
+    @Suppress("unused")
     private val interpolation by BooleanSetting("Interpolation", true, desc = "Interpolates rendering boxes between ticks. Makes the jitter smoother, at the expense of some accuracy.").withDependency { advanced && bloodAssist && assistDropdown}
     private val pingOffset by BooleanSetting("Ping Offset", true, desc = "Offsets the mob box by your ping.").withDependency { advanced && bloodAssist && assistDropdown }
     private val manualOffset by NumberSetting("Mob Box Offset", 0f, 0.0..300.0, 1, desc = "Manually offsets the mob box.").withDependency { advanced && bloodAssist && assistDropdown && !pingOffset}
     private val watcherBar by BooleanSetting("Watcher Bar", true, desc = "Shows the watcher's health.")
 
-    private var currentWatcherEntity: Zombie? = null
-    private var firstSpawns = true
+    private const val WATCHER = "[BOSS] The Watcher: "
+    private val openLines = listOf(
+        "Congratulations, you made it through the Entrance.", "Ah, you've finally arrived.", "Ah, we meet again...",
+        "So you made it this far... interesting.", "You've managed to scratch and claw your way here, eh?",
+        "I'm starting to get tired of seeing you around here...", "Oh.. hello?", "Things feel a little more roomy now, eh?",
+        "Ah, we meet again. As I foresaw..."
+    ).mapTo(HashSet()) { WATCHER + it }
+    private const val SECOND_WAVE_LINE = WATCHER + "Let's see how you can handle this."
+    private const val MOVE_TICKS = 410
+    private const val FIRST_WAVE_REACH = 16.1
+    private const val LATER_WAVE_REACH = 11.9
+
+    // Each spawning mob is a head on an armor stand that slides from its start towards where it lands.
+    private class Spawn(val start: Vec3, val startedMs: Long, val firstWave: Boolean) {
+        var last: Vec3 = start
+        var sumX = 0.0
+        var sumY = 0.0
+        var sumZ = 0.0
+        var seen = false
+        var at: Vec3 = start
+        var landing: Vec3 = start
+        var prevLanding: Vec3 = start
+        var landingMs = startedMs
+        var velX = 0.0
+        var velY = 0.0
+        var velZ = 0.0
+    }
+
+    private val spawns = HashMap<ArmorStand, Spawn>()
+    private var watcher: Zombie? = null
+    private var firstWave = true
+    @Volatile private var serverMs = 0L
+    @Volatile private var moveTicks = 0
+    private val boxes = BoxBatch()
+
+    private var lastBarName: Component? = null
+    private var lastBarIsWatcher = false
+
+    private var moveTextTicks = -1
+    private var moveTextValue = ""
+
+    private fun moveText(ticks: Int): String {
+        if (ticks != moveTextTicks) {
+            moveTextTicks = ticks
+            moveTextValue = "Move Timer: ${ticks / 20}.${((ticks % 20) * 5).toString().padStart(2, '0')}s"
+        }
+        return moveTextValue
+    }
+
+    private val timeText = FormatCache(16) { seconds ->
+        val color = when {
+            seconds > 1.5 -> 'a'
+            seconds in 0.5..1.5 -> '6'
+            seconds in 0.0..0.5 -> 'c'
+            else -> 'b'
+        }
+        "§$color${seconds.toFloat().toFixed()}s"
+    }
+
+    private fun msUntilSpawn(spawn: Spawn) = (if (spawn.firstWave) 2000 else 0) + (tick * 50) - (serverMs - spawn.startedMs) + offset
 
     init {
         on<EntityEvent.Move> {
-            if (newPos == Vec3.ZERO || newPos == entity.position() || !DungeonUtils.inClear) return@on
+            val boss = watcher ?: return@on
+            val stand = entity as? ArmorStand ?: return@on
+            if (newPos == Vec3.ZERO || newPos == stand.position() || !DungeonUtils.inClear) return@on
+            if (boss.distanceTo(stand) > 20) return@on
+            val head = stand.getItemBySlot(EquipmentSlot.HEAD)
+            if (head.item != Items.PLAYER_HEAD || head.texture !in bloodMobHeads) return@on
 
-            val entity = entity as? ArmorStand ?: return@on
-            if (currentWatcherEntity?.let {
-                it.distanceTo(entity) <= 20 } != true ||
-                entity.getItemBySlot(EquipmentSlot.HEAD).item != Items.PLAYER_HEAD ||
-                entity.getItemBySlot(EquipmentSlot.HEAD).texture !in allowedMobSkulls
-            ) return@on
-
-            val data = entityDataMap.getOrPut(entity) { EntityData(newPos, currentTickTime, firstSpawns, lastPosition = newPos) }
-            val delta = newPos.subtract(data.lastPosition)
-            data.lastPosition = newPos
-
-            if (delta.lengthSqr() > 0) data.deltaHistory.addLast(delta)
-
-            val totalDelta = data.deltaHistory.fold(Vec3.ZERO) { acc, d -> acc.add(d) }
-            val endpoint = data.startVector.add((if (totalDelta.lengthSqr() > 0) totalDelta.normalize() else Vec3.ZERO).scale(if (data.firstSpawns) 16.1 else 11.9))
-            val timeTook = currentTickTime - data.started
-            val speedVectors = Vec3(
-                (newPos.x - data.startVector.x) / timeTook,
-                (newPos.y - data.startVector.y) / timeTook,
-                (newPos.z - data.startVector.z) / timeTook
-            )
-
-            renderDataMap.getOrPut(entity) { RenderEData(newPos, endpoint, currentTickTime, speedVectors) }.apply {
-                lastEndVector = endVector
-                endVecUpdated = currentTickTime
-                this.speedVectors = speedVectors
-                currVector = newPos
-                endVector = endpoint
+            val now = serverMs
+            val spawn = spawns.getOrPut(stand) { Spawn(newPos, now, firstWave) }
+            val dx = newPos.x - spawn.last.x
+            val dy = newPos.y - spawn.last.y
+            val dz = newPos.z - spawn.last.z
+            spawn.last = newPos
+            if (dx * dx + dy * dy + dz * dz > 0) {
+                spawn.sumX += dx
+                spawn.sumY += dy
+                spawn.sumZ += dz
             }
+
+            val heading = if (spawn.sumX * spawn.sumX + spawn.sumY * spawn.sumY + spawn.sumZ * spawn.sumZ > 0) Vec3(spawn.sumX, spawn.sumY, spawn.sumZ).normalize() else Vec3.ZERO
+            val elapsed = now - spawn.startedMs
+            val landing = spawn.start.add(heading.scale(if (spawn.firstWave) FIRST_WAVE_REACH else LATER_WAVE_REACH))
+            spawn.prevLanding = if (spawn.seen) spawn.landing else landing
+            spawn.landing = landing
+            spawn.seen = true
+            spawn.landingMs = now
+            spawn.velX = (newPos.x - spawn.start.x) / elapsed
+            spawn.velY = (newPos.y - spawn.start.y) / elapsed
+            spawn.velZ = (newPos.z - spawn.start.z) / elapsed
+            spawn.at = newPos
         }
 
         on<MessageEvent.Chat> {
             if (!DungeonUtils.inClear) return@on
-            if (BLOOD_START_REGEX.matches(message)) {
-                moveTimeSeconds = 20.5f
-                if (sendMoveTime) modMessage("Watcher will move in ${moveTimeSeconds?.toFixed()}s.")
-
-                schedule(410, true) {
-                    if (sendMoveTime) alert("Kill Mobs")
-                    moveTimeSeconds = null
-                }
-            } else if (BLOOD_MOVE_REGEX.matches(message)) firstSpawns = false
+            if (message in openLines) {
+                moveTicks = MOVE_TICKS
+                if (sendMoveTime) modMessage("Watcher will move in 20.50s.")
+            } else if (message == SECOND_WAVE_LINE) firstWave = false
         }
 
         on<EntityEvent.SetItemSlot> {
-            if (!bloodAssist || currentWatcherEntity != null || !DungeonUtils.inClear) return@on
-            if (!stack.isEmpty && slot == EquipmentSlot.HEAD && stack.texture in watcherSkulls) currentWatcherEntity = (entity as? Zombie)
+            if (watcher != null || slot != EquipmentSlot.HEAD || !bloodAssist || stack.isEmpty || !DungeonUtils.inClear) return@on
+            if (stack.texture in watcherHeads) watcher = entity as? Zombie
         }
 
         on<EntityEvent.Remove> {
-            if (currentWatcherEntity == null) return@on
-            if (entity.id == currentWatcherEntity?.id) currentWatcherEntity = null
+            val boss = watcher ?: return@on
+            if (entity.id == boss.id) watcher = null
         }
 
         on<TickEvent.Server> {
-            currentTickTime += 50
-            moveTimeSeconds?.let { moveTimeSeconds = it - 0.05f }
+            serverMs += 50
+            if (moveTicks > 0 && --moveTicks == 0) mc.execute { if (sendMoveTime) alert("Kill Mobs") }
         }
 
         on<LevelEvent.Load> {
-            currentWatcherEntity = null
-            entityDataMap.clear()
-            renderDataMap.clear()
-            currentTickTime = 0
-            firstSpawns = true
-            moveTimeSeconds = null
+            watcher = null
+            spawns.clear()
+            serverMs = 0
+            firstWave = true
+            moveTicks = 0
         }
 
         on<RenderBossBarEvent> {
-            if (!watcherBar || !DungeonUtils.inClear || bossBar.name.string != "§c§lThe Watcher") return@on
-            val amount = 8 + (DungeonUtils.floor?.floorNumber ?: 0)
-            bossBar.name = Component.literal(bossBar.progress.takeIf { it >= 0.05 }?.let { "${bossBar.name.string} ${(amount * it).roundToInt()}/$amount" } ?: return@on)
+            if (!watcherBar || !DungeonUtils.inClear) return@on
+            val bar = bossBar
+            val name = bar.name
+            if (name !== lastBarName) {
+                lastBarName = name
+                lastBarIsWatcher = name.string == "§c§lThe Watcher"
+            }
+            if (lastBarIsWatcher) renameWatcherBar(bar)
         }
 
         on<RenderExtractEvent> {
-            if (!DungeonUtils.inClear || !bloodAssist) return@on
-            val boxOffset = Vec3(boxSize / -2.0, 1.5, boxSize / -2.0)
-            val partialTick = context.gameRenderer().mainCamera().getCameraEntityPartialTicks(mc.deltaTracker)
+            if (spawns.isEmpty() || !bloodAssist || !DungeonUtils.inClear) return@on
+            val size = boxSize
+            val half = size / -2.0
+            val lead = if (pingOffset) ServerUtils.averagePing.toFloat() else manualOffset
+            val now = serverMs
+            boxes.clear()
+            for ((stand, spawn) in spawns) {
+                if (!stand.isAlive) continue
+                val blend = min(now - spawn.landingMs, 100) / 100f
+                val from = spawn.prevLanding
+                val to = spawn.landing
+                val landX = from.x + (to.x - from.x) * blend
+                val landY = from.y + (to.y - from.y) * blend
+                val landZ = from.z + (to.z - from.z) * blend
+                val untilSpawn = msUntilSpawn(spawn)
 
-            renderDataMap.forEach { (entity, renderData) ->
-                if (!entity.isAlive) return@forEach
-                val data = entityDataMap[entity] ?: return@forEach
-                val (currVector, endVector, endVecUpdated, speedVectors) = renderData
+                val landBox = cube(landX, landY, landZ, half, size)
+                if (lead < untilSpawn) {
+                    boxes.outline(cube(stand.x + spawn.velX * lead, stand.y + spawn.velY * lead, stand.z + spawn.velZ * lead, half, size), mboxColor, depth = true)
+                    boxes.outline(landBox, pboxColor, depth = true)
+                } else boxes.outline(landBox, fboxColor, depth = true)
 
-                val endPoint = calcEndVector(endVector, renderData.lastEndVector, min(currentTickTime - endVecUpdated, 100) / 100f)
-                val timeTook = currentTickTime - data.started
-                val time = getTime(data.firstSpawns, timeTook)
-
-                val mobOffset = if (pingOffset) ServerUtils.averagePing.toFloat() else manualOffset
-                val pingPoint = Vec3(entity.x + speedVectors.x * mobOffset, entity.y + speedVectors.y * mobOffset, entity.z + speedVectors.z * mobOffset)
-
-                renderData.lastEndPoint = endPoint
-                renderData.lastPingPoint = pingPoint
-
-                val pingAABB = AABB(boxSize, boxSize, boxSize, 0.0, 0.0, 0.0).move(boxOffset.add(calcEndVector(pingPoint, renderData.lastPingPoint, partialTick, !interpolation)))
-                val endAABB = AABB(boxSize, boxSize, boxSize, 0.0, 0.0, 0.0).move(boxOffset.add(calcEndVector(endPoint, renderData.lastEndPoint, partialTick, !interpolation)))
-
-                if (mobOffset < time) {
-                    drawWireFrameBox(pingAABB, mboxColor, depth = true)
-                    drawWireFrameBox(endAABB, pboxColor, depth = true)
-                } else drawWireFrameBox(endAABB, fboxColor, depth = true)
-
-                if (drawLine)
-                    drawLine(listOf(currVector.addVec(y = 2.0), endPoint.addVec(y = 2.0)), Colors.MINECRAFT_RED, depth = true)
-
-                val timeDisplay = ((time.toFloat() - offset) / 1000).also { renderData.time = it }
-                val colorTime = when {
-                    timeDisplay > 1.5 -> 'a'
-                    timeDisplay in 0.5..1.5 -> '6'
-                    timeDisplay in 0.0..0.5 -> 'c'
-                    else -> 'b'
-                }
-                if (drawTime) drawText("§$colorTime${timeDisplay.toFixed()}s", endPoint.addVec(y = 2.0), 2f, true)
+                val label = Vec3(landX, landY + 2.0, landZ)
+                if (drawLine) drawLine(listOf(spawn.at.add(0.0, 2.0, 0.0), label), Colors.MINECRAFT_RED, depth = true)
+                if (drawTime) drawText(timeText(((untilSpawn.toFloat() - offset) / 1000).toDouble()), label, 2f, true)
             }
+            drawBoxes(boxes)
         }
     }
 
-    private var moveTimeSeconds: Float? = null
-    private var currentTickTime = 0L
-
-    private val renderDataMap = ConcurrentHashMap<ArmorStand, RenderEData>()
-    private data class RenderEData(
-        var currVector: Vec3, var endVector: Vec3, var endVecUpdated: Long, var speedVectors: Vec3,
-        var lastEndVector: Vec3? = null, var lastPingPoint: Vec3? = null, var lastEndPoint: Vec3? = null,
-        var time: Float? = null,
-    )
-
-    private val entityDataMap = ConcurrentHashMap<ArmorStand, EntityData>()
-    private data class EntityData(
-        var startVector: Vec3,
-        val started: Long,
-        var firstSpawns: Boolean = true,
-        val deltaHistory: ArrayDeque<Vec3> = ArrayDeque(),
-        var lastPosition: Vec3 = startVector
-    )
-
-    private fun getTime(firstSpawn: Boolean, timeTook: Long) = (if (firstSpawn) 2000 else 0) + (tick * 50) - timeTook + offset
-
-    private fun calcEndVector(currVector: Vec3, lastVector: Vec3?, multiplier: Float, skip: Boolean = false): Vec3 {
-        return if (lastVector == null || skip) currVector
-        else Vec3(lastVector.x + (currVector.x - lastVector.x) * multiplier, lastVector.y + (currVector.y - lastVector.y) * multiplier, lastVector.z + (currVector.z - lastVector.z) * multiplier)
+    private fun cube(x: Double, y: Double, z: Double, half: Double, size: Double): AABB {
+        val minX = half + x
+        val minY = 1.5 + y
+        val minZ = half + z
+        return AABB(minX, minY, minZ, size + minX, size + minY, size + minZ)
     }
 
-    private val watcherSkulls = setOf(
+    private fun renameWatcherBar(bar: BossEvent) {
+        val progress = bar.progress
+        if (progress < 0.05) return
+        val total = 8 + (DungeonUtils.floor?.floorNumber ?: 0)
+        val renamed = Component.literal("§c§lThe Watcher ${(total * progress).roundToInt()}/$total")
+        bar.name = renamed
+        lastBarName = renamed
+        lastBarIsWatcher = false
+    }
+
+    private val watcherHeads = setOf(
         "ewogICJ0aW1lc3RhbXAiIDogMTY5NzMwOTQxNzI1NiwKICAicHJvZmlsZUlkIiA6ICJjYjYxY2U5ODc4ZWI0NDljODA5MzliNWYxNTkwMzE1MiIsCiAgInByb2ZpbGVOYW1lIiA6ICJWb2lkZWRUcmFzaDUxODUiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNTY2MmI2ZmI0YjhiNTg2ZGM0Y2RmODAzYjA0NDRkOWI0MWQyNDVjZGY2NjhkYWIzOGZhNmMwNjRhZmU4ZTQ2MSIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9",
         "ewogICJ0aW1lc3RhbXAiIDogMTcxOTYwNjM1MjMyMiwKICAicHJvZmlsZUlkIiA6ICI3MmY5MTdjNWQyNDU0OTk0YjlmYzQ1YjVhM2YyMjIzMCIsCiAgInByb2ZpbGVOYW1lIiA6ICJUaGF0X0d1eV9Jc19NZSIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS8yNzM5ZDdmNGU2NmE3ZGIyZWE2Y2Q0MTRlNGM0YmE0MWRmN2E5MjQ1NWM5ZmM0MmNhYWIwMTQ2NjVjMzY3YWQ1IiwKICAgICAgIm1ldGFkYXRhIiA6IHsKICAgICAgICAibW9kZWwiIDogInNsaW0iCiAgICAgIH0KICAgIH0KICB9Cn0=",
         "ewogICJ0aW1lc3RhbXAiIDogMTcxOTYwNjI5MjgzNiwKICAicHJvZmlsZUlkIiA6ICIzZDIxZTYyMTk2NzQ0Y2QwYjM3NjNkNTU3MWNlNGJlZSIsCiAgInByb2ZpbGVOYW1lIiA6ICJTcl83MUJsYWNrYmlyZCIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9iZjZlMWU3ZWQzNjU4NmMyZDk4MDU3MDAyYmMxYWRjOTgxZTI4ODlmN2JkN2I1YjM4NTJiYzU1Y2M3ODAyMjA0IiwKICAgICAgIm1ldGFkYXRhIiA6IHsKICAgICAgICAibW9kZWwiIDogInNsaW0iCiAgICAgIH0KICAgIH0KICB9Cn0=",
@@ -215,9 +252,7 @@ object BloodCamp : Module(
         "ewogICJ0aW1lc3RhbXAiIDogMTcxOTYwNjIzOTU4NiwKICAicHJvZmlsZUlkIiA6ICJhYWZmMDUwYTExOTk0NzM1YjEyNDVlNDk0MGFlZjY4NCIsCiAgInByb2ZpbGVOYW1lIiA6ICJMYXN0SW1tb3J0YWwiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTVjMWRjNDdhMDRjZTU3MDAxYThiNzI2ZjAxOGNkZWY0MGI3ZWE5ZDdiZDZkODM1Y2E0OTVhMGVmMTY5Zjg5MyIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9"
     )
 
-    //mob skull data gotten by DocilElm
-
-    private val allowedMobSkulls = setOf(
+    private val bloodMobHeads = setOf(
         "eyJ0aW1lc3RhbXAiOjE1ODYwNDEwNjQwNTAsInByb2ZpbGVJZCI6ImRhNDk4YWM0ZTkzNzRlNWNiNjEyN2IzODA4NTU3OTgzIiwicHJvZmlsZU5hbWUiOiJOaXRyb2hvbGljXzIiLCJzaWduYXR1cmVSZXF1aXJlZCI6dHJ1ZSwidGV4dHVyZXMiOnsiU0tJTiI6eyJ1cmwiOiJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzVhNzk4NjBhY2E3OTk0MDdjMGZhYTEwYjFiYmNmNDI5OThmYWQ0ZWJjZjMxZDdhMjE0MTgwODI2YjRhYzk0ZTEifX19",
         "eyJ0aW1lc3RhbXAiOjE1ODYwNDExODY2MzYsInByb2ZpbGVJZCI6ImRhNDk4YWM0ZTkzNzRlNWNiNjEyN2IzODA4NTU3OTgzIiwicHJvZmlsZU5hbWUiOiJOaXRyb2hvbGljXzIiLCJzaWduYXR1cmVSZXF1aXJlZCI6dHJ1ZSwidGV4dHVyZXMiOnsiU0tJTiI6eyJ1cmwiOiJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzQ3NzQ4NzExOTBjODc4YzlhMmM0NDk2YzFlMTAyNTdjNmM0ZWExMzgwN2Q3MmMxNWQ3YWM2YWIzYTdhOWE4ZGMifX19",
         "eyJ0aW1lc3RhbXAiOjE1ODYwNDAyMDM1NzMsInByb2ZpbGVJZCI6ImRhNDk4YWM0ZTkzNzRlNWNiNjEyN2IzODA4NTU3OTgzIiwicHJvZmlsZU5hbWUiOiJOaXRyb2hvbGljXzIiLCJzaWduYXR1cmVSZXF1aXJlZCI6dHJ1ZSwidGV4dHVyZXMiOnsiU0tJTiI6eyJ1cmwiOiJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlL2Y0NjI0YTlhOGM2OWNhMjA0NTA0YWJiMDQzZDQ3NDU2Y2Q5YjA5NzQ5YTM2MzU3NDYyMzAzZjI3NmEyMjlkNCJ9fX0=",
@@ -242,7 +277,4 @@ object BloodCamp : Module(
         "ewogICJ0aW1lc3RhbXAiIDogMTU4OTc5MzA2ODgzOSwKICAicHJvZmlsZUlkIiA6ICIyYzEwNjRmY2Q5MTc0MjgyODRlM2JmN2ZhYTdlM2UxYSIsCiAgInByb2ZpbGVOYW1lIiA6ICJOYWVtZSIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS83ZGU3YmJiZGYyMmJmZTE3OTgwZDRlMjA2ODdlMzg2ZjExZDU5ZWUxZGI2ZjhiNDc2MjM5MWI3OWE1YWM1MzJkIgogICAgfQogIH0KfQ==",
         "ewogICJ0aW1lc3RhbXAiIDogMTU5ODk3NzI1OTM1NywKICAicHJvZmlsZUlkIiA6ICJlNzkzYjJjYTdhMmY0MTI2YTA5ODA5MmQ3Yzk5NDE3YiIsCiAgInByb2ZpbGVOYW1lIiA6ICJUaGVfSG9zdGVyX01hbiIsCiAgInNpZ25hdHVyZVJlcXVpcmVkIiA6IHRydWUsCiAgInRleHR1cmVzIiA6IHsKICAgICJTS0lOIiA6IHsKICAgICAgInVybCIgOiAiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9jMTAwN2M1YjcxMTRhYmVjNzM0MjA2ZDRmYzYxM2RhNGYzYTBlOTlmNzFmZjk0OWNlZGFkYzk5MDc5MTM1YTBiIgogICAgfQogIH0KfQ=="
     )
-
-    private val BLOOD_START_REGEX = Regex("^\\[BOSS] The Watcher: (Congratulations, you made it through the Entrance\\.|Ah, you've finally arrived\\.|Ah, we meet again\\.\\.\\.|So you made it this far\\.\\.\\. interesting\\.|You've managed to scratch and claw your way here, eh\\?|I'm starting to get tired of seeing you around here\\.\\.\\.|Oh\\.\\. hello\\?|Things feel a little more roomy now, eh\\?|Ah, we meet again\\. As I foresaw\\.\\.\\.)$")
-    private val BLOOD_MOVE_REGEX = Regex("^\\[BOSS] The Watcher: Let's see how you can handle this\\.$")
 }
