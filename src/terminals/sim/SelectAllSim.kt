@@ -5,61 +5,60 @@ import com.adm.utils.modMessage
 import com.engineerclient.terminals.TerminalTypes
 import com.engineerclient.terminals.TerminalUtils
 import net.minecraft.core.component.DataComponents
-import net.minecraft.core.registries.BuiltInRegistries
-import net.minecraft.resources.Identifier
 import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.DyeColor
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
-import kotlin.math.floor
+import kotlin.random.Random
 
-class SelectAllSim(
-    private val color: DyeColor = DyeColor.entries.random()
-) : TermSimGUI(
-    "Select all the ${color.name.replace("LIGHT_GRAY", "SILVER").replace("_", " ")} items!",
+class SelectAllSim(private val color: DyeColor = DyeColor.entries.random()) : TermSimGUI(
+    "Select all the ${color.name.replace("LIGHT_GRAY", "SILVER").replace('_', ' ')} items!",
     TerminalTypes.SELECT.windowSize
 ) {
-    override fun create() {
-        val guaranteed = (10..16).plus(19..25).plus(28..34).plus(37..43).random()
-        setSlots { slot ->
-            if (floor(slot.index / 9.0) in 1.0..4.0 && slot.index % 9 in 1..7) {
-                val item = ItemStack(getPossibleItems(color).random())
+    private val wanted = itemsOf(color)
 
-                if (slot.index == guaranteed) item
-                else {
-                    if (Math.random() > 0.75) item
-                    else ItemStack(getPossibleItems(DyeColor.entries.filter { it != color }.random()).random())
-                }
-            } else blackPane
+    override fun create() {
+        val sure = cells.random()
+        setSlots {
+            when {
+                it.index !in cells -> blackPane
+                it.index == sure || Math.random() > 0.75 -> ItemStack(wanted.random())
+                else -> ItemStack(itemsOf(otherColor()).random())
+            }
         }
     }
 
-    private fun getPossibleItems(color: DyeColor): List<Item> {
-        return listOf(
-            BuiltInRegistries.ITEM.get(Identifier.fromNamespaceAndPath("minecraft", "${color.name.lowercase()}_stained_glass")).get().value(),
-            BuiltInRegistries.ITEM.get(Identifier.fromNamespaceAndPath("minecraft", "${color.name.lowercase()}_wool")).get().value(),
-            BuiltInRegistries.ITEM.get(Identifier.fromNamespaceAndPath("minecraft", "${color.name.lowercase()}_concrete")).get().value(),
-            when (color) {
+    private fun otherColor(): DyeColor {
+        val pick = Random.nextInt(DyeColor.entries.size - 1)
+        return DyeColor.entries[if (pick >= color.ordinal) pick + 1 else pick]
+    }
+
+    override fun slotClick(slot: Slot, button: Int) {
+        val stack = slot.item
+        if (stack.item !in wanted) return modMessage("§cThat item is not: ${color.name}!")
+        if (stack.hasGlint()) return modMessage("§cAlready selected!")
+        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
+        slot.setSlot(stack)
+        if (guiInventorySlots.none { !it.item.hasGlint() && it.item.item in wanted }) TerminalUtils.lastTermOpened?.onComplete()
+        super.slotClick(slot, button)
+    }
+
+    private companion object {
+        val cells = (1..4).flatMap { row -> (1..7).map { row * 9 + it } }.toSet()
+
+        // Glass, wool, concrete and the dye, with the dyes Hypixel still shows as their old items.
+        val byColor: Map<DyeColor, List<Item>> = DyeColor.entries.associateWith { c ->
+            val dye = when (c) {
                 DyeColor.WHITE -> Items.BONE_MEAL
                 DyeColor.BLUE -> Items.LAPIS_LAZULI
                 DyeColor.BLACK -> Items.INK_SAC
                 DyeColor.BROWN -> Items.COCOA_BEANS
-                else -> BuiltInRegistries.ITEM.get(Identifier.fromNamespaceAndPath("minecraft", "${color.name.lowercase()}_dye")).get().value()
+                else -> Items.DYE.pick(c)
             }
-        )
-    }
+            listOf(Items.STAINED_GLASS.pick(c), Items.WOOL.pick(c), Items.CONCRETE.pick(c), dye)
+        }
 
-    override fun slotClick(slot: Slot, button: Int) {
-        val possibleItems = getPossibleItems(color)
-        if (!possibleItems.contains(slot.item.item)) return modMessage("§cThat item is not: ${color.name.uppercase()}!")
-        if (slot.item.hasGlint()) return modMessage("§cAlready selected!")
-
-        slot.setSlot(slot.item.apply { set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true) })
-
-        if (guiInventorySlots.none { !it.item.hasGlint() && possibleItems.contains(it.item.item) })
-            TerminalUtils.lastTermOpened?.onComplete()
-
-        super.slotClick(slot, button)
+        fun itemsOf(c: DyeColor) = byColor.getValue(c)
     }
 }

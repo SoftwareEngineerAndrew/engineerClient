@@ -2,32 +2,22 @@ package com.engineerclient.terminals.sim
 
 import com.engineerclient.terminals.TerminalTypes
 import com.engineerclient.terminals.TerminalUtils
-import net.minecraft.core.component.DataComponents
-import net.minecraft.network.chat.Component
 import net.minecraft.world.inventory.Slot
-import net.minecraft.world.item.DyeColor
-import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
-import kotlin.math.floor
 
-object PanesSim : TermSimGUI(
-    TerminalTypes.PANES.termName, TerminalTypes.PANES.windowSize
-) {
-    private val greenPane get() = ItemStack(Items.STAINED_GLASS_PANE.pick(DyeColor.LIME)).apply { set(DataComponents.CUSTOM_NAME, Component.literal("")) }
-    private val redPane   get() = ItemStack(Items.STAINED_GLASS_PANE.pick(DyeColor.RED)).apply { set(DataComponents.CUSTOM_NAME, Component.literal("")) }
+object PanesSim : TermSimGUI(TerminalTypes.PANES.termName, TerminalTypes.PANES.windowSize) {
+    private val off = Items.STAINED_GLASS_PANE.red()
+    private val on = Items.STAINED_GLASS_PANE.lime()
+
+    private fun inGrid(i: Int) = i / 9 in 1..3 && i % 9 in 2..6
 
     override fun create() {
-        setSlots {
-            if (floor(it.index / 9f) in 1f..3f && it.index % 9 in 2..6) if (Math.random() > 0.75) greenPane else redPane else blackPane
-        }
+        setSlots { if (!inGrid(it.index)) blackPane else unnamed(if (Math.random() > 0.75) on else off) }
     }
 
     override fun slotClick(slot: Slot, button: Int) {
-        slot.setSlot(if (slot.item.item == Items.STAINED_GLASS_PANE.pick(DyeColor.RED)) greenPane else redPane)
-
-        if (guiInventorySlots.none { it?.item?.item == Items.STAINED_GLASS_PANE.pick(DyeColor.RED) })
-            TerminalUtils.lastTermOpened?.onComplete()
-
+        slot.setSlot(unnamed(if (slot.item.`is`(off)) on else off))
+        if (guiInventorySlots.none { it.item.`is`(off) }) TerminalUtils.lastTermOpened?.onComplete()
         super.slotClick(slot, button)
     }
 }

@@ -1,85 +1,81 @@
 package com.engineerclient.terminals.sim
 
-import com.engineerclient.terminals.Terminals
-import com.engineerclient.terminals.TermSimulator.openRandomTerminal
 import com.adm.utils.handlers.schedule
 import com.adm.utils.modMessage
-import com.engineerclient.terminals.TerminalTypes
 import com.adm.utils.toFixed
+import com.engineerclient.terminals.TermSimulator
+import com.engineerclient.terminals.TerminalTypes
+import com.engineerclient.terminals.Terminals
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.inventory.Slot
-import net.minecraft.world.item.DyeColor
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.ItemLore
 
-object StartGUI : TermSimGUI(
-    "Terminal Simulator", 27
-) {
-    private fun buildTermItem(type: TerminalTypes, item: Item, color: String) = ItemStack(item).apply {
-        set(DataComponents.CUSTOM_NAME, Component.literal("$color${type.termName}"))
-        set(DataComponents.LORE, ItemLore(getTermPB(type)))
-    }
+object StartGUI : TermSimGUI("Terminal Simulator", 27) {
+    private const val RESET_SLOT = 4
+    private const val RANDOM_SLOT = 13
+    private const val CONFIRM_TICKS = 60
 
-    private fun buildTermItems() = listOf(
-        buildTermItem(TerminalTypes.PANES, Items.DYE.pick(DyeColor.LIME), "§a"),
-        buildTermItem(TerminalTypes.RUBIX, Items.DYE.pick(DyeColor.RED), "§6"),
-        buildTermItem(TerminalTypes.NUMBERS, Items.DYE.pick(DyeColor.CYAN), "§3"),
-        buildTermItem(TerminalTypes.STARTS_WITH, Items.DYE.pick(DyeColor.PINK), "§5"),
-        buildTermItem(TerminalTypes.SELECT, Items.DYE.pick(DyeColor.BROWN), "§b"),
-        buildTermItem(TerminalTypes.MELODY, Items.DYE.pick(DyeColor.PURPLE), "§d")
-    )
+    // Slot to terminal; the random button sits in the middle of them.
+    private val menuSlots = intArrayOf(10, 11, 12, 14, 15, 16)
+    private val menuTypes = arrayOf(TerminalTypes.PANES, TerminalTypes.RUBIX, TerminalTypes.NUMBERS, TerminalTypes.STARTS_WITH, TerminalTypes.SELECT, TerminalTypes.MELODY)
+    private val menuIcons: Array<Item> = Items.DYE.let { arrayOf(it.lime(), it.red(), it.cyan(), it.pink(), it.brown(), it.purple()) }
+    private val menuColors = arrayOf("§a", "§6", "§3", "§5", "§b", "§d")
 
-    private val resetButton = ItemStack(Items.DYE.pick(DyeColor.BLACK)).apply { set(DataComponents.CUSTOM_NAME, Component.literal("§cReset PBs!")) }
-    private val randomButton = ItemStack(Items.DYE.pick(DyeColor.WHITE)).apply { set(DataComponents.CUSTOM_NAME, Component.literal("§7Random")) }
+    private val resetButton = named(Items.DYE.black(), "§cReset PBs!")
+    private val randomButton = named(Items.DYE.white(), "§7Random")
+
+    private var confirming = false
+
+    private fun named(item: Item, name: String) = ItemStack(item).apply { set(DataComponents.CUSTOM_NAME, Component.literal(name)) }
 
     fun getTermPB(type: TerminalTypes): List<Component> {
-        val pb = Terminals.termSimPBs.get(type.name) ?: return listOf(Component.literal("§7No PB set!"))
-        return listOf(Component.literal("§7Personal Best: §d${pb.toFixed()}s"),)
+        val pb = Terminals.termSimPBs.get(type.name)
+        return listOf(Component.literal(if (pb == null) "§7No PB set!" else "§7Personal Best: §d${pb.toFixed()}s"))
+    }
+
+    private fun menuIcon(at: Int) = named(menuIcons[at], menuColors[at] + menuTypes[at].termName).apply {
+        set(DataComponents.LORE, ItemLore(getTermPB(menuTypes[at])))
     }
 
     override fun create() {
-        val termItems = buildTermItems()
         setSlots {
-            when (it.index) {
-                4 -> resetButton
-                13  -> randomButton
-                in 10..12 -> termItems[it.index - 10]
-                in 14..16 -> termItems[it.index - 11]
-                else -> blackPane
+            when (val i = it.index) {
+                RESET_SLOT -> resetButton
+                RANDOM_SLOT -> randomButton
+                else -> menuSlots.indexOf(i).let { at -> if (at < 0) blackPane else menuIcon(at) }
             }
         }
     }
 
-    private var areYouSure = false
-
     override fun slotClick(slot: Slot, button: Int) {
-        when (slot.index) {
-            4 -> {
-                if (!areYouSure) {
-                    modMessage("§cAre you sure you want to reset your PBs? Click again to confirm.")
-                    areYouSure = true
-                    schedule(60) {
-                        if (!areYouSure) return@schedule
-                        modMessage("§aPBs reset cancelled.")
-                        areYouSure = false
-                    }
-                    return
-                }
-                Terminals.termSimPBs.reset()
-                create()
-                modMessage("§aPBs reset!")
-                areYouSure = false
+        when (val i = slot.index) {
+            RESET_SLOT -> resetClicked()
+            RANDOM_SLOT -> TermSimulator.openRandomTerminal(ping)
+            else -> {
+                val at = menuSlots.indexOf(i)
+                if (at >= 0) menuTypes[at].simulator().open(ping)
             }
-            10 -> PanesSim.open(ping)
-            11 -> RubixSim.open(ping)
-            12 -> NumbersSim.open(ping)
-            13 -> openRandomTerminal(ping)
-            14 -> StartsWithSim().open(ping)
-            15 -> SelectAllSim().open(ping)
-            16 -> MelodySim.open(ping)
         }
+    }
+
+    private fun resetClicked() {
+        if (!confirming) {
+            modMessage("§cAre you sure you want to reset your PBs? Click again to confirm.")
+            confirming = true
+            schedule(CONFIRM_TICKS) {
+                if (!confirming) return@schedule
+                modMessage("§aPBs reset cancelled.")
+                confirming = false
+            }
+            return
+        }
+        Terminals.termSimPBs.reset()
+        create()
+        modMessage("§aPBs reset!")
+        confirming = false
     }
 }
