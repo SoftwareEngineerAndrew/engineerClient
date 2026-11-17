@@ -18,16 +18,18 @@ object ExplosiveShot : Module(
 ) {
     private val onlyInBoss by BooleanSetting("Only In Boss", true, desc = "Only during the boss fight.")
 
-    private val regex = Regex("^Your Explosive Shot hit (\\d+) enem(?:y|ies) for ([\\d,.]+) damage\\.$")
-    private val format = DecimalFormat("###,###,###,###")
+    private const val LEAD = "Your Explosive Shot hit "
+    private val hitLine = Regex("(\\d+) enem(?:y|ies) for ([\\d,.]+) damage\\.")
+    private val perEnemy = DecimalFormat("###,###,###,###")
 
     init {
         on<MessageEvent.Chat> {
-            if (!DungeonUtils.inDungeons || (onlyInBoss && !DungeonUtils.inBoss)) return@on
-            val match = regex.matchEntire(message) ?: return@on
-            val count = match.groupValues[1].toIntOrNull()?.takeIf { it > 0 } ?: return@on
-            val damage = match.groupValues[2].replace(",", "").toDoubleOrNull() ?: return@on
-            EngineerClient.msg("§aExplosive Shot did §e${format.format(damage / count)}§a damage per enemy.")
+            if (!message.startsWith(LEAD) || !DungeonUtils.inDungeons || onlyInBoss && !DungeonUtils.inBoss) return@on
+            val (enemies, total) = hitLine.matchEntire(message.substring(LEAD.length))?.destructured ?: return@on
+            val count = enemies.toIntOrNull() ?: return@on
+            if (count <= 0) return@on
+            val damage = total.replace(",", "").toDoubleOrNull() ?: return@on
+            EngineerClient.msg("§aExplosive Shot did §e${perEnemy.format(damage / count)}§a damage per enemy.")
         }
     }
 }
