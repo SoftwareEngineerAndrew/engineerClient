@@ -40,7 +40,8 @@ object SecretClicked : Module(
     private val soundSettings = createSoundSettings("Chime Sound", "entity.blaze.hurt") { clickedDropdown && chime }
     private val chimeInBoss by BooleanSetting("Chime In Boss", false, desc = "Prevent playing the sound if in boss room.").withDependency { clickedDropdown && chime }
 
-    private data class Secret(val aabb: AABB, var locked: Boolean = false)
+    // Not a data class: each box removes itself, not an equal one from a later run.
+    private class Secret(val aabb: AABB, var locked: Boolean = false)
     private val clickedSecretsList = CopyOnWriteArrayList<Secret>()
     private var lastPlayed = System.currentTimeMillis()
 
@@ -85,7 +86,8 @@ object SecretClicked : Module(
 
     private fun secretBox(pos: BlockPos) {
         if (!boxes || (DungeonUtils.inBoss && !boxInBoss) || clickedSecretsList.any { it.aabb.intersects(pos) }) return
-        clickedSecretsList.add(Secret(pos.getBlockBounds()?.move(pos) ?: AABB(pos)))
-        schedule(timeToStay * 20) { clickedSecretsList.removeFirstOrNull() }
+        val secret = Secret(pos.getBlockBounds()?.move(pos) ?: AABB(pos))
+        clickedSecretsList.add(secret)
+        schedule(timeToStay * 20) { clickedSecretsList.remove(secret) }
     }
 }
