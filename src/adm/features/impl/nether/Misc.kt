@@ -17,20 +17,25 @@ object Misc : Module(
     private val autoRequeue by BooleanSetting("Auto Requeue", true, desc = "Automatically requeues you after a Kuudra run.")
     private val requeueDelay by NumberSetting("Requeue Delay", 20, 0..100, 1, unit = "ticks", desc = "Delay before requeuing after a run ends.").withDependency { autoRequeue }
 
-    private val endRunRegex =
-        Regex("^\\[NPC] Elle: Good job everyone. A hard fought battle come to an end. Let's get out of here before we run into any more trouble!$")
-    private val endStoneRegex = Regex("^Used Extreme Focus! \\((\\d+) Mana\\)$")
+    private const val RUN_OVER = "[NPC] Elle: Good job everyone. A hard fought battle come to an end. Let's get out of here before we run into any more trouble!"
+    private const val FOCUS_PREFIX = "Used Extreme Focus! ("
+    private const val FOCUS_SUFFIX = " Mana)"
 
     init {
         on<MessageEvent.Chat> {
-            if (manaDrain) endStoneRegex.find(message)?.groupValues?.getOrNull(1)?.let { mana ->
-                val players =
-                    mc.level?.players()?.filter { it.distanceToSqr(mc.player ?: return@on) < 49 && it.uuid.version() == 4 } ?: return@on
-                sendCommand("pc Used $mana mana (${players.size} players nearby)")
+            if (manaDrain && message.startsWith(FOCUS_PREFIX) && message.endsWith(FOCUS_SUFFIX)) {
+                val mana = message.substring(FOCUS_PREFIX.length, message.length - FOCUS_SUFFIX.length)
+                if (mana.isNotEmpty() && mana.all { it in '0'..'9' }) reportDrain(mana)
             }
-
-            if (autoRequeue && endRunRegex.matches(message))
-                schedule(requeueDelay) { sendCommand("instancerequeue") }
+            if (autoRequeue && message == RUN_OVER) schedule(requeueDelay) { sendCommand("instancerequeue") }
         }
+    }
+
+    private fun reportDrain(mana: String) {
+        val self = mc.player ?: return
+        val players = mc.level?.players() ?: return
+        var nearby = 0
+        for (other in players) if (other.distanceToSqr(self) < 49 && other.uuid.version() == 4) nearby++
+        sendCommand("pc Used $mana mana ($nearby players nearby)")
     }
 }
