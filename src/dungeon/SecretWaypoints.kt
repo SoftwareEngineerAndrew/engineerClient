@@ -12,6 +12,7 @@ import com.engineerclient.dungeonpack.pack.Tile
 import com.engineerclient.dungeonpack.pack.rooms.Placement
 import com.engineerclient.dungeonpack.pack.rooms.RoomPack
 import com.engineerclient.dungeonpack.pack.secrets.SecretPack
+import com.engineerclient.dungeonpack.pack.secrets.SecretSite
 import com.engineerclient.dungeonpack.pack.secrets.SecretType
 import com.engineerclient.pov.KnownWorld
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
@@ -32,6 +33,7 @@ import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.features.impl.dungeon.map.WorldScan
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
 import com.adm.features.impl.dungeon.map.tile.RoomShape
+import com.adm.features.impl.dungeon.map.tile.RoomType
 import com.adm.utils.Color
 import com.adm.utils.Color.Companion.multiplyAlpha
 import com.adm.utils.IVec2
@@ -198,7 +200,10 @@ object SecretWaypoints {
         val p = try { design.place(rot, tiles) } catch (e: Exception) { return emptyList() }
         val d = secrets.design(design.id) ?: return emptyList<Spot>().also { placed[key] = it }
         val out = ArrayList<Spot>()
+        val puzzle = room.data?.type == RoomType.PUZZLE
         for (s in d.sites) {
+            // x sites are extras: in a puzzle they are the reward chest, and an x item on a chest is not a secret
+            if (s.id.startsWith('x') && (puzzle || (s.type == SecretType.ITEM && onChest(s.pos, d.sites)))) continue
             val kind = when (s.type) {
                 SecretType.CHEST, SecretType.LOCKED_CHEST -> Kind.CHEST
                 SecretType.ITEM -> Kind.ITEM
@@ -212,6 +217,10 @@ object SecretWaypoints {
         d.key?.skulls?.forEach { out += spot(Kind.KEY, it.first, p) }
         placed[key] = out
         return out
+    }
+
+    private fun onChest(at: Pos, sites: List<SecretSite>): Boolean = sites.any {
+        (it.type == SecretType.CHEST || it.type == SecretType.LOCKED_CHEST) && it.pos.x == at.x && it.pos.z == at.z && at.y - it.pos.y in 1..2
     }
 
     private fun spot(kind: Kind, c: Pos, p: Placement): Spot {
