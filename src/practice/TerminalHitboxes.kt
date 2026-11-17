@@ -44,7 +44,6 @@ object TerminalHitboxes {
     @Volatile private var openedTerm = -1
     /** Hypixel's terminal windows. */
     private val TERM_TITLE = Regex("^(Click in order!|Select all the .+ items!|What starts with: '.+'\\?|Correct all the panes!|Change all to same color!|Click the button on time!)$")
-    private val OWN_TASK = Regex("^(\\w{1,16}) activated a terminal! \\(\\d+/\\d+\\)$")
 
     /** A new P3 or world: nothing done, nothing clicked. From [TermInfo]. */
     fun reset() {
@@ -57,10 +56,9 @@ object TerminalHitboxes {
         mc.execute { openedTerm = lastClicked }
     }
 
-    /** A P3 chat line, on the game thread: your own "activated a terminal!" marks the one you opened done at once. */
-    fun chat(msg: String) {
-        val m = OWN_TASK.matchEntire(msg) ?: return
-        if (m.groupValues[1] == mc.player?.name?.string && openedTerm >= 0) doneSeen[openedTerm] = true
+    /** "[name] activated a terminal!", on the game thread: your own marks the one you opened done at once. */
+    fun terminalActivated(name: String) {
+        if (openedTerm >= 0 && name == mc.player?.name?.string) doneSeen[openedTerm] = true
     }
 
     /**
