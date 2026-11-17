@@ -55,6 +55,7 @@ object SecretWaypoints {
     private val style = SelectorSetting("Style", Style.CELL, desc = "How each secret is drawn.").withDependency { dropdown.value && show.value }
     private val lineWidth = NumberSetting("Line Width", 2.0, 0.5..10.0, 0.5, desc = "Outline thickness.").withDependency { dropdown.value && show.value && style.value != Style.FULL_BLOCK }
     private val fillOpacity = NumberSetting("Fill Opacity", 80, 0..255, 1, desc = "How see-through the fill is.").withDependency { dropdown.value && show.value && style.value == Style.FILLED_OUTLINE }
+    private val smallBoxes = BooleanSetting("Small Boxes", true, desc = "Boxes fit the secret instead of the whole block, like Devonian.").withDependency { dropdown.value && show.value }
     private val chestColor = ColorSetting("Chest Color", Color(0, 255, 0), true, desc = "Chests.").withDependency { dropdown.value && show.value }
     private val itemColor = ColorSetting("Item Color", Color(0, 0, 255), true, desc = "Items.").withDependency { dropdown.value && show.value }
     private val essenceColor = ColorSetting("Essence Color", Color(255, 0, 255), true, desc = "Wither essence.").withDependency { dropdown.value && show.value }
@@ -87,7 +88,7 @@ object SecretWaypoints {
     private var lastRoom: DungeonRoom? = null
 
     fun install() {
-        for (s in listOf(dropdown, show, style, lineWidth, fillOpacity, chestColor, itemColor, essenceColor, batColor, keyColor, leverColor, text, hideCollected, throughWalls, currentRoomOnly))
+        for (s in listOf(dropdown, show, style, lineWidth, fillOpacity, smallBoxes, chestColor, itemColor, essenceColor, batColor, keyColor, leverColor, text, hideCollected, throughWalls, currentRoomOnly))
             SecretClicked.registerSetting(s)
 
         on<LevelEvent.Load> { placed.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null; lastRoom = null }
@@ -128,15 +129,16 @@ object SecretWaypoints {
             for (s in spots) {
                 if (hideCollected.value && s.pos in collected) continue
                 val c = colorOf(s.kind)
+                val box = if (smallBoxes.value) s.box else AABB(s.pos)
                 when (st) {
-                    Style.CELL, Style.OUTLINE -> drawWireFrameBox(s.box, c, width, depth)
+                    Style.CELL, Style.OUTLINE -> drawWireFrameBox(box, c, width, depth)
                     Style.FILLED_OUTLINE -> {
-                        drawFilledBox(s.box, c.multiplyAlpha(fill), depth)
-                        drawWireFrameBox(s.box, c, width, depth)
+                        drawFilledBox(box, c.multiplyAlpha(fill), depth)
+                        drawWireFrameBox(box, c, width, depth)
                     }
                     Style.FULL_BLOCK -> {
-                        drawFilledBox(s.box, c.multiplyAlpha(0.3f), depth)
-                        drawWireFrameBox(s.box, c, 2f, depth)
+                        drawFilledBox(box, c.multiplyAlpha(0.3f), depth)
+                        drawWireFrameBox(box, c, 2f, depth)
                     }
                 }
                 if (!text.value) continue
@@ -144,7 +146,7 @@ object SecretWaypoints {
                     // Past 20 blocks the label grows with distance so it keeps its size on screen.
                     val at = Vec3(s.pos.x + 0.5, s.pos.y + 1.0, s.pos.z + 0.5)
                     drawText(s.kind.tag, at, 2f * maxOf(1.0, at.distanceTo(cam) / 20.0).toFloat(), depth)
-                } else drawText(s.kind.label, Vec3(s.box.center.x, s.box.maxY + 0.3, s.box.center.z), 1f, depth)
+                } else drawText(s.kind.label, Vec3(box.center.x, box.maxY + 0.3, box.center.z), 1f, depth)
             }
         }
         EventBus.subscribe(this)
@@ -227,7 +229,8 @@ object SecretWaypoints {
             Kind.CHEST -> AABB(x + 0.0625, y, z + 0.0625, x + 0.9375, y + 0.875, z + 0.9375)
             Kind.ESSENCE, Kind.KEY -> AABB(x + 0.25, y, z + 0.25, x + 0.75, y + 0.5, z + 0.75)
             Kind.LEVER -> AABB(x + 0.25, y, z + 0.25, x + 0.75, y + 0.6, z + 0.75)
-            Kind.ITEM, Kind.BAT -> AABB(x, y, z, x + 1, y + 1, z + 1)
+            Kind.ITEM -> AABB(x + 0.25, y, z + 0.25, x + 0.75, y + 0.5, z + 0.75)
+            Kind.BAT -> AABB(x + 0.25, y + 0.25, z + 0.25, x + 0.75, y + 0.75, z + 0.75)
         }
         return Spot(kind, pos, box)
     }
