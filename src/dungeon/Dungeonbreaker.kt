@@ -9,7 +9,6 @@ import com.adm.features.Module
 import com.adm.utils.Colors
 import com.adm.utils.itemId
 import com.adm.utils.lore
-import com.adm.utils.render.textDim
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -56,9 +55,22 @@ object Dungeonbreaker : Module(
     private var charges = 0
 
     private val hud by HUD("Breaker Display", "Shows the amount of charges left in your Dungeon Breaker.", false) {
-        if (!chargesDisplay || (!it && (maxCharges == 0 || !DungeonUtils.inDungeons || (!renderFull && charges == maxCharges)))) 0 to 0
-        else textDim("§e${if (it) 17 else charges}§7/§e${if (it) 20 else maxCharges}§c⸕", 0, 0, Colors.WHITE)
+        if (!chargesDisplay || (!it && (maxCharges == 0 || !DungeonUtils.inDungeons || (!renderFull && charges == maxCharges)))) return@HUD 0 to 0
+        val shown = if (it) 17 else charges
+        val max = if (it) 20 else maxCharges
+        if (shown != lineCharges || max != lineMax) {
+            lineCharges = shown
+            lineMax = max
+            line = "§e$shown§7/§e$max§c⸕"
+            lineSize = mc.font.width(line) to mc.font.lineHeight
+        }
+        text(mc.font, line, 0, 0, Colors.WHITE.rgba, true)
+        lineSize
     }.withDependency { chargesDisplay }
+    private var lineCharges = -1
+    private var lineMax = -1
+    private var line = ""
+    private var lineSize = 0 to 9
     private val renderFull by BooleanSetting("Render full", false, desc = "Renders the HUD even when the Dungeon Breaker is full.").withDependency { chargesDisplay }
 
     init {
@@ -82,10 +94,18 @@ object Dungeonbreaker : Module(
     /** The server breaks with the slot it was last told about, not the one on screen. */
     private fun synced(): Boolean = (mc.gameMode as? CarriedSlotAccessor)?.carriedIndex() == mc.player?.inventory?.selectedSlot
 
+    private var alphaIp: String? = null
+    private var alphaHost = false
+
     private fun onAlpha(): Boolean {
         if (mc.hasSingleplayerServer()) return false
-        val host = mc.currentServer?.ip?.trim()?.lowercase()?.substringBefore(':')?.trimEnd('.') ?: return false
-        return host == "alpha.hypixel.net" || host.endsWith(".alpha.hypixel.net")
+        val ip = mc.currentServer?.ip ?: return false
+        if (ip != alphaIp) {
+            val host = ip.trim().lowercase().substringBefore(':').trimEnd('.')
+            alphaHost = host == "alpha.hypixel.net" || host.endsWith(".alpha.hypixel.net")
+            alphaIp = ip
+        }
+        return alphaHost
     }
 
     @JvmStatic
