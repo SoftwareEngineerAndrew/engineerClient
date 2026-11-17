@@ -87,8 +87,8 @@ object PuzzleSolvers : Module(
     private val quizColor by ColorSetting("Quiz Color", Colors.MINECRAFT_GREEN.withAlpha(.75f), true, desc = "Color for the quiz solver.").withDependency { quizDropdown && quizSolver }
     private val quizDepth by BooleanSetting("Quiz Depth", false, desc = "Depth check for the trivia puzzle.").withDependency { quizDropdown && quizSolver }
     private val quizTimerHud by HUD("Quiz Timer Hud", "Displays a timer counting down until you must answer the quiz question.") { example ->
-        val timer = if (example) Triple(220, 220, 1) else QuizSolver.timer
-        if (quizSolver && timer.first > 0) textDim(formatQuizTimer(timer), 0, 0, Colors.WHITE) else 0 to 0
+        val text = if (quizSolver) QuizSolver.timerText(example) else null
+        if (text != null) textDim(text, 0, 0, Colors.WHITE) else 0 to 0
     }.withDependency { quizDropdown && quizSolver }
     private val quizBlockWrong by BooleanSetting("Quiz Block Wrong Clicks", true, desc = "Blocks clicking an answer that isn't the right one.").withDependency { quizDropdown }
     private val quizReset by ActionSetting("Reset Quiz", desc = "Resets the solver.") { QuizSolver.reset() }.withDependency { quizDropdown && quizSolver }
@@ -156,7 +156,7 @@ object PuzzleSolvers : Module(
             TPMazeSolver.reset()
             BlazeSolver.reset()
             BeamsSolver.reset()
-            QuizSolver.reset()
+            QuizSolver.unload()
         }
 
         on<RoomEnterEvent> {
@@ -262,15 +262,5 @@ object PuzzleSolvers : Module(
             puzzlePBs.time(puzzleName, puzzleTime, "s§7!", "§a${puzzleName} §7solved in §6")
             puzzleTimer.sentMessage = true
         }
-    }
-
-    private fun formatQuizTimer(timer: Triple<Int, Int, Int>): String {
-        val (tick, maxTick, stage) = timer
-        val color = when {
-            tick.toFloat() >= maxTick * 0.66 -> "§a"
-            tick.toFloat() >= maxTick * 0.33 -> "§6"
-            else -> "§c"
-        }
-        return "§5Quiz §8(§f$stage§8/§f3§8): $color${(tick / 20f).toFixed()}s"
     }
 }
