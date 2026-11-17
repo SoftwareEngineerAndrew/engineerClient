@@ -18,6 +18,9 @@
       { "adapter": "kotlin", "value": "com.devgineerclient.DevgineerClient" }
     ]
   },
+  "custom": {
+    "badoptimizations:cache_hooks": { "lightmap": "com.engineerclient.render.FullbrightLightmapHook" }
+  },
   "depends": {
     "fabricloader": ">=0.19.5",
     "fabric-api": ">=0.161.0",
