@@ -24,6 +24,7 @@ import com.engineerclient.mapicons.MapSizes
 import com.engineerclient.mappred.MapPrediction
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.PlayerFaceExtractor
+import net.minecraft.world.entity.player.Player
 import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.resources.Identifier
 import java.awt.Color.HSBtoRGB
@@ -269,8 +270,8 @@ fun GuiGraphicsExtractor.renderPlayers() {
     }
 
     pose().pushMatrix()
-    if (self != null) pose().translate(mapX(self.renderX.toFloat()), mapX(self.renderZ.toFloat()))
-    else pose().translate(64f - DungeonScan.startX, 64f - DungeonScan.startY)
+    val (selfX, selfZ) = playerRenderPosition(self, IVec2(0, 0))
+    pose().translate(selfX, selfZ)
     pose().rotate(Math.toRadians(180.0 + (self?.yRot ?: 0f)).toFloat())
 
     if (DungeonMap.playerHead) {
@@ -286,6 +287,11 @@ fun GuiGraphicsExtractor.renderPlayers() {
     }
     pose().popMatrix()
 }
+
+// Ascent's camera projection hooks this by name
+private fun playerRenderPosition(entity: Player?, mapPos: IVec2): Pair<Float, Float> =
+    if (entity != null) mapX(entity.renderX.toFloat()) to mapX(entity.renderZ.toFloat())
+    else (mapPos.x + 128) / 2f - DungeonScan.startX to (mapPos.z + 128) / 2f - DungeonScan.startY
 
 private fun mapX(world: Float): Float = (world + 200f) * GRID / 32f
 

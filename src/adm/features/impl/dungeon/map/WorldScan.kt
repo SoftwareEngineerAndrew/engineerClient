@@ -40,7 +40,36 @@ object WorldScan {
             currentRoom = null
         }
 
-        on<TickEvent.End> { tick() }
+        // Ascent redirects the player position reads in this handler
+        on<TickEvent.End> {
+            val player = mc.player ?: return@on
+            if (!DungeonUtils.inDungeons || DungeonUtils.inBoss) {
+                if (currentRoom != null) {
+                    currentRoom = null
+                    RoomEnterEvent(null).postAndCatch()
+                }
+                return@on
+            }
+
+            val rooms = DungeonScan.rooms
+            for (i in 0 until rooms.size) {
+                val room = rooms[i]
+                if (room.shape == RoomShape.OneByOne && (room.rotation == null || room.clayPos == null) && room.highestBlock != null) room.get1x1Rotation()
+            }
+
+            val col = (player.blockX + 201) shr 5
+            val row = (player.blockZ + 201) shr 5
+            if (col !in 0..5 || row !in 0..5) return@on
+            val room = DungeonScan.tiles[row * 6 + col].room ?: return@on
+            if (room === currentRoom || room.rotation == null || room.clayPos == null) return@on
+            val top = room.highestBlock ?: return@on
+            if (player.blockY > top - 10 && !LocationUtils.isCurrentArea(Island.SinglePlayer)) return@on
+
+            currentRoom = room
+            room.walkedInto = true
+            RoomEnterEvent(room).postAndCatch()
+            devMessage("${room.data?.name ?: room.type} - ${room.rotation} || clay: ${room.clayPos}")
+        }
 
         ClientChunkEvents.CHUNK_LOAD.register { _, chunk ->
             if (DungeonUtils.inDungeons) scan(chunk) else pending.add(IVec2(chunk.pos.x, chunk.pos.z))
@@ -57,36 +86,6 @@ object WorldScan {
             }
             pending.clear()
         }
-    }
-
-    private fun tick() {
-        val player = mc.player ?: return
-        if (!DungeonUtils.inDungeons || DungeonUtils.inBoss) {
-            if (currentRoom != null) {
-                currentRoom = null
-                RoomEnterEvent(null).postAndCatch()
-            }
-            return
-        }
-
-        val rooms = DungeonScan.rooms
-        for (i in 0 until rooms.size) {
-            val room = rooms[i]
-            if (room.shape == RoomShape.OneByOne && (room.rotation == null || room.clayPos == null) && room.highestBlock != null) room.get1x1Rotation()
-        }
-
-        val col = (player.blockX + 201) shr 5
-        val row = (player.blockZ + 201) shr 5
-        if (col !in 0..5 || row !in 0..5) return
-        val room = DungeonScan.tiles[row * 6 + col].room ?: return
-        if (room === currentRoom || room.rotation == null || room.clayPos == null) return
-        val top = room.highestBlock ?: return
-        if (player.blockY > top - 10 && !LocationUtils.isCurrentArea(Island.SinglePlayer)) return
-
-        currentRoom = room
-        room.walkedInto = true
-        RoomEnterEvent(room).postAndCatch()
-        devMessage("${room.data?.name ?: room.type} - ${room.rotation} || clay: ${room.clayPos}")
     }
 
     private fun scan(chunk: LevelChunk) {
