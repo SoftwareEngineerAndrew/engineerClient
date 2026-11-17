@@ -37,7 +37,7 @@ object MelodyMessage : Module(
     private val melodyProgress by BooleanSetting("Melody Progress", false, desc = "Tells the party about melody terminal progress.")
     private val melodySendCoords by BooleanSetting("Melody Send Coords", false, desc = "Sends the coordinates of the melody terminal.").withDependency { melodyProgress }
 
-    private val melodyGui by HUD("Progress GUI", "Shows a gui with the progress of broadcasting core users in melody.", true) { example ->
+    private val melodyGui by HUD("Progress GUI", "Each teammate's melody: from the party link, Odin's socket, else party chat.", true) { example ->
         var rows = 0
         var captionWidth = 0
         val self = mc.user.name
@@ -65,7 +65,8 @@ object MelodyMessage : Module(
             val update = try { gson.fromJson(message, UpdateMessage::class.java) } catch (_: Exception) { return@onMessage }
             val name = update.username
             val clazz = DungeonUtils.dungeonTeammates.find { it.name == name }?.clazz ?: return@onMessage
-            val data = melodies.getOrPut(name) { MelodyData(null, null, null, clazz) }
+            // the link or the socket outranks a row from chat
+            val data = melodies[name]?.takeIf { !it.chat } ?: MelodyData(null, null, null, clazz).also { melodies[name] = it }
             when (update.type) {
                 CLOSED -> melodies.remove(name)
                 CLAY -> data.clay = update.slot
@@ -85,7 +86,6 @@ object MelodyMessage : Module(
         }
 
         on<MessageEvent.Chat> {
-            if (!melodyProgress) return@on
             when (message) {
                 CORE_OPENING -> {
                     melodyWebSocket.shutdown()
@@ -110,6 +110,22 @@ object MelodyMessage : Module(
         on<TerminalEvent.Close> {
             if (terminal.type == TerminalTypes.MELODY) melodyWebSocket.send(update(CLOSED, 0))
         }
+    }
+
+    /** A teammate's percent from party chat: their row, unless the link or the socket already gives one. */
+    fun chatProgress(name: String, percent: Int) {
+        val have = melodies[name]
+        if (have != null && !have.chat) return
+        val clay = when { percent >= 75 -> 4; percent >= 50 -> 3; percent >= 25 -> 2; else -> 1 }
+        if (have == null) {
+            val clazz = DungeonUtils.dungeonTeammates.firstOrNull { it.name.equals(name, true) }?.clazz ?: return
+            melodies[name] = MelodyData(null, null, clay, clazz).apply { chat = true }
+        } else if ((have.clay ?: 1) < clay) have.clay = clay
+    }
+
+    /** Takes out [name]'s chat row, or every chat row. */
+    fun chatDone(name: String? = null) {
+        melodies.entries.removeIf { it.value.chat && (name == null || it.key.equals(name, true)) }
     }
 
     private fun inLiveMelody(type: TerminalTypes) =
@@ -155,7 +171,7 @@ object MelodyMessage : Module(
         val pane = data.pane
         val purple = data.purple
         for (column in 0 until 5) {
-            val square = if (column == pane) PANE_SQUARE else if (column == purple) PURPLE_SQUARE else EMPTY_SQUARE
+            val square = if (data.chat) UNKNOWN_SQUARE else if (column == pane) PANE_SQUARE else if (column == purple) PURPLE_SQUARE else EMPTY_SQUARE
             text(square, cell * column, y)
         }
         val clay = data.clay ?: return 0
@@ -189,10 +205,13 @@ object MelodyMessage : Module(
     private const val PANE_SQUARE = "§a■"
     private const val PURPLE_SQUARE = "§d■"
     private const val EMPTY_SQUARE = "§f■"
+    private const val UNKNOWN_SQUARE = "§8■"
 
     private data class UpdateMessage(val username: String, val type: Int, val slot: Int)
 
     private data class MelodyData(var purple: Int?, var pane: Int?, var clay: Int?, val dungeonClass: DungeonClass) {
+        /** Only the clay is known, from party chat. */
+        var chat = false
         var captionKey = -1
         var captionName: String? = null
         var caption = ""

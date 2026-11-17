@@ -145,7 +145,6 @@ object EngineerClient : ClientModInitializer {
         safely("freeze report") { com.engineerclient.misc.FreezeReport.install() }
         safely("health mana") { com.engineerclient.misc.HealthMana.install() }
         safely("lcm melee warning") { com.engineerclient.misc.LcmMeleeWarning.install() }
-        safely("terminal huds") { com.engineerclient.dungeon.TerminalHuds.install() }
         safely("terminals") { com.engineerclient.terminals.Terminals.install() }
         safely("devices") { com.engineerclient.devices.Devices.install() }
         safely("clear info") { com.engineerclient.dungeon.ClearInfo.install() }
