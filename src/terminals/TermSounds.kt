@@ -3,6 +3,7 @@ package com.engineerclient.terminals
 import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
@@ -32,17 +33,16 @@ object TermSounds {
             if (melodyTicks++ % Terminals.melodyRepeat == 0) playSoundSettings(Terminals.melodySound())
         }
 
-        // Once per screen: a resize inits it again.
-        val glowing = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Any, Boolean>())
-        ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
-            if (!glowing.add(screen)) return@register
-            ScreenEvents.afterExtract(screen).register { _, graphics, _, _, _ ->
-                val m = TerminalUtils.currentTerm as? MelodyHandler ?: return@register
-                if (Terminals.melodyAlert && Terminals.melodyVignette && m.alerting()) {
-                    val c = Terminals.melodyVignetteColor
-                    com.engineerclient.render.Vignette.draw(graphics, c.rgba, (c.alphaFloat * 255).toInt())
-                }
+        val glow = ScreenEvents.AfterExtract { _, graphics, _, _, _ ->
+            val m = TerminalUtils.currentTerm as? MelodyHandler ?: return@AfterExtract
+            if (Terminals.melodyAlert && Terminals.melodyVignette && m.alerting()) {
+                val c = Terminals.melodyVignetteColor
+                com.engineerclient.render.Vignette.draw(graphics, c.rgba, (c.alphaFloat * 255).toInt())
             }
+        }
+        // Every init and resize gives the screen fresh events, so this registers again each time.
+        ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
+            if (screen is AbstractContainerScreen<*>) ScreenEvents.afterExtract(screen).register(glow)
         }
 
         on<TerminalEvent.Solve> {
