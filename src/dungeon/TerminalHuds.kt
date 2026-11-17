@@ -19,10 +19,24 @@ object TerminalHuds {
         MelodyMessage.registerSetting(melodyHud)
     }
 
+    private var lastWho: String? = null
+    private var lastStep = -1
+    private var lastText = ""
+
     private fun melodyText(): String? {
+        val heard = MelodyChat.heard()
+        if (heard.isEmpty()) return null
         val me = Minecraft.getInstance().user.name
-        val (name, heard) = MelodyChat.heard().filterKeys { !it.equals(me, true) }.maxByOrNull { it.value.percent } ?: return null
+        var name: String? = null
+        var percent = 0
+        for ((n, h) in heard) if (!n.equals(me, true) && (name == null || h.percent > percent)) { name = n; percent = h.percent }
+        name ?: return null
         val who = DungeonUtils.dungeonTeammates.firstOrNull { it.name.equals(name, true) }?.clazz?.name ?: name
-        return "§5§l$who§r§d has melody! ${minOf(heard.percent / 33, 2)}/3"
+        val step = minOf(percent / 33, 2)
+        if (who != lastWho || step != lastStep) {
+            lastWho = who; lastStep = step
+            lastText = "§5§l$who§r§d has melody! $step/3"
+        }
+        return lastText
     }
 }
