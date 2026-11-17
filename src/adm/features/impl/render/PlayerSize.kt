@@ -27,16 +27,21 @@ object PlayerSize : Module(
     private const val COSMETICS_URL = "https://api.noamm.org/cosmeticPeople.json"
 
     private data class CustomSize(val sizeX: Float, val sizeY: Float, val sizeZ: Float)
-    private var customSizeById: Map<UUID, CustomSize> = emptyMap()
+    @Volatile private var customSizeById: Map<UUID, CustomSize> = emptyMap()
 
     @JvmStatic
     fun preRenderCallbackScaleHook(state: AvatarRenderState, matrix: PoseStack) {
-        val gameProfile = state.getData(GAME_PROFILE_KEY) ?: return
-        val (x, y, z) = when {
-            !enabled -> return
-            gameProfile.id == mc.player?.gameProfile?.id -> Triple(sizeX, sizeY, sizeZ)
-            customSizes -> customSizeById[gameProfile.id]?.let { Triple(it.sizeX, it.sizeY, it.sizeZ) } ?: return
-            else -> return
+        if (!enabled) return
+        val id = state.getData(GAME_PROFILE_KEY)?.id ?: return
+        val x: Float
+        val y: Float
+        val z: Float
+        if (id == mc.player?.gameProfile?.id) {
+            x = sizeX; y = sizeY; z = sizeZ
+        } else {
+            if (!customSizes) return
+            val custom = customSizeById[id] ?: return
+            x = custom.sizeX; y = custom.sizeY; z = custom.sizeZ
         }
         if (x == 1f && y == 1f && z == 1f) return
         if (y < 0) matrix.translate(0f, y * 2, 0f)
