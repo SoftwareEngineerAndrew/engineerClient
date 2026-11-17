@@ -102,7 +102,7 @@
     "GamePerfRenderMixin",
     "ScreenTweaksHudMixin",
     "ScreenTweaksGameRendererMixin",
-    "ScreenTweaksOverlayMixin",
+    "ScreenEffectOverlayMixin",
     "ScreenTweaksInventoryEffectsMixin",
     "ScreenTweaksFogMixin",
     "ScreenTweaksLightmapMixin",

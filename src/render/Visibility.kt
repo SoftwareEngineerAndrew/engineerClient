@@ -282,8 +282,8 @@ object Visibility : Module(
     }
     @JvmStatic fun lavaAsWater() = enabled && lavaAsWater
     private var lavaShown = false
-    fun noWaterOverlay() = enabled && noWaterOverlay
-    fun noSuffocationOverlay() = enabled && noSuffocationOverlay
+    @JvmStatic fun drawsWaterOverlay() = !enabled || !noWaterOverlay
+    @JvmStatic fun drawsInWallOverlay() = !enabled || !noSuffocationOverlay
     fun hidePotionHud() = enabled && hidePotionHud
     fun hideInventoryEffects() = enabled && hideInventoryEffects
     fun noFog(): Boolean {
