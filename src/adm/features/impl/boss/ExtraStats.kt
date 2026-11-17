@@ -20,212 +20,188 @@ object ExtraStats {
         BOTH(personal = true, team = true)
     }
 
-    private val extraStats = PostDungeonStats()
+    private const val SHOW_EXTRA_STATS = "                             > EXTRA STATS <"
+    // Every stats line starts, after its indent, with one of these.
+    private const val LEADS = "☠T+MCS▬ADE"
 
-    private val terminalCompleteRegex = Regex("^\\s*☠ Defeated (.+) in 0?([\\dhms ]+?)\\s*(\\(NEW RECORD!\\))?$")
-    private val teamScoreRegex = Regex("^\\s*Team Score: (\\d+) \\((.{1,2})\\)\\s?(\\(NEW RECORD!\\))?$")
-    private val expRegex = Regex("^\\s*(\\+[\\d,.]+\\s?\\w+ Experience)\\s?(?:\\(.+\\))?$")
-    private val bitsRegex = Regex("^\\s*(\\+\\d+ Bits)$")
-    private val damageRegex = Regex("^\\s*(Total Damage as .+: ([\\d,.]+)\\s?(\\(NEW RECORD!\\))?)$")
-    private val healRegex = Regex("^\\s*(Ally Healing: ([\\d,.]+)\\s?(\\(NEW RECORD!\\))?)$")
-    private val enemyKillRegex = Regex("^\\s*(Enemies Killed: (\\d+)\\s?(\\(NEW RECORD!\\))?)$")
-    private val deathsRegex = Regex("^\\s*(Deaths: (\\d+))$")
-    private val secretsRegex = Regex("^\\s*(Secrets Found: (\\d+))$")
-    private val extraStatsRegex = Regex(" {29}> EXTRA STATS <")
+    private val defeated = Regex("^\\s*☠ Defeated (.+) in 0?([\\dhms ]+?)\\s*(\\(NEW RECORD!\\))?$")
+    private val teamScore = Regex("^\\s*Team Score: (\\d+) \\((.{1,2})\\)\\s?(\\(NEW RECORD!\\))?$")
+    private val experience = Regex("^\\s*(\\+[\\d,.]+\\s?\\w+ Experience)\\s?(?:\\(.+\\))?$")
+    private val bitsLine = Regex("^\\s*(\\+\\d+ Bits)$")
+    private val damageLine = Regex("^\\s*(Total Damage as .+: ([\\d,.]+)\\s?(\\(NEW RECORD!\\))?)$")
+    private val healLine = Regex("^\\s*(Ally Healing: ([\\d,.]+)\\s?(\\(NEW RECORD!\\))?)$")
+    private val killsLine = Regex("^\\s*(Enemies Killed: (\\d+)\\s?(\\(NEW RECORD!\\))?)$")
+    private val deathsLine = Regex("^\\s*(Deaths: (\\d+))$")
+    private val secretsLine = Regex("^\\s*(Secrets Found: (\\d+))$")
 
-    private val cancelRegexes = listOf(
-        Regex(" {29}> EXTRA STATS <"),
-        Regex("^\\s*☠ Defeated (.+) in 0?([\\dhms ]+?)\\s*(\\(NEW RECORD!\\))?$"),
-        Regex("^\\s*Team Score: \\d+ \\(.{1,2}\\)\\s?(?:\\(NEW RECORD!\\))?$"),
-        Regex("^\\s*(\\+[\\d,.]+\\s?\\w+ Experience)\\s?(?:\\(.+\\))?$"),
+    // Hidden but not read.
+    private val hiddenOnly = arrayOf(
         Regex("^\\s*(Master Mode)? ?(?:The)? Catacombs - (Entrance|Floor .{1,3})$"),
-        Regex("^\\s*Secrets Found: \\d+$"),
         Regex("^▬+$"),
-        Regex("^\\s*Total Damage as .+: [\\d,.]+\\s?(?:\\(NEW RECORD!\\))?$"),
-        Regex("^\\s*Ally Healing: [\\d,.]+\\s?(?:\\(NEW RECORD!\\))?$"),
         Regex("^\\s*\\+0 Experience \\(No Class Milestone Reached\\)$"),
         Regex("^\\s*The Catacombs - .+ Stats$"),
-        Regex("^\\s*Deaths: \\d+$"),
         Regex("^\\s*Master Mode Catacombs - .+ Stats$"),
         Regex("^\\s*Master Mode The Catacombs - .+ Stats$"),
-        Regex("^\\s*\\+(\\d+) Bits$"),
-        Regex("^\\s*Enemies Killed: \\d+\\s?(?:\\(NEW RECORD!\\))?$")
     )
+
+    private val run = RunStats()
 
     fun install() {
         on<MessageEvent.Chat> {
             if (!DungeonUtils.inDungeons || !ClearInfo.extraStatsOn) return@on
-
-            if (extraStatsRegex.matches(message)) return@on sendCommand("showextrastats")
-            if (cancelRegexes.any { it.matches(message) }) cancel()
-
-            terminalCompleteRegex.find(message)?.let {
-                extraStats.timePB = it.groupValues[3].isNotEmpty()
-                extraStats.bossKilled = it.groupValues[1]
-                return@on
-            }
-
-            teamScoreRegex.find(message)?.let {
-                extraStats.score = it.groupValues[1].toIntOrNull() ?: 0
-                extraStats.scorePB = it.groupValues[3].isNotEmpty()
-                extraStats.scoreLetter = it.groupValues[2]
-                return@on
-            }
-
-            expRegex.find(message)?.let {
-                extraStats.xp.add("§3${it.groupValues[1].replace("Experience", "EXP").replace("Catacombs", "Cata")}")
-                return@on
-            }
-
-            bitsRegex.find(message)?.let {
-                extraStats.bits = it.groupValues[1]
-                return@on
-            }
-
-            damageRegex.find(message)?.let {
-                extraStats.damagePB = it.groupValues[3].isNotEmpty()
-                extraStats.damage = formatNumber(it.groupValues[2]) + if (extraStats.damagePB) "(NEW PB!)" else ""
-                extraStats.combatStats.add("§e${it.groupValues[1]}")
-                return@on
-            }
-
-            healRegex.find(message)?.let {
-                extraStats.healPB = it.groupValues[3].isNotEmpty()
-                extraStats.heal = formatNumber(it.groupValues[2]) + if (extraStats.healPB) "(NEW PB!)" else ""
-                extraStats.combatStats.add("§a${it.groupValues[1]}")
-                return@on
-            }
-
-            enemyKillRegex.find(message)?.let {
-                extraStats.enemyKillPB = it.groupValues[3].isNotEmpty()
-                extraStats.enemyKill = (it.groupValues[2].toIntOrNull() ?: 0).toString() + if (extraStats.enemyKillPB) "(NEW PB!)" else ""
-                extraStats.combatStats.add(1, "§b${it.groupValues[1]}")
-                return@on
-            }
-
-            deathsRegex.find(message)?.let {
-                extraStats.deaths = it.groupValues[2].toIntOrNull() ?: 0
-                if (ClearInfo.teamStats.personal) extraStats.skillStats.add("§c${it.groupValues[1]}")
-                return@on
-            }
-
-            secretsRegex.find(message)?.let {
-                extraStats.secretsFound = it.groupValues[2].toIntOrNull() ?: 0
-                if (ClearInfo.teamStats.personal) extraStats.skillStats.add(0, "§b${it.groupValues[1]}")
-                if (ClearInfo.teamStats == TeamStats.BOTH) extraStats.skillStats.add("")
-                if (ClearInfo.teamStats.team) {
-                    extraStats.skillStats.add("§bTeam Secrets Found: ${DungeonUtils.secretCount}")
-                    extraStats.skillStats.add("§6Crypt: ${DungeonUtils.cryptCount}")
-                    extraStats.skillStats.add("§cTeam Deaths: ${DungeonUtils.deathCount}")
-                }
-                printEndStats()
-                return@on
-            }
+            if (message == SHOW_EXTRA_STATS) return@on sendCommand("showextrastats")
+            if (!mayBeStatsLine(message)) return@on
+            if (read(message)) cancel()
+            else for (r in hiddenOnly) if (r.matches(message)) return@on cancel()
         }
 
-        on<LevelEvent.Load> {
-            extraStats.reset()
-        }
+        on<LevelEvent.Load> { run.reset() }
         EventBus.subscribe(this)
     }
 
-    private fun printEndStats() {
-        val defeatedText = if (extraStats.bossKilled == null) "§c§lFAILED §a- §e${DungeonUtils.dungeonTime}"
-        else "§aDefeated §c${extraStats.bossKilled} §ain §e${DungeonUtils.dungeonTime}${if (extraStats.timePB) " §d§l(NEW RECORD!)" else ""}"
-
-        val message = Component.literal(getChatBreak())
-            .append("\n\n")
-            .append(getCenteredText((if (DungeonUtils.floor?.isMM == true) "§cMaster Mode" else "§cThe Catacombs") + " §r- §e${DungeonUtils.floor?.name}"))
-            .append("\n\n")
-            .append(getCenteredText(defeatedText))
-            .append("\n")
-            .append(getCenteredText("§aScore: §6${extraStats.score} §a(§b${extraStats.scoreLetter}§a)${if (extraStats.scorePB) " §d§l(NEW RECORD!)" else ""}${if (extraStats.bits != null && ClearInfo.showBits) "    §b${extraStats.bits}" else ""}"))
-            .append("\n")
-
-        val xpText = "${extraStats.xp.firstOrNull() ?: ""}${if (ClearInfo.showClassEXP) "  ${extraStats.xp.getOrNull(1) ?: ""}" else ""}"
-        message.append(
-            Component.literal(getCenteredText(xpText)).withStyle {
-                it.withClickEvent(ClickEvent.SuggestCommand(extraStats.xp.joinToString("\n")))
-                    .withHoverEvent(HoverEvent.ShowText(Component.literal(extraStats.xp.joinToString("\n"))))
-            }
-        ).append("\n")
-
-        if (ClearInfo.showCombatStats) {
-            message.append(
-                Component.literal(getCenteredText("§e${extraStats.damage}§r-§b${extraStats.enemyKill}§r-§a${extraStats.heal}")).withStyle {
-                    it.withClickEvent(ClickEvent.SuggestCommand(extraStats.combatStats.joinToString("\n")))
-                        .withHoverEvent(HoverEvent.ShowText(Component.literal(extraStats.combatStats.joinToString("\n"))))
-                }
-            ).append("\n")
+    // Java's \s: these six, nothing else.
+    private fun mayBeStatsLine(s: String): Boolean {
+        for (c in s) {
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\u000B' || c == '\u000C' || c == '\r') continue
+            return LEADS.indexOf(c) >= 0
         }
-
-        if (ClearInfo.teamStats != TeamStats.OFF) {
-            val statsText = when (ClearInfo.teamStats) {
-                TeamStats.PERSONAL -> "§b${extraStats.secretsFound}§r-§c${extraStats.deaths}"
-                TeamStats.TEAM -> "§b${DungeonUtils.secretCount}§r-§6${DungeonUtils.cryptCount}§r-§c${DungeonUtils.deathCount}"
-                TeamStats.BOTH -> "§b${extraStats.secretsFound}§r-§c${extraStats.deaths} §r/ §b${DungeonUtils.secretCount}§r-§6${DungeonUtils.cryptCount}§r-§c${DungeonUtils.deathCount}"
-                TeamStats.OFF -> ""
-            }
-            message.append(
-                Component.literal(getCenteredText(statsText)).withStyle {
-                    it.withClickEvent(ClickEvent.SuggestCommand(extraStats.skillStats.joinToString("\n")))
-                        .withHoverEvent(HoverEvent.ShowText(Component.literal(extraStats.skillStats.joinToString("\n"))))
-                }
-            ).append("\n")
-        }
-
-        if (ClearInfo.showTeammates) {
-            message.append(
-                getCenteredText(
-                    if (DungeonUtils.dungeonTeammatesNoSelf.isNotEmpty())
-                        DungeonUtils.dungeonTeammatesNoSelf.joinToString(separator = "§r, ") { "§${it.clazz.colorCode}${it.name}" }
-                    else "§3Solo"
-                )
-            ).append("\n")
-        }
-
-        message.append("\n").append(Component.literal(getChatBreak()))
-
-        modMessage(message, "")
+        return false
     }
 
-    private data class PostDungeonStats(
-        var score: Int = 0,
-        var scoreLetter: String? = null,
-        var bossKilled: String? = null,
-        var xp: MutableList<String> = mutableListOf(),
-        var timePB: Boolean = false,
-        var scorePB: Boolean = false,
-        var combatStats: MutableList<String> = mutableListOf(),
-        var damage: String? = "0",
-        var damagePB: Boolean = false,
-        var enemyKill: String? = "0",
-        var enemyKillPB: Boolean = false,
-        var heal: String? = "0",
-        var healPB: Boolean = false,
-        var skillStats: MutableList<String> = mutableListOf(),
-        var deaths: Int = 0,
-        var secretsFound: Int = 0,
+    private fun read(line: String): Boolean {
+        defeated.find(line)?.let {
+            run.timePB = it.groupValues[3].isNotEmpty()
+            run.bossKilled = it.groupValues[1]
+            return it.value.length == line.length
+        }
+        teamScore.find(line)?.let {
+            run.score = it.groupValues[1].toIntOrNull() ?: 0
+            run.scorePB = it.groupValues[3].isNotEmpty()
+            run.scoreLetter = it.groupValues[2]
+            return it.value.length == line.length
+        }
+        experience.find(line)?.let {
+            run.xp.add("§3${it.groupValues[1].replace("Experience", "EXP").replace("Catacombs", "Cata")}")
+            return it.value.length == line.length
+        }
+        bitsLine.find(line)?.let {
+            run.bits = it.groupValues[1]
+            return it.value.length == line.length
+        }
+        damageLine.find(line)?.let {
+            run.damage = formatNumber(it.groupValues[2]) + pb(it.groupValues[3])
+            run.combatStats.add("§e${it.groupValues[1]}")
+            return it.value.length == line.length
+        }
+        healLine.find(line)?.let {
+            run.heal = formatNumber(it.groupValues[2]) + pb(it.groupValues[3])
+            run.combatStats.add("§a${it.groupValues[1]}")
+            return it.value.length == line.length
+        }
+        killsLine.find(line)?.let {
+            run.enemyKill = (it.groupValues[2].toIntOrNull() ?: 0).toString() + pb(it.groupValues[3])
+            // after the damage line when Hypixel sent one
+            run.combatStats.add(minOf(1, run.combatStats.size), "§b${it.groupValues[1]}")
+            return it.value.length == line.length
+        }
+        deathsLine.find(line)?.let {
+            run.deaths = it.groupValues[2].toIntOrNull() ?: 0
+            if (ClearInfo.teamStats.personal) run.skillStats.add("§c${it.groupValues[1]}")
+            return it.value.length == line.length
+        }
+        secretsLine.find(line)?.let {
+            run.secretsFound = it.groupValues[2].toIntOrNull() ?: 0
+            val mode = ClearInfo.teamStats
+            if (mode.personal) run.skillStats.add(0, "§b${it.groupValues[1]}")
+            if (mode == TeamStats.BOTH) run.skillStats.add("")
+            if (mode.team) {
+                run.skillStats.add("§bTeam Secrets Found: ${DungeonUtils.secretCount}")
+                run.skillStats.add("§6Crypt: ${DungeonUtils.cryptCount}")
+                run.skillStats.add("§cTeam Deaths: ${DungeonUtils.deathCount}")
+            }
+            printSummary()
+            return it.value.length == line.length
+        }
+        return false
+    }
+
+    private fun pb(record: String) = if (record.isNotEmpty()) "(NEW PB!)" else ""
+
+    private fun withDetails(text: String, details: List<String>): Component {
+        val joined = details.joinToString("\n")
+        return Component.literal(getCenteredText(text)).withStyle {
+            it.withClickEvent(ClickEvent.SuggestCommand(joined)).withHoverEvent(HoverEvent.ShowText(Component.literal(joined)))
+        }
+    }
+
+    private fun printSummary() {
+        val floor = DungeonUtils.floor
+        val time = DungeonUtils.dungeonTime
+        val boss = run.bossKilled
+        val result = if (boss == null) "§c§lFAILED §a- §e$time"
+            else "§aDefeated §c$boss §ain §e$time${if (run.timePB) " §d§l(NEW RECORD!)" else ""}"
+        val bits = run.bits
+        val scoreText = "§aScore: §6${run.score} §a(§b${run.scoreLetter}§a)${if (run.scorePB) " §d§l(NEW RECORD!)" else ""}" +
+            if (bits != null && ClearInfo.showBits) "    §b$bits" else ""
+
+        val out = Component.literal(getChatBreak())
+            .append("\n\n")
+            .append(getCenteredText((if (floor?.isMM == true) "§cMaster Mode" else "§cThe Catacombs") + " §r- §e${floor?.name}"))
+            .append("\n\n")
+            .append(getCenteredText(result))
+            .append("\n")
+            .append(getCenteredText(scoreText))
+            .append("\n")
+
+        val xp = run.xp
+        out.append(withDetails("${xp.firstOrNull() ?: ""}${if (ClearInfo.showClassEXP) "  ${xp.getOrNull(1) ?: ""}" else ""}", xp)).append("\n")
+
+        if (ClearInfo.showCombatStats)
+            out.append(withDetails("§e${run.damage}§r-§b${run.enemyKill}§r-§a${run.heal}", run.combatStats)).append("\n")
+
+        val personal = "§b${run.secretsFound}§r-§c${run.deaths}"
+        val team = "§b${DungeonUtils.secretCount}§r-§6${DungeonUtils.cryptCount}§r-§c${DungeonUtils.deathCount}"
+        val statsText = when (ClearInfo.teamStats) {
+            TeamStats.OFF -> null
+            TeamStats.PERSONAL -> personal
+            TeamStats.TEAM -> team
+            TeamStats.BOTH -> "$personal §r/ $team"
+        }
+        if (statsText != null) out.append(withDetails(statsText, run.skillStats)).append("\n")
+
+        if (ClearInfo.showTeammates) {
+            val others = DungeonUtils.dungeonTeammatesNoSelf
+            out.append(getCenteredText(
+                if (others.isEmpty()) "§3Solo" else others.joinToString(separator = "§r, ") { "§${it.clazz.colorCode}${it.name}" }
+            )).append("\n")
+        }
+
+        out.append("\n").append(Component.literal(getChatBreak()))
+        modMessage(out, "")
+    }
+
+    private class RunStats {
+        var score = 0
+        var scoreLetter: String? = null
+        var bossKilled: String? = null
+        val xp = ArrayList<String>()
+        var timePB = false
+        var scorePB = false
+        val combatStats = ArrayList<String>()
+        var damage = "0"
+        var enemyKill = "0"
+        var heal = "0"
+        val skillStats = ArrayList<String>()
+        var deaths = 0
+        var secretsFound = 0
         var bits: String? = null
-    ) {
+
         fun reset() {
-            scoreLetter = null
-            bossKilled = null
-            secretsFound = 0
-            scorePB = false
-            timePB = false
-            xp.clear()
-            score = 0
-            deaths = 0
-            heal = "0"
-            healPB = false
-            damage = "0"
-            damagePB = false
-            enemyKill = "0"
-            enemyKillPB = false
-            bits = null
-            skillStats.clear()
-            combatStats.clear()
+            score = 0; scoreLetter = null; bossKilled = null
+            timePB = false; scorePB = false
+            xp.clear(); combatStats.clear(); skillStats.clear()
+            damage = "0"; enemyKill = "0"; heal = "0"
+            deaths = 0; secretsFound = 0; bits = null
         }
     }
 }
