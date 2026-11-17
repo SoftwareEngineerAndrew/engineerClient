@@ -3,7 +3,6 @@ package com.adm.features
 import com.mojang.blaze3d.platform.InputConstants
 import com.adm.clickgui.settings.SettingState
 import com.adm.AdmMod
-import com.adm.clickgui.HudLayer
 import com.adm.clickgui.settings.AlwaysActive
 import com.adm.clickgui.settings.DevModule
 import com.adm.clickgui.settings.Setting
@@ -128,7 +127,7 @@ abstract class Module(
         block: GuiGraphicsExtractor.(example: Boolean) -> Pair<Int, Int>
     ): HUDSetting {
         val element = HudElement(x, y, scale, !toggleable)
-        return HUDSetting(name, element, toggleable, desc, this) { example -> HudLayer.DrawnHudContent(element, example, block) }
+        return HUDSetting(name, element, toggleable, desc, this) {}.also { it.drawer = block }
     }
 
     private companion object {

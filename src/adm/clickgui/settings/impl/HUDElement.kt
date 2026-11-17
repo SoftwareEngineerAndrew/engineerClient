@@ -4,7 +4,6 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.adm.clickgui.settings.SettingState
 import com.adm.AdmMod.mc
-import com.mojang.blaze3d.platform.Window
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 open class HudElement(
@@ -13,94 +12,105 @@ open class HudElement(
     var scale: Float,
     enabled: Boolean = true,
 ) {
-    // Where it sits as a share of the screen, as ADM keeps it, so it stays put when the window or GUI scale changes.
-    // Until the window is known it holds pixels, turned into a share on first use.
-    private var fx = Double.NaN
-    private var fy = Double.NaN
-    private var px = x
-    private var py = y
+    // Kept as a share of the screen so the HUD stays put across window and GUI scale changes; pixels until the window has a size.
+    private var shareX = Double.NaN
+    private var shareY = Double.NaN
+    private var pixelX = x
+    private var pixelY = y
 
-    /** Module/setting name, set by its HUDSetting; how other HUDs link to this one. */
     var id = ""
 
-    /** The HUD this one is linked to: it then sits at an offset from it and moves with it. */
     var link: String? = null
         private set
-    private var lx = 0
-    private var ly = 0
-    private var resolving = false
+    private var linkDx = 0
+    private var linkDy = 0
+    private var anchor: HudElement? = null
+    private var anchorId: String? = null
+    private var walking = false
 
     fun parent(): HudElement? {
-        val id = link ?: return null
-        if (resolving) return null
-        return resolve(id)
+        val target = link ?: return null
+        if (walking) return null
+        if (anchorId != target) {
+            val found = resolve(target) ?: return null
+            anchor = found
+            anchorId = target
+        }
+        return anchor
     }
 
-    private inline fun <T> guarded(block: () -> T): T {
-        resolving = true
-        try { return block() } finally { resolving = false }
+    private inline fun <T> walk(block: () -> T): T {
+        walking = true
+        try {
+            return block()
+        } finally {
+            walking = false
+        }
     }
 
     fun linkTo(other: HudElement): Boolean {
-        var p: HudElement? = other
+        var step: HudElement? = other
         var depth = 0
-        while (p != null && depth++ < 64) {
-            if (p === this) return false
-            p = p.parent()
+        while (step != null && depth++ < 64) {
+            if (step === this) return false
+            step = step.parent()
         }
-        val cx = x; val cy = y
+        val ownX = x
+        val ownY = y
         link = other.id
-        lx = cx - other.x
-        ly = cy - other.y
+        linkDx = ownX - other.x
+        linkDy = ownY - other.y
         return true
     }
 
     fun unlink() {
-        val cx = x; val cy = y
+        val ownX = x
+        val ownY = y
         link = null
-        x = cx; y = cy
-    }
-
-    // 0 until the window exists and has a size.
-    private fun screenWidth(): Int {
-        val window: Window = mc.window ?: return 0
-        return if (window.guiScaledWidth > 0 && window.guiScaledHeight > 0) window.guiScaledWidth else 0
-    }
-
-    private fun screenHeight(): Int {
-        val window: Window = mc.window ?: return 0
-        return if (window.guiScaledWidth > 0 && window.guiScaledHeight > 0) window.guiScaledHeight else 0
+        x = ownX
+        y = ownY
     }
 
     var x: Int
         get() {
-            parent()?.let { p -> return guarded { p.x } + lx }
-            val w = screenWidth()
-            if (w == 0) return px
-            if (fx.isNaN()) fx = px.toDouble() / w
-            return Math.round(fx * w).toInt()
+            val p = parent()
+            if (p != null) return walk { p.x } + linkDx
+            val w = liveWidth()
+            if (w == 0) return pixelX
+            if (shareX.isNaN()) shareX = pixelX.toDouble() / w
+            return Math.round(shareX * w).toInt()
         }
         set(value) {
-            parent()?.let { p -> lx = value - guarded { p.x }; return }
-            px = value
-            val w = screenWidth()
-            fx = if (w == 0) Double.NaN else value.toDouble() / w
+            val p = parent()
+            if (p != null) {
+                linkDx = value - walk { p.x }
+                return
+            }
+            pixelX = value
+            val w = liveWidth()
+            shareX = if (w == 0) Double.NaN else value.toDouble() / w
         }
 
     var y: Int
         get() {
-            parent()?.let { p -> return guarded { p.y } + ly }
-            val h = screenHeight()
-            if (h == 0) return py
-            if (fy.isNaN()) fy = py.toDouble() / h
-            return Math.round(fy * h).toInt()
+            val p = parent()
+            if (p != null) return walk { p.y } + linkDy
+            val h = liveHeight()
+            if (h == 0) return pixelY
+            if (shareY.isNaN()) shareY = pixelY.toDouble() / h
+            return Math.round(shareY * h).toInt()
         }
         set(value) {
-            parent()?.let { p -> ly = value - guarded { p.y }; return }
-            py = value
-            val h = screenHeight()
-            fy = if (h == 0) Double.NaN else value.toDouble() / h
+            val p = parent()
+            if (p != null) {
+                linkDy = value - walk { p.y }
+                return
+            }
+            pixelY = value
+            val h = liveHeight()
+            shareY = if (h == 0) Double.NaN else value.toDouble() / h
         }
+
     var enabled: Boolean by SettingState(enabled)
 
     var width: Int = 0
@@ -111,27 +121,29 @@ open class HudElement(
     val scaledWidth: Int get() = (width * scale).toInt()
     val scaledHeight: Int get() = (height * scale).toInt()
 
-    /** What the content drew this frame; in the middle column [width] is the widest it has been (the example's in Edit HUD), so text centres in it. */
     var contentWidth: Int = 0
         private set
-    private var box = 0
+    private var widest = 0
 
-    /** How far right the content goes to sit in the middle of [width]. */
+    // A HUD in the middle third keeps the width of its widest frame (the editor's example sets it) and centres what it draws in it.
     val centerOffset: Int get() = if (inMiddle()) ((width - contentWidth) / 2).coerceAtLeast(0) else 0
 
     fun onMeasured(measuredWidth: Int, measuredHeight: Int, example: Boolean = false) {
         contentWidth = measuredWidth
-        box = if (example) measuredWidth else maxOf(box, measuredWidth)
-        width = if (measuredWidth == 0) 0 else if (inMiddle()) box else measuredWidth
+        widest = if (example) measuredWidth else maxOf(widest, measuredWidth)
+        width = when {
+            measuredWidth == 0 -> 0
+            inMiddle() -> widest
+            else -> measuredWidth
+        }
         height = measuredHeight
     }
 
-    /** Whether the HUD's middle is in the screen's middle third. */
     fun inMiddle(): Boolean {
-        val w = screenWidth()
+        val w = liveWidth()
         if (w == 0) return false
-        val mid = x + scaledWidth / 2
-        return mid > w / 3 && mid < w * 2 / 3
+        val middle = x + scaledWidth / 2
+        return middle > w / 3 && middle < w * 2 / 3
     }
 
     fun clampToScreen() {
@@ -139,29 +151,46 @@ open class HudElement(
         y = y.coerceIn(0, (mc.window.guiScaledHeight - scaledHeight).coerceAtLeast(0))
     }
 
-    fun write(): JsonObject =
-        JsonObject().apply {
-            addProperty("x", x)
-            addProperty("y", y)
-            if (!fx.isNaN()) addProperty("fx", fx)
-            if (!fy.isNaN()) addProperty("fy", fy)
-            addProperty("scale", scale)
-            addProperty("enabled", enabled)
-            link?.let { addProperty("link", it); addProperty("lx", lx); addProperty("ly", ly) }
+    private fun liveWidth(): Int {
+        val window = mc.window ?: return 0
+        val w = window.guiScaledWidth
+        return if (w > 0 && window.guiScaledHeight > 0) w else 0
+    }
+
+    private fun liveHeight(): Int {
+        val window = mc.window ?: return 0
+        val h = window.guiScaledHeight
+        return if (h > 0 && window.guiScaledWidth > 0) h else 0
+    }
+
+    fun write(): JsonObject {
+        val json = JsonObject()
+        json.addProperty("x", x)
+        json.addProperty("y", y)
+        if (!shareX.isNaN()) json.addProperty("fx", shareX)
+        if (!shareY.isNaN()) json.addProperty("fy", shareY)
+        json.addProperty("scale", scale)
+        json.addProperty("enabled", enabled)
+        val target = link
+        if (target != null) {
+            json.addProperty("link", target)
+            json.addProperty("lx", linkDx)
+            json.addProperty("ly", linkDy)
         }
+        return json
+    }
 
     fun read(element: JsonElement, toggleable: Boolean) {
         if (element !is JsonObject) return
-
-        element.get("x")?.asInt?.let { px = it; fx = Double.NaN }
-        element.get("y")?.asInt?.let { py = it; fy = Double.NaN }
-        element.get("fx")?.asDouble?.let { fx = it }
-        element.get("fy")?.asDouble?.let { fy = it }
+        element.get("x")?.asInt?.let { pixelX = it; shareX = Double.NaN }
+        element.get("y")?.asInt?.let { pixelY = it; shareY = Double.NaN }
+        element.get("fx")?.asDouble?.let { shareX = it }
+        element.get("fy")?.asDouble?.let { shareY = it }
         scale = element.get("scale")?.asFloat ?: scale
         enabled = !toggleable || element.get("enabled")?.asBoolean ?: enabled
         link = element.get("link")?.asString
-        lx = element.get("lx")?.asInt ?: 0
-        ly = element.get("ly")?.asInt ?: 0
+        linkDx = element.get("lx")?.asInt ?: 0
+        linkDy = element.get("ly")?.asInt ?: 0
     }
 
     companion object {
@@ -172,9 +201,10 @@ open class HudElement(
 }
 
 fun GuiGraphicsExtractor.drawAtHud(hud: HudElement, content: GuiGraphicsExtractor.() -> Unit) {
-    pose().pushMatrix()
-    pose().translate(hud.x.toFloat(), hud.y.toFloat())
-    pose().scale(hud.scale)
+    val pose = pose()
+    pose.pushMatrix()
+    pose.translate(hud.x.toFloat(), hud.y.toFloat())
+    pose.scale(hud.scale)
     content()
-    pose().popMatrix()
+    pose.popMatrix()
 }

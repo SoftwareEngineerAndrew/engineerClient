@@ -17,9 +17,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.client.input.MouseButtonEvent
-import net.minecraft.client.renderer.RenderPipelines
 import net.minecraft.network.chat.Component
-import net.minecraft.resources.Identifier
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sign
@@ -57,7 +55,6 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
     }
 
     override fun init() {
-        HudLayer.settle()
         for (setting in huds) setting.hud.clampToScreen()
     }
 
@@ -208,7 +205,7 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
             pose.popMatrix()
         }
 
-        graphics.blit(RenderPipelines.GUI_TEXTURED, CROSSHAIR, width / 2 - CROSSHAIR_SIZE, height / 2 - CROSSHAIR_SIZE, 0f, 0f, CROSSHAIR_SIZE * 2, CROSSHAIR_SIZE * 2, CROSSHAIR_SIZE * 2, CROSSHAIR_SIZE * 2)
+        drawCrosshair(graphics, width / 2, height / 2)
 
         val longest = INFO.maxOf { font.width(it) }
         for (i in INFO.indices) {
@@ -257,6 +254,17 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         }
     }
 
+    // On the grid's centre lines, which sit half a pixel back.
+    private fun drawCrosshair(g: GuiGraphicsExtractor, cx: Int, cy: Int) {
+        val pose = g.pose()
+        pose.pushMatrix()
+        pose.translate(-0.5f, -0.5f)
+        g.fill(cx - CROSSHAIR_SIZE, cy, cx + CROSSHAIR_SIZE + 1, cy + 1, WHITE)
+        g.fill(cx, cy - CROSSHAIR_SIZE, cx + 1, cy, WHITE)
+        g.fill(cx, cy + 1, cx + 1, cy + CROSSHAIR_SIZE + 1, WHITE)
+        pose.popMatrix()
+    }
+
     private fun drawLink(g: GuiGraphicsExtractor, x0: Int, y0: Int, x1: Int, y1: Int) {
         val steps = maxOf(kotlin.math.abs(x1 - x0), kotlin.math.abs(y1 - y0)) / 3
         for (i in 0..steps) {
@@ -296,7 +304,6 @@ class HudEditor(private val parent: Screen?) : Screen(Component.literal("HUD Edi
         @JvmStatic
         fun replace(screen: Screen?): Screen? = if (screen === HudManager) HudEditor(Minecraft.getInstance().gui.screen()) else screen
 
-        private val CROSSHAIR = Identifier.fromNamespaceAndPath("engineerclient", "hud/crosshair.png")
         private const val CROSSHAIR_SIZE = 4
         private const val GRID = 20
         private const val GRID_COLOR = 0xFF004444.toInt()

@@ -12,6 +12,7 @@ import com.adm.clickgui.ui.SWITCH_HEIGHT
 import com.adm.clickgui.ui.SettingRow
 import com.adm.clickgui.ui.Switch
 import com.adm.features.Module
+import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.resources.Identifier
 
 class HUDSetting(
@@ -32,6 +33,9 @@ class HUDSetting(
 
     val isEnabled: Boolean get() = module.enabled && value.enabled
     val hud get() = value
+
+    // Drawn straight from this when set, without composing [content].
+    internal var drawer: (GuiGraphicsExtractor.(example: Boolean) -> Pair<Int, Int>)? = null
 
     @Composable
     override fun Content() {
