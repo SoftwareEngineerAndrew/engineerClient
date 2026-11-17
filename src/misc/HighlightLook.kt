@@ -14,8 +14,8 @@ import com.adm.events.core.on
 import com.adm.features.impl.dungeon.Highlight
 import com.adm.utils.Color
 import com.adm.utils.NameMemo
-import com.adm.utils.render.drawFilledBox
-import com.adm.utils.render.drawWireFrameBox
+import com.adm.utils.render.BoxBatch
+import com.adm.utils.render.drawBoxes
 import com.adm.utils.renderBoundingBox
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.Minecraft
@@ -61,14 +61,15 @@ object HighlightLook {
         val outline = ColorSetting("$kind Outline", Color(outline), true, desc = "$kind outline colour.").withDependency { mobHighlight.value && style.value != Style.FILLED }
     }
 
-    private val colours = mapOf(
-        Kind.STAR to Colours("Starred", 0xFF00FF00.toInt(), 0xFF00FF00.toInt()),
-        Kind.TANK to Colours("Tank", 0xFFFF0000.toInt(), 0xFFFF0000.toInt()),
-        Kind.MINI to Colours("Miniboss", 0xFFFFFF00.toInt(), 0xFFFFFF00.toInt()),
-        Kind.FEL to Colours("Fel", 0xFF00FFFF.toInt(), 0xFF00FFFF.toInt()),
-        Kind.ASSASSIN to Colours("Shadow Assassin", 0xFF800080.toInt(), 0xFF800080.toInt()),
-        Kind.BAT to Colours("Bat", -14531329, -14531329),
-        Kind.WITHER to Colours("Wither", -2011028958, -2011028958),
+    // In Kind order.
+    private val colours = arrayOf(
+        Colours("Starred", 0xFF00FF00.toInt(), 0xFF00FF00.toInt()),
+        Colours("Tank", 0xFFFF0000.toInt(), 0xFFFF0000.toInt()),
+        Colours("Miniboss", 0xFFFFFF00.toInt(), 0xFFFFFF00.toInt()),
+        Colours("Fel", 0xFF00FFFF.toInt(), 0xFF00FFFF.toInt()),
+        Colours("Shadow Assassin", 0xFF800080.toInt(), 0xFF800080.toInt()),
+        Colours("Bat", -14531329, -14531329),
+        Colours("Wither", -2011028958, -2011028958),
     )
 
     private val BAT_HEALTHS = setOf(100f, 200f, 400f, 800f)
@@ -88,6 +89,7 @@ object HighlightLook {
     private var rescanning = false
 
     private val mc: Minecraft get() = Minecraft.getInstance()
+    private val batch = BoxBatch()
 
     private fun kindOf(name: String): Kind? = when {
         "King Midas" in name -> Kind.MINI
@@ -102,8 +104,8 @@ object HighlightLook {
     private val withermancers = NameMemo { "withermancer" in it.string.lowercase() }
 
     private fun isShadowAssassin(p: Player): Boolean =
-        p.uuid.version() == 2 && p.mainHandItem.customName?.string == "Silent Death" &&
-            p.getItemBySlot(EquipmentSlot.FEET).`is`(Items.LEATHER_BOOTS)
+        p.uuid.version() == 2 && p.getItemBySlot(EquipmentSlot.FEET).`is`(Items.LEATHER_BOOTS) &&
+            p.mainHandItem.customName?.string == "Silent Death"
 
     private fun box(e: Entity, kind: Kind): AABB {
         var box = e.renderBoundingBox
@@ -177,7 +179,7 @@ object HighlightLook {
 
     /** Adds the settings to ADM's Highlight; before SplitsLook.install, which re-reads ADM's config. */
     fun install() {
-        val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth, starWidth) + colours.values.flatMap { listOf(it.fill, it.outline) }
+        val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth, starWidth) + colours.flatMap { listOf(it.fill, it.outline) }
         for (s in all) Highlight.registerSetting(s)
 
         // Each entity is judged as it changes; every few ticks, everything again, for what came in before the dungeon or boss was known.
@@ -205,14 +207,17 @@ object HighlightLook {
             if (notWhileBlind.value && mc.player?.hasEffect(MobEffects.BLINDNESS) == true) return@on
             val filled = style.value != Style.OUTLINE
             val outlined = style.value != Style.FILLED
+            val width = outlineWidth.value.toFloat()
+            batch.clear()
             for ((e, kind) in found.values) {
                 if (!e.isAlive) continue
                 if (hideInvisible.value && e is Player && e.isInvisible) continue
-                val c = colours.getValue(kind)
+                val c = colours[kind.ordinal]
                 val b = box(e, kind)
-                if (filled) drawFilledBox(b, c.fill.value, depth = true)
-                if (outlined) drawWireFrameBox(b, c.outline.value, outlineWidth.value.toFloat(), depth = true)
+                if (filled) batch.filled(b, c.fill.value, depth = true)
+                if (outlined) batch.outline(b, c.outline.value, width, depth = true)
             }
+            drawBoxes(batch)
         }
 
         on<LevelEvent.Load> { found.clear(); claimedTags.clear(); pending.clear(); tagOf.clear() }
