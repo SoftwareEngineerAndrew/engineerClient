@@ -22,7 +22,7 @@ class PanesHandler : TerminalHandler(TerminalTypes.PANES) {
     override fun next(key: Int, button: Int) = when (key) { 1 -> 0; 0 -> 1; else -> key }
     override fun canClickShown(slot: Int, button: Int) = shown[slot] == 1
     override fun buildSolution(out: ArrayList<Int>) { for (i in 0 until area) if (shown[i] == 1) out += i }
-    override fun look(slot: Int) = if (shown.getOrNull(slot) == 1) Look(PANE) else null
+    override fun look(slot: Int) = if (shown.getOrNull(slot) == 1) cached(PANE) else null
 }
 
 class NumbersHandler : TerminalHandler(TerminalTypes.NUMBERS) {
@@ -47,9 +47,9 @@ class NumbersHandler : TerminalHandler(TerminalTypes.NUMBERS) {
     override fun look(slot: Int): Look? {
         val at = order.indexOf(slot)
         if (at < 0) return null
-        val text = if (!Terminals.numberText || orderOverride?.invoke() != null || (Terminals.hidesTerminalNumbers() && !Terminals.showsTerminalNumber(slot, order))) null
-            else shown[slot].toString()
-        return Look(if (at < 4) NUMBER_1 + at else NONE, text)
+        val kind = if (at < 4) NUMBER_1 + at else NONE
+        val hidden = !Terminals.numberText || orderOverride?.invoke() != null || (Terminals.hidesTerminalNumbers() && !Terminals.showsTerminalNumber(slot, order))
+        return if (hidden) cached(kind) else cached(kind, shown[slot])
     }
 
     companion object {
@@ -139,8 +139,8 @@ class RubixHandler(
     override fun look(slot: Int): Look? {
         val n = need(slot)
         if (n == 0) return null
-        if (route.isNotEmpty()) return Look(if (route[0] == slot) RUBIX_1 else RUBIX_2, n.toString())
-        return Look(when (n) { 1 -> RUBIX_1; 2 -> RUBIX_2; -1 -> RUBIX_M1; -2 -> RUBIX_M2; else -> if (n > 0) RUBIX_2 else RUBIX_M2 }, n.toString())
+        if (route.isNotEmpty()) return cached(if (route[0] == slot) RUBIX_1 else RUBIX_2, n)
+        return cached(when (n) { 1 -> RUBIX_1; 2 -> RUBIX_2; -1 -> RUBIX_M1; -2 -> RUBIX_M2; else -> if (n > 0) RUBIX_2 else RUBIX_M2 }, n)
     }
 
     private companion object {
@@ -170,7 +170,7 @@ class SelectHandler(color: DyeColor) : TerminalHandler(TerminalTypes.SELECT) {
     override fun next(key: Int, button: Int) = 0
     override fun canClickShown(slot: Int, button: Int) = shown[slot] == 1
     override fun buildSolution(out: ArrayList<Int>) { for (i in 0 until area) if (shown[i] == 1) out += i }
-    override fun look(slot: Int) = if (shown.getOrNull(slot) == 1) Look(SELECT) else null
+    override fun look(slot: Int) = if (shown.getOrNull(slot) == 1) cached(SELECT) else null
 }
 
 class StartsWithHandler(private val letter: String) : TerminalHandler(TerminalTypes.STARTS_WITH) {
@@ -182,7 +182,7 @@ class StartsWithHandler(private val letter: String) : TerminalHandler(TerminalTy
     override fun next(key: Int, button: Int) = 0
     override fun canClickShown(slot: Int, button: Int) = shown[slot] == 1
     override fun buildSolution(out: ArrayList<Int>) { for (i in 0 until area) if (shown[i] == 1) out += i }
-    override fun look(slot: Int) = if (shown.getOrNull(slot) == 1) Look(STARTS_WITH) else null
+    override fun look(slot: Int) = if (shown.getOrNull(slot) == 1) cached(STARTS_WITH) else null
 
     private companion object {
         val GLINT_ANYWAY by lazy { BuiltInRegistries.ITEM.filter { it.components().has(DataComponents.ENCHANTMENT_GLINT_OVERRIDE) }.toSet() + Items.GOLDEN_APPLE }
@@ -235,9 +235,9 @@ class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
         val row = slot / 9
         val col = slot % 9
         return when {
-            (row == 0 || row == 4) && col == column -> Look(MELODY_COLUMN)
-            slot == pointer -> Look(MELODY_POINTER)
-            slot == button && aligned() -> Look(MELODY_POINTER)
+            (row == 0 || row == 4) && col == column -> cached(MELODY_COLUMN)
+            slot == pointer -> cached(MELODY_POINTER)
+            slot == button && aligned() -> cached(MELODY_POINTER)
             else -> null
         }
     }

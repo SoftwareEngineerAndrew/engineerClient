@@ -84,6 +84,7 @@ abstract class TerminalHandler(val type: TerminalTypes) {
 
     /** The answer [newKey] for slot [i]: returns the latest answered click's seq, or -1. */
     private fun answer(i: Int, oldKey: Int, newKey: Int, updated: Boolean): Int {
+        if (pending.isEmpty()) return -1
         val mine = pending.filter { it.slot == i }
         if (mine.isEmpty()) return -1
         if (anyUpdateAnswers) {
@@ -190,6 +191,21 @@ abstract class TerminalHandler(val type: TerminalTypes) {
         const val RUBIX_1 = 3; const val RUBIX_2 = 4; const val RUBIX_M1 = 5; const val RUBIX_M2 = 6
         const val NUMBER_1 = 7; const val NUMBER_2 = 8; const val NUMBER_3 = 9; const val NUMBER_4 = 10
         const val MELODY_COLUMN = 11; const val MELODY_POINTER = 12; const val MELODY_LANE = 13
+
+        private const val KINDS = MELODY_LANE + 2
+        private const val NUMBER_OFFSET = 8
+        private const val NUMBERS = 80
+        // Looks are asked for per slot every frame, so the few there are get shared.
+        private val plain = Array(KINDS) { Look(it - 1) }
+        private val numbered = arrayOfNulls<Look>(KINDS * NUMBERS)
+
+        fun cached(kind: Int): Look = plain[kind + 1]
+
+        fun cached(kind: Int, n: Int): Look {
+            val i = (kind + 1) * NUMBERS + n + NUMBER_OFFSET
+            if (kind + 1 !in 0 until KINDS || n + NUMBER_OFFSET !in 0 until NUMBERS) return Look(kind, n.toString())
+            return numbered[i] ?: Look(kind, n.toString()).also { numbered[i] = it }
+        }
     }
 }
 
@@ -197,15 +213,19 @@ abstract class TerminalHandler(val type: TerminalTypes) {
 object ClickRtt {
     private val samples = LongArray(8)
     private var count = 0
+    private var median = 0L
 
-    fun sample(ns: Long) { samples[count++ % samples.size] = ns }
+    fun sample(ns: Long) {
+        samples[count++ % samples.size] = ns
+        val n = minOf(count, samples.size)
+        val sorted = samples.copyOf(n).also { it.sort() }
+        median = sorted[n / 2]
+    }
 
     fun timeoutNs(): Long {
         val fixed = Terminals.resyncTimeout
         if (fixed > 0) return fixed * 1_000_000L
         if (count == 0) return 600_000_000L
-        val n = minOf(count, samples.size)
-        val median = samples.copyOf(n).sorted()[n / 2]
         return (median * 2 + 100_000_000L).coerceIn(250_000_000L, 1_000_000_000L)
     }
 }
