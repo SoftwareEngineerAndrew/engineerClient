@@ -11,36 +11,17 @@ object CommandKeybinds : Module(
     description = "Various keybinds for common skyblock commands.",
     key = null
 ) {
-    private val pets by KeybindSetting("Pets", InputConstants.UNKNOWN, desc = "Opens the pets menu.").onPress {
-        if (!enabled || !LocationUtils.isInSkyblock) return@onPress
-        sendCommand("pets")
-    }
-    private val storage by KeybindSetting("Storage", InputConstants.UNKNOWN, desc = "Opens the storage menu.").onPress {
-        if (!enabled || !LocationUtils.isInSkyblock) return@onPress
-        sendCommand("storage")
-    }
-    private val armorSets by KeybindSetting("Armor Wardrobe", InputConstants.UNKNOWN, desc = "Opens the armor wardrobe menu.").onPress {
-        if (!enabled || !LocationUtils.isInSkyblock) return@onPress
-        sendCommand("armor")
-    }
-    private val equipmentSets by KeybindSetting("Equip Wardrobe", InputConstants.UNKNOWN, desc = "Opens the equipment wardrobe menu.").onPress {
-        if (!enabled || !LocationUtils.isInSkyblock) return@onPress
-        sendCommand("equipment")
-    }
-    private val loadouts by KeybindSetting("Loadouts", InputConstants.UNKNOWN, desc = "Opens the loadouts menu.").onPress {
-        if (!enabled || !LocationUtils.isInSkyblock) return@onPress
-        sendCommand("loadout")
-    }
-    private val stats by KeybindSetting("Stats", InputConstants.UNKNOWN, desc = "Opens the stats menu.").onPress {
-        if (!enabled || !LocationUtils.isInSkyblock) return@onPress
-        sendCommand("stats")
-    }
-    private val dhub by KeybindSetting("Dungeon Hub", InputConstants.UNKNOWN, desc = "Warps to the dungeon hub.").onPress {
-        if (!enabled || !LocationUtils.isInSkyblock) return@onPress
-        sendCommand("warp dungeon_hub")
-    }
-    private val potion by KeybindSetting("Potion Bag", InputConstants.UNKNOWN, desc = "Open the potion bag.").onPress {
-        if (!enabled || !LocationUtils.isInSkyblock) return@onPress
-        sendCommand("potionbag")
-    }
+    private fun bind(name: String, desc: String, command: String) =
+        KeybindSetting(name, InputConstants.UNKNOWN, desc = desc).onPress {
+            if (enabled && LocationUtils.isInSkyblock) sendCommand(command)
+        }
+
+    private val pets by bind("Pets", "Opens the pets menu.", "pets")
+    private val storage by bind("Storage", "Opens the storage menu.", "storage")
+    private val armorSets by bind("Armor Wardrobe", "Opens the armor wardrobe menu.", "armor")
+    private val equipmentSets by bind("Equip Wardrobe", "Opens the equipment wardrobe menu.", "equipment")
+    private val loadouts by bind("Loadouts", "Opens the loadouts menu.", "loadout")
+    private val stats by bind("Stats", "Opens the stats menu.", "stats")
+    private val dhub by bind("Dungeon Hub", "Warps to the dungeon hub.", "warp dungeon_hub")
+    private val potion by bind("Potion Bag", "Open the potion bag.", "potionbag")
 }
