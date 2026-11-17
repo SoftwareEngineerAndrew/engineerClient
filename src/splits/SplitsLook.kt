@@ -73,7 +73,13 @@ object SplitsLook {
             .associateWith { toggle("Kuudra $it", "Kuudra: the $it split.") }
     }
 
-    private fun strip(s: String) = s.replace(Regex("§."), "").trim()
+    private val colourCode = Regex("§.")
+    private val stripped = HashMap<String, String>()
+    private fun strip(s: String): String {
+        stripped[s]?.let { return it }
+        if (stripped.size >= 256) stripped.clear()
+        return s.replace(colourCode, "").trim().also { stripped[s] = it }
+    }
 
     private fun shownName(name: String): Boolean = when (name) {
         "Pace" -> showPace.value
@@ -311,7 +317,7 @@ object SplitsLook {
      * best (kept with the sub splits' bests), on M7 gold only.
      */
     private fun grade(name: String, ms: Long, ticks: Long, over: Boolean, master: Boolean): String? {
-        val id = SubSplitGrades.MAIN_SPLITS[name.replace(Regex("§."), "").trim()] ?: return null
+        val id = SubSplitGrades.MAIN_SPLITS[strip(name)] ?: return null
         val floor = if (master) "M7" else "F7"
         val value = SubSplitGrades.value(id, ms, ticks)
         DungeonSplits.recordBest(floor, id, value, over)

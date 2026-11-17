@@ -223,14 +223,16 @@ object SubSplitGrades {
     }
 
     /** Bests as stored in the config: `id=value` pairs, comma separated. */
-    /** Parsed once per text (the splits HUD asks for bests every frame); each caller gets its own copy to change. */
-    fun parseBests(text: String): MutableMap<String, Long> {
-        lastBests?.let { (t, m) -> if (t === text) return HashMap(m) }
+    fun parseBests(text: String): MutableMap<String, Long> = HashMap(bestsView(text))
+
+    /** Parsed once per text (the splits HUD asks for bests every frame); read only. */
+    fun bestsView(text: String): Map<String, Long> {
+        lastBests?.let { (t, m) -> if (t === text) return m }
         val m = text.split(',').mapNotNull { e ->
             val (k, v) = e.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
             v.trim().toLongOrNull()?.let { k.trim() to it }
         }.toMap(HashMap())
-        lastBests = text to HashMap(m)
+        lastBests = text to m
         return m
     }
     @Volatile private var lastBests: Pair<String, Map<String, Long>>? = null
