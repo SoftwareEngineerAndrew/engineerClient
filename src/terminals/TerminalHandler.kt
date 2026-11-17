@@ -48,8 +48,8 @@ abstract class TerminalHandler(val type: TerminalTypes) {
     var top = type.layout[0]; var left = type.layout[1]; var rows = type.layout[2]; var cols = type.layout[3]
         private set
 
-    /** Instant GUI: a terminal whose slots don't depend on each other is shown and clicked slot by slot as they arrive. */
-    val early get() = !ready && type.orderFree && Terminals.instantGui && Terminals.style == Terminals.Style.CUSTOM
+    /** Instant GUI: shown and clicked slot by slot as the items arrive (Rubix needs every pane to pick its color). */
+    val early get() = !ready && type.loadsEarly && Terminals.instantGui && Terminals.style == Terminals.Style.CUSTOM
 
     protected abstract fun key(item: ItemStack): Int
     /** The key a slot has after a click on it. */
@@ -137,7 +137,7 @@ abstract class TerminalHandler(val type: TerminalTypes) {
         for (i in 0 until area) shown[i] = if (done[i]) NONE else keys[i]
         for (p in pending) shown[p.slot] = next(shown[p.slot], p.button)
         solution.clear()
-        if (ready) buildSolution(solution)
+        if (ready || early) buildSolution(solution)
         clickedSlots.clear()
         for (p in pending) clickedSlots.add(p.slot to containerButton(p.button))
     }

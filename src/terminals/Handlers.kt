@@ -40,8 +40,26 @@ class NumbersHandler : TerminalHandler(TerminalTypes.NUMBERS) {
         order.clear()
         val forced = orderOverride?.invoke()
         if (forced != null) order += forced.filter { (shown.getOrNull(it) ?: 0) > 0 }
-        else (0 until area).filter { shown[it] > 0 }.sortedBy { shown[it] }.let(order::addAll)
+        else if (ready) (0 until area).filter { shown[it] > 0 }.sortedBy { shown[it] }.let(order::addAll)
+        else knownRun()
         out += order
+    }
+
+    /** Still filling: the numbers in order from 1 for as long as each one has arrived, red or already lime. */
+    private fun knownRun() {
+        val red = HashMap<Int, Int>()
+        val done = HashSet<Int>()
+        for (i in 0 until area) when {
+            shown[i] > 0 -> red[shown[i]] = i
+            keys[i] > 0 -> done += keys[i]
+            keys[i] == 0 -> done += items[i].count
+        }
+        var n = 1
+        while (true) {
+            val at = red[n]
+            if (at != null) order += at else if (n !in done) break
+            n++
+        }
     }
 
     override fun look(slot: Int): Look? {
