@@ -17,89 +17,108 @@ import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.world.item.DyeColor
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.chunk.ChunkAccess
 import net.minecraft.world.level.chunk.status.ChunkStatus
 
-/**
- * Doors read from the world ahead of time (dtMap's door scan, BSD 3-Clause) and kept hidden; once a room is on the map
- * its doors go on too, so the rooms behind them show as unknown without waiting for the map item.
- */
+/** Reads doors from the world before the map shows them, so the rooms behind a seen room's doors show as unknown early. */
 object DoorScan {
-    private const val W = 6
-    /** Each edge's door type by tile * 2 (+1 for the one below); null value: a wall. */
-    private val read = HashMap<Int, DoorType?>()
+    // edge e = tile * 2 (+1 for the edge below the tile, else the one to its right)
+    private const val EDGES = 72
+    private const val UNLOADED = -1
+    private val decided = BooleanArray(EDGES)
+    private val found = arrayOfNulls<DoorType>(EDGES)
+    @Volatile private var anyDoor = false
     private var ticks = 0
-
-    private val RED_TERRACOTTA by lazy { Blocks.DYED_TERRACOTTA.pick(DyeColor.RED) }
+    private val probe = BlockPos.MutableBlockPos()
+    private val bloodClay: Block by lazy { Blocks.DYED_TERRACOTTA.pick(DyeColor.RED) }
 
     init {
-        on<LevelEvent.Load> { read.clear() }
+        on<LevelEvent.Load> {
+            decided.fill(false)
+            found.fill(null)
+            anyDoor = false
+        }
         on<RoomEnterEvent> { reveal() }
         on<MapUpdateEvent> { reveal() }
         on<TickEvent.End> {
             if (!DungeonUtils.inDungeons || DungeonUtils.inBoss || ++ticks % 10 != 0) return@on
-            if (scan(mc.level ?: return@on)) reveal()
+            val level = mc.level ?: return@on
+            if (read(level)) reveal()
         }
     }
 
-    private fun scan(level: Level): Boolean {
-        var found = false
-        for (t in 0 until W * W) for (right in booleanArrayOf(true, false)) {
-            val x = t % W; val z = t / W
-            if (right && x + 1 >= W || !right && z + 1 >= W) continue
-            val key = t * 2 + if (right) 0 else 1
-            if (read.containsKey(key)) continue
+    private fun read(level: Level): Boolean {
+        var any = false
+        for (edge in 0 until EDGES) {
+            if (decided[edge]) continue
+            val t = edge shr 1
+            val below = edge and 1 == 1
+            val col = t % 6
+            val row = t / 6
+            if (if (below) row == 5 else col == 5) continue
             val a = DungeonScan.tiles[t].room
-            val b = DungeonScan.tiles[if (right) t + 1 else t + W].room
-            if (a == null && b == null || a != null && a === b) continue
-            val wx = x * 32 - 185 + if (right) 16 else 0
-            val wz = z * 32 - 185 + if (right) 0 else 16
-            val chunk = level.chunkSource.getChunk(wx shr 4, wz shr 4, ChunkStatus.FULL, false) ?: continue
-            val height = topY(chunk, wx, wz) ?: continue
-            read[key] = when {
-                height == 73 || height == 81 -> when (chunk.getBlockState(BlockPos(wx, 69, wz)).block) {
-                    Blocks.COAL_BLOCK -> if (a?.type == RoomType.FAIRY || b?.type == RoomType.FAIRY) DoorType.Fairy else DoorType.Wither
-                    RED_TERRACOTTA -> DoorType.Blood
-                    else -> if (a?.type == RoomType.FAIRY || b?.type == RoomType.FAIRY) DoorType.Fairy else DoorType.Normal
+            val b = DungeonScan.tiles[if (below) t + 6 else t + 1].room
+            if (a === b) continue
+
+            val x = col * 32 - 185 + if (below) 0 else 16
+            val z = row * 32 - 185 + if (below) 16 else 0
+            val chunk = level.chunkSource.getChunk(x shr 4, z shr 4, ChunkStatus.FULL, false) ?: continue
+            val top = surface(chunk, x, z)
+            if (top == UNLOADED) continue
+
+            val fairy = a?.type == RoomType.FAIRY || b?.type == RoomType.FAIRY
+            val type = when {
+                top == 73 || top == 81 -> {
+                    val gate = chunk.getBlockState(probe.set(x, 69, z)).block
+                    when {
+                        gate === bloodClay -> DoorType.Blood
+                        fairy -> DoorType.Fairy
+                        gate === Blocks.COAL_BLOCK -> DoorType.Wither
+                        else -> DoorType.Normal
+                    }
                 }
-                // the entrance's door sometimes has blocks above it
-                height > 73 && (a?.type == RoomType.ENTRANCE || b?.type == RoomType.ENTRANCE) -> DoorType.Normal
+                // blocks sometimes sit above the entrance's door
+                top > 73 && (a?.type == RoomType.ENTRANCE || b?.type == RoomType.ENTRANCE) -> DoorType.Normal
                 else -> null
             }
-            found = found || read[key] != null
+            found[edge] = type
+            decided[edge] = true
+            if (type != null) {
+                anyDoor = true
+                any = true
+            }
         }
-        return found
+        return any
     }
 
-    /** Puts on the map the doors of every room it shows. */
     private fun reveal() {
-        if (!DungeonUtils.inDungeons || read.isEmpty()) return
+        if (!DungeonUtils.inDungeons || !anyDoor) return
         var added = false
-        for ((key, type) in read) {
-            type ?: continue
-            val t = key / 2
-            val rotation = if (key % 2 == 0) DoorRotation.Horizontal else DoorRotation.Vertical
-            val n = t + rotation.offset.x + rotation.offset.z * W
-            if (!shown(DungeonScan.tiles[t].room) && !shown(DungeonScan.tiles[n].room)) continue
-            val position = IVec2(t % W, t / W)
-            val id = IVec2(-12 + 2 * position.x + rotation.offset.x, -12 + 2 * position.z + rotation.offset.z)
-            if (DungeonScan.doors.containsKey(id)) continue
-            DungeonScan.doors[id] = DungeonDoor(position, rotation, type, Colors.WHITE)
+        for (edge in 0 until EDGES) {
+            val type = found[edge] ?: continue
+            val t = edge shr 1
+            val rotation = if (edge and 1 == 0) DoorRotation.Horizontal else DoorRotation.Vertical
+            val step = rotation.offset
+            if (!visible(DungeonScan.tiles[t].room) && !visible(DungeonScan.tiles[t + step.x + step.z * 6].room)) continue
+            val col = t % 6
+            val row = t / 6
+            val key = IVec2(2 * col - 12 + step.x, 2 * row - 12 + step.z)
+            if (DungeonScan.doors.containsKey(key)) continue
+            DungeonScan.doors[key] = DungeonDoor(IVec2(col, row), rotation, type, Colors.WHITE)
             added = true
         }
         if (added) DungeonScan.updateViewableDoors()
     }
 
-    private fun shown(room: DungeonRoom?) = room?.isViewable == true
+    private fun visible(room: DungeonRoom?) = room != null && room.isViewable
 
-    /** The highest non-air block from y 160 down; null in a section not loaded yet. */
-    private fun topY(chunk: ChunkAccess, x: Int, z: Int): Int? {
-        val pos = BlockPos.MutableBlockPos()
+    private fun surface(chunk: ChunkAccess, x: Int, z: Int): Int {
         for (y in 160 downTo 11) {
-            val block = chunk.getBlockState(pos.set(x, y, z)).block
-            if (block == Blocks.VOID_AIR) return null
-            if (block != Blocks.AIR) return y
+            val block = chunk.getBlockState(probe.set(x, y, z)).block
+            if (block === Blocks.VOID_AIR) return UNLOADED
+            if (block !== Blocks.AIR) return y
         }
         return 0
     }

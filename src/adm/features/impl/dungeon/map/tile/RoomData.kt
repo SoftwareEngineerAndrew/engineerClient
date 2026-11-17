@@ -1,8 +1,8 @@
 package com.adm.features.impl.dungeon.map.tile
 
-import com.google.gson.annotations.SerializedName
 import com.adm.utils.IVec2
 import com.adm.utils.JsonResourceLoader
+import com.google.gson.annotations.SerializedName
 import net.minecraft.resources.Identifier
 
 @ConsistentCopyVisibility
@@ -16,18 +16,12 @@ data class RoomData private constructor(
     val trappedChests: Int,
 ) {
     companion object {
-        private val coreToRoomData: HashMap<Int, RoomData> = run {
-            val roomData: ArrayList<RoomData> = JsonResourceLoader.loadJson(Identifier.fromNamespaceAndPath("engineerclient", "rooms.json")) ?: arrayListOf()
-            val map: HashMap<Int, RoomData> = hashMapOf()
-            for (room in roomData) {
-                for (core in room.cores) {
-                    map[core] = room
-                }
-            }
-            map
+        private val byCore = HashMap<Int, RoomData>(1024).also { index ->
+            val all = JsonResourceLoader.loadJson<ArrayList<RoomData>>(Identifier.fromNamespaceAndPath("engineerclient", "rooms.json"))
+            all?.forEach { room -> for (core in room.cores) index[core] = room }
         }
 
-        fun getRoomData(core: Int): RoomData? = coreToRoomData[core]
+        fun getRoomData(core: Int): RoomData? = byCore[core]
     }
 }
 
@@ -44,8 +38,10 @@ enum class RoomType(val mapColor: Byte) {
     UNDISCOVERED(-1);
 
     companion object {
-        private val BY_COLOR = entries.associateBy { it.mapColor }
-        fun fromMapColor(color: Byte) = BY_COLOR[color]
+        // a later entry wins a shared colour, so 63 reads as RARE until the room's data says otherwise
+        private val byColor = arrayOfNulls<RoomType>(256).also { table -> for (t in entries) table[t.mapColor.toInt() and 0xFF] = t }
+
+        fun fromMapColor(color: Byte): RoomType? = byColor[color.toInt() and 0xFF]
     }
 }
 
@@ -81,10 +77,10 @@ enum class MapCheckmark {
 
     companion object {
         fun fromMapColor(color: Byte): MapCheckmark? = when (color.toInt()) {
-            34   -> WHITE
-            30   -> GREEN
-            18   -> RED
-            119  -> QUESTION_MARK
+            30 -> GREEN
+            34 -> WHITE
+            18 -> RED
+            119 -> QUESTION_MARK
             else -> null
         }
     }

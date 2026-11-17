@@ -9,11 +9,18 @@ class DungeonDoor(
     var type: DoorType,
     var color: Color,
 ) {
-    val originTileIndex = position.x + position.z * 6
-    val destinationTileIndex = position.x + rotation.offset.x + (position.z + rotation.offset.z) * 6
+    val originTileIndex: Int
+    val destinationTileIndex: Int
+    val worldX: Int
+    val worldZ: Int
 
-    val worldX = (position.x - 6) * 32 + 7 + rotation.offset.x * 16
-    val worldZ = (position.z - 6) * 32 + 7 + rotation.offset.z * 16
+    init {
+        val step = rotation.offset
+        originTileIndex = position.z * 6 + position.x
+        destinationTileIndex = originTileIndex + step.z * 6 + step.x
+        worldX = position.x * 32 - 185 + step.x * 16
+        worldZ = position.z * 32 - 185 + step.z * 16
+    }
 }
 
 enum class DoorType {
@@ -23,14 +30,14 @@ enum class DoorType {
     Fairy;
 
     companion object {
-        fun fromColor(color: Byte): DoorType {
-            return when (color) {
-                119.toByte() -> Wither
-                RoomType.BLOOD.mapColor -> Blood
-                RoomType.FAIRY.mapColor -> Fairy
-                else -> Normal
-            }
+        fun fromColor(color: Byte): DoorType = when (color) {
+            WITHER_COLOR -> Wither
+            RoomType.BLOOD.mapColor -> Blood
+            RoomType.FAIRY.mapColor -> Fairy
+            else -> Normal
         }
+
+        private const val WITHER_COLOR: Byte = 119
     }
 }
 

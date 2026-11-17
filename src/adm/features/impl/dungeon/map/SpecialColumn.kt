@@ -8,7 +8,6 @@ import com.adm.features.impl.dungeon.map.tile.DungeonRoom
 import com.adm.features.impl.dungeon.map.tile.RoomShape
 import com.adm.features.impl.dungeon.map.tile.RoomType
 import com.adm.utils.Color
-import com.adm.utils.equalsOneOf
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 
 object SpecialColumn {
@@ -18,9 +17,13 @@ object SpecialColumn {
     var discovered1x1s = 0
     var column = -1
 
+    internal const val CHAMPION = 0
+    internal const val TRAP = 1
+    internal const val PUZZLE = 2
+
     init {
         on<LevelEvent.Load> { unload() }
-        on<RoomEnterEvent> { room?.let { update() } }
+        on<RoomEnterEvent> { if (room != null) update() }
         on<MapUpdateEvent> { update() }
     }
 
@@ -32,132 +35,163 @@ object SpecialColumn {
         columnRoomCount = 0
     }
 
+    private val gridWidth: Int get() = if (DungeonScan.startX == 5) 6 else 5
+
     fun update() {
-        val size = if (DungeonScan.startX == 5) 6 else 5
+        val width = gridWidth
+        val grid = DungeonScan.tiles
+        for (i in grid.indices) {
+            val room = grid[i].room ?: continue
+            if (room.isKnown1x1 || room.isViewable) continue
+            val shape = room.data?.shape
+            if (shape != null && shape != RoomShape.OneByOne) continue
+            val x = i % 6
+            val z = i / 6
+            if (!nextToSeen(x, z, room)) continue
 
-        for ((position, room) in DungeonScan.tiles) {
-            if (room == null || room.isKnown1x1 || room.isViewable) continue
-            if (room.data?.shape.let { it != null && it != RoomShape.OneByOne }) continue
-            if (!touchesViewableRoom(position.x, position.z, room)) continue
-
-            if (position.x == column) {
-                if (!hasDoorToViewableRoom(position.x + position.z * 6, room)) continue
+            if (x == column) {
+                if (!doorToSeen(i, room)) continue
                 room.isKnown1x1 = true
                 discovered1x1s++
                 columnRoomCount++
-            } else if (isVisibleFromAllSides(position.x, position.z, size, room)) {
+            } else if (enclosed(x, z, width, room)) {
                 room.isKnown1x1 = true
                 discovered1x1s++
             }
         }
-        DungeonScan.rooms.filter { it.type.equalsOneOf(RoomType.CHAMPION, RoomType.TRAP, RoomType.PUZZLE) && it.isViewable }.forEach { openedSpecialRooms.add(it) }
 
-        discoveredFullSpecialColumn =
-            if (discovered1x1s == DungeonUtils.puzzleCount + 2) size
-            else if (column != -1) countDiscoveredInColumn(size) else 0
-    }
-
-    private fun touchesViewableRoom(x: Int, z: Int, self: DungeonRoom): Boolean =
-        DungeonScan.directions.any { (dx, dz) ->
-            val nx = x + dx
-            val nz = z + dz
-            nx in 0..5 && nz in 0..5 && DungeonScan.tiles[nx + nz * 6].room?.let { it !== self && it.isViewable } == true
+        for (room in DungeonScan.rooms) {
+            val t = room.type
+            if ((t == RoomType.CHAMPION || t == RoomType.TRAP || t == RoomType.PUZZLE) && room.isViewable) openedSpecialRooms.add(room)
         }
 
-    private fun hasDoorToViewableRoom(index: Int, self: DungeonRoom): Boolean =
-        DungeonScan.doors.values.any { door ->
+        discoveredFullSpecialColumn = when {
+            discovered1x1s == DungeonUtils.puzzleCount + 2 -> width
+            column != -1 -> unseenInColumn(width)
+            else -> 0
+        }
+    }
+
+    private fun seenOther(index: Int, self: DungeonRoom): Boolean {
+        val room = DungeonScan.tiles[index].room ?: return false
+        return room !== self && room.isViewable
+    }
+
+    private fun nextToSeen(x: Int, z: Int, self: DungeonRoom): Boolean {
+        val i = z * 6 + x
+        return (x < 5 && seenOther(i + 1, self)) || (x > 0 && seenOther(i - 1, self)) ||
+            (z < 5 && seenOther(i + 6, self)) || (z > 0 && seenOther(i - 6, self))
+    }
+
+    private fun doorToSeen(index: Int, self: DungeonRoom): Boolean {
+        for (door in DungeonScan.doors.values) {
             val other = when (index) {
                 door.originTileIndex -> door.destinationTileIndex
                 door.destinationTileIndex -> door.originTileIndex
-                else -> return@any false
+                else -> continue
             }
-            DungeonScan.tiles.getOrNull(other)?.room?.let { it !== self && it.isViewable } == true
+            if (other in 0 until 36 && seenOther(other, self)) return true
         }
-
-    private fun isPathHint(x: Int, z: Int) = DungeonScan.pathHints.any { it.position.x == x && it.position.z == z }
-
-    private fun checkSide(nx: Int, nz: Int, gridSize: Int, self: DungeonRoom, selfIsHint: Boolean): Boolean {
-        if (nx !in 0 until gridSize || nz !in 0 until 6) return true
-
-        val room = DungeonScan.tiles.getOrNull(nx + nz * 6)?.room ?: return false
-        return room !== self && (room.isViewable || (selfIsHint && isPathHint(nx, nz)))
+        return false
     }
 
-    private fun isVisibleFromAllSides(x: Int, z: Int, gridSize: Int, self: DungeonRoom): Boolean {
-        val selfIsHint = isPathHint(x, z)
-        val right = checkSide(x + 1, z, gridSize, self, selfIsHint)
-        val left = checkSide(x - 1, z, gridSize, self, selfIsHint)
-        val bottom = checkSide(x, z + 1, gridSize, self, selfIsHint)
-        val top = checkSide(x, z - 1, gridSize, self, selfIsHint)
-
-        val allKnown = right && left && bottom && top
-
-        return allKnown
+    private fun isHint(x: Int, z: Int): Boolean {
+        for (tile in DungeonScan.pathHints) if (tile.position.x == x && tile.position.z == z) return true
+        return false
     }
 
-    private fun countDiscoveredInColumn(zSize: Int): Int {
-        var discovered = zSize
-        for (z in 0 until zSize) {
-            val tile = DungeonScan.tiles[(column - 1) + z * 6]
-            val room = tile.room
-            if (room == null || (room.isViewable && room.type != RoomType.BLOOD) || room.isViewable)
-                discovered--
+    private fun closedSide(x: Int, z: Int, width: Int, self: DungeonRoom, selfHint: Boolean): Boolean {
+        if (x < 0 || x >= width || z < 0 || z >= 6) return true
+        val room = DungeonScan.tiles[z * 6 + x].room ?: return false
+        return room !== self && (room.isViewable || (selfHint && isHint(x, z)))
+    }
+
+    private fun enclosed(x: Int, z: Int, width: Int, self: DungeonRoom): Boolean {
+        val selfHint = isHint(x, z)
+        return closedSide(x + 1, z, width, self, selfHint) && closedSide(x - 1, z, width, self, selfHint) &&
+            closedSide(x, z + 1, width, self, selfHint) && closedSide(x, z - 1, width, self, selfHint)
+    }
+
+    private fun unseenInColumn(height: Int): Int {
+        var left = height
+        for (z in 0 until height) {
+            val room = DungeonScan.tiles[column - 1 + z * 6].room
+            if (room == null || room.isViewable) left--
         }
-        return discovered
+        return left
     }
 
     fun colorGuessForUnknown(tileX: Int): Array<Color> {
-        val specialColumnRoomCount = if (column != -1 && columnRoomCount == 0) 1 else columnRoomCount
-        val z = if (DungeonScan.startX == 5) 6 else 5
-
-        return if (tileX == column) guessSpecialTileColor(specialColumnRoomCount, z)
-        else guessNonSpecialTileColor(specialColumnRoomCount)
+        val code = guessCode(tileX == column)
+        return Array(guessCount(code)) { kindColor(guessKind(code, it)) }
     }
 
-    private val championPossible get() = openedSpecialRooms.none { it.type == RoomType.CHAMPION }
-    private val trapPossible get() = openedSpecialRooms.none { it.type == RoomType.TRAP }
-    private val puzzlePossible get() = openedSpecialRooms.count { it.type == RoomType.PUZZLE } < DungeonUtils.puzzleCount
+    internal fun guessCount(code: Int): Int = code ushr 6
 
-    private fun possible(vararg guesses: Color): Array<Color> {
-        val allowed = { color: Color ->
-            when (color) {
-                DungeonMap.championRoomColor -> championPossible
-                DungeonMap.trapRoomColor -> trapPossible
-                else -> puzzlePossible
+    internal fun guessKind(code: Int, i: Int): Int = (code ushr (i * 2)) and 3
+
+    internal fun kindColor(kind: Int): Color = when (kind) {
+        CHAMPION -> DungeonMap.championRoomColor
+        TRAP -> DungeonMap.trapRoomColor
+        else -> DungeonMap.puzzleRoomColor
+    }
+
+    // the types an unknown 1x1 may be, in order, two bits each, with the count from bit 6
+    internal fun guessCode(inColumn: Boolean): Int {
+        var champions = 0
+        var traps = 0
+        var puzzles = 0
+        var outsidePuzzles = 0
+        var outsideTrap = false
+        for (room in openedSpecialRooms) {
+            when (room.type) {
+                RoomType.CHAMPION -> champions++
+                RoomType.TRAP -> {
+                    traps++
+                    if (room.topLeft.x != column) outsideTrap = true
+                }
+                RoomType.PUZZLE -> {
+                    puzzles++
+                    if (room.topLeft.x != column) outsidePuzzles++
+                }
+                else -> {}
             }
         }
-        return guesses.filter(allowed).ifEmpty { listOf(DungeonMap.championRoomColor, DungeonMap.trapRoomColor, DungeonMap.puzzleRoomColor).filter(allowed) }
-            .ifEmpty { listOf(DungeonMap.puzzleRoomColor) }.toTypedArray()
-    }
+        val puzzleTotal = DungeonUtils.puzzleCount
+        val allowed = (if (champions == 0) 1 shl CHAMPION else 0) or
+            (if (traps == 0) 1 shl TRAP else 0) or
+            (if (puzzles < puzzleTotal) 1 shl PUZZLE else 0)
 
-    private fun guessSpecialTileColor(specialColumnRoomCount: Int, mapSizeZ: Int): Array<Color> {
-        val specialSize = mapSizeZ - discoveredFullSpecialColumn + specialColumnRoomCount
+        val inSpecial = if (column != -1 && columnRoomCount == 0) 1 else columnRoomCount
 
+        if (inColumn) {
+            val specialSize = gridWidth - discoveredFullSpecialColumn + inSpecial
+            val elsewhere = discovered1x1s - inSpecial
+            return when {
+                specialSize <= puzzleTotal || elsewhere >= 2 || outsideTrap -> narrow(allowed, PUZZLE)
+                specialSize == puzzleTotal + 1 || elsewhere == 1 -> narrow(allowed, TRAP, PUZZLE)
+                else -> narrow(allowed, CHAMPION, TRAP, PUZZLE)
+            }
+        }
         return when {
-            specialSize <= DungeonUtils.puzzleCount || discovered1x1s - specialColumnRoomCount >= 2 ->
-                possible(DungeonMap.puzzleRoomColor)
-
-            openedSpecialRooms.any { it.type == RoomType.TRAP && it.topLeft.x != column } ->
-                possible(DungeonMap.puzzleRoomColor)
-
-            specialSize == DungeonUtils.puzzleCount + 1 || discovered1x1s - specialColumnRoomCount == 1 ->
-                possible(DungeonMap.trapRoomColor, DungeonMap.puzzleRoomColor)
-
-            else -> possible(DungeonMap.championRoomColor, DungeonMap.trapRoomColor, DungeonMap.puzzleRoomColor)
+            inSpecial + outsidePuzzles == puzzleTotal -> narrow(allowed, CHAMPION, TRAP)
+            inSpecial == puzzleTotal + 1 -> narrow(allowed, CHAMPION)
+            else -> narrow(allowed, PUZZLE, TRAP, CHAMPION)
         }
     }
 
-    private fun guessNonSpecialTileColor(specialColumnRoomCount: Int): Array<Color> {
-        val nonSpecialPuzzles = openedSpecialRooms.count { it.type == RoomType.PUZZLE && it.topLeft.x != column }
+    private fun narrow(allowed: Int, a: Int, b: Int = -1, c: Int = -1): Int {
+        val wanted = pack(allowed, a, b, c)
+        if (wanted ushr 6 != 0) return wanted
+        val any = pack(allowed, CHAMPION, TRAP, PUZZLE)
+        return if (any ushr 6 != 0) any else (1 shl 6) or PUZZLE
+    }
 
-        return when {
-            specialColumnRoomCount + nonSpecialPuzzles == DungeonUtils.puzzleCount ->
-                possible(DungeonMap.championRoomColor, DungeonMap.trapRoomColor)
+    private fun pack(allowed: Int, a: Int, b: Int, c: Int): Int = append(allowed, append(allowed, append(allowed, 0, a), b), c)
 
-            specialColumnRoomCount == DungeonUtils.puzzleCount + 1 ->
-                possible(DungeonMap.championRoomColor)
-
-            else -> possible(DungeonMap.puzzleRoomColor, DungeonMap.trapRoomColor, DungeonMap.championRoomColor)
-        }
+    private fun append(allowed: Int, code: Int, kind: Int): Int {
+        if (kind < 0 || allowed and (1 shl kind) == 0) return code
+        val n = code ushr 6
+        return (code and 63) or (kind shl (n * 2)) or ((n + 1) shl 6)
     }
 }

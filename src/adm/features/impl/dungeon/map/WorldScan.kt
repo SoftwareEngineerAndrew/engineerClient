@@ -12,123 +12,116 @@ import com.adm.features.impl.dungeon.map.tile.RoomShape
 import com.adm.features.impl.render.ClickGUIModule
 import com.adm.utils.IVec2
 import com.adm.utils.devMessage
-import com.adm.utils.equalsOneOf
 import com.adm.utils.skyblock.Island
 import com.adm.utils.skyblock.LocationUtils
 import com.adm.utils.skyblock.dungeon.DungeonUtils
-import com.adm.utils.toIVec2
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents
+import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.LevelChunk
+import java.util.concurrent.ConcurrentHashMap
 
 object WorldScan {
 
     var currentRoom: DungeonRoom? = null
         private set
 
-    private val dataToRoom = HashMap<RoomData, DungeonRoom>()
-    private val chunksToScan = HashSet<IVec2>()
+    private const val UNMAPPED_CORE = -318865360
+
+    private val roomsByData = HashMap<RoomData, DungeonRoom>()
+    private val pending = HashSet<IVec2>()
+    private val blockNames = ConcurrentHashMap<Block, String>()
 
     init {
         on<LevelEvent.Load> {
-            dataToRoom.clear()
-            chunksToScan.clear()
+            roomsByData.clear()
+            pending.clear()
             currentRoom = null
         }
 
-        on<TickEvent.End> {
-            val player = mc.player ?: return@on
-
-            if (!DungeonUtils.inDungeons || DungeonUtils.inBoss) {
-                if (currentRoom != null) {
-                    currentRoom = null
-                    RoomEnterEvent(null).postAndCatch()
-                }
-                return@on
-            }
-
-            for (room in DungeonScan.rooms) {
-                if (room.shape != RoomShape.OneByOne) continue
-                if (room.rotation != null && room.clayPos != null) continue
-                if (room.highestBlock != null) room.get1x1Rotation()
-            }
-
-            val tileX = (player.blockX + 201) shr 5
-            val tileZ = (player.blockZ + 201) shr 5
-            if (tileX !in 0..5 || tileZ !in 0..5) return@on
-
-            DungeonScan.tiles[tileX + tileZ * 6].room?.let { room ->
-                if (room == currentRoom || room.rotation == null || room.clayPos == null || room.highestBlock == null) return@on
-                if (player.blockY > room.highestBlock!! - 10 && !LocationUtils.isCurrentArea(Island.SinglePlayer)) return@on
-
-                currentRoom = room
-                room.walkedInto = true
-                RoomEnterEvent(room).postAndCatch()
-                devMessage("${room.data?.name ?: room.type} - ${room.rotation} || clay: ${room.clayPos}")
-            }
-        }
+        on<TickEvent.End> { tick() }
 
         ClientChunkEvents.CHUNK_LOAD.register { _, chunk ->
-            if (!DungeonUtils.inDungeons) chunksToScan.add(IVec2(chunk.pos.x, chunk.pos.z))
-            else scanChunk(chunk)
+            if (DungeonUtils.inDungeons) scan(chunk) else pending.add(IVec2(chunk.pos.x, chunk.pos.z))
         }
 
         ClientChunkEvents.CHUNK_UNLOAD.register { _, chunk ->
-            if (!DungeonUtils.inDungeons) chunksToScan.remove(IVec2(chunk.pos.x, chunk.pos.z))
+            if (!DungeonUtils.inDungeons) pending.remove(IVec2(chunk.pos.x, chunk.pos.z))
         }
 
         on<LocationChangeEvent> {
             if (DungeonUtils.inDungeons) {
                 val level = mc.level ?: return@on
-                for (position in chunksToScan) scanChunk(level.getChunk(position.x, position.z))
+                for (pos in pending) scan(level.getChunk(pos.x, pos.z))
             }
-            chunksToScan.clear()
+            pending.clear()
         }
     }
 
-    private fun scanChunk(chunk: LevelChunk) {
-        val chunkPosition = chunk.pos.toIVec2()
-        val columnEven = chunkPosition.z % 2 == 0
-        val rowEven = chunkPosition.x % 2 == 0
-
-        if (chunkPosition.x in -12..-2 && chunkPosition.z in -12..-2) {
-            if (rowEven && columnEven) {
-                val tilePos = (chunkPosition / 2) + 6
-                val tile = DungeonScan.tiles.getOrNull(tilePos.x + tilePos.z * 6)
-                if (tile?.room?.data == null) scanRoom(chunk, chunkPosition)
+    private fun tick() {
+        val player = mc.player ?: return
+        if (!DungeonUtils.inDungeons || DungeonUtils.inBoss) {
+            if (currentRoom != null) {
+                currentRoom = null
+                RoomEnterEvent(null).postAndCatch()
             }
+            return
         }
+
+        val rooms = DungeonScan.rooms
+        for (i in 0 until rooms.size) {
+            val room = rooms[i]
+            if (room.shape == RoomShape.OneByOne && (room.rotation == null || room.clayPos == null) && room.highestBlock != null) room.get1x1Rotation()
+        }
+
+        val col = (player.blockX + 201) shr 5
+        val row = (player.blockZ + 201) shr 5
+        if (col !in 0..5 || row !in 0..5) return
+        val room = DungeonScan.tiles[row * 6 + col].room ?: return
+        if (room === currentRoom || room.rotation == null || room.clayPos == null) return
+        val top = room.highestBlock ?: return
+        if (player.blockY > top - 10 && !LocationUtils.isCurrentArea(Island.SinglePlayer)) return
+
+        currentRoom = room
+        room.walkedInto = true
+        RoomEnterEvent(room).postAndCatch()
+        devMessage("${room.data?.name ?: room.type} - ${room.rotation} || clay: ${room.clayPos}")
     }
 
-    private fun scanRoom(chunk: LevelChunk, chunkPosition: IVec2) {
-        val (core, highestBlock) = getRoomCore(chunk, (chunkPosition * 16) + 7)
-        val data = RoomData.getRoomData(core) ?: run {
-            if (core == -318865360) return
-            else return devMessage("Unknown room data for core: $core $chunkPosition")
+    private fun scan(chunk: LevelChunk) {
+        val cx = chunk.pos.x
+        val cz = chunk.pos.z
+        if (cx !in -12..-2 || cz !in -12..-2 || cx and 1 != 0 || cz and 1 != 0) return
+        val tile = DungeonScan.tiles[(cz / 2 + 6) * 6 + cx / 2 + 6]
+        if (tile.room?.data == null) identify(chunk, tile.position, IVec2(cx * 16 + 7, cz * 16 + 7))
+    }
+
+    private fun identify(chunk: LevelChunk, tilePos: IVec2, column: IVec2) {
+        val (core, top) = getRoomCore(chunk, column)
+        val data = RoomData.getRoomData(core)
+        if (data == null) {
+            if (core != UNMAPPED_CORE) devMessage("Unknown room data for core: $core ${IVec2(chunk.pos.x, chunk.pos.z)}")
+            return
         }
 
-        if (ClickGUIModule.dungeonCoresLogging) mc.execute { DungeonScan.recordRoomCore(data.name, core, getRoomCoreBlocks(chunk, (chunkPosition * 16) + 7)) }
+        if (ClickGUIModule.dungeonCoresLogging) mc.execute { DungeonScan.recordRoomCore(data.name, core, getRoomCoreBlocks(chunk, column)) }
 
-        val tilePosition = (chunkPosition / 2) + 6
-        val tile = DungeonScan.tiles.getOrNull(tilePosition.x + (tilePosition.z * 6)) ?: return
-
-        val room = dataToRoom.getOrPut(data) {
-            val existingMapRoom = tile.room
-            if (existingMapRoom != null) {
-                existingMapRoom.data = data
-                existingMapRoom.type = data.type
-                existingMapRoom
-            } else DungeonRoom(data.type, tile.position, data).also { DungeonScan.rooms.add(it) }
+        val tile = DungeonScan.tiles[tilePos.z * 6 + tilePos.x]
+        val room = roomsByData.getOrPut(data) {
+            tile.room?.also {
+                it.data = data
+                it.type = data.type
+            } ?: DungeonRoom(data.type, tilePos, data).also { DungeonScan.rooms.add(it) }
         }
 
         if (tile.room !== room) {
-            room.highestBlock = highestBlock
+            room.highestBlock = top
             tile.room = room
             room.addSegment(tile)
         } else if (room.highestBlock == null) {
-            room.highestBlock = highestBlock
-            if (room.tiles.size == data.shape.tileAmount) room.inferLayout(highestBlock)
+            room.highestBlock = top
+            if (room.tiles.size == data.shape.tileAmount) room.inferLayout(top)
         }
 
         if (room.data == null) {
@@ -139,51 +132,48 @@ object WorldScan {
         mc.execute { DungeonScan.refresh() }
     }
 
-    private val stringBuilder = StringBuilder(1024)
-
     fun getRoomCore(chunk: LevelChunk, position: IVec2): Pair<Int, Int> {
-        stringBuilder.setLength(0)
-
-        var foundHighest = false
-        var highestBlock = 0
-        var bedrock = 0
+        // the String.hashCode of the column written out (block names, '0' for skipped air), without building the string
+        var hash = 0
+        var top = 0
+        var started = false
+        var bedrockRun = 0
+        val x = position.x
+        val z = position.z
 
         for (y in 140 downTo 12) {
-            val blockState = chunk.getBlockState(position.x, y, position.z)
-
-            if (!foundHighest) {
-                if (!blockState.isAir && blockState.block !== Blocks.GOLD_BLOCK) {
-                    foundHighest = true
-                    highestBlock = y
-                } else stringBuilder.append('0')
-            }
-
-            if (foundHighest) {
-                if (blockState.isAir && bedrock >= 2 && y < 69) {
-                    repeat(y - 11) { stringBuilder.append('0') }
-                    break
+            val state = chunk.stateAt(x, y, z)
+            val block = state.block
+            if (!started) {
+                if (state.isAir || block === Blocks.GOLD_BLOCK) {
+                    hash = 31 * hash + '0'.code
+                    continue
                 }
-                if (blockState.block === Blocks.BEDROCK) bedrock++
-                else {
-                    bedrock = 0
-                    if (blockState.block.equalsOneOf(Blocks.OAK_PLANKS, Blocks.TRAPPED_CHEST, Blocks.CHEST)) continue
-                }
-                stringBuilder.append(blockState.block)
+                started = true
+                top = y
             }
+            if (state.isAir && bedrockRun >= 2 && y < 69) {
+                repeat(y - 11) { hash = 31 * hash + '0'.code }
+                break
+            }
+            if (block === Blocks.BEDROCK) bedrockRun++
+            else {
+                bedrockRun = 0
+                if (block === Blocks.OAK_PLANKS || block === Blocks.TRAPPED_CHEST || block === Blocks.CHEST) continue
+            }
+            val name = blockNames.getOrPut(block) { block.toString() }
+            for (c in name) hash = 31 * hash + c.code
         }
-
-        return stringBuilder.toString().hashCode() to highestBlock
+        return hash to top
     }
 
     fun getRoomCoreBlocks(chunk: LevelChunk, position: IVec2): List<String> =
-        (160 downTo 12).map { y -> chunk.getBlockState(position.x, y, position.z).block.descriptionId }
+        (160 downTo 12).map { y -> chunk.stateAt(position.x, y, position.z).block.descriptionId }
 
-    private fun LevelChunk.getBlockState(x: Int, y: Int, z: Int): BlockState {
-        val sectionIndex = getSectionIndex(y)
-        if (sectionIndex >= 0 && sectionIndex < sections.size) {
-            val section = sections[sectionIndex]
-            if (!section.hasOnlyAir()) return section.getBlockState(x and 15, y and 15, z and 15)
-        }
-        return Blocks.AIR.defaultBlockState()
+    private fun LevelChunk.stateAt(x: Int, y: Int, z: Int): BlockState {
+        val index = getSectionIndex(y)
+        if (index < 0 || index >= sections.size) return Blocks.AIR.defaultBlockState()
+        val section = sections[index]
+        return if (section.hasOnlyAir()) Blocks.AIR.defaultBlockState() else section.getBlockState(x and 15, y and 15, z and 15)
     }
 }

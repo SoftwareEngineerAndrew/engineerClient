@@ -2,9 +2,14 @@ package com.adm.features.impl.dungeon.map.tile
 
 import com.adm.AdmMod.mc
 import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
-import com.adm.utils.*
+import com.adm.utils.IVec2
+import com.adm.utils.modMessage
+import com.adm.utils.rotateAroundNorth
+import com.adm.utils.rotateToNorth
+import com.adm.utils.sortKey
 import net.minecraft.core.BlockPos
 import net.minecraft.world.item.DyeColor
+import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.AABB
 
@@ -14,7 +19,7 @@ class DungeonRoom(var type: RoomType, initialPosition: IVec2, var data: RoomData
     var rotation: RoomRotation? = null
         set(value) {
             field = value
-            recalculateCenter()
+            placeCenter()
         }
 
     var shape: RoomShape = RoomShape.OneByOne
@@ -40,137 +45,76 @@ class DungeonRoom(var type: RoomType, initialPosition: IVec2, var data: RoomData
     val name: String? get() = data?.name
 
     fun addSegment(segment: DungeonTile) {
-        if (!tiles.contains(segment.position)) {
-            tiles.add(segment.position)
-            topLeft = IVec2(tiles.minOf { it.x }, tiles.minOf { it.z })
-            highestBlock?.let { if (tiles.size == data?.shape?.tileAmount) inferLayout(it) }
-            recalculateCenter()
+        val pos = segment.position
+        for (i in tiles.indices) if (tiles[i] == pos) return
+        tiles.add(pos)
+        var minX = pos.x
+        var minZ = pos.z
+        for (t in tiles) {
+            if (t.x < minX) minX = t.x
+            if (t.z < minZ) minZ = t.z
         }
-    }
-
-    private fun recalculateCenter() {
-        rotation?.let { rot ->
-            val (offX, offZ) = when (shape) {
-                RoomShape.OneByOne -> 0 to 0
-                RoomShape.TwoByTwo -> 10 to 10
-                RoomShape.L -> if (rot == RoomRotation.NORTH || rot == RoomRotation.WEST) 10 to 0 else 10 to 20
-                else -> {
-                    val span = (shape.tileAmount - 1) * 10
-                    if (rot == RoomRotation.SOUTH) span to 0 else 0 to span
-                }
-            }
-            center = IVec2(topLeft.x * 20 + 8 + offX, topLeft.z * 20 + 8 + offZ)
-        } ?: run {
-            val anchor = tiles.minByOrNull { it.sortKey } ?: return
-            center = IVec2(anchor.x * 20 + 8, anchor.z * 20 + 8)
-        }
+        topLeft = IVec2(minX, minZ)
+        val height = highestBlock
+        if (height != null && tiles.size == data?.shape?.tileAmount) inferLayout(height)
+        placeCenter()
     }
 
     fun inferLayoutFromMap() {
-        val minX = tiles.minOf { it.x }
-        val minZ = tiles.minOf { it.z }
-        val maxX = tiles.maxOf { it.x }
-        val maxZ = tiles.maxOf { it.z }
-
+        if (tiles.isEmpty()) return
+        var minX = Int.MAX_VALUE; var minZ = Int.MAX_VALUE
+        var maxX = Int.MIN_VALUE; var maxZ = Int.MIN_VALUE
+        for (t in tiles) {
+            if (t.x < minX) minX = t.x
+            if (t.x > maxX) maxX = t.x
+            if (t.z < minZ) minZ = t.z
+            if (t.z > maxZ) maxZ = t.z
+        }
+        val square = maxX - minX == 1 && maxZ - minZ == 1
         shape = when (tiles.size) {
-            1    -> RoomShape.OneByOne
-            2    -> RoomShape.TwoByOne
-            3    -> if ((maxX - minX) == 1 && (maxZ - minZ) == 1) RoomShape.L else RoomShape.ThreeByOne
-            4    -> if ((maxX - minX) == 1 && (maxZ - minZ) == 1) RoomShape.TwoByTwo else RoomShape.FourByOne
+            2 -> RoomShape.TwoByOne
+            3 -> if (square) RoomShape.L else RoomShape.ThreeByOne
+            4 -> if (square) RoomShape.TwoByTwo else RoomShape.FourByOne
             else -> RoomShape.OneByOne
         }
-
-        resolveGeometryRotation()?.let { rotation = it }
+        orientation()?.let { rotation = it }
     }
 
     fun inferLayout(highestBlock: Int) {
-        val roomData = data ?: return
-
-        if (applyFairyFallback(highestBlock)) return
-
-        shape = roomData.shape
-
+        val known = data ?: return
+        if (fairyLayout(highestBlock)) return
+        shape = known.shape
         if (shape == RoomShape.OneByOne) {
             get1x1Rotation()
             return
         }
-
-        val rot = resolveGeometryRotation()
-        val pos = rot?.let { resolveClayPos(it, highestBlock) }
-
-        if (rot == null || pos == null) {
+        val rot = orientation()
+        val clay = rot?.let { claySpot(it, highestBlock) }
+        if (rot == null || clay == null) {
             modMessage("Failed to resolve geometry for ${data?.name ?: type} at $topLeft with tiles $tiles")
             return
         }
-
         rotation = rot
-        clayPos = pos
-    }
-
-    private fun resolveGeometryRotation(): RoomRotation? {
-        val bottomRight = tiles.maxByOrNull { it.sortKey } ?: return null
-
-        return if (shape == RoomShape.L) {
-            val other = tiles.find { it != topLeft && it != bottomRight } ?: return null
-            when {
-                topLeft.x == bottomRight.x -> RoomRotation.EAST
-                topLeft.z == bottomRight.z -> RoomRotation.WEST
-                other.x == topLeft.x -> RoomRotation.SOUTH
-                else -> RoomRotation.NORTH
-            }
-        } else {
-            if (topLeft.x == bottomRight.x) RoomRotation.WEST else RoomRotation.SOUTH
-        }
-    }
-
-    private fun resolveClayPos(rotation: RoomRotation, height: Int): BlockPos? {
-        val bottomRight = tiles.maxByOrNull { it.sortKey } ?: return null
-
-        val (tlX, tlZ) = getRealPosition(topLeft.x, topLeft.z)
-        val (brX, brZ) = getRealPosition(bottomRight.x, bottomRight.z)
-
-        return if (shape == RoomShape.L) {
-            val other = tiles.find { it != topLeft && it != bottomRight } ?: return null
-            val (otX, _) = getRealPosition(other.x, other.z)
-
-            when (rotation) {
-                RoomRotation.EAST  -> BlockPos(otX - 15, height, tlZ + 15)
-                RoomRotation.WEST  -> BlockPos(brX + 15, height, brZ - 15)
-                RoomRotation.SOUTH -> BlockPos(tlX - 15, height, tlZ - 15)
-                RoomRotation.NORTH -> BlockPos(brX + 15, height, brZ + 15)
-            }
-        } else {
-            if (rotation == RoomRotation.WEST) BlockPos(tlX + 15, height, tlZ - 15)
-            else BlockPos(tlX - 15, height, tlZ - 15)
-        }
+        clayPos = clay
     }
 
     fun get1x1Rotation(): Boolean {
         if (shape != RoomShape.OneByOne) return false
         val y = highestBlock ?: return false
-        if (applyFairyFallback(y)) return true
-
+        if (fairyLayout(y)) return true
+        val level = mc.level ?: return false
+        val baseX = topLeft.x * 32 - 185
+        val baseZ = topLeft.z * 32 - 185
+        val probe = BlockPos.MutableBlockPos()
         for (rot in RoomRotation.entries) {
-            val pos = clayProbePos(rot, y)
-            if (mc.level?.getBlockState(pos)?.block == Blocks.DYED_TERRACOTTA.pick(DyeColor.BLUE)) {
+            probe.set(baseX + rot.dx, y, baseZ + rot.dz)
+            if (level.getBlockState(probe).block === blueClay) {
                 rotation = rot
-                clayPos = pos
+                clayPos = probe.immutable()
                 return true
             }
         }
         return false
-    }
-
-    private fun applyFairyFallback(highestBlock: Int): Boolean {
-        if (data?.name != "Fairy") return false
-        clayPos = clayProbePos(RoomRotation.SOUTH, highestBlock)
-        rotation = RoomRotation.SOUTH
-        return true
-    }
-
-    private fun clayProbePos(rotation: RoomRotation, y: Int): BlockPos {
-        val (x, z) = getRealPosition()
-        return BlockPos(x + rotation.dx, y, z + rotation.dz)
     }
 
     fun getRealPosition(x: Int = topLeft.x, z: Int = topLeft.z) = x * 32 - 185 to z * 32 - 185
@@ -189,15 +133,91 @@ class DungeonRoom(var type: RoomType, initialPosition: IVec2, var data: RoomData
 
     fun getRelativeAABB(aabb: AABB): AABB {
         val rot = rotation ?: return aabb
-        val minPos = aabb.minPosition.add(-0.5, -0.5, -0.5).rotateToNorth(rot).add(0.5, 0.5, 0.5)
-        val maxPos = aabb.maxPosition.add(-0.5, -0.5, -0.5).rotateToNorth(rot).add(0.5, 0.5, 0.5)
-        return AABB(minPos, maxPos)
+        return AABB(
+            aabb.minPosition.add(-0.5, -0.5, -0.5).rotateToNorth(rot).add(0.5, 0.5, 0.5),
+            aabb.maxPosition.add(-0.5, -0.5, -0.5).rotateToNorth(rot).add(0.5, 0.5, 0.5)
+        )
     }
 
     fun getRealAABB(aabb: AABB): AABB {
         val rot = rotation ?: return aabb
-        val minPos = aabb.maxPosition.add(-0.5, -0.5, -0.5).rotateAroundNorth(rot).add(0.5, 0.5, 0.5)
-        val maxPos = aabb.minPosition.add(-0.5, -0.5, -0.5).rotateAroundNorth(rot).add(0.5, 0.5, 0.5)
-        return AABB(minPos, maxPos)
+        return AABB(
+            aabb.maxPosition.add(-0.5, -0.5, -0.5).rotateAroundNorth(rot).add(0.5, 0.5, 0.5),
+            aabb.minPosition.add(-0.5, -0.5, -0.5).rotateAroundNorth(rot).add(0.5, 0.5, 0.5)
+        )
+    }
+
+    private fun placeCenter() {
+        val rot = rotation
+        if (rot == null) {
+            val first = cornerTile(lowest = true) ?: return
+            center = IVec2(first.x * 20 + 8, first.z * 20 + 8)
+            return
+        }
+        var dx = 0
+        var dz = 0
+        when (shape) {
+            RoomShape.OneByOne -> {}
+            RoomShape.TwoByTwo -> { dx = 10; dz = 10 }
+            RoomShape.L -> { dx = 10; dz = if (rot == RoomRotation.NORTH || rot == RoomRotation.WEST) 0 else 20 }
+            else -> if (rot == RoomRotation.SOUTH) dx = (shape.tileAmount - 1) * 10 else dz = (shape.tileAmount - 1) * 10
+        }
+        center = IVec2(topLeft.x * 20 + 8 + dx, topLeft.z * 20 + 8 + dz)
+    }
+
+    private fun cornerTile(lowest: Boolean): IVec2? {
+        if (tiles.isEmpty()) return null
+        var best = tiles[0]
+        for (i in 1 until tiles.size) {
+            val t = tiles[i]
+            if (if (lowest) t.sortKey < best.sortKey else t.sortKey > best.sortKey) best = t
+        }
+        return best
+    }
+
+    private fun lMiddle(far: IVec2): IVec2? {
+        for (t in tiles) if (t != topLeft && t != far) return t
+        return null
+    }
+
+    private fun orientation(): RoomRotation? {
+        val far = cornerTile(lowest = false) ?: return null
+        if (shape != RoomShape.L) return if (topLeft.x == far.x) RoomRotation.WEST else RoomRotation.SOUTH
+        val middle = lMiddle(far) ?: return null
+        return when {
+            topLeft.x == far.x -> RoomRotation.EAST
+            topLeft.z == far.z -> RoomRotation.WEST
+            middle.x == topLeft.x -> RoomRotation.SOUTH
+            else -> RoomRotation.NORTH
+        }
+    }
+
+    private fun claySpot(rot: RoomRotation, y: Int): BlockPos? {
+        val far = cornerTile(lowest = false) ?: return null
+        val left = topLeft.x * 32 - 185
+        val top = topLeft.z * 32 - 185
+        if (shape != RoomShape.L) {
+            return if (rot == RoomRotation.WEST) BlockPos(left + 15, y, top - 15) else BlockPos(left - 15, y, top - 15)
+        }
+        val middle = lMiddle(far) ?: return null
+        val right = far.x * 32 - 185
+        val bottom = far.z * 32 - 185
+        return when (rot) {
+            RoomRotation.EAST -> BlockPos(middle.x * 32 - 185 - 15, y, top + 15)
+            RoomRotation.WEST -> BlockPos(right + 15, y, bottom - 15)
+            RoomRotation.SOUTH -> BlockPos(left - 15, y, top - 15)
+            RoomRotation.NORTH -> BlockPos(right + 15, y, bottom + 15)
+        }
+    }
+
+    private fun fairyLayout(y: Int): Boolean {
+        if (data?.name != "Fairy") return false
+        clayPos = BlockPos(topLeft.x * 32 - 185 + RoomRotation.SOUTH.dx, y, topLeft.z * 32 - 185 + RoomRotation.SOUTH.dz)
+        rotation = RoomRotation.SOUTH
+        return true
+    }
+
+    private companion object {
+        val blueClay: Block by lazy { Blocks.DYED_TERRACOTTA.pick(DyeColor.BLUE) }
     }
 }

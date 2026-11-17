@@ -1,22 +1,24 @@
 package com.adm.features.impl.dungeon.map
 
-import com.google.gson.reflect.TypeToken
-import com.adm.AdmMod.mc
-import com.adm.AdmMod.scope
+import com.adm.AdmMod
 import com.adm.events.FloorEnterEvent
 import com.adm.events.LevelEvent
 import com.adm.events.MapUpdateEvent
 import com.adm.events.RoomEnterEvent
 import com.adm.events.core.EventBus
 import com.adm.events.core.on
-import com.adm.features.impl.dungeon.map.tile.*
+import com.adm.features.impl.dungeon.map.tile.DoorType
+import com.adm.features.impl.dungeon.map.tile.DungeonDoor
+import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.features.impl.dungeon.map.tile.DungeonTile
+import com.adm.features.impl.dungeon.map.tile.RoomType
 import com.adm.utils.Color
 import com.adm.utils.Color.Companion.darker
 import com.adm.utils.IVec2
 import com.adm.utils.JsonResourceLoader.defaultGson
 import com.adm.utils.skyblock.dungeon.Floor
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import com.engineerclient.misc.DiskWrites
+import com.google.gson.reflect.TypeToken
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -26,13 +28,12 @@ object DungeonScan {
     const val ROOM_SPACING = 4
 
     var roomSize = 16
-    val roomGap: Int get () = roomSize + ROOM_SPACING
-
+    val roomGap: Int get() = roomSize + ROOM_SPACING
     val connectionGap: Int get() = roomSize + ROOM_SPACING / 2
     var startX = 5
     var startY = 5
 
-    val tiles: Array<DungeonTile> = Array(36) { index -> DungeonTile(position = IVec2(x = index % 6, z = index / 6)) }
+    val tiles: Array<DungeonTile> = Array(36) { freshTile(it) }
     val rooms: CopyOnWriteArrayList<DungeonRoom> = CopyOnWriteArrayList()
     val doors: ConcurrentHashMap<IVec2, DungeonDoor> = ConcurrentHashMap()
 
@@ -41,37 +42,45 @@ object DungeonScan {
 
     val directions = arrayOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)
 
-    private val roomCoresFile = File(com.adm.AdmMod.configFile, "room-cores.json")
-    val roomCores: MutableMap<String, MutableList<Map<Int, List<String>>>> = runCatching {
-        defaultGson.fromJson<MutableMap<String, MutableList<Map<Int, List<String>>>>>(roomCoresFile.readText(), object : TypeToken<MutableMap<String, MutableList<Map<Int, List<String>>>>>() {}.type)
-    }.getOrNull() ?: mutableMapOf()
+    private val coresFile = File(AdmMod.configFile, "room-cores.json")
+    val roomCores: MutableMap<String, MutableList<Map<Int, List<String>>>> by lazy {
+        runCatching {
+            defaultGson.fromJson<MutableMap<String, MutableList<Map<Int, List<String>>>>>(
+                coresFile.readText(), object : TypeToken<MutableMap<String, MutableList<Map<Int, List<String>>>>>() {}.type
+            )
+        }.getOrNull() ?: mutableMapOf()
+    }
 
-    private val roomCoresIODispatcher = Dispatchers.IO.limitedParallelism(1)
+    private var dimBloodSource = 0
+    private var dimBlood: Color? = null
+
+    init {
+        on<LevelEvent.Load> { clear() }
+        on<FloorEnterEvent> { initClient(floor) }
+        on<RoomEnterEvent> { if (room != null) updateViewableDoors() }
+        on<MapUpdateEvent> { updateViewableDoors() }
+
+        EventBus.subscribe(WorldScan)
+        EventBus.subscribe(MapScan)
+        EventBus.subscribe(SpecialColumn)
+        EventBus.subscribe(DoorScan)
+    }
+
+    private fun freshTile(index: Int) = DungeonTile(IVec2(index % 6, index / 6))
 
     fun recordRoomCore(name: String, core: Int, blocks: List<String>) {
-        val cores = roomCores.getOrPut(name) { mutableListOf() }
-        if (cores.any { it.containsKey(core) }) return
-        cores.add(mapOf(core to blocks))
-
+        val known = roomCores.getOrPut(name) { mutableListOf() }
+        for (entry in known) if (entry.containsKey(core)) return
+        known.add(mapOf(core to blocks))
         val json = defaultGson.toJson(roomCores)
-        scope.launch(roomCoresIODispatcher) {
-            roomCoresFile.parentFile.mkdirs()
-            roomCoresFile.writeText(json)
+        DiskWrites.write {
+            coresFile.parentFile.mkdirs()
+            coresFile.writeText(json)
         }
     }
 
-    init {
-        on<LevelEvent.Load> { reset() }
-        on<FloorEnterEvent> { initClient(floor) }
-
-        on<RoomEnterEvent> { room?.let { updateViewableDoors() } }
-        on<MapUpdateEvent> { updateViewableDoors() }
-
-        listOf(WorldScan, MapScan, SpecialColumn, DoorScan).forEach { EventBus.subscribe(it) }
-    }
-
-    private fun reset() {
-        repeat(36) { index -> tiles[index] = DungeonTile(position = IVec2(x = index % 6, z = index / 6)) }
+    private fun clear() {
+        for (i in tiles.indices) tiles[i] = freshTile(i)
         rooms.clear()
         doors.clear()
         viewableDoors.clear()
@@ -82,18 +91,13 @@ object DungeonScan {
     }
 
     fun initClient(floor: Floor) {
-        roomSize = if (floor.floorNumber <= 3) 18 else 16
-
-        startX = when {
-            floor.floorNumber <= 1 -> 22
-            floor.floorNumber <= 3 -> 11
-            else -> 5
-        }
-
-        startY = when (floor.floorNumber) {
+        val n = floor.floorNumber
+        roomSize = if (n <= 3) 18 else 16
+        startX = if (n <= 1) 22 else if (n <= 3) 11 else 5
+        startY = when (n) {
             0 -> 22
+            1, 2, 3 -> 11
             4 -> 16
-            in 1..3 -> 11
             else -> 5
         }
     }
@@ -104,29 +108,44 @@ object DungeonScan {
     }
 
     fun updateViewableDoors() {
-        pathHints.clear()
-        for ((_, door) in doors) {
-            val originTile = tiles[door.originTileIndex]
-            val destTile = tiles[door.destinationTileIndex]
-            val originView = originTile.room?.isViewable == true
-            val destView = destTile.room?.isViewable == true
-            if (!originView && !destView) continue
+        val hints = ArrayList<DungeonTile>()
+        for (door in doors.values) {
+            val from = tiles[door.originTileIndex]
+            val to = tiles[door.destinationTileIndex]
+            val fromRoom = from.room
+            val toRoom = to.room
+            val fromSeen = fromRoom?.isViewable == true
+            val toSeen = toRoom?.isViewable == true
+            if (!fromSeen && !toSeen) continue
 
-            (if (originTile.room?.isViewable != true) originTile else if (destTile.room?.isViewable != true) destTile else null)?.let {
-                pathHints.add(it)
-            }
+            if (!fromSeen) hints.add(from) else if (!toSeen) hints.add(to)
+            val bothSeen = fromSeen && toSeen
 
             door.color = when (door.type) {
                 DoorType.Wither -> DungeonMap.witherDoorColor
-                DoorType.Blood -> if (!originView || !destView) DungeonMap.bloodDoorColor.darker(0.5f) else DungeonMap.bloodDoorColor
+                DoorType.Blood -> if (bothSeen) DungeonMap.bloodDoorColor else dimmedBlood()
                 DoorType.Fairy -> DungeonMap.fairyDoorColor
-                else -> {
-                    if (!originView || !destView) DungeonMap.unknownDoorColor
-                    else listOfNotNull(originTile.room, destTile.room)
-                        .firstOrNull { it.type != RoomType.NORMAL && it.type != RoomType.FAIRY }
-                        ?.type?.let { room -> roomTypeColor(room) } ?: DungeonMap.normalDoorColor
+                DoorType.Normal -> when {
+                    !bothSeen -> DungeonMap.unknownDoorColor
+                    fromRoom.isSpecial() -> roomTypeColor(fromRoom!!.type)
+                    toRoom.isSpecial() -> roomTypeColor(toRoom!!.type)
+                    else -> DungeonMap.normalDoorColor
                 }
             }
+        }
+        pathHints.clear()
+        pathHints.addAll(hints)
+    }
+
+    private fun DungeonRoom?.isSpecial() = this != null && type != RoomType.NORMAL && type != RoomType.FAIRY
+
+    private fun dimmedBlood(): Color {
+        val source = DungeonMap.bloodDoorColor
+        val cached = dimBlood
+        if (cached != null && dimBloodSource == source.rgba) return cached
+        return source.darker(0.5f).also {
+            dimBlood = it
+            dimBloodSource = source.rgba
         }
     }
 }
