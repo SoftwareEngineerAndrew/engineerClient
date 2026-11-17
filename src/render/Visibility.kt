@@ -267,7 +267,7 @@ object Visibility : Module(
         }
     }
 
-    fun noVignette() = enabled && noVignette
+    @JvmStatic fun drawsVignette() = !enabled || !noVignette
     @JvmStatic fun hidesPortalOverlay() = enabled && hidePortalOverlay
 
     // "1,234", "✧1,234✧" and crits like "✯1,234✯", with Hypixel's separators and icons around them.
@@ -284,7 +284,7 @@ object Visibility : Module(
     private var lavaShown = false
     @JvmStatic fun drawsWaterOverlay() = !enabled || !noWaterOverlay
     @JvmStatic fun drawsInWallOverlay() = !enabled || !noSuffocationOverlay
-    fun hidePotionHud() = enabled && hidePotionHud
+    @JvmStatic fun drawsEffectHud() = !enabled || !hidePotionHud
     fun hideInventoryEffects() = enabled && hideInventoryEffects
     fun noFog(): Boolean {
         if (!enabled || !noFog) return false
@@ -318,9 +318,10 @@ object Visibility : Module(
         else -> timeMode.ticks
     }
 
-    fun sidebarColor(title: Boolean, original: Int): Int {
-        if (!enabled || !sidebarColors) return original
-        return if (title) sidebarTitleColor.rgba else sidebarBodyColor.rgba
+    @JvmStatic fun sidebarBack(vanilla: Int, title: Boolean): Int = when {
+        !enabled || !sidebarColors -> vanilla
+        title -> sidebarTitleColor.rgba
+        else -> sidebarBodyColor.rgba
     }
 
     fun hidesParticle(particle: Particle): Boolean = enabled &&

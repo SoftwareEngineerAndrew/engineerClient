@@ -100,7 +100,7 @@
     "PerformanceClickMixin",
     "GamePerfMixin",
     "GamePerfRenderMixin",
-    "ScreenTweaksHudMixin",
+    "HudOverlayMixin",
     "ScreenTweaksGameRendererMixin",
     "ScreenEffectOverlayMixin",
     "ScreenTweaksInventoryEffectsMixin",
