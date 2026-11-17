@@ -23,11 +23,9 @@ import com.adm.utils.render.textDim
 import com.adm.utils.sendCommand
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.Floor
-import com.adm.utils.toFixed
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
-import java.util.Locale
 
 object DungeonQueue : Module(
     name = "Dungeon Queue",
@@ -35,21 +33,27 @@ object DungeonQueue : Module(
     description = "Requeuing, warp cooldowns and the kicked timer.",
     toggled = true,
 ) {
-    private val warpTimerHud by HUD("Warp Timer", "Displays the warp timer in the HUD.") {
-        if (warpTimer - System.currentTimeMillis() <= 0 && !it) return@HUD 0 to 0
-        textDim("§eWarp: §a${if (it) "30" else ((warpTimer - System.currentTimeMillis()) / 1000f).toFixed()}s", 0, 0, Colors.WHITE)
+    private val warpTimerHud by HUD("Warp Timer", "Displays the warp timer in the HUD.") { example ->
+        if (example) return@HUD textDim("§eWarp: §a30s", 0, 0, Colors.WHITE)
+        val left = warpTimer - System.currentTimeMillis()
+        if (left <= 0) return@HUD 0 to 0
+        val line = warpLine.at((left + 5) / 10)
+        text(mc.font, line.text, 0, 0, Colors.WHITE.rgba, true)
+        line.size
     }
     private val warpCooldownHud by HUD("Warp Cooldown", "Time left until you can warp again.", true, 420, 70, 1f) { example ->
-        val left = if (example) 21.4 else (endTime - System.currentTimeMillis()) / 1000.0
+        val left = if (example) 2140L else endTime - System.currentTimeMillis()
         if (left <= 0) return@HUD 0 to 0
-        textDim("§bWarp Cooldown: §f${String.format(Locale.ROOT, "%.1f", left)}s", 0, 0)
+        val line = cooldownLine.at((left + 50) / 100)
+        text(mc.font, line.text, 0, 0, Colors.WHITE.rgba, true)
+        line.size
     }
     private val kickedHud by HUD("Kicked Timer", "Time since the kick, for a minute.", false, 10, 10, 1f) { example ->
-        val elapsed = (System.currentTimeMillis() - kickedAt) / 1000.0
-        if (!example && (kickedAt == 0L || elapsed > 60)) return@HUD 0 to 0
-        val text = "§5Time kicked: §f${"%.2f".format(if (example) 12.34 else elapsed)}s"
-        text(mc.font, text, 0, 0, -1)
-        mc.font.width(text) to 9
+        val elapsed = if (example) 12340L else System.currentTimeMillis() - kickedAt
+        if (!example && (kickedAt == 0L || elapsed > 60_000)) return@HUD 0 to 0
+        val line = kickedLine.at((elapsed + 5) / 10)
+        text(mc.font, line.text, 0, 0, -1)
+        line.size
     }
     private val announceKick by BooleanSetting("Announce Kick", false, desc = "Announce when you get kicked from skyblock.")
 
@@ -89,6 +93,29 @@ object DungeonQueue : Module(
     private val instanceRegex = Regex("\\[[^]]+] \\w+ entered (?:MM )?\\w+ Catacombs, Floor \\w+!")
     private val warpRegex = Regex("^Sending to server .+")
 
+    private val warpLine = TimerLine("§eWarp: §a", 100)
+    private val cooldownLine = TimerLine("§bWarp Cooldown: §f", 10)
+    private val kickedLine = TimerLine("§5Time kicked: §f", 100)
+
+    private class TimerLine(private val prefix: String, private val scale: Int) {
+        private var units = Long.MIN_VALUE
+        var text = ""
+        var size = 0 to 9
+
+        fun at(value: Long): TimerLine {
+            if (value == units) return this
+            units = value
+            val fraction = (value % scale).toString()
+            text = buildString {
+                append(prefix).append(value / scale).append('.')
+                repeat(scale.toString().length - 1 - fraction.length) { append('0') }
+                append(fraction).append('s')
+            }
+            size = mc.font.width(text) to 9
+            return this
+        }
+    }
+
     private var warpTimer = 0L
     var disableRequeue = false
     private var endTime = 0L
@@ -126,7 +153,7 @@ object DungeonQueue : Module(
             }
             if (!soloClear) return@on
             if (message == MORT) startedAt = System.currentTimeMillis()
-            else onReply(message.lowercase())
+            else if (command != null) onReply(message.lowercase())
         }
 
         on<TickEvent.End> {
@@ -134,14 +161,16 @@ object DungeonQueue : Module(
             retry()
             if (fired || !soloSeven() || DungeonUtils.inBoss) return@on
             if (fivePuzzles && puzzles() >= 5) return@on trigger("5 Puzzles")
+            val cycle = mapCycler && !mapChecked
+            if (!cycle && !pbTrigger) return@on
             val t = elapsed() ?: return@on
-            if (mapCycler && !mapChecked && t >= 19.5) {
+            if (cycle && t >= 19.5) {
                 mapChecked = true
                 checkMap()?.let { return@on trigger(it) }
             }
             if (pbTrigger) {
-                val pb = parse(if (DungeonUtils.floor == Floor.M7) pbM7 else pbF7) ?: return@on
-                if (t > pb) trigger("PB Pace Lost")
+                val pb = pbSeconds(if (DungeonUtils.floor == Floor.M7) pbM7 else pbF7)
+                if (pb >= 0 && t > pb) trigger("PB Pace Lost")
             }
         }
 
@@ -165,10 +194,29 @@ object DungeonQueue : Module(
 
     private fun puzzles() = maxOf(DungeonUtils.puzzleCount, DungeonUtils.puzzles.size)
 
-    private fun elapsed(): Double? {
-        val tab = TIME_PART.findAll(DungeonUtils.dungeonTime).sumOf { m ->
-            m.groupValues[1].toInt() * when (m.groupValues[2]) { "h" -> 3600; "m" -> 60; else -> 1 }
+    private var tabTime = ""
+    private var tabSeconds = 0
+
+    private var pbInput = ""
+    private var pbParsed = -1
+
+    private fun pbSeconds(input: String): Int {
+        if (input != pbInput) {
+            pbInput = input
+            pbParsed = parse(input) ?: -1
         }
+        return pbParsed
+    }
+
+    private fun elapsed(): Double? {
+        val time = DungeonUtils.dungeonTime
+        if (time != tabTime) {
+            tabTime = time
+            tabSeconds = TIME_PART.findAll(time).sumOf { m ->
+                m.groupValues[1].toInt() * when (m.groupValues[2]) { "h" -> 3600; "m" -> 60; else -> 1 }
+            }
+        }
+        val tab = tabSeconds
         val own = if (startedAt > 0) (System.currentTimeMillis() - startedAt) / 1000.0 else 0.0
         return maxOf(tab.toDouble(), own).takeIf { it > 0 }
     }
