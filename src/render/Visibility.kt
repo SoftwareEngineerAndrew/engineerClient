@@ -254,14 +254,13 @@ object Visibility : Module(
         }
 
         on<EntityEvent.SetItemSlot> {
-            if (!DungeonUtils.inDungeons || stack.isEmpty) return@on
+            val head = slot == EquipmentSlot.HEAD
+            val wanted = if (head) hideWeaver || hideTentacle else slot == EquipmentSlot.MAINHAND && hideFairy
+            if (!wanted || !DungeonUtils.inDungeons || stack.isEmpty) return@on
             val texture = stack.texture ?: return@on
-
-            if (
-                (hideFairy && slot == EquipmentSlot.MAINHAND && texture == HEALER_FAIRY_TEXTURE) ||
-                (hideWeaver && slot == EquipmentSlot.HEAD && texture == SOUL_WEAVER_TEXTURE) ||
-                (hideTentacle && slot == EquipmentSlot.HEAD && texture == TENTACLE_TEXTURE)
-            ) entity.remove(Entity.RemovalReason.DISCARDED)
+            val hidden = if (head) hideWeaver && texture == SOUL_WEAVER_TEXTURE || hideTentacle && texture == TENTACLE_TEXTURE
+                else texture == HEALER_FAIRY_TEXTURE
+            if (hidden) entity.remove(Entity.RemovalReason.DISCARDED)
         }
 
         on<MessageEvent.Chat> {
