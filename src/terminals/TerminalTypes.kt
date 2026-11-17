@@ -8,7 +8,7 @@ import net.minecraft.world.item.DyeColor
 enum class TerminalTypes(val termName: String, val regex: Regex, val windowSize: Int, val layout: IntArray, val orderFree: Boolean = false) {
     PANES("Correct all the panes!", Regex("^Correct all the panes!$"), 45, intArrayOf(1, 2, 3, 5), true),
     RUBIX("Change all to same color!", Regex("^Change all to same color!$"), 45, intArrayOf(1, 3, 3, 3)),
-    NUMBERS("Click in order!", Regex("^Click in order!$"), 36, intArrayOf(1, 1, 2, 7)),
+    NUMBERS("Click in order!", Regex("^Click in order!$"), 36, intArrayOf(1, 2, 2, 5)),
     STARTS_WITH("What starts with: \"*\"?", Regex("^What starts with: '(\\w)'\\?$"), 45, intArrayOf(1, 1, 3, 7), true),
     SELECT("Select all the \"*\" items!", Regex("^Select all the ([\\w ]+) items!$"), 54, intArrayOf(1, 1, 4, 7), true),
     MELODY("Click the button on time!", Regex("^Click the button on time!$"), 54, intArrayOf(0, 1, 5, 7));
