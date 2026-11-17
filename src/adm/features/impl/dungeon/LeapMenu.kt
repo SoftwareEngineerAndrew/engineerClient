@@ -101,7 +101,17 @@ object LeapMenu : Module(
     private var dismissed = false
     @Volatile private var moved = false
 
-    fun isLeapScreen(screen: Screen?): Boolean = screen != null && screen.title.string in TITLES
+    private var titleScreen: Screen? = null
+    private var titleMatches = false
+
+    fun isLeapScreen(screen: Screen?): Boolean {
+        if (screen == null) return false
+        if (screen !== titleScreen) {
+            titleMatches = screen.title.string in TITLES
+            titleScreen = screen
+        }
+        return titleMatches
+    }
 
     private fun currentLeapScreen(): Screen? {
         if (!enabled) return null
