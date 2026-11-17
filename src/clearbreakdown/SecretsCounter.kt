@@ -11,57 +11,56 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** ADM's Secrets Counter: each teammate's secrets this run from the API, at the end of any run, won or not. */
 object SecretsCounter {
-    private val secretsBaseline = ConcurrentHashMap<String, Long>()
-    private var snapshotDone = false
+    /** Each teammate's lifetime secrets when last asked: the run start, or the end of their last run with us. */
+    private val totals = ConcurrentHashMap<String, Long>()
+    private var startTaken = false
 
-    private val dungeonStartRegex = Regex("^\\[NPC] Mort: Good luck\\.$")
-    private val dungeonEndRegex = Regex("^\\s*(?:Master Mode )?(?:The )?Catacombs - (?:Entrance|Floor .{1,3})$")
+    private const val START_LINE = "[NPC] Mort: Good luck."
+    private const val END_MARK = "Catacombs - "
+    private val startRegex = Regex("^\\[NPC] Mort: Good luck\\.$")
+    private val endRegex = Regex("^\\s*(?:Master Mode )?(?:The )?Catacombs - (?:Entrance|Floor .{1,3})$")
 
     fun reset() {
-        snapshotDone = false
+        startTaken = false
     }
 
     fun onChat(message: String) {
-        if (dungeonEndRegex.containsMatchIn(message)) schedule(30) { fetchAndDisplay() }
+        if (message.contains(END_MARK) && endRegex.containsMatchIn(message)) schedule(30) { report() }
+        if (!startTaken && message.startsWith(START_LINE) && startRegex.containsMatchIn(message)) takeStart()
+    }
 
-        if (!dungeonStartRegex.containsMatchIn(message) || snapshotDone) return
-        val teammates = DungeonUtils.dungeonTeammatesNoSelf.toList().ifEmpty { return }
-        snapshotDone = true
+    private fun takeStart() {
+        val team = DungeonUtils.dungeonTeammatesNoSelf.toList().ifEmpty { return }
+        startTaken = true
         scope.launch {
-            for ((teammateName) in teammates) {
-                if (secretsBaseline.containsKey(teammateName)) continue
-                RequestUtils.pullSecrets(teammateName).onSuccess { secrets ->
-                    secretsBaseline[teammateName] = secrets
-                }
+            for (player in team) {
+                if (totals.containsKey(player.name)) continue
+                RequestUtils.pullSecrets(player.name).onSuccess { totals[player.name] = it }
             }
         }
     }
 
-    private fun fetchAndDisplay() {
-        val teammates = DungeonUtils.dungeonTeammatesNoSelf.toList().ifEmpty { return }
-        val secretsDelta = mutableMapOf<String, Long?>()
-
-        secretsBaseline.keys.retainAll(teammates.map { it.name }.toSet())
+    private fun report() {
+        val team = DungeonUtils.dungeonTeammatesNoSelf.toList().ifEmpty { return }
+        totals.keys.retainAll(team.mapTo(HashSet()) { it.name })
 
         scope.launch {
-            for ((teammateName) in teammates) {
-                val baseline = secretsBaseline[teammateName]
-                RequestUtils.pullSecrets(teammateName).onSuccess { newSecrets ->
-                    secretsDelta[teammateName] = if (baseline != null) (newSecrets - baseline).coerceAtLeast(0L) else null
-                    secretsBaseline[teammateName] = newSecrets
+            val gained = HashMap<String, Long?>()
+            for (player in team) {
+                val before = totals[player.name]
+                RequestUtils.pullSecrets(player.name).onSuccess { now ->
+                    gained[player.name] = if (before != null) (now - before).coerceAtLeast(0L) else null
+                    totals[player.name] = now
                 }
             }
-            display(teammates, secretsDelta)
+            show(team, gained)
         }
     }
 
-    private fun display(teammates: List<DungeonPlayer>, secretsDelta: Map<String, Long?>) {
-        teammates
-            .sortedWith(compareBy<DungeonPlayer> { it.clazz.ordinal }.thenByDescending { secretsDelta[it.name] ?: -1L })
-            .forEach { player ->
-                val delta = secretsDelta[player.name]
-                if (delta == null) modMessage("§${player.clazz.colorCode}${player.name} §7-> §cFailed to get secrets")
-                else modMessage("§${player.clazz.colorCode}${player.name} §7-> §f$delta Secrets")
-            }
+    private fun show(team: List<DungeonPlayer>, gained: Map<String, Long?>) {
+        for (player in team.sortedWith(compareBy<DungeonPlayer> { it.clazz.ordinal }.thenByDescending { gained[it.name] ?: -1L })) {
+            val n = gained[player.name]
+            modMessage("§${player.clazz.colorCode}${player.name} §7-> " + if (n == null) "§cFailed to get secrets" else "§f$n Secrets")
+        }
     }
 }
