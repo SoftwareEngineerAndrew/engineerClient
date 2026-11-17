@@ -187,9 +187,27 @@ object Visibility : Module(
     private const val STACK_RANGE = 100
     private val stacks = LinkedHashMap<String, Pair<Component, Int>>()
 
-    private val hoppityName = Regex("^§D§LHOPPITY'S HUNT §7You found (.+) §.\\(.+\\)!$", RegexOption.IGNORE_CASE)
-    private val hoppityInfo = Regex("^(§.§.)(DUPLICATE|NEW) RABBIT! (.+)")
-    private var hoppityRabbit = ""
+    private val hoppityFind = Regex("^§D§LHOPPITY'S HUNT §7You found (.+) §.\\(.+\\)!$", RegexOption.IGNORE_CASE)
+    private val hoppityResult = Regex("^(§.§.)(DUPLICATE|NEW) RABBIT! (.+)")
+    private var pendingRabbit = ""
+
+    // The plain text gates the styled text, so other chat lines never build it.
+    private fun joinHoppity(plain: String, component: Component): Boolean {
+        val find = plain.contains("HOPPITY'S HUNT", ignoreCase = true)
+        if (!find && !plain.contains("RABBIT! ")) return false
+        if (plain == "HOPPITY'S HUNT You found a Hitman Egg!") return true
+        val styled = component.string
+        if (find) hoppityFind.find(styled)?.let {
+            pendingRabbit = it.groupValues[1]
+            return true
+        }
+        val result = hoppityResult.find(styled) ?: return false
+        val (style, status, chocolate) = result.destructured
+        val joined = Component.literal("$style$status $pendingRabbit $chocolate")
+        mc.execute { mc.gui.hud.chat.addClientSystemMessage(joined) }
+        pendingRabbit = ""
+        return true
+    }
 
     init {
         on<TickEvent.End> {
@@ -247,24 +265,7 @@ object Visibility : Module(
         }
 
         on<MessageEvent.Chat> {
-            if (!compactHoppity) return@on
-            val text = component.string
-            if (message == "HOPPITY'S HUNT You found a Hitman Egg!") {
-                cancel()
-                return@on
-            }
-            hoppityName.find(text)?.let {
-                hoppityRabbit = it.groupValues[1]
-                cancel()
-                return@on
-            }
-            hoppityInfo.find(text)?.let {
-                val (style, status, chocolate) = it.destructured
-                val line = Component.literal("$style$status $hoppityRabbit $chocolate")
-                mc.execute { mc.gui.hud.chat.addClientSystemMessage(line) }
-                hoppityRabbit = ""
-                cancel()
-            }
+            if (compactHoppity && joinHoppity(message, component)) cancel()
         }
     }
 
