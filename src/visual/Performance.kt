@@ -11,7 +11,7 @@ import com.adm.features.ModuleManager
 import com.adm.utils.Color
 import com.adm.utils.Colors
 import com.adm.utils.ServerUtils
-import com.adm.utils.render.textDim
+import com.adm.utils.render.text
 import com.adm.utils.FormatCache
 import com.adm.utils.toFixed
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
@@ -68,25 +68,24 @@ object Performance : Module(
 
     private val hud by HUD("Performance HUD", "Shows performance information on the screen.", true) {
         if (!showFPS && !showTPS && !showPing) return@HUD 0 to 0
-
-        var width = 1
-        var height = 1
+        val vertical = direction == Direction.VERTICAL
         val lineHeight = mc.font.lineHeight
-
-        fun renderMetric(label: String, value: String) {
-            val w = drawText(label, value, if (direction == Direction.HORIZONTAL) width else 1, height)
-            if (direction == Direction.HORIZONTAL) width += w
-            else {
-                width = maxOf(width, w)
-                height += lineHeight
+        var x = 1
+        var y = 1
+        var widest = 1
+        for (i in 0..2) {
+            val value = when (i) {
+                0 -> if (showTPS) tpsText(ServerUtils.averageTps.toDouble()) else continue
+                1 -> if (showFPS) fpsText(mc.fps.toDouble()) else continue
+                else -> if (showPing) pingText(ServerUtils.averagePing.toDouble()) else continue
             }
+            val w = metric(metricLabels[i], value, x, y)
+            if (vertical) {
+                if (w > widest) widest = w
+                y += lineHeight
+            } else x += w
         }
-
-        if (showTPS) renderMetric("TPS: ", "${tpsText(ServerUtils.averageTps.toDouble())} ")
-        if (showFPS) renderMetric("FPS: ", "${mc.fps} ")
-        if (showPing) renderMetric("Ping: ", "${ServerUtils.averagePing}ms ")
-
-        width to if (direction == Direction.HORIZONTAL) lineHeight else height
+        hudSize(if (vertical) widest else x, if (vertical) y else lineHeight)
     }
 
     private val clockHud by HUD("Clock HUD", "The system time.", true, 10, 10, 1f) {
@@ -110,14 +109,27 @@ object Performance : Module(
         ScreenEvents.AFTER_INIT.register { _, screen, _, _ -> PerfMonitor.mark("screen " + screen.javaClass.simpleName) }
     }
 
-    private fun GuiGraphicsExtractor.drawText(name: String, value: String, x: Int, y: Int): Int {
-        var width = 0
-        width += textDim(name, x, y, nameColor, true).first
-        width += textDim(value, x + width, y, valueColor, true).first
-        return width
+    private val metricLabels = arrayOf("TPS: ", "FPS: ", "Ping: ")
+
+    private fun GuiGraphicsExtractor.metric(name: String, value: String, x: Int, y: Int): Int {
+        val font = mc.font
+        text(name, x, y, nameColor, true)
+        val nameWidth = font.width(name)
+        text(value, x + nameWidth, y, valueColor, true)
+        return nameWidth + font.width(value)
     }
 
-    private val tpsText = FormatCache(1) { it.toFloat().toFixed(1) }
+    private val tpsText = FormatCache(1) { it.toFloat().toFixed(1) + " " }
+    private val fpsText = FormatCache(1) { "${it.toInt()} " }
+    private val pingText = FormatCache(1) { "${it.toInt()}ms " }
+
+    private var lastHudSize = 0 to 0
+
+    private fun hudSize(width: Int, height: Int): Pair<Int, Int> {
+        val size = lastHudSize
+        if (size.first != width || size.second != height) lastHudSize = width to height
+        return lastHudSize
+    }
 
     private var clockSecond = Long.MIN_VALUE
     private var clockWithSeconds = false
