@@ -247,6 +247,9 @@ class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
         return if (row == 0) col == FIRST_SLOT else row > 0 && rowColumns[row - 1] >= 0 && col == rowColumns[row - 1] + direction
     }
 
+    /** Row 1's pane lined up on its first slot. */
+    fun firstClick() = aligned() && BUTTONS.indexOf(button) == 0 && column % 9 == FIRST_SLOT
+
     private fun aligned() = pointer >= 0 && column >= 0 && button >= 0 && pointer % 9 == column % 9
 
     override fun look(slot: Int): Look? {

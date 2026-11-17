@@ -150,7 +150,7 @@ object TermSolver {
         g.roundedRect(-2, -2, grid.w + 2, grid.h + 2, Terminals.backgroundColor.rgba, radius)
         // Melody: the lanes and the buttons as two plain blocks, with only the column marks, the moving pane and a lined up button on them.
         if (t.type == TerminalTypes.MELODY) {
-            val lanes = Terminals.melodyBackground.rgba
+            val lanes = (if ((t as? MelodyHandler)?.firstClick() == true) Terminals.melodyFirstBackground else Terminals.melodyBackground).rgba
             g.roundedRect(0, grid.step, 5 * grid.step - Terminals.gap, 4 * grid.step - Terminals.gap, lanes, radius)
             g.roundedRect(6 * grid.step, grid.step, 6 * grid.step + CELL, 4 * grid.step - Terminals.gap, lanes, radius)
         }
