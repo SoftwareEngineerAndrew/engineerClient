@@ -69,8 +69,8 @@ object Sounds : Module(
     fun mutesAotv() = enabled && muteAotv && holdingAotv()
     private fun holding(name: String) = mc.player?.mainHandItem?.hoverName?.string?.contains(name) == true
 
-    interface MonoChannel {
-        fun ecRefreshMonoPosition()
+    interface MonoSource {
+        fun ecRecentre()
     }
 
     private val recentSounds = Collections.synchronizedSet(LinkedHashSet<Identifier>())
@@ -195,12 +195,11 @@ object Sounds : Module(
     @JvmStatic
     fun monoActive(): Boolean = enabled && monoAudio
 
+    // Straight ahead at the sound's real distance: it keeps its falloff but loses its direction.
     @JvmStatic
-    fun distanceToListener(pos: Vec3): Double = pos.distanceTo(mc.soundManager.listenerTransform.position())
-
-    @JvmStatic
-    fun applyCenteredPosition(source: Int, distance: Double) {
-        AL10.alSourcefv(source, AL10.AL_POSITION, floatArrayOf(0f, 0f, -distance.toFloat()))
+    fun centre(source: Int, pos: Vec3, relative: Boolean) {
+        val distance = if (relative) pos.length() else pos.distanceTo(mc.soundManager.listenerTransform.position())
+        AL10.alSource3f(source, AL10.AL_POSITION, 0f, 0f, -distance.toFloat())
     }
 
     @JvmStatic
