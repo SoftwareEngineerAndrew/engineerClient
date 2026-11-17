@@ -6,27 +6,27 @@ import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.SetSlotEvent
-import com.engineerclient.terminals.TerminalEvent
 import com.adm.events.core.on
 import com.adm.features.Module
-import com.engineerclient.terminals.sim.TermSimGUI
 import com.adm.features.impl.render.ClickGUIModule
-import com.adm.utils.equalsOneOf
+import com.adm.utils.getPositionString
 import com.adm.utils.network.WebUtils.gson
 import com.adm.utils.network.webSocket
 import com.adm.utils.render.getStringWidth
 import com.adm.utils.render.text
-import com.adm.utils.sendCommand
 import com.adm.utils.sendChatMessage
-import com.adm.utils.getPositionString
+import com.adm.utils.sendCommand
 import com.adm.utils.skyblock.LocationUtils
 import com.adm.utils.skyblock.dungeon.DungeonClass
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.M7Phases
+import com.engineerclient.terminals.TerminalEvent
 import com.engineerclient.terminals.TerminalTypes
 import com.engineerclient.terminals.TerminalUtils
+import com.engineerclient.terminals.sim.TermSimGUI
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.world.item.DyeColor
+import net.minecraft.world.item.Item
 import net.minecraft.world.item.Items
 import java.util.concurrent.ConcurrentHashMap
 
@@ -37,163 +37,167 @@ object MelodyMessage : Module(
     private val melodyProgress by BooleanSetting("Melody Progress", false, desc = "Tells the party about melody terminal progress.")
     private val melodySendCoords by BooleanSetting("Melody Send Coords", false, desc = "Sends the coordinates of the melody terminal.").withDependency { melodyProgress }
 
-    private val melodyGui by HUD("Progress GUI", "Shows a gui with the progress of broadcasting core users in melody.", true) {
+    private val melodyGui by HUD("Progress GUI", "Shows a gui with the progress of broadcasting core users in melody.", true) { example ->
         var rows = 0
-        var labelWidth = 0
-
-        fun track(data: MelodyData, index: Int, name: String) {
-            rows = maxOf(rows, index + 1)
-            val clay = data.clay ?: return
-            val label = melodyLabel(data, name) ?: ""
-            labelWidth = maxOf(labelWidth, getStringWidth("$clay $label"))
+        var captionWidth = 0
+        val self = mc.user.name
+        if (example) {
+            captionWidth = drawRow(preview, 0, self)
+            rows = 1
         }
-
-        if (it) {
-            val example = MelodyData(3, 1, 2, DungeonClass.ARCHER)
-            drawMelody(example, 0, mc.user.name)
-            track(example, 0, mc.user.name)
-        }
-
         if (melodyWebSocket.connected || melodies.isNotEmpty()) {
-            melodies.entries.forEachIndexed { i, (name, data) ->
-                if (name == mc.user.name) return@forEachIndexed
-                drawMelody(data, i, name)
-                track(data, i, name)
+            var row = 0
+            for ((name, data) in melodies) {
+                if (name != self) {
+                    captionWidth = maxOf(captionWidth, drawRow(data, row, name))
+                    rows = maxOf(rows, row + 1)
+                }
+                row++
             }
         }
-
-        (width * 5 + 2 + labelWidth) to (width * rows)
+        (cell * 5 + 2 + captionWidth) to (cell * rows)
     }
 
     private val showPlayer by SelectorSetting("Show Player", ShowPlayer.NONE, desc = "How player details should be rendered in the Melody GUI.")
 
     val melodyWebSocket = webSocket {
         onMessage { message ->
-            val (username, type, slot) = try { gson.fromJson(message, UpdateMessage::class.java) } catch (_: Exception) { return@onMessage }
-            val playerClass = DungeonUtils.dungeonTeammates.find { it.name == username }?.clazz ?: return@onMessage
-            val entry = melodies.getOrPut(username) { MelodyData(null, null, null, playerClass) }
-            when (type) {
-                0 -> melodies.remove(username)
-                1 -> entry.clay = slot
-                2 -> entry.purple = slot
-                5 -> entry.pane = slot
+            val update = try { gson.fromJson(message, UpdateMessage::class.java) } catch (_: Exception) { return@onMessage }
+            val name = update.username
+            val clazz = DungeonUtils.dungeonTeammates.find { it.name == name }?.clazz ?: return@onMessage
+            val data = melodies.getOrPut(name) { MelodyData(null, null, null, clazz) }
+            when (update.type) {
+                CLOSED -> melodies.remove(name)
+                CLAY -> data.clay = update.slot
+                PURPLE -> data.purple = update.slot
+                PANE -> data.pane = update.slot
             }
         }
     }
 
     private val melodies = ConcurrentHashMap<String, MelodyData>()
-    private val lastSent = MelodyData(null, null, null, DungeonClass.EMPTY)
+    private val sent = MelodyData(null, null, null, DungeonClass.EMPTY)
+    private val preview = MelodyData(3, 1, 2, DungeonClass.ARCHER)
 
     init {
         on<TerminalEvent.Open> {
-            if (DungeonUtils.getF7Phase() != M7Phases.P3 || terminal.type != TerminalTypes.MELODY || mc.gui.screen() is TermSimGUI) return@on
-            if (melodySendCoords) sendChatMessage(getPositionString())
+            if (melodySendCoords && inLiveMelody(terminal.type)) sendChatMessage(getPositionString())
         }
 
         on<MessageEvent.Chat> {
-            if (melodyProgress) onChatMessage(message)
+            if (!melodyProgress) return@on
+            when (message) {
+                CORE_OPENING -> {
+                    melodyWebSocket.shutdown()
+                    melodies.clear()
+                }
+                GOLDOR_START -> LocationUtils.lobbyId?.let { melodyWebSocket.connect("${ClickGUIModule.webSocketUrl}$it") }
+            }
         }
 
         on<SetSlotEvent> {
-            if (melodyProgress) onSlotUpdate()
+            if (melodyProgress) onMelodySlot(slotIndex, itemStack.item)
         }
 
         on<LevelEvent.Load> {
             melodyWebSocket.shutdown()
             melodies.clear()
+            sent.clay = null
+            sent.purple = null
+            sent.pane = null
         }
 
         on<TerminalEvent.Close> {
-            if (terminal.type != TerminalTypes.MELODY) return@on
-            melodyWebSocket.send(update(0, 0))
+            if (terminal.type == TerminalTypes.MELODY) melodyWebSocket.send(update(CLOSED, 0))
         }
     }
 
-    private val coreRegex = Regex("^The Core entrance is opening!$")
-    private val p3StartRegex = Regex("^\\[BOSS] Goldor: Who dares trespass into my domain\\?$")
+    private fun inLiveMelody(type: TerminalTypes) =
+        type == TerminalTypes.MELODY && DungeonUtils.getF7Phase() == M7Phases.P3 && mc.gui.screen() !is TermSimGUI
 
-    private fun onChatMessage(value: String) {
-        if (coreRegex.matches(value)) {
-            melodyWebSocket.shutdown()
-            melodies.clear()
-        }
-
-        if (p3StartRegex.matches(value)) LocationUtils.lobbyId?.let {
-            melodyWebSocket.connect("${ClickGUIModule.webSocketUrl}${it}")
-        }
-    }
-
-    private fun SetSlotEvent.onSlotUpdate() {
+    private fun onMelodySlot(slot: Int, item: Item) {
         val term = TerminalUtils.currentTerm ?: return
-        if (DungeonUtils.getF7Phase() != M7Phases.P3 || term.type != TerminalTypes.MELODY || mc.gui.screen() is TermSimGUI) return
+        if (!inLiveMelody(term.type)) return
 
-        val item = itemStack.item
         if (item == Items.DYED_TERRACOTTA.pick(DyeColor.LIME)) {
-            val position = slotIndex / 9
-            if (lastSent.clay == position) return
-            melodyWebSocket.send(update(1, position))
-            if (melodyProgress) clayProgress[position]?.let { sendCommand("pc $it") }
-            lastSent.clay = position
+            val row = slot / 9
+            if (sent.clay == row) return
+            melodyWebSocket.send(update(CLAY, row))
+            when (row) {
+                2 -> sendCommand("pc Melody 33%")
+                3 -> sendCommand("pc Melody 67%")
+            }
+            sent.clay = row
             return
         }
-        if (!item.equalsOneOf(Items.STAINED_GLASS_PANE.pick(DyeColor.MAGENTA), Items.STAINED_GLASS_PANE.pick(DyeColor.LIME))) return
-        val index = mapToRange(slotIndex) ?: return
-        val meta = when (item) {
-            Items.STAINED_GLASS_PANE.pick(DyeColor.MAGENTA) -> {
-                if (lastSent.purple == index) return
-                lastSent.purple = index
-                2
-            }
-            Items.STAINED_GLASS_PANE.pick(DyeColor.LIME) -> {
-                if (lastSent.pane == index) return
-                lastSent.pane = index
-                5
-            }
-            else -> return
-        }
 
-        melodyWebSocket.send(update(meta, index))
+        val purple = item == Items.STAINED_GLASS_PANE.pick(DyeColor.MAGENTA)
+        if (!purple && item != Items.STAINED_GLASS_PANE.pick(DyeColor.LIME)) return
+        val column = slot % 9 - 1
+        if (column !in 0..4 || slot >= 36) return
+        if (purple) {
+            if (sent.purple == column) return
+            sent.purple = column
+            melodyWebSocket.send(update(PURPLE, column))
+        } else {
+            if (sent.pane == column) return
+            sent.pane = column
+            melodyWebSocket.send(update(PANE, column))
+        }
     }
 
     private fun update(type: Int, slot: Int): String = gson.toJson(UpdateMessage(mc.user.name, type, slot))
 
-    private val clayProgress = hashMapOf(2 to "Melody 33%", 3 to "Melody 67%")
-    private val ranges = listOf(1..5, 10..14, 19..23, 28..32)
+    private val cell by lazy { getStringWidth("§d■") }
 
-    private fun mapToRange(value: Int): Int? {
-        for (r in ranges) {
-            if (value in r) return (value - r.first) % 5
+    private fun GuiGraphicsExtractor.drawRow(data: MelodyData, row: Int, name: String): Int {
+        val y = cell * row - 1
+        val pane = data.pane
+        val purple = data.purple
+        for (column in 0 until 5) {
+            val square = if (column == pane) PANE_SQUARE else if (column == purple) PURPLE_SQUARE else EMPTY_SQUARE
+            text(square, cell * column, y)
         }
-        return null
-    }
-
-    private val width by lazy { getStringWidth("§d■") }
-
-    private fun melodyLabel(data: MelodyData, playerName: String): String? = when (showPlayer) {
-        ShowPlayer.CLASS -> "§${data.dungeonClass.colorCode}${data.dungeonClass.name.lowercase()}"
-        ShowPlayer.NAME -> "§6$playerName"
-        ShowPlayer.CLASS_AND_NAME -> "§6$playerName §8(§${data.dungeonClass.colorCode}${data.dungeonClass.name.lowercase()}§8)"
-        else -> null
-    }
-
-    private fun GuiGraphicsExtractor.drawMelody(data: MelodyData, index: Int, playerName: String) {
-        val y = width * index - 1
-
-        repeat(5) {
-            val color = when (it) {
-                data.pane -> "§a"
-                data.purple -> "§d"
-                else -> "§f"
-            }
-            text("$color■", width * it, y)
+        val clay = data.clay ?: return 0
+        val mode = showPlayer
+        val key = clay * 4 + mode.ordinal
+        if (data.captionKey != key || data.captionName !== name) {
+            data.captionKey = key
+            data.captionName = name
+            data.caption = "$clay ${playerTag(mode, data.dungeonClass, name)}"
+            data.captionWidth = getStringWidth(data.caption)
         }
-
-        val label = melodyLabel(data, playerName) ?: ""
-        data.clay?.let { text("$it $label", width * 5 + 2, y) }
+        text(data.caption, cell * 5 + 2, y)
+        return data.captionWidth
     }
+
+    private fun playerTag(mode: ShowPlayer, clazz: DungeonClass, name: String): String = when (mode) {
+        ShowPlayer.NONE -> ""
+        ShowPlayer.CLASS -> "§${clazz.colorCode}${clazz.name.lowercase()}"
+        ShowPlayer.NAME -> "§6$name"
+        ShowPlayer.CLASS_AND_NAME -> "§6$name §8(§${clazz.colorCode}${clazz.name.lowercase()}§8)"
+    }
+
+    private const val CLOSED = 0
+    private const val CLAY = 1
+    private const val PURPLE = 2
+    private const val PANE = 5
+
+    private const val CORE_OPENING = "The Core entrance is opening!"
+    private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
+
+    private const val PANE_SQUARE = "§a■"
+    private const val PURPLE_SQUARE = "§d■"
+    private const val EMPTY_SQUARE = "§f■"
 
     private data class UpdateMessage(val username: String, val type: Int, val slot: Int)
-    private data class MelodyData(var purple: Int?, var pane: Int?, var clay: Int?, val dungeonClass: DungeonClass)
+
+    private data class MelodyData(var purple: Int?, var pane: Int?, var clay: Int?, val dungeonClass: DungeonClass) {
+        var captionKey = -1
+        var captionName: String? = null
+        var caption = ""
+        var captionWidth = 0
+    }
 
     private enum class ShowPlayer(private val label: String) {
         NONE("None"), CLASS("Class"), NAME("Name"), CLASS_AND_NAME("Class & Name");
