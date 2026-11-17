@@ -3,98 +3,175 @@ package com.adm.features.impl.dungeon.puzzlesolvers
 import com.adm.AdmMod.mc
 import com.adm.events.RenderExtractEvent
 import com.adm.events.RoomEnterEvent
-import com.adm.utils.*
-import com.adm.utils.Color.Companion.withAlpha
-import com.adm.utils.render.drawFilledBox
+import com.adm.utils.Color
+import com.adm.utils.render.BoxBatch
+import com.adm.utils.render.drawBoxes
 import com.adm.utils.render.drawTracer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
 import net.minecraft.util.Mth
+import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
-import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
+// Method names are kept: a mixin elsewhere switches this solver off by name.
 object TPMazeSolver {
-    private var tpPads = listOf<BlockPos>()
-    private var correctPortals = listOf<BlockPos>()
-    private var visited = CopyOnWriteArraySet<BlockPos>()
-    private var best: BlockPos? = null
+    private const val ROOM = "Teleport Maze"
+    private const val PADS = 30
 
-    fun onRoomEnter(event: RoomEnterEvent) = with(event.room) {
-        if (this?.data?.name == "Teleport Maze") tpPads = endPortalFrameLocations.map { getRealCoords(BlockPos(it.x, it.y, it.z)) }
+    // Room-relative pad frames, seven cells of four, then the end and start pads.
+    private val frameX = intArrayOf(4, 4, 10, 10, 4, 4, 10, 10, 4, 4, 10, 10, 12, 12, 18, 18, 20, 20, 26, 26, 26, 26, 20, 20, 26, 26, 20, 20, 15, 15)
+    private val frameZ = intArrayOf(12, 6, 12, 6, 20, 14, 20, 14, 28, 22, 28, 22, 28, 22, 28, 22, 28, 22, 28, 22, 20, 14, 20, 14, 12, 6, 12, 6, 14, 12)
+
+    private val idle = Color(255, 255, 255, 0.5f)
+
+    @Volatile private var pads: Array<BlockPos>? = null
+    private val visited = BooleanArray(PADS)
+    private val possible = BooleanArray(PADS)
+    @Volatile private var possibleCount = 0
+    @Volatile private var target = -1
+
+    private val shapeState = arrayOfNulls<BlockState>(PADS)
+    private val shapeBox = arrayOfNulls<AABB>(PADS)
+    private val boxes = BoxBatch()
+
+    fun onRoomEnter(event: RoomEnterEvent) {
+        val room = event.room ?: return
+        if (room.data?.name != ROOM) return
+        pads = Array(PADS) { room.getRealCoords(BlockPos(frameX[it], 69, frameZ[it])) }
+        shapeState.fill(null)
     }
 
     fun tpPacket(event: ClientboundPlayerPositionPacket) {
-        val pos = event.change.position
-        if (DungeonUtils.currentRoomName != "Teleport Maze" || pos.x % 0.5 != 0.0 || pos.y != 69.5 || pos.z % 0.5 != 0.0 || tpPads.isEmpty()) return
+        val p = event.change.position
+        if (p.y != 69.5 || p.x % 0.5 != 0.0 || p.z % 0.5 != 0.0) return
+        val pads = pads ?: return
+        if (DungeonUtils.currentRoomName != ROOM) return
+        val body = mc.player?.boundingBox
 
-        val posAABB = AABB.unitCubeFromLowerCorner(pos).inflate(1.0, 0.0, 1.0)
-        visited.addAll(tpPads.filter { posAABB.intersects(AABB(it)) || mc.player?.boundingBox?.inflate(1.0, 0.0, 1.0)?.intersects(AABB(it)) == true })
-        getCorrectPortals(pos, event.change.yRot, event.change.xRot)
+        var landed = -1
+        for (i in 0 until PADS) {
+            val pad = pads[i]
+            val near = touches(pad, p.x - 1, p.y, p.z - 1, p.x + 2, p.y + 1, p.z + 2)
+            if (near && landed < 0) landed = i
+            if (near || (body != null && touches(pad, body.minX - 1, body.minY, body.minZ - 1, body.maxX + 1, body.maxY, body.maxZ + 1))) visited[i] = true
+        }
+        narrow(pads, p, event.change.yRot, event.change.xRot, body)
 
-        val currentPad = tpPads.firstOrNull { posAABB.intersects(AABB(it)) } ?: return
-        val index = tpPads.indexOf(currentPad)
-
-        if (index in 28..29) { best = null; return }
-
-        val groupStart = index / 4 * 4
-        if (groupStart + 4 > tpPads.size) return
-
-        val candidates = tpPads.slice(groupStart until groupStart + 4).filter { it != currentPad && it !in visited }
-
-        best = candidates.firstOrNull { it in correctPortals }
-            ?: candidates.minByOrNull {
-                val yaw = (atan2(it.center.z - pos.z, it.center.x - pos.x) * 180.0 / Math.PI).toFloat() - 90f
-                abs(Mth.wrapDegrees(yaw) - Mth.wrapDegrees(event.change.yRot))
+        if (landed < 0) return
+        if (landed >= 28) {
+            target = -1
+            return
+        }
+        val cell = landed / 4 * 4
+        var pick = -1
+        var pickByLook = -1
+        var bestTurn = Float.MAX_VALUE
+        val facing = Mth.wrapDegrees(event.change.yRot)
+        for (i in cell until cell + 4) {
+            if (i == landed || visited[i]) continue
+            if (possible[i]) {
+                pick = i
+                break
             }
+            val pad = pads[i]
+            val yaw = (atan2(pad.z + 0.5 - p.z, pad.x + 0.5 - p.x) * 180.0 / Math.PI).toFloat() - 90f
+            val turn = abs(Mth.wrapDegrees(yaw) - facing)
+            if (turn < bestTurn) {
+                bestTurn = turn
+                pickByLook = i
+            }
+        }
+        target = if (pick >= 0) pick else pickByLook
     }
 
-    private fun getCorrectPortals(pos: Vec3, yaw: Float, pitch: Float) {
-        if (correctPortals.isEmpty()) correctPortals = tpPads
-
-        correctPortals = correctPortals.filter {
-            it !in visited &&
-            isXZInterceptable(
-                AABB(it.x.toDouble(), it.y.toDouble(), it.z.toDouble(), it.x + 1.0, it.y + 4.0, it.z + 1.0).inflate(0.75, 0.0, 0.75),
-                32.0, pos, yaw, pitch
-            ) && !AABB(it).inflate(.5, .0, .5).intersects(mc.player?.boundingBox ?: return@filter false)
+    private fun narrow(pads: Array<BlockPos>, p: Vec3, yaw: Float, pitch: Float, body: AABB?) {
+        if (possibleCount == 0) possible.fill(true)
+        var count = 0
+        for (i in 0 until PADS) {
+            if (!possible[i]) continue
+            val pad = pads[i]
+            val keep = !visited[i] && body != null &&
+                lookCrosses(pad.x - 0.75, pad.z - 0.75, pad.x + 1.75, pad.z + 1.75, p, yaw, pitch) &&
+                !touches(pad, body.minX, body.minY, body.minZ, body.maxX, body.maxY, body.maxZ, grow = 0.5)
+            possible[i] = keep
+            if (keep) count++
         }
+        possibleCount = count
+    }
+
+    private fun touches(pad: BlockPos, minX: Double, minY: Double, minZ: Double, maxX: Double, maxY: Double, maxZ: Double, grow: Double = 0.0): Boolean {
+        val x0 = pad.x - grow
+        val z0 = pad.z - grow
+        return minX < pad.x + 1 + grow && maxX > x0 && minY < pad.y + 1.0 && maxY > pad.y.toDouble() && minZ < pad.z + 1 + grow && maxZ > z0
+    }
+
+    // Whether a 32 block look ray from the landing spot crosses one of the box's four sides, in X/Z only.
+    private fun lookCrosses(minX: Double, minZ: Double, maxX: Double, maxZ: Double, p: Vec3, yaw: Float, pitch: Float): Boolean {
+        val flat = -cos(-pitch * 0.017453292f).toDouble()
+        val lx = sin(-yaw * 0.017453292f - 3.1415927f) * flat
+        val lz = cos(-yaw * 0.017453292f - 3.1415927f) * flat
+        val sx = p.x
+        val sz = p.z
+        val dx = (sx + lx * 32.0) - sx
+        val dz = (sz + lz * 32.0) - sz
+        return alongX(sx, sz, dx, dz, minX, minZ, maxZ) || alongX(sx, sz, dx, dz, maxX, minZ, maxZ) ||
+            alongX(sz, sx, dz, dx, minZ, minX, maxX) || alongX(sz, sx, dz, dx, maxZ, minX, maxX)
+    }
+
+    private fun alongX(s: Double, o: Double, d: Double, od: Double, at: Double, lo: Double, hi: Double): Boolean {
+        if (d * d < 1e-8) return false
+        val t = (at - s) / d
+        if (t < 0.0 || t > 1.0) return false
+        val cross = o + od * t
+        return cross >= lo && cross <= hi
     }
 
     fun onRenderWorld(event: RenderExtractEvent, mazeColorOne: Color, mazeColorMultiple: Color, mazeColorVisited: Color, showTracer: Boolean, tracerColor: Color) {
-        if (DungeonUtils.currentRoomName != "Teleport Maze") return
-        tpPads.forEach {
-            val aabb = it.getBlockBounds()?.move(it) ?: AABB(it)
-            when (it) {
-                in correctPortals -> event.drawFilledBox(aabb, if (correctPortals.size == 1) mazeColorOne else mazeColorMultiple, false)
-                in visited -> event.drawFilledBox(aabb, mazeColorVisited, true)
-                else -> event.drawFilledBox(aabb, Colors.WHITE.withAlpha(0.5f), true)
+        val pads = pads ?: return
+        if (DungeonUtils.currentRoomName != ROOM) return
+        val level = mc.level ?: return
+        val possibleColor = if (possibleCount == 1) mazeColorOne else mazeColorMultiple
+        boxes.clear()
+        for (i in 0 until PADS) {
+            val pad = pads[i]
+            val box = padBox(level, i, pad)
+            when {
+                possible[i] && possibleCount > 0 -> boxes.filled(box, possibleColor, false)
+                visited[i] -> boxes.filled(box, mazeColorVisited, true)
+                else -> boxes.filled(box, idle, true)
             }
         }
+        event.drawBoxes(boxes)
 
         if (showTracer) {
-            val target = best ?: return
-            event.drawTracer(Vec3(target.x + 0.5, target.y + 0.8, target.z + 0.5), tracerColor, false)
+            val t = target
+            if (t < 0) return
+            val pad = pads[t]
+            event.drawTracer(Vec3(pad.x + 0.5, pad.y + 0.8, pad.z + 0.5), tracerColor, false)
         }
+    }
+
+    private fun padBox(level: Level, i: Int, pad: BlockPos): AABB {
+        val state = level.getBlockState(pad)
+        if (state !== shapeState[i]) {
+            shapeState[i] = state
+            val shape = state.getShape(level, pad).singleEncompassing()
+            shapeBox[i] = if (shape.isEmpty) AABB(pad) else shape.bounds().move(pad)
+        }
+        return shapeBox[i]!!
     }
 
     fun reset() {
-        correctPortals = listOf()
-        visited = CopyOnWriteArraySet()
-        best = null
+        possible.fill(false)
+        possibleCount = 0
+        visited.fill(false)
+        target = -1
     }
-
-    private val endPortalFrameLocations = listOf(
-        BlockPos(4, 69, 12), BlockPos(4, 69, 6),   BlockPos(10, 69, 12), BlockPos(10, 69, 6),
-        BlockPos(4, 69, 20), BlockPos(4, 69, 14),  BlockPos(10, 69, 20), BlockPos(10, 69, 14),
-        BlockPos(4, 69, 28), BlockPos(4, 69, 22),  BlockPos(10, 69, 28), BlockPos(10, 69, 22),
-        BlockPos(12, 69, 28), BlockPos(12, 69, 22), BlockPos(18, 69, 28), BlockPos(18, 69, 22),
-        BlockPos(20, 69, 28), BlockPos(20, 69, 22), BlockPos(26, 69, 28), BlockPos(26, 69, 22),
-        BlockPos(26, 69, 20), BlockPos(26, 69, 14), BlockPos(20, 69, 20), BlockPos(20, 69, 14),
-        BlockPos(26, 69, 12), BlockPos(26, 69, 6),  BlockPos(20, 69, 12), BlockPos(20, 69, 6),
-        BlockPos(15, 69, 14), BlockPos(15, 69, 12)
-    )
 }
