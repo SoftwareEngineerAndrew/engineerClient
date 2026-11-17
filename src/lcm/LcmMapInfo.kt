@@ -43,7 +43,7 @@ object LcmMapInfo {
         } catch (t: Throwable) {
             if (!failed) {
                 failed = true
-                EngineerClient.logger.error("[ec] dtMap score failed", t)
+                EngineerClient.logger.error("[ec] Map Info failed", t)
             }
             NONE
         }
@@ -106,7 +106,7 @@ object LcmMapInfo {
         state[8] = if (!stats.princeKilled && princeLeft(floorNumber)) 1 else 0
         state[9] = if (bats < batsPossible) bats.coerceAtMost(5) else -1
         state[10] = crypts
-        state[11] = LcmStyle.mapSize(false).second
+        state[11] = LcmStyle.rows(false)
     }
 
     private fun rebuild() {
