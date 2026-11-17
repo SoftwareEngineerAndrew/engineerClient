@@ -4,6 +4,7 @@ import com.adm.AdmMod.mc
 import com.adm.events.RenderExtractEvent
 import com.adm.events.RoomEnterEvent
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.features.impl.dungeon.map.tile.RoomRotation
 import com.adm.utils.Color
 import com.adm.utils.modMessage
 import com.adm.utils.render.BoxStyle
@@ -92,9 +93,14 @@ object BoulderSolver {
 
     fun onRenderWorld(event: RenderExtractEvent, showAllBoulderClicks: Boolean, boulderStyle: BoxStyle, boulderColor: Color) {
         val room = room ?: return
-        if (DungeonUtils.currentRoomName != "Boulder" || plan.isEmpty()) return
-        val steps = if (showAllBoulderClicks) plan else plan.take(1)
-        for (step in steps) event.drawStyledBox(AABB(room.getRealCoords(facePos(step))), boulderColor, boulderStyle, false)
+        if (plan.isEmpty() || DungeonUtils.currentRoomName != "Boulder") return
+        if (facesFor !== plan || !sameFrame(facesFrame, room)) {
+            faces = Array(plan.size) { AABB(room.getRealCoords(facePos(plan[it]))) }
+            facesFor = plan
+            facesFrame = Frame(room, room.clayPos, room.rotation)
+        }
+        val count = if (showAllBoulderClicks) faces.size else 1
+        for (i in 0 until count) event.drawStyledBox(faces[i], boulderColor, boulderStyle, false)
     }
 
     fun reset() {
@@ -105,6 +111,10 @@ object BoulderSolver {
         planMode = null
         plan = emptyList()
         asked = null
+        faces = emptyArray()
+        facesFor = null
+        facesFrame = null
+        cellsFrame = null
     }
 
     private fun facePos(step: Step): BlockPos {
@@ -181,14 +191,30 @@ object BoulderSolver {
 
     private fun readBoard(room: DungeonRoom): Long? {
         val level = mc.level ?: return null
+        if (!sameFrame(cellsFrame, room)) {
+            for (i in 0 until 42) cells[i] = room.getRealCoords(BlockPos(6 + 3 * (i % 7), 65, 9 + 3 * (i / 7))).asLong()
+            cellsFrame = Frame(room, room.clayPos, room.rotation)
+        }
         var b = 0L
         for (i in 0 until 42) {
-            val pos = room.getRealCoords(BlockPos(6 + 3 * (i % 7), 65, 9 + 3 * (i / 7)))
-            if (!level.isLoaded(pos)) return null
-            if (!level.getBlockState(pos).isAir) b = b or (1L shl i)
+            probe.set(cells[i])
+            if (!level.isLoaded(probe)) return null
+            if (!level.getBlockState(probe).isAir) b = b or (1L shl i)
         }
         return b
     }
+
+    // Where the room sits: its cell and face positions are worked out again only when this changes.
+    private class Frame(val room: DungeonRoom, val clay: BlockPos?, val rotation: RoomRotation?)
+
+    private fun sameFrame(f: Frame?, room: DungeonRoom) = f != null && f.room === room && f.clay == room.clayPos && f.rotation == room.rotation
+
+    private val cells = LongArray(42)
+    private var cellsFrame: Frame? = null
+    private val probe = BlockPos.MutableBlockPos()
+    private var faces = emptyArray<AABB>()
+    private var facesFor: List<Step>? = null
+    private var facesFrame: Frame? = null
 
     private fun playerNode(room: DungeonRoom, b: Long): Int {
         val pos = room.getRelativeCoords(mc.player?.blockPosition() ?: return NORTH + 3)
