@@ -8,7 +8,7 @@ import com.adm.features.Module
 import com.adm.utils.Colors
 import com.adm.utils.render.textDim
 import com.adm.utils.skyblock.dungeon.DungeonUtils
-import com.adm.utils.toFixed
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet
 import net.minecraft.core.BlockPos
 import net.minecraft.world.level.block.Blocks
 
@@ -17,62 +17,77 @@ object SpiritBear : Module(
     description = "Displays the current state of Spirit Bear."
 ) {
     private val hud by HUD(name, "Displays the current state of Spirit Bear in the HUD.", false) { example ->
-        when {
-            example -> "§e1.45s"
-            !DungeonUtils.isFloor(4) || !DungeonUtils.inBoss -> null
-            timer < 0 -> "§d$kills/$maxKills"
-            timer > 0 -> "§e${(timer / 20f).toFixed()}s"
-            else -> "§aAlive!"
-        }?.let { text ->
-            textDim("§6Bear: $text", 0, 0, Colors.WHITE)
-        } ?: (0 to 0)
+        if (example) return@HUD textDim("§6Bear: §e1.45s", 0, 0, Colors.WHITE)
+        val floor = DungeonUtils.floor
+        if (floor?.floorNumber != 4 || !DungeonUtils.inBoss) return@HUD 0 to 0
+        textDim(label(floor.isMM), 0, 0, Colors.WHITE)
     }
 
-    private inline val blockLocations get() = if (DungeonUtils.floor?.isMM == true) m4BlockLocations else f4BlockLocations
-    private inline val maxKills get() = if (DungeonUtils.floor?.isMM == true) 30 else 25
-    private val lastBlockLocation = BlockPos(7, 77, 34)
-    private var timer = -1 // state: -1=NotSpawned, 0=Alive, 1+=Spawning
-    private var kills = 0
+    private const val LAMP_Y = 77
+    private const val SPAWN_TICKS = 68
+    private val BEAR_LAMP = BlockPos.asLong(7, LAMP_Y, 34)
+
+    // The lamps light one per kill; the last one lit starts the bear's spawn.
+    private val normalLamps = lamps(
+        -3, 33, -9, 31, -16, 26, -20, 20, -23, 13, -24, 6, -24, 0, -22, -7, -18, -13, -12, -19, -5, -22, 1, -24, 8, -24,
+        14, -23, 21, -19, 27, -14, 31, -8, 33, -1, 34, 5, 33, 12, 31, 19, 27, 25, 20, 30, 14, 33, 7, 34
+    )
+    private val masterLamps = lamps(
+        -2, 33, -7, 32, -13, 28, -17, 24, -21, 18, -23, 13, -24, 7, -24, 2, -23, -4, -21, -9, -17, -14, -12, -19, -6, -22,
+        -1, -23, 5, -24, 10, -24, 16, -22, 21, -19, 27, -15, 30, -10, 32, -5, 34, 1, 34, 7, 33, 12, 31, 18, 28, 23, 23, 28,
+        18, 31, 12, 33, 7, 34
+    )
+
+    private fun lamps(vararg xz: Int) = LongOpenHashSet(xz.size / 2).apply {
+        for (i in xz.indices step 2) add(BlockPos.asLong(xz[i], LAMP_Y, xz[i + 1]))
+    }
+
+    // -1 before the last lamp is lit, 0 once the bear is up, otherwise ticks until it spawns.
+    private var spawnTicks = -1
+    private var lit = 0
+
+    private var labelKey = Long.MIN_VALUE
+    private var labelText = ""
+
+    private fun label(master: Boolean): String {
+        val key = (spawnTicks.toLong() shl 32) or (lit.toLong() shl 1) or (if (master) 1L else 0L)
+        if (key != labelKey) {
+            labelKey = key
+            labelText = "§6Bear: " + when {
+                spawnTicks < 0 -> "§d$lit/${if (master) masterLamps.size else normalLamps.size}"
+                spawnTicks > 0 -> "§e${spawnTicks / 20}.${((spawnTicks % 20) * 5).toString().padStart(2, '0')}s"
+                else -> "§aAlive!"
+            }
+        }
+        return labelText
+    }
 
     init {
         on<BlockUpdateEvent> {
-            if (!DungeonUtils.isFloor(4) || !DungeonUtils.inBoss || !blockLocations.contains(pos)) return@on
-
-            when (updated.block) {
-                Blocks.SEA_LANTERN if old.block == Blocks.COAL_BLOCK -> {
-                    if (kills < maxKills) kills++
-                    if (pos == lastBlockLocation) timer = 68
-                }
-                Blocks.COAL_BLOCK if old.block == Blocks.SEA_LANTERN -> {
-                    if (kills > 0) kills--
-                    if (pos == lastBlockLocation) timer = -1
-                }
+            if (pos.y != LAMP_Y) return@on
+            val floor = DungeonUtils.floor
+            if (floor?.floorNumber != 4 || !DungeonUtils.inBoss) return@on
+            val key = pos.asLong()
+            val lamps = if (floor.isMM) masterLamps else normalLamps
+            if (key !in lamps) return@on
+            val now = updated.block
+            val before = old.block
+            if (now === Blocks.SEA_LANTERN && before === Blocks.COAL_BLOCK) {
+                if (lit < lamps.size) lit++
+                if (key == BEAR_LAMP) spawnTicks = SPAWN_TICKS
+            } else if (now === Blocks.COAL_BLOCK && before === Blocks.SEA_LANTERN) {
+                if (lit > 0) lit--
+                if (key == BEAR_LAMP) spawnTicks = -1
             }
         }
 
         on<TickEvent.Server> {
-            if (timer > 0) timer--
+            if (spawnTicks > 0) spawnTicks--
         }
 
         on<LevelEvent.Load> {
-            kills = 0
-            timer = -1
+            lit = 0
+            spawnTicks = -1
         }
     }
-
-    private val f4BlockLocations = hashSetOf(
-        BlockPos(-3, 77, 33), BlockPos(-9, 77, 31), BlockPos(-16, 77, 26), BlockPos(-20, 77, 20), BlockPos(-23, 77, 13),
-        BlockPos(-24, 77, 6), BlockPos(-24, 77, 0), BlockPos(-22, 77, -7), BlockPos(-18, 77, -13), BlockPos(-12, 77, -19),
-        BlockPos(-5, 77, -22), BlockPos(1, 77, -24), BlockPos(8, 77, -24), BlockPos(14, 77, -23), BlockPos(21, 77, -19),
-        BlockPos(27, 77, -14), BlockPos(31, 77, -8), BlockPos(33, 77, -1), BlockPos(34, 77, 5), BlockPos(33, 77, 12),
-        BlockPos(31, 77, 19), BlockPos(27, 77, 25), BlockPos(20, 77, 30), BlockPos(14, 77, 33), BlockPos(7, 77, 34)
-    )
-    private val m4BlockLocations = hashSetOf(
-        BlockPos(-2, 77, 33), BlockPos(-7, 77, 32), BlockPos(-13, 77, 28), BlockPos(-17, 77, 24), BlockPos(-21, 77, 18),
-        BlockPos(-23, 77, 13), BlockPos(-24, 77, 7), BlockPos(-24, 77, 2), BlockPos(-23, 77, -4), BlockPos(-21, 77, -9),
-        BlockPos(-17, 77, -14), BlockPos(-12, 77, -19), BlockPos(-6, 77, -22), BlockPos(-1, 77, -23), BlockPos(5, 77, -24),
-        BlockPos(10, 77, -24), BlockPos(16, 77, -22), BlockPos(21, 77, -19), BlockPos(27, 77, -15), BlockPos(30, 77, -10),
-        BlockPos(32, 77, -5), BlockPos(34, 77, 1), BlockPos(34, 77, 7), BlockPos(33, 77, 12), BlockPos(31, 77, 18),
-        BlockPos(28, 77, 23), BlockPos(23, 77, 28), BlockPos(18, 77, 31), BlockPos(12, 77, 33), BlockPos(7, 77, 34)
-    )
 }
