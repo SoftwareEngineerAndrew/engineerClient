@@ -4,9 +4,9 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.events.GuiEvent
 import com.adm.events.core.on
 import com.adm.features.Module
-import com.adm.utils.containsOneOf
-import com.adm.utils.equalsOneOf
+import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
+import net.minecraft.network.chat.Component
 
 object RemovePerks : Module(
     name = "Remove Perks",
@@ -14,20 +14,56 @@ object RemovePerks : Module(
 ) {
     private val renderStun by BooleanSetting("Show Stun", false, desc = "Shows the stun role perks.")
 
+    private const val KEEP: Byte = 0
+    private const val HIDE: Byte = 1
+    private const val STUN: Byte = 2
+
+    private var titleSeen: Component? = null
+    private var isPerkMenu = false
+
+    private var seenNames = arrayOfNulls<Component>(64)
+    private var kinds = ByteArray(64)
+
     init {
         on<GuiEvent.RenderSlot> {
-            if (screen.title.string == "Perk Menu" && slotCheck(slot.item.hoverName.string))
-                cancel()
+            if (!perkMenu(screen)) return@on
+            if (hidden(slot.index, slot.item.hoverName)) cancel()
         }
 
         on<GuiEvent.SlotClick> {
-            if (screen is AbstractContainerScreen<*> && screen.title.string == "Perk Menu" && slotCheck(screen.menu.getSlot(slotIndex).item.hoverName.string))
-                cancel()
+            if (screen !is AbstractContainerScreen<*> || !perkMenu(screen)) return@on
+            if (hidden(-1, screen.menu.getSlot(slotIndex).item.hoverName)) cancel()
         }
     }
 
-    private fun slotCheck(slot: String): Boolean =
-        slot.containsOneOf("Steady Hands", "Bomberman", "Mining Frenzy") ||
-        slot.equalsOneOf("Elle's Lava Rod", "Elle's Pickaxe", "Auto Revive") ||
-        (!renderStun && slot.containsOneOf("Human Cannonball"))
+    private fun perkMenu(screen: Screen): Boolean {
+        val title = screen.title
+        if (title !== titleSeen) {
+            titleSeen = title
+            isPerkMenu = title.string == "Perk Menu"
+        }
+        return isPerkMenu
+    }
+
+    private fun hidden(index: Int, name: Component): Boolean {
+        val kind = if (index < 0) kindOf(name.string) else {
+            if (index >= kinds.size) {
+                seenNames = seenNames.copyOf(index + 1)
+                kinds = kinds.copyOf(index + 1)
+            }
+            if (seenNames[index] !== name) {
+                seenNames[index] = name
+                kinds[index] = kindOf(name.string)
+            }
+            kinds[index]
+        }
+        return kind == HIDE || (kind == STUN && !renderStun)
+    }
+
+    private fun kindOf(name: String): Byte = when {
+        "Steady Hands" in name || "Bomberman" in name || "Mining Frenzy" in name -> HIDE
+        name == "Elle's Lava Rod" || name == "Elle's Pickaxe" || name == "Auto Revive" -> HIDE
+        "Human Cannonball" in name -> STUN
+        else -> KEEP
+    }
 }
