@@ -96,10 +96,10 @@ object DungeonMap : Module(
     private class Shared(val playerName: String, val roomName: String, val tiles: ArrayList<IVec2>, val foundSecrets: Int?)
 
     val syncSocket = webSocket {
-        onMessage { text -> if (allowWebsocket && DungeonUtils.inDungeons) receive(text) }
+        onMessage { text -> if (allowWebsocket && DungeonUtils.inDungeons) applyShared(text) }
     }
 
-    private fun receive(text: String) {
+    private fun applyShared(text: String) {
         val shared = try { gson.fromJson(text, Shared::class.java) } catch (_: Exception) { return } ?: return
         if (DungeonUtils.dungeonTeammatesNoSelf.none { it.name == shared.playerName }) return
         val room = DungeonScan.rooms.firstOrNull { it.name == shared.roomName && it.tiles == shared.tiles } ?: return
