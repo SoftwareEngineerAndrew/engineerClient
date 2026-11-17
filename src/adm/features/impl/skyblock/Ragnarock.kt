@@ -6,8 +6,13 @@ import com.adm.events.MessageEvent
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.features.Module
-import com.adm.utils.*
+import com.adm.utils.alert
+import com.adm.utils.itemId
+import com.adm.utils.modMessage
+import com.adm.utils.sendCommand
+import com.adm.utils.strength
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvents
 
 object Ragnarock : Module(
@@ -19,24 +24,29 @@ object Ragnarock : Module(
     private val strengthGainedMessage by BooleanSetting("Strength gained", true, "Shows Ragnarock strength gained.")
     private val announceStrengthGained by BooleanSetting("Announce strength", false, "Announce gained strength in party chat").withDependency { strengthGainedMessage }
 
-    private val cancelRegex = Regex("Ragnarock was cancelled due to (?:being hit|taking damage)!")
+    private const val CAST_PITCH = 1.4920635f
+
+    // The cast plays a wolf death sound at this pitch; any wolf variant's death sound counts.
+    private val castSounds: Set<Identifier> by lazy {
+        SoundEvents.WOLF_SOUNDS.values.mapTo(HashSet()) { it.adultSounds().deathSound().value().location() }
+    }
 
     init {
         on<MessageEvent.Chat> {
-            if (cancelAlert && message.matches(cancelRegex)) alert("§cRagnarock Cancelled!")
+            if (cancelAlert && message.startsWith("Ragnarock was cancelled due to ") &&
+                (message == "Ragnarock was cancelled due to being hit!" || message == "Ragnarock was cancelled due to taking damage!")
+            ) alert("§cRagnarock Cancelled!")
         }
 
         onReceive<ClientboundSoundPacket> {
-            if (pitch == 1.4920635f && mc.player?.mainHandItem?.itemId == "RAGNAROCK_AXE" &&
-                SoundEvents.WOLF_SOUNDS.entries.any { it.value.adultSounds.deathSound.value().location == sound.value().location }
-            ) {
-                if (castAlert) alert("§aCasted Rag")
-                val strengthGained = ((mc.player?.mainHandItem?.strength ?: return@onReceive) * 1.5).toInt()
-                if (strengthGainedMessage) {
-                    modMessage("§7Gained strength: §4$strengthGained")
-                    if (announceStrengthGained) sendCommand("pc Gained strength from Ragnarock: $strengthGained")
-                }
-            }
+            if (pitch != CAST_PITCH || sound.value().location() !in castSounds) return@onReceive
+            val held = mc.player?.mainHandItem ?: return@onReceive
+            if (held.itemId != "RAGNAROCK_AXE") return@onReceive
+            if (castAlert) alert("§aCasted Rag")
+            if (!strengthGainedMessage) return@onReceive
+            val gained = (held.strength * 1.5).toInt()
+            modMessage("§7Gained strength: §4$gained")
+            if (announceStrengthGained) sendCommand("pc Gained strength from Ragnarock: $gained")
         }
     }
 }
