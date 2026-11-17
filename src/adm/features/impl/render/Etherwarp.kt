@@ -142,74 +142,67 @@ object Etherwarp : Module(
     ): EtherPos {
         val player = mc.player ?: return EtherPos.NONE
         if (position == null) return EtherPos.NONE
-        val eyeHeight = when {
-            player.pose == Pose.SWIMMING -> 0.4
-            sneaking -> 1.27
-            else -> 1.62
-        }
-
-        val startPos = position.addVec(y = eyeHeight)
-        val endPos = startPos.add(player.lookAngle.scale(distance))
-        val result = traverseVoxels(startPos, endPos, etherWarp)
-        return if (result === EtherPos.NONE && returnEnd) EtherPos(true, BlockPos.containing(endPos), null) else result
+        val eye = if (player.pose == Pose.SWIMMING) 0.4 else if (sneaking) 1.27 else 1.62
+        val look = player.lookAngle
+        val fromX = position.x
+        val fromY = position.y + eye
+        val fromZ = position.z
+        val toX = fromX + look.x * distance
+        val toY = fromY + look.y * distance
+        val toZ = fromZ + look.z * distance
+        val hit = traverseVoxels(fromX, fromY, fromZ, toX, toY, toZ, etherWarp)
+        return if (hit === EtherPos.NONE && returnEnd) EtherPos(true, BlockPos.containing(toX, toY, toZ), null) else hit
     }
 
-    /**
-     * Traverses voxels from start to end and returns the first non-air block it hits.
-     * @author Bloom
-     */
-    private fun traverseVoxels(start: Vec3, end: Vec3, etherWarp: Boolean): EtherPos {
+    private fun traverseVoxels(fromX: Double, fromY: Double, fromZ: Double, toX: Double, toY: Double, toZ: Double, etherWarp: Boolean): EtherPos {
         val level = mc.level ?: return EtherPos.NONE
-        val (x0, y0, z0) = start
-        val (dirX, dirY, dirZ) = end.subtract(start)
+        val dx = toX - fromX
+        val dy = toY - fromY
+        val dz = toZ - fromZ
 
-        var x = floor(x0).toInt()
-        var y = floor(y0).toInt()
-        var z = floor(z0).toInt()
+        var x = floor(fromX).toInt()
+        var y = floor(fromY).toInt()
+        var z = floor(fromZ).toInt()
+        val stepX = sign(dx).toInt()
+        val stepY = sign(dy).toInt()
+        val stepZ = sign(dz).toInt()
+        val spanX = abs(1.0 / dx)
+        val spanY = abs(1.0 / dy)
+        val spanZ = abs(1.0 / dz)
+        var nextX = (if (stepX < 0) fromX - x else x + 1 - fromX) * spanX
+        var nextY = (if (stepY < 0) fromY - y else y + 1 - fromY) * spanY
+        var nextZ = (if (stepZ < 0) fromZ - z else z + 1 - fromZ) * spanZ
+        var left = abs(floor(toX).toInt() - x) + abs(floor(toY).toInt() - y) + abs(floor(toZ).toInt() - z)
 
-        val stepX = sign(dirX).toInt()
-        val stepY = sign(dirY).toInt()
-        val stepZ = sign(dirZ).toInt()
-
-        val tDeltaX = abs(1.0 / dirX)
-        val tDeltaY = abs(1.0 / dirY)
-        val tDeltaZ = abs(1.0 / dirZ)
-
-        var tMaxX = (if (stepX < 0) x0 - x else x + 1 - x0) * tDeltaX
-        var tMaxY = (if (stepY < 0) y0 - y else y + 1 - y0) * tDeltaY
-        var tMaxZ = (if (stepZ < 0) z0 - z else z + 1 - z0) * tDeltaZ
-
-        var remaining = abs(floor(end.x).toInt() - x) + abs(floor(end.y).toInt() - y) + abs(floor(end.z).toInt() - z)
-
-        val pos = BlockPos.MutableBlockPos()
+        val cursor = BlockPos.MutableBlockPos()
         while (true) {
             val chunk = level.chunkSource.getChunkNow(x shr 4, z shr 4) ?: return EtherPos.NONE
-            val state = chunk.getBlockState(pos.set(x, y, z))
+            val state = chunk.getBlockState(cursor.set(x, y, z))
             val flags = flagsOf(state)
-
-            if (if (etherWarp) flags and PASSABLE == 0 else flags and AIR == 0) {
-                if (flags and PASSABLE != 0) return EtherPos(false, pos.immutable(), state)
-
-                val feetY = y + (flags ushr STAND_OFFSET_SHIFT)
-                return EtherPos(!chunk.obstructs(BlockPos(x, feetY, z)) && !chunk.obstructs(BlockPos(x, feetY + 1, z)), pos.immutable(), state)
+            val stops = if (etherWarp) flags and PASSABLE == 0 else flags and AIR == 0
+            if (stops) {
+                val hit = cursor.immutable()
+                if (flags and PASSABLE != 0) return EtherPos(false, hit, state)
+                val feet = y + (flags ushr STAND_OFFSET_SHIFT)
+                val clear = !obstructs(chunk, cursor.set(x, feet, z)) && !obstructs(chunk, cursor.set(x, feet + 1, z))
+                return EtherPos(clear, hit, state)
             }
+            if (left-- == 0) return if (flags and AIR != 0) EtherPos.NONE else EtherPos(false, cursor.immutable(), state)
 
-            if (remaining-- == 0) return if (flags and AIR != 0) EtherPos.NONE else EtherPos(false, pos.immutable(), state)
-
-            if (tMaxX <= tMaxY && tMaxX <= tMaxZ) {
-                tMaxX += tDeltaX
+            if (nextX <= nextY && nextX <= nextZ) {
+                nextX += spanX
                 x += stepX
-            } else if (tMaxY <= tMaxZ) {
-                tMaxY += tDeltaY
+            } else if (nextY <= nextZ) {
+                nextY += spanY
                 y += stepY
             } else {
-                tMaxZ += tDeltaZ
+                nextZ += spanZ
                 z += stepZ
             }
         }
     }
 
-    private fun LevelChunk.obstructs(pos: BlockPos): Boolean = flagsOf(getBlockState(pos)) and OBSTRUCTS != 0
+    private fun obstructs(chunk: LevelChunk, pos: BlockPos): Boolean = flagsOf(chunk.getBlockState(pos)) and OBSTRUCTS != 0
     private fun flagsOf(state: BlockState): Int = blockFlags[Block.getId(state)]
 
     private const val STAND_OFFSET_SHIFT = 3
