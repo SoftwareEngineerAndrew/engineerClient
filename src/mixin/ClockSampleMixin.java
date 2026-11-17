@@ -14,14 +14,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 @Mixin(AttributeTrackSampler.class)
-public class TimeChangerSamplerMixin {
-
+public class ClockSampleMixin {
     @Shadow @Final private Holder<WorldClock> clock;
     @Shadow @Final private ClockManager clockManager;
 
     @ModifyArg(method = "applyTimeBased", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/KeyframeTrackSampler;sample(J)Ljava/lang/Object;"), index = 0)
-    private long ec$changeTime(long ticks) {
-        if (!Visibility.extractingSky || !(clockManager instanceof ClientClockManager) || !clock.is(WorldClocks.OVERWORLD)) return ticks;
-        return Visibility.INSTANCE.time();
+    private long ec$sampleAt(long ticks) {
+        long shown = Visibility.skyTime;
+        if (shown < 0 || !(clockManager instanceof ClientClockManager) || !clock.is(WorldClocks.OVERWORLD)) return ticks;
+        return shown;
     }
 }

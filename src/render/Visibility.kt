@@ -174,7 +174,8 @@ object Visibility : Module(
     private val removePing by BooleanSetting("Remove Tab Ping", false, desc = "Hides the ping bars next to each name.").withDependency { tabDropdown }
     private val removeHeads by BooleanSetting("Remove Useless Tab Heads", false, desc = "Hides the gray heads Hypixel puts on its info lines.").withDependency { tabDropdown }
 
-    @JvmField var extractingSky = false
+    // The time the sky and fog are being drawn at, or -1 outside that or with Time Changer off.
+    @JvmField var skyTime = -1L
 
     private const val TENTACLE_TEXTURE = "ewogICJ0aW1lc3RhbXAiIDogMTcxOTg1NzI3NzI0OSwKICAicHJvZmlsZUlkIiA6ICIxODA1Y2E2MmM0ZDI0M2NiOWQxYmY4YmM5N2E1YjgyNCIsCiAgInByb2ZpbGVOYW1lIiA6ICJSdWxsZWQiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzdkODM2NzQ5MjZiODk3MTRlNmI1YTU1NDcwNTAxYzA0YjA2NmRkODdiZjZjMzM1Y2RkYzZlNjBhMWExYTVmNSIKICAgIH0KICB9Cn0="
     private const val HEALER_FAIRY_TEXTURE = "ewogICJ0aW1lc3RhbXAiIDogMTcxOTQ2MzA5MTA0NywKICAicHJvZmlsZUlkIiA6ICIyNjRkYzBlYjVlZGI0ZmI3OTgxNWIyZGY1NGY0OTgyNCIsCiAgInByb2ZpbGVOYW1lIiA6ICJxdWludHVwbGV0IiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzJlZWRjZmZjNmExMWEzODM0YTI4ODQ5Y2MzMTZhZjdhMjc1MmEzNzZkNTM2Y2Y4NDAzOWNmNzkxMDhiMTY3YWUiCiAgICB9CiAgfQp9"
@@ -310,12 +311,15 @@ object Visibility : Module(
         graphics.fill(0, 0, mc.window.guiScaledWidth, mc.window.guiScaledHeight, alpha)
     }
 
-    fun changesTime() = enabled && timeChanger
-
-    fun time(): Long = when (timeMode) {
-        Time.REAL_TIME -> LocalTime.now().let { Math.floorMod(it.hour * 1000L + it.minute * 1000L / 60 - 6000, 24000L) }
-        Time.CUSTOM -> customTime.toLong()
-        else -> timeMode.ticks
+    @JvmStatic
+    fun shownTime(): Long {
+        if (!enabled || !timeChanger) return -1L
+        val mode = timeMode
+        if (mode == Time.CUSTOM) return customTime.toLong()
+        if (mode != Time.REAL_TIME) return mode.ticks
+        // Midnight is tick 18000, so a wall clock hour h is tick (h - 6) * 1000.
+        val now = LocalTime.now()
+        return Math.floorMod(now.hour * 1000L + now.minute * 1000L / 60 - 6000, 24000L)
     }
 
     @JvmStatic fun sidebarBack(vanilla: Int, title: Boolean): Int = when {

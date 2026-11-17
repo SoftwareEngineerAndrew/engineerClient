@@ -10,15 +10,15 @@ import net.minecraft.client.renderer.state.level.SkyRenderState;
 import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(SkyRenderer.class)
-public class TimeChangerSkyMixin {
-
+public class SkyClockMixin {
     @WrapMethod(method = "extractRenderState")
-    private void ec$skyTime(ClientLevel level, float partialTicks, Camera camera, SkyRenderState state, Operation<Void> original) {
-        Visibility.extractingSky = Visibility.INSTANCE.changesTime();
+    private void ec$skyClock(ClientLevel level, float partialTicks, Camera camera, SkyRenderState state, Operation<Void> original) {
+        long outer = Visibility.skyTime;
+        Visibility.skyTime = Visibility.shownTime();
         try {
             original.call(level, partialTicks, camera, state);
         } finally {
-            Visibility.extractingSky = false;
+            Visibility.skyTime = outer;
         }
     }
 }

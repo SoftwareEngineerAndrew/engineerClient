@@ -10,15 +10,15 @@ import org.joml.Vector3fc;
 import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(AtmosphericFogEnvironment.class)
-public class TimeChangerFogMixin {
-
+public class FogClockMixin {
     @WrapMethod(method = "getBaseColor")
-    private Vector3fc ec$fogTime(ClientLevel level, Camera camera, int renderDistance, float partialTicks, Operation<Vector3fc> original) {
-        Visibility.extractingSky = Visibility.INSTANCE.changesTime();
+    private Vector3fc ec$fogClock(ClientLevel level, Camera camera, int renderDistance, float partialTicks, Operation<Vector3fc> original) {
+        long outer = Visibility.skyTime;
+        Visibility.skyTime = Visibility.shownTime();
         try {
             return original.call(level, camera, renderDistance, partialTicks);
         } finally {
-            Visibility.extractingSky = false;
+            Visibility.skyTime = outer;
         }
     }
 }
