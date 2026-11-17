@@ -14,22 +14,22 @@ abstract class AdmScreen(title: Component) : Screen(title) {
 
     protected open val guiScale: Float get() = 1f
 
-    override fun init() {
-        ui.settle()
-    }
+    override fun init() = ui.settle()
 
     override fun mouseClicked(event: MouseButtonEvent, doubleClick: Boolean): Boolean =
-        ui.click(event.intoGuiSpace(), doubleClick) || super.mouseClicked(event, doubleClick)
+        ui.click(local(event), doubleClick) || super.mouseClicked(event, doubleClick)
 
     override fun mouseDragged(event: MouseButtonEvent, dragX: Double, dragY: Double): Boolean =
-        ui.drag(event.intoGuiSpace()) || super.mouseDragged(event, dragX, dragY)
+        ui.drag(local(event)) || super.mouseDragged(event, dragX, dragY)
 
     override fun mouseReleased(event: MouseButtonEvent): Boolean =
-        ui.release(event.intoGuiSpace()) || super.mouseReleased(event)
+        ui.release(local(event)) || super.mouseReleased(event)
 
-    override fun mouseScrolled(mouseX: Double, mouseY: Double, horizontalAmount: Double, verticalAmount: Double): Boolean =
-        ui.scroll(mouseX / guiScale, mouseY / guiScale, verticalAmount) ||
+    override fun mouseScrolled(mouseX: Double, mouseY: Double, horizontalAmount: Double, verticalAmount: Double): Boolean {
+        val scale = guiScale
+        return ui.scroll(mouseX / scale, mouseY / scale, verticalAmount) ||
             super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount)
+    }
 
     override fun charTyped(event: CharacterEvent): Boolean = ui.char(event) || super.charTyped(event)
 
@@ -43,6 +43,8 @@ abstract class AdmScreen(title: Component) : Screen(title) {
 
     override fun isPauseScreen(): Boolean = false
 
-    private fun MouseButtonEvent.intoGuiSpace(): MouseButtonEvent =
-        if (guiScale == 1f) this else MouseButtonEvent(x() / guiScale, y() / guiScale, buttonInfo())
+    private fun local(event: MouseButtonEvent): MouseButtonEvent {
+        val scale = guiScale
+        return if (scale == 1f) event else MouseButtonEvent(event.x() / scale, event.y() / scale, event.buttonInfo())
+    }
 }

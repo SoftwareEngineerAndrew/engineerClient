@@ -6,6 +6,7 @@ import com.adm.AdmMod.mc
 import com.adm.clickgui.ClickGUI
 import com.adm.clickgui.GuiTheme
 import com.adm.features.Category
+import com.adm.features.Module
 import com.adm.features.ModuleManager
 import com.adm.features.impl.render.ClickGUIModule
 import com.adm.utils.render.Corners
@@ -15,78 +16,84 @@ import com.adm.utils.ui.compose.*
 
 @Composable
 fun Panel(category: Category, onPress: () -> Unit) {
-    val data = remember { ClickGUIModule.panelSetting.getOrPut(category.name) { ClickGUIModule.PanelData(0, 0) } }
-    val modules = remember { ModuleManager.modulesByCategory[category]?.sortedByDescending { mc.font.width(it.name) }.orEmpty() }
+    val place = remember { ClickGUIModule.panelSetting.getOrPut(category.name) { ClickGUIModule.PanelData(0, 0) } }
+    val members = remember { ModuleManager.modulesByCategory[category]?.sortedByDescending { mc.font.width(it.name) }.orEmpty() }
     val scroll = remember(ClickGUI.searchString) { ScrollState() }
 
-    Column {
-        PanelHeader(category, data) {
-            data.extended = !data.extended
+    val panel = Column {
+        PanelHeader(category, place) {
+            place.extended = !place.extended
             scroll.offset = 0
         }
-
-        AnimatedVisibility({ data.extended }) {
-            Box {
-                Column { for (module in modules) key(module) { ModuleView(module) } }.offset(y = { scroll.offset })
-            }
-                .width(GuiTheme.ROW_WIDTH)
-                .height {
-                    scroll.maxScroll = height - MIN_VISIBLE
-                    (height + scroll.offset).coerceAtLeast(0)
-                }
-                .clip()
-        }
-
+        AnimatedVisibility({ place.extended }) { ModuleList(members, scroll) }
         Box().size(GuiTheme.ROW_WIDTH, GuiTheme.CAP).drawBehind { graphics ->
-            val accented = data.extended && modules.lastOrNull()?.enabled == true
-            graphics.roundedRect(x, y, right, bottom, (if (accented) GuiTheme.accent else GuiTheme.background).rgba, CORNERS_BOTTOM)
+            val lit = place.extended && members.lastOrNull()?.enabled == true
+            graphics.roundedRect(x, y, right, bottom, (if (lit) GuiTheme.accent else GuiTheme.background).rgba, FOOT)
         }
     }
-        .width(GuiTheme.ROW_WIDTH)
-        .offset({ data.x.coerceIn(0, maxX()) }, { data.y.coerceIn(0, maxY()) })
+    panel.width(GuiTheme.ROW_WIDTH)
+        .offset({ place.x.coerceIn(0, rightmost()) }, { place.y.coerceIn(0, lowest()) })
         .onPress(onPress)
         .onScroll { amount ->
-            if (data.extended) scroll.by(amount)
-            data.extended
+            val open = place.extended
+            if (open) scroll.by(amount)
+            open
         }
-        .drawBehind { graphics -> graphics.roundedShadow(x, y, right, bottom, GuiTheme.shadow.rgba, GuiTheme.PANEL_BLUR, CORNERS) }
+        .drawBehind { graphics -> graphics.roundedShadow(x, y, right, bottom, GuiTheme.shadow.rgba, GuiTheme.PANEL_BLUR, WHOLE) }
 }
 
 @Composable
-private fun PanelHeader(category: Category, data: ClickGUIModule.PanelData, onToggle: () -> Unit) {
-    var grabX by remember { mutableIntStateOf(0) }
-    var grabY by remember { mutableIntStateOf(0) }
+private fun ModuleList(members: List<Module>, scroll: ScrollState) {
+    Box {
+        Column { for (module in members) key(module) { ModuleView(module) } }.offset(y = { scroll.offset })
+    }
+        .width(GuiTheme.ROW_WIDTH)
+        .height {
+            scroll.maxScroll = height - KEEP_VISIBLE
+            (height + scroll.offset).coerceAtLeast(0)
+        }
+        .clip()
+}
+
+@Composable
+private fun PanelHeader(category: Category, place: ClickGUIModule.PanelData, onToggle: () -> Unit) {
+    var heldX by remember { mutableIntStateOf(0) }
+    var heldY by remember { mutableIntStateOf(0) }
+    val title = remember(category) { "§l${category.name}" }
 
     Box().size(GuiTheme.ROW_WIDTH, GuiTheme.ROW_HEIGHT)
         .pointerInput(
             onDrag = { event ->
                 if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
-                    data.x = (event.x().toInt() - grabX).coerceIn(0, maxX())
-                    data.y = (event.y().toInt() - grabY).coerceIn(0, maxY())
+                    place.x = (event.x().toInt() - heldX).coerceIn(0, rightmost())
+                    place.y = (event.y().toInt() - heldY).coerceIn(0, lowest())
                 }
             },
         ) { event ->
             when (event.button()) {
-                InputConstants.MOUSE_BUTTON_RIGHT -> onToggle()
-                InputConstants.MOUSE_BUTTON_LEFT -> {
-                    grabX = event.x().toInt() - x
-                    grabY = event.y().toInt() - y
+                InputConstants.MOUSE_BUTTON_RIGHT -> {
+                    onToggle()
+                    true
                 }
-                else -> return@pointerInput false
+                InputConstants.MOUSE_BUTTON_LEFT -> {
+                    heldX = event.x().toInt() - x
+                    heldY = event.y().toInt() - y
+                    true
+                }
+                else -> false
             }
-            true
         }
         .drawBehind { graphics ->
-            graphics.roundedRect(x, y, right, bottom, GuiTheme.background.rgba, CORNERS_TOP)
-            graphics.textCentered("§l${category.name}", x, y, right, bottom)
+            graphics.roundedRect(x, y, right, bottom, GuiTheme.background.rgba, HEAD)
+            graphics.textCentered(title, x, y, right, bottom)
         }
 }
 
-private fun maxX() = (ClickGUI.virtualWidth - GuiTheme.ROW_WIDTH).coerceAtLeast(0)
-private fun maxY() = (ClickGUI.virtualHeight - GuiTheme.ROW_HEIGHT).coerceAtLeast(0)
+private fun rightmost() = (ClickGUI.virtualWidth - GuiTheme.ROW_WIDTH).coerceAtLeast(0)
+private fun lowest() = (ClickGUI.virtualHeight - GuiTheme.ROW_HEIGHT).coerceAtLeast(0)
 
-private const val MIN_VISIBLE = 72
+private const val KEEP_VISIBLE = 72
 
-private val CORNERS = Corners(GuiTheme.RADIUS)
-private val CORNERS_TOP = Corners.top(GuiTheme.RADIUS)
-private val CORNERS_BOTTOM = Corners.bottom(GuiTheme.RADIUS)
+private val WHOLE = Corners(GuiTheme.RADIUS)
+private val HEAD = Corners.top(GuiTheme.RADIUS)
+private val FOOT = Corners.bottom(GuiTheme.RADIUS)

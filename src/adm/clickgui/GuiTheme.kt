@@ -2,9 +2,9 @@ package com.adm.clickgui
 
 import com.adm.features.impl.render.ClickGUIModule
 import com.adm.utils.Color
-import com.adm.utils.Color.Companion.brighter
 import com.adm.utils.Colors
 import net.minecraft.util.ARGB
+import java.awt.Color.HSBtoRGB
 
 object GuiTheme {
 
@@ -25,5 +25,17 @@ object GuiTheme {
 }
 
 fun blend(from: Int, to: Int, progress: Float): Int = ARGB.srgbLerp(progress, from, to)
+
 fun Color.hoverTint(hover: Float, factor: Float = 1.3f): Int =
-    if (hover <= 0f) rgba else blend(rgba, brighter(factor).rgba, hover)
+    if (hover <= 0f) rgba else blend(rgba, lighter(factor), hover)
+
+// The packed colour Color.brighter / darker / hsbMax would give, without making a Color each frame.
+internal fun Color.lighter(factor: Float): Int =
+    packHsb(hue, saturation, (brightness * factor.coerceAtLeast(1f)).coerceAtMost(1f), alphaFloat)
+
+internal fun Color.dimmer(factor: Float): Int = packHsb(hue, saturation, brightness * factor, alphaFloat)
+
+internal fun Color.fullHue(): Int = packHsb(hue, 1f, 1f, 1f)
+
+private fun packHsb(hue: Float, saturation: Float, brightness: Float, alpha: Float): Int =
+    (HSBtoRGB(hue, saturation, brightness) and 0x00FFFFFF) or ((alpha * 255).toInt() shl 24)

@@ -4,15 +4,16 @@ import androidx.compose.runtime.*
 import com.adm.AdmMod.mc
 import com.adm.clickgui.ClickGUI
 import com.adm.clickgui.GuiTheme
+import com.adm.clickgui.fullHue
 import com.adm.clickgui.hoverTint
 import com.adm.clickgui.settings.RenderableSetting
-import com.adm.utils.Color.Companion.hsbMax
 import com.adm.utils.Colors
 import com.adm.utils.render.*
 import com.adm.utils.ui.compose.*
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
+import net.minecraft.util.FormattedCharSequence
 import kotlin.math.roundToInt
 
 @Composable
@@ -20,42 +21,47 @@ fun RenderableSetting<*>.SettingRow(
     height: Int = GuiTheme.ROW_HEIGHT,
     trailing: @Composable (hovered: () -> Boolean) -> Unit = {},
 ): UiNode {
-    val interaction = remember { InteractionSource() }
-    return Box {
-        val row = Row(GuiTheme.PADDING) { trailing { interaction.hovered } }
-        row.offset({ GuiTheme.ROW_WIDTH - GuiTheme.PADDING - row.width }, { (height - row.height) / 2 })
+    val pointer = remember { InteractionSource() }
+    val row = Box {
+        val controls = Row(GuiTheme.PADDING) { trailing { pointer.hovered } }
+        controls.offset({ GuiTheme.ROW_WIDTH - GuiTheme.PADDING - controls.width }, { (height - controls.height) / 2 })
     }
-        .size(GuiTheme.ROW_WIDTH, height)
-        .hoverable(interaction)
-        .tooltip(description)
-        .drawBehind { graphics -> graphics.text(mc.font, name, x + GuiTheme.PADDING, y + (height - 8) / 2, Colors.WHITE.rgba, false) }
+    row.size(GuiTheme.ROW_WIDTH, height).hoverable(pointer).tooltip(description)
+    return row.drawBehind { graphics -> graphics.text(mc.font, name, x + GuiTheme.PADDING, y + (height - 8) / 2, Colors.WHITE.rgba, false) }
 }
-
 
 @Composable
 fun Gap(height: Int): UiNode = Box().height(height)
 
-fun GuiGraphicsExtractor.textCentered(value: String, left: Int, top: Int, right: Int, bottom: Int, color: Int = Colors.WHITE.rgba) =
-    text(mc.font, value, left + (right - left - mc.font.width(value)) / 2, top + (bottom - top - 8) / 2, color, false)
+fun GuiGraphicsExtractor.textCentered(value: String, left: Int, top: Int, right: Int, bottom: Int, color: Int = Colors.WHITE.rgba) {
+    val textX = left + (right - left - mc.font.width(value)) / 2
+    text(mc.font, value, textX, top + (bottom - top - 8) / 2, color, false)
+}
 
 @Composable
 fun UiNode.tooltip(text: String): UiNode {
     if (text.isEmpty()) return this
-    val interaction = remember { InteractionSource() }
-    val rest = animateProgress(600) { interaction.hovered }
-    val lines = remember(text) { mc.font.split(Component.literal(text), 200) }
-    val boxWidth = remember(lines) { (lines.maxOfOrNull { mc.font.width(it) } ?: 0) + 8 * 2 }
-    val boxHeight = remember(lines) { lines.size * mc.font.lineHeight + 8 * 2 }
-    return hoverable(interaction).drawBehind {
-        if (!interaction.hovered || rest.value < 1f) return@drawBehind
-        val boxX = (right + 10).coerceIn(0, (ClickGUI.virtualWidth - boxWidth).coerceAtLeast(0))
-        val boxY = y.coerceIn(0, (ClickGUI.virtualHeight - boxHeight).coerceAtLeast(0))
-        Overlay.defer { overlay ->
-            overlay.roundedRectOutlined(boxX, boxY, boxX + boxWidth, boxY + boxHeight, GuiTheme.surface.rgba, GuiTheme.accent.hsbMax().rgba, 1.5f, GuiTheme.RADIUS)
-            lines.forEachIndexed { index, line ->
-                overlay.text(mc.font, line, boxX + 8, boxY + 8 + index * mc.font.lineHeight, Colors.WHITE.rgba, false)
-            }
-        }
+    val pointer = remember { InteractionSource() }
+    val dwell = animateProgress(600) { pointer.hovered }
+    val bubble = remember(text) { Bubble(mc.font.split(Component.literal(text), BUBBLE_WRAP)) }
+    return hoverable(pointer).drawBehind {
+        if (!pointer.hovered || dwell.value < 1f) return@drawBehind
+        bubble.left = (right + 10).coerceIn(0, (ClickGUI.virtualWidth - bubble.width).coerceAtLeast(0))
+        bubble.top = y.coerceIn(0, (ClickGUI.virtualHeight - bubble.height).coerceAtLeast(0))
+        Overlay.defer(bubble)
+    }
+}
+
+private class Bubble(private val lines: List<FormattedCharSequence>) : (GuiGraphicsExtractor) -> Unit {
+    val width = (lines.maxOfOrNull { mc.font.width(it) } ?: 0) + BUBBLE_PAD * 2
+    val height = lines.size * mc.font.lineHeight + BUBBLE_PAD * 2
+    var left = 0
+    var top = 0
+
+    override fun invoke(graphics: GuiGraphicsExtractor) {
+        graphics.roundedRectOutlined(left, top, left + width, top + height, GuiTheme.surface.rgba, GuiTheme.accent.fullHue(), 1.5f, GuiTheme.RADIUS)
+        val step = mc.font.lineHeight
+        for (i in lines.indices) graphics.text(mc.font, lines[i], left + BUBBLE_PAD, top + BUBBLE_PAD + i * step, Colors.WHITE.rgba, false)
     }
 }
 
@@ -67,29 +73,33 @@ fun UiNode.outlined(radius: Float = GuiTheme.RADIUS, width: Float = 1f, fill: ()
 
 @Composable
 fun Switch(checked: Boolean, onClick: (() -> Unit)? = null): UiNode {
-    val interaction = remember { InteractionSource() }
-    val hover = animateProgress { interaction.hovered }
-    val progress = animateProgress(checked, 200)
-    return Box {
-        Box().size(24, SWITCH_HEIGHT).outlined(SWITCH_CORNERS, 1.5f) { GuiTheme.surface.hoverTint(hover.value) }
+    val pointer = remember { InteractionSource() }
+    val hover = animateProgress { pointer.hovered }
+    val on = animateProgress(checked, 200)
+    val track = Box {
+        Box().size(SWITCH_WIDTH, SWITCH_HEIGHT).outlined(SWITCH_CORNERS, 1.5f) { GuiTheme.surface.hoverTint(hover.value) }
         Canvas { graphics ->
-            if (progress.value <= 0f) return@Canvas
-            val fillRight = x + (24 * progress.value).roundToInt()
-            graphics.roundedRectClipped(x, y, right, bottom, x, y, fillRight, bottom, GuiTheme.accent.hoverTint(hover.value), SWITCH_CORNERS)
-        }.size(24, SWITCH_HEIGHT)
-        Canvas { graphics -> graphics.circle(x + SWITCH_HEIGHT / 2, y + SWITCH_HEIGHT / 2, SWITCH_KNOB_RADIUS, Colors.WHITE.rgba) }
-            .size(SWITCH_HEIGHT).offset(x = { ((24 - SWITCH_HEIGHT).toFloat() * progress.value).roundToInt() })
-    }.clickable(onClick = onClick).hoverable(interaction).scale { 1f - 0.06f * hover.value }
+            val shown = on.value
+            if (shown > 0f) {
+                val edge = x + (SWITCH_WIDTH * shown).roundToInt()
+                graphics.roundedRectClipped(x, y, right, bottom, x, y, edge, bottom, GuiTheme.accent.hoverTint(hover.value), SWITCH_CORNERS)
+            }
+        }.size(SWITCH_WIDTH, SWITCH_HEIGHT)
+        Canvas { graphics -> graphics.circle(x + SWITCH_HEIGHT / 2, y + SWITCH_HEIGHT / 2, KNOB_RADIUS, Colors.WHITE.rgba) }
+            .size(SWITCH_HEIGHT)
+            .offset(x = { ((SWITCH_WIDTH - SWITCH_HEIGHT).toFloat() * on.value).roundToInt() })
+    }
+    return track.clickable(onClick = onClick).hoverable(pointer).scale { 1f - PRESS_SHRINK * hover.value }
 }
 
 @Composable
 fun Button(text: String, width: Int, height: Int, onClick: () -> Unit): UiNode {
-    val interaction = remember { InteractionSource() }
-    val hover = animateProgress { interaction.hovered }
+    val pointer = remember { InteractionSource() }
+    val hover = animateProgress { pointer.hovered }
     return Box().size(width, height)
-        .hoverable(interaction)
+        .hoverable(pointer)
         .clickable(onClick = onClick)
-        .scale { 1f - 0.06f * hover.value }
+        .scale { 1f - PRESS_SHRINK * hover.value }
         .outlined { GuiTheme.surface.hoverTint(hover.value) }
         .drawBehind { graphics -> graphics.textCentered(text, x, y, right, bottom) }
 }
@@ -101,20 +111,20 @@ fun Pill(
     onClick: (() -> Unit)? = null,
     onRightClick: (() -> Unit)? = null
 ): UiNode {
-    val interaction = remember { InteractionSource() }
-    val hover = animateProgress { interaction.hovered }
-    return Canvas(size = { mc.font.width(text()) + GuiTheme.PADDING * 2 to PILL_HEIGHT }) { graphics ->
+    val pointer = remember { InteractionSource() }
+    val hover = animateProgress { pointer.hovered }
+    val label = Canvas(size = { mc.font.width(text()) + GuiTheme.PADDING * 2 to PILL_HEIGHT }) { graphics ->
         graphics.text(mc.font, text(), x + GuiTheme.PADDING, y + (height - 8) / 2, color(), false)
     }
-        .clickable(onRightClick = onRightClick, onClick = onClick)
-        .hoverable(interaction)
+    return label.clickable(onRightClick = onRightClick, onClick = onClick)
+        .hoverable(pointer)
         .outlined { GuiTheme.surface.hoverTint(hover.value, 1.2f) }
 }
 
 @Composable
 fun Pill(text: String, onClick: (() -> Unit)? = null, onRightClick: (() -> Unit)? = null): UiNode {
-    val current = rememberUpdatedState(text)
-    return Pill({ current.value }, onClick = onClick, onRightClick = onRightClick)
+    val latest = rememberUpdatedState(text)
+    return Pill({ latest.value }, onClick = onClick, onRightClick = onRightClick)
 }
 
 @Composable
@@ -125,17 +135,19 @@ fun Icon(
     rotation: () -> Float = { 0f },
     onClick: (() -> Unit)? = null
 ): UiNode {
-    val interaction = remember { InteractionSource() }
-    val hover = animateProgress { hovered?.invoke() ?: interaction.hovered }
+    val pointer = remember { InteractionSource() }
+    val hover = animateProgress { if (hovered != null) hovered() else pointer.hovered }
+    val half = size / 2f
     return Canvas { graphics ->
-        graphics.pose().pushMatrix()
-        graphics.pose().translate(x + size / 2f, y + size / 2f)
-        graphics.pose().scale(1f + 0.15f * hover.value)
-        graphics.pose().rotate(rotation())
-        graphics.pose().translate(-size / 2f, -size / 2f)
+        val pose = graphics.pose()
+        pose.pushMatrix()
+        pose.translate(x + half, y + half)
+        pose.scale(1f + ICON_GROW * hover.value)
+        pose.rotate(rotation())
+        pose.translate(-half, -half)
         graphics.roundedTexture(0, 0, size, size, texture)
-        graphics.pose().popMatrix()
-    }.clickable(onClick = onClick).size(size).hoverable(interaction)
+        pose.popMatrix()
+    }.clickable(onClick = onClick).size(size).hoverable(pointer)
 }
 
 @Composable
@@ -149,18 +161,21 @@ fun TextBox(
     filter: (String) -> String = { it },
     focusRequester: FocusRequester? = null
 ): UiNode {
-    var focused by remember { mutableStateOf(false) }
-    return TextInput(
-        value, onValueChange, maxLength, centered, filter, focusRequester,
-        onFocusChanged = { focused = it },
-    ).outlined(radius).drawBehind { graphics ->
-        if (value.isNotEmpty() || focused || placeholder.isEmpty()) return@drawBehind
+    var typing by remember { mutableStateOf(false) }
+    val field = TextInput(value, onValueChange, maxLength, centered, filter, focusRequester, onFocusChanged = { typing = it })
+    return field.outlined(radius).drawBehind { graphics ->
+        if (placeholder.isEmpty() || value.isNotEmpty() || typing) return@drawBehind
         val textX = if (centered) x + width / 2 - mc.font.width(placeholder) / 2 else x + 4
         graphics.text(mc.font, placeholder, textX, y + (height - 8) / 2, Colors.MINECRAFT_GRAY.rgba, false)
     }
 }
 
 const val SWITCH_HEIGHT = 16
+private const val SWITCH_WIDTH = 24
 private const val PILL_HEIGHT = 17
-private const val SWITCH_KNOB_RADIUS = (SWITCH_HEIGHT / 2 - 4).toFloat()
+private const val KNOB_RADIUS = (SWITCH_HEIGHT / 2 - 4).toFloat()
+private const val PRESS_SHRINK = 0.06f
+private const val ICON_GROW = 0.15f
+private const val BUBBLE_WRAP = 200
+private const val BUBBLE_PAD = 8
 private val SWITCH_CORNERS = Corners(9f)

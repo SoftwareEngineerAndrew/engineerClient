@@ -21,62 +21,60 @@ object ClickGUI : AdmScreen(Component.literal("Click GUI")) {
         private set
 
     private val searchFocus = FocusRequester()
-    private val panels = mutableStateListOf<Category>()
+    // Back to front: the last one draws on top and is picked first.
+    private val stack = mutableStateListOf<Category>()
 
     override val ui by lazy {
         if (Category.categories.keys.any { ClickGUIModule.panelSetting[it] == null }) ClickGUIModule.resetPositions()
-        panels.addAll(Category.categories.values)
+        stack.addAll(Category.categories.values)
+        UiHost { Contents() }
+    }
 
-        UiHost {
-            TextBox(
-                searchString, { searchString = it },
-                placeholder = "Search...", maxLength = 18, centered = true, radius = 6f, focusRequester = searchFocus,
-            ).size(SEARCH_WIDTH, SEARCH_HEIGHT).offset({ virtualWidth / 2 - SEARCH_WIDTH / 2 }, { virtualHeight - SEARCH_BOTTOM_MARGIN })
-            for (category in panels) key(category) {
-                Panel(category) { bringToFront(category) }
-            }
+    @Composable
+    private fun Contents() {
+        TextBox(
+            searchString, { searchString = it },
+            placeholder = "Search...", maxLength = 18, centered = true, radius = 6f, focusRequester = searchFocus,
+        ).size(SEARCH_W, SEARCH_H).offset({ virtualWidth / 2 - SEARCH_W / 2 }, { virtualHeight - SEARCH_FROM_BOTTOM })
+        for (category in stack) key(category) {
+            Panel(category) { raise(category) }
         }
     }
 
-    private var scale: Float = 1f
-    override val guiScale: Float get() = scale
+    private var zoom = 1f
+    override val guiScale: Float get() = zoom
 
-    val virtualWidth get() = (mc.window.guiScaledWidth / scale).toInt()
-    val virtualHeight get() = (mc.window.guiScaledHeight / scale).toInt()
-
-    override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
-        graphics.pose().pushMatrix()
-        graphics.pose().scale(scale, scale)
-
-        ui.render(graphics, virtualWidth, virtualHeight, (mouseX / scale).toInt(), (mouseY / scale).toInt())
-
-        graphics.pose().popMatrix()
-        super.extractRenderState(graphics, mouseX, mouseY, partialTick)
-    }
+    val virtualWidth get() = (mc.window.guiScaledWidth / zoom).toInt()
+    val virtualHeight get() = (mc.window.guiScaledHeight / zoom).toInt()
 
     override fun init() {
         super.init()
-        scale = ClickGUIModule.clickGuiScale / mc.window.guiScale
-        focusSearch()
+        zoom = ClickGUIModule.clickGuiScale / mc.window.guiScale
+        ui.focus(searchFocus)
+    }
+
+    override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
+        val pose = graphics.pose()
+        pose.pushMatrix()
+        pose.scale(zoom, zoom)
+        ui.render(graphics, virtualWidth, virtualHeight, (mouseX / zoom).toInt(), (mouseY / zoom).toInt())
+        pose.popMatrix()
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick)
     }
 
     override fun keyPressed(event: KeyEvent): Boolean {
-        if (event.key == InputConstants.KEYCODE_F && event.hasControlDownWithQuirk()) {
-            focusSearch()
-            return true
-        }
-        return super.keyPressed(event)
+        if (event.key != InputConstants.KEYCODE_F || !event.hasControlDownWithQuirk()) return super.keyPressed(event)
+        ui.focus(searchFocus)
+        return true
     }
 
-    private fun focusSearch() = ui.focus(searchFocus)
-
-    private fun bringToFront(category: Category) {
-        if (panels.last() == category) return
-        panels.remove(category)
-        panels.add(category)
+    private fun raise(category: Category) {
+        if (stack.last() == category) return
+        stack.remove(category)
+        stack.add(category)
     }
 
-    private const val SEARCH_WIDTH = 120
-    private const val SEARCH_HEIGHT = 20
-    private const val SEARCH_BOTTOM_MARGIN = 45
+    private const val SEARCH_W = 120
+    private const val SEARCH_H = 20
+    private const val SEARCH_FROM_BOTTOM = 45
 }
