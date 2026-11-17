@@ -86,8 +86,8 @@ fun logError(throwable: Throwable, context: Any) {
     modMessage(Component.literal("$message §cClick to copy it.").withStyle {
         it
             .withClickEvent(
-                ClickEvent.RunCommand(
-                    "oddev copy $message \\n``` ${throwable.message} \\n${
+                ClickEvent.CopyToClipboard(
+                    "$message\n``` ${throwable.message}\n${
                         throwable.stackTraceToString().lineSequence().take(10).joinToString("\n")
                     }```"
                 )

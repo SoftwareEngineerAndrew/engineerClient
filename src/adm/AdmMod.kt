@@ -74,7 +74,6 @@ object AdmMod : ClientModInitializer {
 
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             arrayOf(
-                devCommand,
                 soopyCommand,
                 dungeonWaypointsCommand, cataCommand
             ).forEach { commodore -> commodore.register(dispatcher) }
