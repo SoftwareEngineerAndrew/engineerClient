@@ -14,8 +14,8 @@ import com.adm.utils.skyblock.dungeon.DungeonUtils
  * "Only Used" for ADM's Invincibility Timer: its HUD lists only the masks (and Phoenix) that have
  * saved you since you joined the world - each stays once used, cooldown over or not, so you see
  * which are back. Nothing used yet: no HUD. Registered into ADM's module like the Splits look
- * (see SplitsLook); `InvincibilityHudMixin` asks [shows] where ADM reads its Show Spirit /
- * Bonzo / Phoenix settings while drawing.
+ * (see SplitsLook); the HUD asks [shows] where it reads its Show Spirit / Bonzo / Phoenix
+ * settings while drawing.
  */
 object MasksUsed {
 
@@ -40,16 +40,11 @@ object MasksUsed {
 
     /**
      * P3 Sim restarted its masks and Phoenix (Masks.reset, every start): ADM's timers go back to ready as well, and
-     * nothing counts as used this run. ADM's InvincibilityType enum is package-private, so its public reset()
-     * (cooldown and invincibility to 0) is reached by reflection. Client thread.
+     * nothing counts as used this run. Client thread.
      */
     fun resetTimers() {
         used.fill(false)
-        com.engineerclient.EngineerClient.safely("core invincibility reset") {
-            val type = Class.forName("com.adm.features.impl.dungeon.InvincibilityTimer\$InvincibilityType")
-            val reset = type.getMethod("reset").apply { isAccessible = true }
-            type.enumConstants.forEach { reset.invoke(it) }
-        }
+        InvincibilityTimer.resetTimers()
     }
 
     /** Adds the setting to ADM's module; before SplitsLook.install, which re-reads ADM's config for both. */

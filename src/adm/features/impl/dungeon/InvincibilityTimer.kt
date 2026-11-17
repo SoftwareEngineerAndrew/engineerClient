@@ -11,11 +11,19 @@ import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.on
 import com.adm.features.Module
-import com.adm.utils.*
+import com.adm.utils.Color
+import com.adm.utils.Colors
+import com.adm.utils.alert
+import com.adm.utils.createSkullStack
+import com.adm.utils.itemId
+import com.adm.utils.lore
 import com.adm.utils.render.ItemStateRenderer.Companion.drawItemStack
 import com.adm.utils.render.textDim
+import com.adm.utils.sendCommand
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.engineerclient.misc.MasksUsed
 import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.item.ItemStack
 
 object InvincibilityTimer : Module(
     name = "Invincibility Timer",
@@ -32,140 +40,146 @@ object InvincibilityTimer : Module(
 
     private val hud by HUD(name, "Shows the invincibility time in the HUD.") { example ->
         if (!example && ((onlyInDungeons && !DungeonUtils.inDungeons) || (showOnlyInBoss && !DungeonUtils.inBoss))) return@HUD 0 to 0
-
-        val visibleTypes = if (example) InvincibilityType.entries else InvincibilityType.entries.filter { type ->
-            when (type) {
-                InvincibilityType.SPIRIT -> showSpirit
-                InvincibilityType.BONZO -> showBonzo
-                InvincibilityType.PHOENIX -> showPhoenix
-            } && when (showWhen) {
-                ShowWhen.ALWAYS -> true
-                ShowWhen.ANY -> type.activeTime > 0 || type.currentCooldown > 0
-                ShowWhen.WHEN_ACTIVE -> type.activeTime > 0
-                ShowWhen.ON_COOLDOWN -> type.currentCooldown > 0
-            }
-        }.ifEmpty { return@HUD 0 to 0 }
-
+        val worn = wornMask()
+        var row = 0
         var width = 0
-
-        visibleTypes.forEachIndexed { index, type ->
-            drawItemStack(type.itemStack, 0, -1 + index * 14)
-            val y = index * 14 + 3
-
-            if (type == InvincibilityType.BONZO && mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.itemId?.equalsOneOf("BONZO_MASK", "STARRED_BONZO_MASK") == true ||
-                type == InvincibilityType.SPIRIT && mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.itemId?.equalsOneOf("SPIRIT_MASK", "STARRED_SPIRIT_MASK") == true) {
-                fill(14, y, 15, y + 9, equippedMaskColor.rgba)
-            }
-            textDim(
-                text = when {
-                    type.activeTime > 0 -> "${(type.activeTime / 20f).toFixed()}s"
-                    type.currentCooldown > 0 -> "${(type.currentCooldown / 20f).toFixed()}s"
-                    else -> "✔"
-                },
-                16, y,
-                if (type.activeTime == 0 && type.currentCooldown == 0) Colors.MINECRAFT_GREEN
-                else if (type.activeTime > 0) Colors.MINECRAFT_GOLD else Colors.MINECRAFT_RED
-            ).first.let { if (it > width) width = it }
+        for (item in items) {
+            if (!example && !listed(item)) continue
+            drawItemStack(item.icon, 0, row * 14 - 1)
+            val y = row * 14 + 3
+            if (worn != null && worn === item) fill(14, y, 15, y + 9, equippedMaskColor.rgba)
+            val w = textDim(item.label(), 16, y, item.labelColor()).first
+            if (w > width) width = w
+            row++
         }
-
-        width + 20 to visibleTypes.size * 14
+        if (row == 0) 0 to 0 else width + 20 to row * 14
     }
     private val showOnlyInBoss by BooleanSetting("Show In Boss", false, desc = "Only shows invincibility timers during dungeon boss fights.")
     private val showWhen by SelectorSetting("Show", ShowWhen.ALWAYS, "Controls when invincibility items are shown.")
     private val equippedMaskColor by ColorSetting("Equipped Mask", Colors.MINECRAFT_DARK_PURPLE, desc = "Color of the equipped mask in the HUD. (Bonzo/Spirit)")
-    private val cooldownRegex = Regex("^Cooldown: (\\d+)s$")
 
     private val itemCat by DropdownSetting("Cooldown On Item", desc = "Options to show cooldown on the item slot itself.")
     private val showOnItem by BooleanSetting("Show on Item", false, "Renders the cooldown on the spirit mask and bonzo mask items").withDependency { itemCat }
     private val durability by BooleanSetting("Display As Durability", false, "True: durability, False: colored vertical slide").withDependency { itemCat }
     private val cdColor by ColorSetting("Cooldown Color", Colors.gray38, false, "Color of the cooldown").withDependency { itemCat }
 
+    private class Saver(val label: String, val savedTicks: Int, val cooldownSeconds: Int, texture: String, vararg val maskIds: String) {
+        val icon: ItemStack by lazy { createSkullStack(texture) }
+        @Volatile var savedLeft = 0
+        @Volatile var cooldownLeft = 0
+
+        private var shownKey = Long.MIN_VALUE
+        private var shown = ""
+
+        fun label(): String {
+            val key = (savedLeft.toLong() shl 32) or (cooldownLeft.toLong() and 0xFFFFFFFFL)
+            if (key != shownKey) {
+                shownKey = key
+                shown = when {
+                    savedLeft > 0 -> seconds(savedLeft)
+                    cooldownLeft > 0 -> seconds(cooldownLeft)
+                    else -> "✔"
+                }
+            }
+            return shown
+        }
+
+        fun labelColor(): Color = when {
+            savedLeft > 0 -> Colors.MINECRAFT_GOLD
+            cooldownLeft > 0 -> Colors.MINECRAFT_RED
+            else -> Colors.MINECRAFT_GREEN
+        }
+    }
+
+    private val spirit = Saver("Spirit", 60, 30, "9bbe721d7ad8ab965f08cbec0b834f779b5197f79da4aea3d13d253ece9dec2", "SPIRIT_MASK", "STARRED_SPIRIT_MASK")
+    private val bonzo = Saver("Bonzo", 60, 180, "12716ecbf5b8da00b05f316ec6af61e8bd02805b21eb8e440151468dc656549c", "BONZO_MASK", "STARRED_BONZO_MASK")
+    // The pet's lore says 4 s, but a proc only covers the player for 3 s, like the masks.
+    private val phoenix = Saver("Phoenix", 60, 60, "66b1b59bc890c9c97527787dde20600c8b86f6b9912d51a6bfcdb0e4c2aa3c97")
+    private val items = arrayOf(spirit, bonzo, phoenix)
+
+    private const val SPIRIT_LINE = "Second Wind Activated! Your Spirit Mask saved your life!"
+    private const val PHOENIX_LINE = "Your Phoenix Pet saved you from certain death!"
+    private const val BONZO_TAIL = "Bonzo's Mask saved your life!"
+    private const val COOLDOWN_PREFIX = "Cooldown: "
+
+    private fun seconds(ticks: Int) = "${ticks / 20}.${((ticks % 20) * 5).toString().padStart(2, '0')}s"
+
+    private fun listed(item: Saver): Boolean {
+        val index = items.indexOf(item)
+        val on = MasksUsed.shows(index, when (index) { 0 -> showSpirit; 1 -> showBonzo; else -> showPhoenix })
+        return on && when (showWhen) {
+            ShowWhen.ALWAYS -> true
+            ShowWhen.ANY -> item.savedLeft > 0 || item.cooldownLeft > 0
+            ShowWhen.WHEN_ACTIVE -> item.savedLeft > 0
+            ShowWhen.ON_COOLDOWN -> item.cooldownLeft > 0
+        }
+    }
+
+    private fun wornMask(): Saver? {
+        val id = mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.itemId ?: return null
+        return if (id in spirit.maskIds) spirit else if (id in bonzo.maskIds) bonzo else null
+    }
+
+    private fun savedBy(message: String): Saver? = when {
+        message == SPIRIT_LINE -> spirit
+        message == PHOENIX_LINE -> phoenix
+        // "Your Bonzo's Mask", or with a one character star before it: "Your ⚚ Bonzo's Mask".
+        message.startsWith("Your ") && message.endsWith(BONZO_TAIL) &&
+            (message.length == 5 + BONZO_TAIL.length || (message.length == 7 + BONZO_TAIL.length && message[6] == ' ' && message[5] != '\n' && message[5] != '\r')) -> bonzo
+        else -> null
+    }
+
+    private fun helmetCooldownSeconds(): Int? {
+        val lines = mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.lore ?: return null
+        for (i in lines.indices.reversed()) {
+            val line = lines[i].string
+            if (line.length <= COOLDOWN_PREFIX.length + 1 || !line.startsWith(COOLDOWN_PREFIX) || !line.endsWith('s')) continue
+            val digits = line.substring(COOLDOWN_PREFIX.length, line.length - 1)
+            if (digits.all { it in '0'..'9' }) digits.toIntOrNull()?.let { return it }
+        }
+        return null
+    }
+
     init {
         on<TickEvent.Server> {
-            InvincibilityType.entries.forEach { it.tick() }
+            for (item in items) {
+                if (item.cooldownLeft > 0) item.cooldownLeft--
+                if (item.savedLeft > 0) item.savedLeft--
+            }
         }
 
         on<MessageEvent.Chat> {
             if (onlyInDungeons && !DungeonUtils.inDungeons) return@on
-            InvincibilityType.entries.firstOrNull { type -> message.matches(type.regex) }?.let { type ->
-                val seconds = if (type == InvincibilityType.BONZO) {
-                    mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.loreString?.reversed()
-                        ?.firstNotNullOfOrNull { cooldownRegex.matchEntire(it)?.groupValues?.get(1)?.toIntOrNull() }
-                } else null
-                type.proc(seconds)
-                val usedMasks = InvincibilityType.entries.count { it.currentCooldown > 0 }
-                if (invincibilityAnnounce) sendCommand("pc ${type.name.lowercase().capitalizeFirst()} Procced! ($usedMasks/${InvincibilityType.entries.size})")
-                if (invincibilityAlert) alert(type.name.lowercase().capitalizeFirst())
-            }
+            val item = savedBy(message) ?: return@on
+            val seconds = if (item === bonzo) helmetCooldownSeconds() else null
+            item.savedLeft = item.savedTicks
+            item.cooldownLeft = (seconds ?: item.cooldownSeconds) * 20
+            if (invincibilityAnnounce) sendCommand("pc ${item.label} Procced! (${items.count { it.cooldownLeft > 0 }}/${items.size})")
+            if (invincibilityAlert) alert(item.label)
         }
 
-        on<LevelEvent.Load> {
-            InvincibilityType.entries.forEach { it.reset() }
-        }
+        on<LevelEvent.Load> { resetTimers() }
 
         on<GuiEvent.RenderSlot> {
-            if (!showOnItem) return@on
-            val percent = when(slot.item.itemId) {
-                "BONZO_MASK","STARRED_BONZO_MASK" -> InvincibilityType.BONZO.currentCooldown.toDouble() / (InvincibilityType.BONZO.maxCooldownTime * 20)
-                "SPIRIT_MASK","STARRED_SPIRIT_MASK" -> InvincibilityType.SPIRIT.currentCooldown.toDouble() / (InvincibilityType.SPIRIT.maxCooldownTime * 20)
-                else -> return@on
-            }
-            if (percent <= 0) return@on
+            if (!showOnItem || (spirit.cooldownLeft <= 0 && bonzo.cooldownLeft <= 0)) return@on
+            val stack = slot.item
+            val id = stack.itemId
+            val mask = if (id in spirit.maskIds) spirit else if (id in bonzo.maskIds) bonzo else return@on
+            val left = 1 - mask.cooldownLeft.toDouble() / (mask.cooldownSeconds * 20)
+            if (left >= 1) return@on
+            guiGraphics.fakeItem(stack, slot.x, slot.y)
             if (durability) {
-                guiGraphics.fakeItem(slot.item, slot.x, slot.y)
                 guiGraphics.fill(slot.x + 2, slot.y + 13, slot.x + 14, slot.y + 15, Colors.BLACK.rgba)
-                guiGraphics.fill(slot.x + 2, slot.y + 13, slot.x + 14 - ((1 - percent) * 12).toInt(), slot.y + 14,cdColor.rgba)
-                cancel()
-            } else {
-                guiGraphics.fakeItem(slot.item, slot.x, slot.y)
-                guiGraphics.fill(slot.x, slot.y + ((1 - percent) * 16).toInt(), slot.x + 16, slot.y + 16, cdColor.rgba)
-                cancel()
-            }
+                guiGraphics.fill(slot.x + 2, slot.y + 13, slot.x + 14 - (left * 12).toInt(), slot.y + 14, cdColor.rgba)
+            } else guiGraphics.fill(slot.x, slot.y + (left * 16).toInt(), slot.x + 16, slot.y + 16, cdColor.rgba)
+            cancel()
         }
     }
 
-    private enum class InvincibilityType(
-        val regex: Regex,
-        private val maxInvincibilityTime: Int,
-        val maxCooldownTime: Int,
-        private val textureHash: String
-    ) {
-        SPIRIT(
-            Regex("^Second Wind Activated! Your Spirit Mask saved your life!$"),
-            60, 30,
-            "9bbe721d7ad8ab965f08cbec0b834f779b5197f79da4aea3d13d253ece9dec2"
-        ),
-        BONZO(
-            Regex("^Your (?:. )?Bonzo's Mask saved your life!$"),
-            60, 180,
-            "12716ecbf5b8da00b05f316ec6af61e8bd02805b21eb8e440151468dc656549c"
-        ),
-        PHOENIX(
-            Regex("^Your Phoenix Pet saved you from certain death!$"),
-            80, 60,
-            "66b1b59bc890c9c97527787dde20600c8b86f6b9912d51a6bfcdb0e4c2aa3c97"
-        );
-
-        val itemStack by lazy { createSkullStack(textureHash) }
-
-        var activeTime: Int = 0
-            private set
-        var currentCooldown: Int = 0
-            private set
-
-        fun proc(cooldownTime: Int?) {
-            activeTime = maxInvincibilityTime
-            currentCooldown = (cooldownTime ?: maxCooldownTime) * 20
-        }
-
-        fun tick() {
-            if (currentCooldown > 0) currentCooldown--
-            if (activeTime > 0) activeTime--
-        }
-
-        fun reset() {
-            currentCooldown = 0
-            activeTime = 0
+    fun resetTimers() {
+        for (item in items) {
+            item.savedLeft = 0
+            item.cooldownLeft = 0
         }
     }
 
