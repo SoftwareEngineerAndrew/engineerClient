@@ -54,7 +54,7 @@ object SecretWaypoints {
     private val show = BooleanSetting("Secret Waypoints", false, desc = "Boxes every secret in the clear.").withDependency { dropdown.value }
     private val style = SelectorSetting("Style", Style.CELL, desc = "How each secret is drawn.").withDependency { dropdown.value && show.value }
     private val lineWidth = NumberSetting("Line Width", 2.0, 0.5..10.0, 0.5, desc = "Outline thickness.").withDependency { dropdown.value && show.value && style.value != Style.FULL_BLOCK }
-    private val fillOpacity = NumberSetting("Fill Opacity", 80, 0..255, 1, desc = "How see-through the fill is.").withDependency { dropdown.value && show.value && (style.value == Style.CELL || style.value == Style.FILLED_OUTLINE) }
+    private val fillOpacity = NumberSetting("Fill Opacity", 80, 0..255, 1, desc = "How see-through the fill is.").withDependency { dropdown.value && show.value && style.value == Style.FILLED_OUTLINE }
     private val chestColor = ColorSetting("Chest Color", Color(0, 255, 0), true, desc = "Chests.").withDependency { dropdown.value && show.value }
     private val itemColor = ColorSetting("Item Color", Color(0, 0, 255), true, desc = "Items.").withDependency { dropdown.value && show.value }
     private val essenceColor = ColorSetting("Essence Color", Color(255, 0, 255), true, desc = "Wither essence.").withDependency { dropdown.value && show.value }
@@ -70,7 +70,7 @@ object SecretWaypoints {
 
     private enum class Kind(val label: String, val tag: String = label) { CHEST("Chest"), ITEM("Item"), ESSENCE("Essence"), BAT("Bat"), KEY("Redstone Key", "Redstone"), LEVER("Lever") }
 
-    private class Spot(val kind: Kind, val pos: BlockPos, val box: AABB) { val cell = AABB(pos) }
+    private class Spot(val kind: Kind, val pos: BlockPos, val box: AABB)
 
     private val secrets by lazy { SecretPack.bundled }
     @Volatile private var ownPack: RoomPack? = null
@@ -129,11 +129,7 @@ object SecretWaypoints {
                 if (hideCollected.value && s.pos in collected) continue
                 val c = colorOf(s.kind)
                 when (st) {
-                    Style.CELL -> {
-                        drawFilledBox(s.cell, c.multiplyAlpha(fill), depth)
-                        drawWireFrameBox(s.cell, c, width, depth)
-                    }
-                    Style.OUTLINE -> drawWireFrameBox(s.box, c, width, depth)
+                    Style.CELL, Style.OUTLINE -> drawWireFrameBox(s.box, c, width, depth)
                     Style.FILLED_OUTLINE -> {
                         drawFilledBox(s.box, c.multiplyAlpha(fill), depth)
                         drawWireFrameBox(s.box, c, width, depth)
