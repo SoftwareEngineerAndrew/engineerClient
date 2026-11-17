@@ -101,6 +101,7 @@ object Visibility : Module(
     private val hidePortalOverlay by BooleanSetting("Hide Portal Overlay", false, desc = "No purple overlay inside a nether portal.").withDependency { screenDropdown }
 
     private val cleanupDropdown by DropdownSetting("Cleanup", desc = "Particles, entities and players that clutter the screen.")
+    private val hideAllParticles by BooleanSetting("Hide All Particles", false, desc = "No particles at all.").withDependency { cleanupDropdown }
     private val hideBlockBreak by BooleanSetting("Hide Block Break Particles", false, desc = "No block crack and break particles.").withDependency { cleanupDropdown }
     private val hideSmoke by BooleanSetting("Hide Smoke Particles", false, desc = "No smoke particles.").withDependency { cleanupDropdown }
     private val disableExplosion by BooleanSetting("Hide Explosion Particles", false, desc = "No explosion particles.").withDependency { cleanupDropdown }
@@ -329,7 +330,7 @@ object Visibility : Module(
     }
 
     fun hidesParticle(particle: Particle): Boolean = enabled &&
-        (hideBlockBreak && particle is TerrainParticle || hideSmoke && particle is SmokeParticle)
+        (hideAllParticles || hideBlockBreak && particle is TerrainParticle || hideSmoke && particle is SmokeParticle)
 
     fun hidesEntityFire() = enabled && hideEntityFire
 
