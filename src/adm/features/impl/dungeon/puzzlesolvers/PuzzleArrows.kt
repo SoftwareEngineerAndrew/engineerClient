@@ -6,6 +6,7 @@ import com.engineerclient.p3sim.ShotPlan
 import com.adm.AdmMod.mc
 import com.adm.utils.itemId
 import com.adm.utils.lore
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow
 import net.minecraft.world.item.BowItem
@@ -61,8 +62,8 @@ object PuzzleArrows {
             val wall = level.clip(ClipContext(a, b, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player))
             val end = if (wall.type == HitResult.Type.MISS) b else wall.location
             var hit = -1; var best = Double.MAX_VALUE
-            val all = boxes + stops
-            all.forEachIndexed { i, box ->
+            for (i in 0 until boxes.size + stops.size) {
+                val box = if (i < boxes.size) boxes[i] else stops[i - boxes.size]
                 val d = if (box.contains(a)) 0.0 else box.clip(a, end).map { a.distanceToSqr(it) }.orElse(Double.MAX_VALUE)
                 if (d < best) { best = d; hit = i }
             }
@@ -87,14 +88,17 @@ object PuzzleArrows {
     }
 
     // Every puzzle block on a bow or a punch goes through here; true holds the input back.
-    @JvmStatic
-    fun blocksUse(): Boolean = shortbowShot(false)?.let(::blocksShot) ?: false
+    private inline val armed get() = PuzzleSolvers.enabled && DungeonUtils.inClear
 
     @JvmStatic
-    fun blocksAttack(): Boolean = BeamsSolver.blocksPunch() || IcePathSolver.blocksPunch() || (shortbowShot(true)?.let(::blocksShot) ?: false)
+    fun blocksUse(): Boolean = armed && shortbowShot(false)?.let(::blocksShot) ?: false
+
+    @JvmStatic
+    fun blocksAttack(): Boolean = armed && (BeamsSolver.blocksPunch() || IcePathSolver.blocksPunch() || (shortbowShot(true)?.let(::blocksShot) ?: false))
 
     @JvmStatic
     fun blocksRelease(): Boolean {
+        if (!armed) return false
         val shot = releaseShot() ?: return false
         if (!blocksShot(shot)) return false
         mc.player?.stopUsingItem()
