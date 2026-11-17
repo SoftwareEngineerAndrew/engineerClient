@@ -295,14 +295,14 @@ object Visibility : Module(
     fun fullbright() = enabled && fullbright
     fun noTextShadow() = enabled && noTextShadow
 
-    fun hidesPaneHighlight(slot: Slot?): Boolean {
-        if (!enabled || !noPaneHighlight || slot == null) return false
-        val stack = slot.item
-        return BuiltInRegistries.ITEM.getKey(stack.item).path.endsWith("glass_pane") && stack.hoverName.string.isBlank()
-    }
+    @JvmStatic fun highlightsSlot(slot: Slot): Boolean = !enabled || !noPaneHighlight || !isFillerPane(slot.item)
 
-    fun slotIcon(icon: Identifier?): Identifier? =
-        if (enabled && hideOffhandBackground && icon == InventoryMenu.EMPTY_ARMOR_SLOT_SHIELD) null else icon
+    // Menu fillers are glass panes renamed to nothing.
+    private fun isFillerPane(stack: ItemStack): Boolean =
+        BuiltInRegistries.ITEM.getKey(stack.item).path.endsWith("glass_pane") && stack.hoverName.string.isBlank()
+
+    @JvmStatic fun emptySlotIcon(icon: Identifier?): Identifier? =
+        if (icon != null && enabled && hideOffhandBackground && icon == InventoryMenu.EMPTY_ARMOR_SLOT_SHIELD) null else icon
 
     fun drawDarkMode(graphics: GuiGraphicsExtractor, afterHud: Boolean) {
         if (!enabled || !darkMode || darkTintHud != afterHud) return
