@@ -12,10 +12,10 @@ import com.adm.utils.Color.Companion.withAlpha
 import com.adm.utils.Colors
 import com.adm.utils.itemId
 import com.adm.utils.render.drawCylinder
-import com.adm.utils.skyblock.dungeon.DungeonUtils.getAbilityCooldown
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.world.item.Items
-import kotlin.math.abs
+import net.minecraft.world.phys.Vec3
 
 object GyroWand : Module(
     name = "Gyro Wand",
@@ -26,43 +26,43 @@ object GyroWand : Module(
     private val cooldownColor by ColorSetting("Cooldown Color", Colors.MINECRAFT_RED.withAlpha(0.5f), true, desc = "The color of the cooldown of the Gyrokinetic Wand.").withDependency { showCooldown }
     private val depthCheck by BooleanSetting("Depth Check", true, desc = "Whether or not the cylinder should have a depth check.")
 
-    private data class Burst(val start: Long = 0L, val y: Double = 0.0, val count: Int = 0)
+    // The cast is five still witch particles at one height within 120 ms.
+    private var groupStart = 0L
+    private var groupY = 0.0
+    private var groupSize = 0
+    private var castAt = 0L
 
-    private var burst = Burst()
-    private var lastUse = 0L
-
-    private val onCooldown get() =
-        System.currentTimeMillis() - lastUse < getAbilityCooldown(30_000L)
+    private fun cooling(now: Long) = now - castAt < DungeonUtils.getAbilityCooldown(30_000L)
 
     init {
         on<ParticleEvent> {
-            if (particle != ParticleTypes.WITCH || xd != 0.0 || yd != 0.0 || zd != 0.0 || onCooldown) return@on
+            if (xd != 0.0 || yd != 0.0 || zd != 0.0 || particle !== ParticleTypes.WITCH) return@on
             val now = System.currentTimeMillis()
-
-            burst = if (now - burst.start > 120L || abs(y - burst.y) > 0.02) Burst(now, y, 1)
-            else burst.copy(count = burst.count + 1)
-
-            if (burst.count >= 5) {
-                lastUse = now
-                burst = Burst()
+            if (cooling(now)) return@on
+            if (groupSize == 0 || now - groupStart > 120L || y - groupY > 0.02 || groupY - y > 0.02) {
+                groupStart = now
+                groupY = y
+                groupSize = 1
+            } else if (++groupSize >= 5) {
+                castAt = now
+                groupSize = 0
             }
         }
 
         on<RenderExtractEvent> {
             val player = mc.player ?: return@on
-            player.mainHandItem.takeIf { it.item == Items.BLAZE_ROD && it.itemId == "GYROKINETIC_WAND" } ?: return@on
-            val position = Etherwarp.getEtherPos(player.position(), distance = 25.0, etherWarp = false).takeIf { it.state?.isAir == false } ?: return@on
-
-            drawCylinder(
-                position.vec3.add(0.5, 1.0, 0.5), 10f, 0.3f,
-                if (showCooldown && onCooldown) cooldownColor else color,
-                64, depth = depthCheck
-            )
+            val held = player.mainHandItem
+            if (!held.`is`(Items.BLAZE_ROD) || held.itemId != "GYROKINETIC_WAND") return@on
+            val hit = Etherwarp.getEtherPos(player.position(), 25.0)
+            val block = hit.pos ?: return@on
+            if (hit.state?.isAir != false) return@on
+            val tint = if (showCooldown && cooling(System.currentTimeMillis())) cooldownColor else color
+            drawCylinder(Vec3(block.x + 0.5, block.y + 1.0, block.z + 0.5), 10f, 0.3f, tint, 64, depth = depthCheck)
         }
 
         on<LevelEvent.Load> {
-            lastUse = 0L
-            burst = Burst()
+            castAt = 0L
+            groupSize = 0
         }
     }
 }
