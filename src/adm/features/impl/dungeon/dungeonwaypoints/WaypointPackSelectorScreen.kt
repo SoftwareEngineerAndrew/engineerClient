@@ -24,7 +24,7 @@ class WaypointPackSelectorScreen(private val parent: Screen?) : AdmScreen(Compon
     private class Prompt(val title: String, val onConfirm: (String) -> Unit)
 
     private var revision by mutableIntStateOf(0)
-    private var packs by mutableStateOf(WaypointPackFileUtils.listPackNames())
+    private var packs by mutableStateOf(WaypointPackFileUtils.packNames())
     private var loading by mutableStateOf(false)
     private var prompt by mutableStateOf<Prompt?>(null)
 
@@ -56,14 +56,15 @@ class WaypointPackSelectorScreen(private val parent: Screen?) : AdmScreen(Compon
             Text({ "§lWaypoint Pack Manager" }).centeredX(PANEL_WIDTH, DIALOG_PADDING)
             Button("Create Pack", 100, DIALOG_BUTTON_HEIGHT) {
                 prompt = Prompt("Create Pack") { name ->
-                    if (name.isNotBlank()) refreshAfter { DungeonWaypoints.createPack(name) }
+                    if (name.isNotBlank()) refreshAfter { WaypointStore.createPack(name) }
                 }
             }.at(76, ACTIONS_Y)
             Button("Import", 80, DIALOG_BUTTON_HEIGHT) {
                 prompt = Prompt("Import as New Pack") { name ->
+                    val clipboard = mc.keyboardHandler.clipboard
                     refreshAfter {
-                        DungeonWaypointConfig.decodeWaypoints(name)
-                            ?.takeIf { DungeonWaypoints.importPack(name, it) }
+                        DungeonWaypointConfig.decodeWaypoints(null, clipboard)
+                            ?.takeIf { WaypointStore.importPack(name, it) }
                             ?.let { modMessage("§aImported waypoints as pack '$name'!") }
                             ?: modMessage("§cFailed to decode waypoints from clipboard.")
                     }
@@ -123,16 +124,16 @@ class WaypointPackSelectorScreen(private val parent: Screen?) : AdmScreen(Compon
                 backgroundSave()
             }).at(36, 0)
             Text({
-                val count = DungeonWaypoints.loadedPacks[name]?.values?.sumOf { it.size }
-                if (count != null) "§a$count §7wp" else "§7? wp"
+                val count = WaypointStore.waypointCount(name)
+                if (count >= 0) "§a$count §7wp" else "§7? wp"
             }).at(190, (ROW_HEIGHT - 8) / 2)
             Button("§7✎", 26, 18) {
                 prompt = Prompt("Rename Pack") { newName ->
-                    if (newName.isNotBlank() && newName != name) refreshAfter { DungeonWaypoints.renamePack(name, newName) }
+                    if (newName.isNotBlank() && newName != name) refreshAfter { WaypointStore.renamePack(name, newName) }
                 }
             }.at(260, (ROW_HEIGHT - 18) / 2)
             Button(if (canDelete) "§cX" else "§8X", 26, 18) {
-                if (canDelete) refreshAfter { DungeonWaypoints.deletePack(name) }
+                if (canDelete) refreshAfter { WaypointStore.deletePack(name) }
             }.at(292, (ROW_HEIGHT - 18) / 2)
         }.size(ROW_WIDTH, ROW_HEIGHT).drawBehind { graphics ->
             if (editing) graphics.roundedRectOutlined(x, y, right, bottom, GuiTheme.surface.rgba, GuiTheme.accent.rgba, 1f, GuiTheme.RADIUS)
@@ -141,7 +142,7 @@ class WaypointPackSelectorScreen(private val parent: Screen?) : AdmScreen(Compon
     }
 
     private fun backgroundSave() {
-        AdmMod.scope.launch { DungeonWaypoints.savePackSelection(DungeonWaypoints.selectedPackIds.toList(), DungeonWaypoints.editPackId) }
+        AdmMod.scope.launch { WaypointStore.selectPacks(DungeonWaypoints.selectedPackIds.toList(), DungeonWaypoints.editPackId) }
     }
 
     private fun refreshAfter(work: suspend () -> Unit) {
@@ -150,7 +151,7 @@ class WaypointPackSelectorScreen(private val parent: Screen?) : AdmScreen(Compon
             try {
                 work()
             } finally {
-                packs = WaypointPackFileUtils.listPackNames()
+                packs = WaypointPackFileUtils.packNames()
                 revision++
                 loading = false
             }

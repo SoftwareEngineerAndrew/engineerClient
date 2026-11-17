@@ -1,26 +1,20 @@
 package com.adm.config
 
-data class WaypointPackState(
-    val selectedPackIds: MutableList<String> = mutableListOf(),
-    var editPackId: String = "",
-)
+internal class PackSelection(val selected: List<String>, val edit: String)
 
-fun WaypointPackState.normalized(availablePackIds: List<String>): WaypointPackState {
-    if (availablePackIds.isEmpty()) return WaypointPackState()
+internal fun settlePackSelection(selected: List<String>, edit: String, available: List<String>): PackSelection {
+    if (available.isEmpty()) return PackSelection(emptyList(), "")
 
-    val selectedPackIds = selectedPackIds
-        .map(String::trim)
-        .filter { it.isNotBlank() && it in availablePackIds }
-        .distinct()
-        .toMutableList()
-
-    val editPackId = editPackId
-        .takeIf { it in availablePackIds }
-        ?: selectedPackIds.firstOrNull()
-        ?: availablePackIds.first()
-
-    if (selectedPackIds.isEmpty()) selectedPackIds.add(editPackId)
-    if (editPackId !in selectedPackIds) selectedPackIds.add(editPackId)
-
-    return WaypointPackState(selectedPackIds, editPackId)
+    val kept = ArrayList<String>(selected.size + 1)
+    for (raw in selected) {
+        val id = raw.trim()
+        if (id.isNotEmpty() && id in available && id !in kept) kept.add(id)
+    }
+    val editId = when {
+        edit in available -> edit
+        kept.isNotEmpty() -> kept[0]
+        else -> available[0]
+    }
+    if (editId !in kept) kept.add(editId)
+    return PackSelection(kept, editId)
 }

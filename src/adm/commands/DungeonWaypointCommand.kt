@@ -8,11 +8,16 @@ import com.adm.AdmMod.scope
 import com.adm.clickgui.settings.impl.label
 import com.adm.config.DungeonWaypointConfig
 import com.adm.config.WaypointPackFileUtils
-import com.adm.features.impl.dungeon.dungeonwaypoints.*
+import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
+import com.adm.features.impl.dungeon.dungeonwaypoints.SecretWaypoints
+import com.adm.features.impl.dungeon.dungeonwaypoints.WaypointPackSelectorScreen
+import com.adm.features.impl.dungeon.dungeonwaypoints.WaypointStore
 import com.adm.utils.Color
 import com.adm.utils.modMessage
 import com.adm.utils.setClipboardContent
 import kotlinx.coroutines.launch
+
+private val hexColor = Regex("[0-9A-Fa-f]{8}")
 
 val dungeonWaypointsCommand = Commodore("dwp", "dungeonwaypoints") {
     runs {
@@ -25,8 +30,7 @@ val dungeonWaypointsCommand = Commodore("dwp", "dungeonwaypoints") {
     }
 
     literal("size").runs { sizeX: Double, sizeY: Double, sizeZ: Double ->
-        fun valid(size: Double) = size in 0.1..1.0
-        if (!valid(sizeX) || !valid(sizeY) || !valid(sizeZ)) return@runs modMessage("§cSize must be between 0.1 and 1.0!")
+        if (sizeX !in 0.1..1.0 || sizeY !in 0.1..1.0 || sizeZ !in 0.1..1.0) return@runs modMessage("§cSize must be between 0.1 and 1.0!")
         DungeonWaypoints.sizeX = sizeX
         DungeonWaypoints.sizeY = sizeY
         DungeonWaypoints.sizeZ = sizeZ
@@ -55,7 +59,7 @@ val dungeonWaypointsCommand = Commodore("dwp", "dungeonwaypoints") {
 
     literal("color").executable {
         param("hex").parser { hex: String ->
-            if (!hex.matches(Regex("[0-9A-Fa-f]{8}"))) throw SyntaxException("Color hex not properly formatted! Use format RRGGBBAA")
+            if (!hex.matches(hexColor)) throw SyntaxException("Color hex not properly formatted! Use format RRGGBBAA")
             Color(hex)
         }
 
@@ -66,22 +70,27 @@ val dungeonWaypointsCommand = Commodore("dwp", "dungeonwaypoints") {
     }
 
     literal("export").runs {
+        val pack = WaypointStore.editPackCopy()
         scope.launch {
-            val encoded = DungeonWaypointConfig.encodeWaypoints(DungeonWaypoints.exportEditableWaypoints())
-            if (encoded != null) {
+            val encoded = DungeonWaypointConfig.encodeWaypoints(pack)
+            mc.execute {
+                if (encoded == null) return@execute modMessage("Failed to write waypoint config to clipboard.")
                 setClipboardContent(encoded)
                 modMessage("Wrote waypoint config to clipboard.")
-            } else modMessage("Failed to write waypoint config to clipboard.")
+            }
         }
     }
 
     literal("import").runs { importString: GreedyString? ->
+        val clipboard = mc.keyboardHandler.clipboard
         scope.launch {
-            val waypoints = DungeonWaypointConfig.decodeWaypoints(importString?.string) ?: return@launch modMessage("§cFailed to decode waypoints from clipboard. §fIs the data valid?")
-
-            val existing = WaypointPackFileUtils.listPackNames().toSet()
-            val name = generateSequence(1) { it + 1 }.map { if (it == 1) "Imported" else "Imported $it" }.first { it !in existing }
-            if (!DungeonWaypoints.importPack(name, waypoints)) return@launch modMessage("§cFailed to create pack '$name'.")
+            val waypoints = DungeonWaypointConfig.decodeWaypoints(importString?.string, clipboard)
+                ?: return@launch modMessage("§cFailed to decode waypoints from clipboard. §fIs the data valid?")
+            val taken = WaypointPackFileUtils.packNames()
+            var n = 1
+            while ((if (n == 1) "Imported" else "Imported $n") in taken) n++
+            val name = if (n == 1) "Imported" else "Imported $n"
+            if (!WaypointStore.importPack(name, waypoints)) return@launch modMessage("§cFailed to create pack '$name'.")
             modMessage("Imported waypoints as new pack '$name'!${if (!DungeonWaypoints.enabled) " §7(Make sure to enable the Waypoints module)" else ""}")
         }
     }

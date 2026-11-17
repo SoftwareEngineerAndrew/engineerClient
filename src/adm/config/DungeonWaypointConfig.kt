@@ -3,9 +3,8 @@ package com.adm.config
 import com.google.gson.*
 import com.google.gson.reflect.TypeToken
 import com.adm.AdmMod
-import com.adm.AdmMod.mc
-import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
 import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints.DungeonWaypoint
+import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints.WaypointType
 import com.adm.utils.Color
 import com.adm.utils.network.WebUtils
 import net.minecraft.core.BlockPos
@@ -18,171 +17,95 @@ import kotlin.io.encoding.Base64
 
 object DungeonWaypointConfig {
     val gson: Gson = GsonBuilder()
-        .registerTypeAdapter(AABB::class.java, AABBSerializer())
-        .registerTypeAdapter(DungeonWaypoint::class.java, DungeonWaypointDeserializer())
-        .registerTypeAdapter(BlockPos::class.java, BlockPosSerializer())
+        .registerTypeAdapter(AABB::class.java, BoxAdapter)
+        .registerTypeAdapter(DungeonWaypoint::class.java, WaypointReader)
+        .registerTypeAdapter(BlockPos::class.java, PosAdapter)
         .setPrettyPrinting().create()
 
-    fun encodeWaypoints(waypointsMap: MutableMap<String, MutableList<DungeonWaypoint>>): String? {
-        return try {
-            Base64.encode(compress(gson.toJson(waypointsMap)))
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+    private val packType = object : TypeToken<MutableMap<String, MutableList<DungeonWaypoint>>>() {}.type
+
+    fun encodeWaypoints(waypoints: Map<String, List<DungeonWaypoint>>): String? = try {
+        val bytes = ByteArrayOutputStream()
+        GZIPOutputStream(bytes).use { it.write(gson.toJson(waypoints).toByteArray()) }
+        Base64.encode(bytes.toByteArray())
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
     }
 
-    private fun compress(input: String): ByteArray {
-        ByteArrayOutputStream().use { byteArrayOutputStream ->
-            GZIPOutputStream(byteArrayOutputStream).use { gzipOutputStream ->
-                gzipOutputStream.write(input.toByteArray())
-            }
-            return byteArrayOutputStream.toByteArray()
-        }
-    }
-
-    suspend fun decodeWaypoints(importString: String?): MutableMap<String, MutableList<DungeonWaypoint>>? {
-        val input = (importString?.let {
-            if (importString.startsWith("https://")) WebUtils.fetchString(importString).getOrNull()
-            else importString
-        } ?: mc.keyboardHandler.clipboard).trim().trim { it == '\n' }
-
+    /** [source] is a pack string, a link to one, or null for [clipboard]; a link that can't be fetched also falls back to [clipboard]. */
+    suspend fun decodeWaypoints(source: String?, clipboard: String): MutableMap<String, MutableList<DungeonWaypoint>>? {
+        val raw = (if (source == null) null else if (source.startsWith("https://")) WebUtils.fetchString(source).getOrNull() else source) ?: clipboard
+        val input = raw.trim().trim { it == '\n' }
         return try {
-            gson.fromJson(
-                if (input.startsWith("{")) input else decompress(Base64.decode(input)),
-                object : TypeToken<MutableMap<String, MutableList<DungeonWaypoint>>>() {}.type
-            )
+            val json = if (input.startsWith("{")) input
+            else GZIPInputStream(Base64.decode(input).inputStream()).bufferedReader().use { it.readText() }
+            gson.fromJson(json, packType)
         } catch (_: Exception) {
             null
         }
     }
 
-    private fun decompress(compressed: ByteArray): String {
-        GZIPInputStream(compressed.inputStream()).use { gzipInputStream ->
-            return gzipInputStream.bufferedReader().use { it.readText() }
-        }
-    }
-
-    internal class DungeonWaypointDeserializer : JsonDeserializer<DungeonWaypoint> {
+    private object WaypointReader : JsonDeserializer<DungeonWaypoint> {
         override fun deserialize(json: JsonElement, type: Type, context: JsonDeserializationContext): DungeonWaypoint {
-            val jsonObj = json.asJsonObject
-
-            val blockPos = if (jsonObj.has("blockPos")) context.deserialize(jsonObj["blockPos"], BlockPos::class.java)
-            else BlockPos(jsonObj["x"].asInt, jsonObj["y"].asInt, jsonObj["z"].asInt)
-
-            val color = context.deserialize<Color>(jsonObj["color"], Color::class.java)
-
-            val filled = jsonObj["filled"].asBoolean
-            val depth = jsonObj["depth"].asBoolean
-
-            val aabb = context.deserialize<AABB>(jsonObj["aabb"], AABB::class.java)
-
-            val title = jsonObj["title"]?.asString?.ifBlank { null }
-            val waypointType = jsonObj["type"]?.asString?.let {
-                runCatching { DungeonWaypoints.WaypointType.valueOf(it) }.getOrNull()
-            }
-
-            val waypoint = DungeonWaypoint(blockPos, color, filled, depth, aabb, title, type = waypointType)
-
-            if (waypointType == null && jsonObj.has("secret") && jsonObj["secret"]?.asBoolean == true)
-                waypoint.type = DungeonWaypoints.WaypointType.SECRET
-
-            return waypoint
+            val o = json.asJsonObject
+            val pos = if (o.has("blockPos")) context.deserialize(o["blockPos"], BlockPos::class.java)
+            else BlockPos(o["x"].asInt, o["y"].asInt, o["z"].asInt)
+            val kind = o["type"]?.asString?.let { name -> WaypointType.entries.firstOrNull { it.name == name } }
+                ?: WaypointType.SECRET.takeIf { o["secret"]?.asBoolean == true }
+            return DungeonWaypoint(
+                pos,
+                context.deserialize(o["color"], Color::class.java),
+                o["filled"].asBoolean,
+                o["depth"].asBoolean,
+                context.deserialize(o["aabb"], AABB::class.java),
+                o["title"]?.asString?.ifBlank { null },
+                kind,
+            )
         }
     }
 
-    internal class AABBSerializer : JsonSerializer<AABB>, JsonDeserializer<AABB> {
+    // Older saves used intermediary and legacy field names for the box corners.
+    private val boxKeys = arrayOf(
+        arrayOf("minX", "minY", "minZ", "maxX", "maxY", "maxZ"),
+        arrayOf("field_1323", "field_1322", "field_1321", "field_1320", "field_1325", "field_1324"),
+        arrayOf("field_72340_a", "field_72338_b", "field_72339_c", "field_72336_d", "field_72337_e", "field_72334_f"),
+    )
+
+    private object BoxAdapter : JsonSerializer<AABB>, JsonDeserializer<AABB> {
         override fun deserialize(json: JsonElement, type: Type, context: JsonDeserializationContext): AABB {
-            val jsonObj = json.asJsonObject
-
-            if (jsonObj.has("minX")) {
-                val minX = jsonObj["minX"].asDouble
-                val minY = jsonObj["minY"].asDouble
-                val minZ = jsonObj["minZ"].asDouble
-                val maxX = jsonObj["maxX"].asDouble
-                val maxY = jsonObj["maxY"].asDouble
-                val maxZ = jsonObj["maxZ"].asDouble
-
-                return AABB(minX, minY, minZ, maxX, maxY, maxZ)
-            }
-
-            if (jsonObj.has("field_1323")) {
-                val minX = jsonObj["field_1323"].asDouble
-                val minY = jsonObj["field_1322"].asDouble
-                val minZ = jsonObj["field_1321"].asDouble
-                val maxX = jsonObj["field_1320"].asDouble
-                val maxY = jsonObj["field_1325"].asDouble
-                val maxZ = jsonObj["field_1324"].asDouble
-
-                return AABB(minX, minY, minZ, maxX, maxY, maxZ)
-            }
-
-            if (jsonObj.has("field_72340_a")) {
-                val minX = jsonObj["field_72340_a"].asDouble
-                val minY = jsonObj["field_72338_b"].asDouble
-                val minZ = jsonObj["field_72339_c"].asDouble
-                val maxX = jsonObj["field_72336_d"].asDouble
-                val maxY = jsonObj["field_72337_e"].asDouble
-                val maxZ = jsonObj["field_72334_f"].asDouble
-
-                return AABB(minX, minY, minZ, maxX, maxY, maxZ)
-            }
-
-            return AABB(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+            val o = json.asJsonObject
+            val k = boxKeys.firstOrNull { o.has(it[0]) } ?: return AABB(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+            return AABB(o[k[0]].asDouble, o[k[1]].asDouble, o[k[2]].asDouble, o[k[3]].asDouble, o[k[4]].asDouble, o[k[5]].asDouble)
         }
 
-        override fun serialize(src: AABB, typeOfSrc: Type?, context: JsonSerializationContext?): JsonElement {
-            val jsonObject = JsonObject()
-            jsonObject.addProperty("minX", src.minX)
-            jsonObject.addProperty("minY", src.minY)
-            jsonObject.addProperty("minZ", src.minZ)
-            jsonObject.addProperty("maxX", src.maxX)
-            jsonObject.addProperty("maxY", src.maxY)
-            jsonObject.addProperty("maxZ", src.maxZ)
-
-            return jsonObject
+        override fun serialize(src: AABB, type: Type?, context: JsonSerializationContext?): JsonElement = JsonObject().apply {
+            addProperty("minX", src.minX)
+            addProperty("minY", src.minY)
+            addProperty("minZ", src.minZ)
+            addProperty("maxX", src.maxX)
+            addProperty("maxY", src.maxY)
+            addProperty("maxZ", src.maxZ)
         }
     }
 
-    internal class BlockPosSerializer : JsonSerializer<BlockPos>, JsonDeserializer<BlockPos> {
-        override fun serialize(
-            src: BlockPos,
-            typeOfSrc: Type,
-            context: JsonSerializationContext
-        ): JsonElement {
-            val obj = JsonObject()
-            obj.addProperty("x", src.x)
-            obj.addProperty("y", src.y)
-            obj.addProperty("z", src.z)
-
-            return obj
+    private object PosAdapter : JsonSerializer<BlockPos>, JsonDeserializer<BlockPos> {
+        override fun serialize(src: BlockPos, type: Type, context: JsonSerializationContext): JsonElement = JsonObject().apply {
+            addProperty("x", src.x)
+            addProperty("y", src.y)
+            addProperty("z", src.z)
         }
 
-        override fun deserialize(
-            json: JsonElement,
-            typeOfT: Type,
-            context: JsonDeserializationContext
-        ): BlockPos {
-            val obj = json.asJsonObject
-
-            if (obj.has("field_11173")) {
-                val x = obj["field_11175"].asInt
-                val y = obj["field_11174"].asInt
-                val z = obj["field_11173"].asInt
-                return BlockPos(x, y, z)
+        override fun deserialize(json: JsonElement, type: Type, context: JsonDeserializationContext): BlockPos {
+            val o = json.asJsonObject
+            return when {
+                o.has("field_11173") -> BlockPos(o["field_11175"].asInt, o["field_11174"].asInt, o["field_11173"].asInt)
+                o.has("x") -> BlockPos(o["x"].asInt, o["y"].asInt, o["z"].asInt)
+                else -> {
+                    AdmMod.logger.debug("Failed to deserialize BlockPos\n$json")
+                    BlockPos(0, 0, 0)
+                }
             }
-
-            if (obj.has("x")) {
-                val x = obj["x"].asInt
-                val y = obj["y"].asInt
-                val z = obj["z"].asInt
-                return BlockPos(x, y, z)
-            }
-
-            AdmMod.logger.debug("Failed to deserialize BlockPos\n$json")
-            return BlockPos(0, 0, 0)
         }
-
     }
 }
-

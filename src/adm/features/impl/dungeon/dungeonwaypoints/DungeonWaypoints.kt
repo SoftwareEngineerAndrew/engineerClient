@@ -3,7 +3,6 @@ package com.adm.features.impl.dungeon.dungeonwaypoints
 import com.engineerclient.dungeon.BossWaypoints
 import com.github.stivais.commodore.parsers.CommandParsable
 import com.mojang.blaze3d.platform.InputConstants
-import com.adm.AdmMod.scope
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.*
 import com.adm.events.*
@@ -17,16 +16,10 @@ import com.adm.utils.Color
 import com.adm.utils.Colors
 import com.adm.utils.modMessage
 import com.adm.utils.skyblock.dungeon.DungeonUtils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
 import net.minecraft.world.phys.AABB
 
-/**
- * Custom Waypoints for Dungeons
- * @author Bonsai
- */
 object DungeonWaypoints : Module(
     name = "Waypoints",
     description = "Room, boss and party waypoints."
@@ -38,7 +31,7 @@ object DungeonWaypoints : Module(
     val disableDepth by BooleanSetting("Global Depth", false, desc = "Disables depth testing for all waypoints.")
 
     private val editorHud by HUD("Editor HUD", "Shows information about the waypoint you're placing or looking at.", false) {
-        drawWaypointEditorHud(it)
+        EditorHud.draw(this, it)
     }
 
     private val settingsDropDown by DropdownSetting("Next Waypoint Settings", desc = "Shows settings for the next waypoint you place.")
@@ -57,77 +50,52 @@ object DungeonWaypoints : Module(
     private var presetSecret by ColorSetting("Secret Color", Colors.MINECRAFT_BLUE, true, "Color for cyclable preset 3.").withDependency { editModeSettings }
     private var presetEtherwarp by ColorSetting("Etherwarp Color", Colors.MINECRAFT_GOLD, true, "Color for cyclable preset 4.").withDependency { editModeSettings }
     private var cycleWaypointType by KeybindSetting("Cycle Waypoint", InputConstants.UNKNOWN, "Keybind to cycle the waypoint type.").withDependency { editModeSettings }
-        .onPress {
-            if (!allowEdits) return@onPress
-            waypointType = WaypointType.entries[(waypointType.ordinal + 1) % WaypointType.entries.size]
-            color = when (waypointType) {
-                WaypointType.NONE -> presetNone
-                WaypointType.NORMAL -> presetNormal
-                WaypointType.SECRET -> presetSecret
-                WaypointType.ETHERWARP -> presetEtherwarp
-            }
-            modMessage("§aWaypoint type changed to §c${waypointType.label}§a.")
-        }
+        .onPress { if (allowEdits) cycleType() }
 
     var selectedPackIds by ListSetting("Selected Waypoint Packs", mutableListOf<String>())
     var editPackId by StringSetting("Edit Waypoint Pack", "", length = 256, desc = "", placeholder = "").hide()
-    var loadedPacks: MutableMap<String, MutableMap<String, MutableList<DungeonWaypoint>>> = mutableMapOf()
-    var allActiveWaypoints: MutableMap<String, MutableList<DungeonWaypoint>> = mutableMapOf()
 
     private val resetButton by ActionSetting("Reset Current Room", desc = "Resets the waypoints for the current room.") {
         val room = DungeonUtils.currentRoom ?: return@ActionSetting modMessage("§cRoom not found!")
-        val waypoints = getEditableWaypoints(room)
-        if (waypoints.isEmpty()) return@ActionSetting modMessage("§cCurrent room does not have any editable waypoints!")
-        waypoints.clear()
-        syncRoomToActive(room)
-        scope.launch { saveWaypoints() }
+        val own = WaypointStore.editable(room)
+        if (own.isNullOrEmpty()) return@ActionSetting modMessage("§cCurrent room does not have any editable waypoints!")
+        own.clear()
+        WaypointStore.roomEdited(room)
         modMessage("§aSuccessfully reset current room!")
     }
 
     val partyWaypoints by BooleanSetting("Party Waypoints", true, desc = "Adds waypoints from coordinates party members send.")
-
-    var lastEtherPos: BlockPos? = null
-    var lastEtherTime = 0L
 
     init {
         // Boss waypoint commands register on load, whether or not this is on.
         BossWaypoints
         TemporaryWaypoints
 
-        onReceive<ClientboundPlayerPositionPacket> {
-            SecretWaypoints.onEtherwarp(this)
-        }
-
-        on<SecretPickupEvent.Bat> {
-            SecretWaypoints.onSecret(this)
-        }
-
-        on<SecretPickupEvent.Item> {
-            SecretWaypoints.onSecret(this)
-        }
-
-        on<SecretPickupEvent.Interact> {
-            SecretWaypoints.onSecret(this)
-        }
-
-        on<RoomEnterEvent> {
-            room?.setWaypoints()
-        }
+        onReceive<ClientboundPlayerPositionPacket> { SecretWaypoints.onTeleport(this) }
+        on<SecretPickupEvent.Interact> { SecretWaypoints.onPickup(blockPos, 0) }
+        on<SecretPickupEvent.Item> { SecretWaypoints.onPickup(entity.blockPosition(), 3) }
+        on<SecretPickupEvent.Bat> { SecretWaypoints.onPickup(BlockPos.containing(packet.x, packet.y, packet.z), 5) }
 
         on<LevelEvent.Load> {
-            scope.launch(Dispatchers.IO) { loadWaypoints() }
-            resetClickedWaypoints()
-            lastEtherPos = null
-            lastEtherTime = 0L
+            WaypointStore.reload()
+            WaypointStore.clearClicks()
+            SecretWaypoints.forgetEtherwarp()
         }
 
-        on<RenderExtractEvent> (EventPriority.HIGHEST) {
-            renderWaypoints(this)
-        }
+        on<RenderExtractEvent>(EventPriority.HIGHEST) { WaypointView.render(this) }
+        on<InputEvent> { WaypointEditor.onInput(this) }
+    }
 
-        on<InputEvent> {
-            handleEditorInput(this)
-        }
+    private fun cycleType() {
+        val next = WaypointType.entries[(waypointType.ordinal + 1) % WaypointType.entries.size]
+        waypointType = next
+        color = when (next) {
+            WaypointType.NONE -> presetNone
+            WaypointType.NORMAL -> presetNormal
+            WaypointType.SECRET -> presetSecret
+            WaypointType.ETHERWARP -> presetEtherwarp
+        }.copy()
+        modMessage("§aWaypoint type changed to §c${next.label}§a.")
     }
 
     @CommandParsable
@@ -135,6 +103,7 @@ object DungeonWaypoints : Module(
         NONE, NORMAL, SECRET, ETHERWARP
     }
 
+    // Field names and order are the saved pack format.
     data class DungeonWaypoint(
         val blockPos: BlockPos, val color: Color, val filled: Boolean,
         val depth: Boolean, val aabb: AABB, val title: String? = null,

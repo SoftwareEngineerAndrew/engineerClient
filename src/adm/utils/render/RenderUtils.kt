@@ -4,7 +4,6 @@ import com.mojang.blaze3d.vertex.PoseStack
 import com.mojang.blaze3d.vertex.VertexConsumer
 import com.adm.AdmMod.mc
 import com.adm.events.RenderExtractEvent
-import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
 import com.adm.utils.Color
 import com.adm.utils.Color.Companion.multiplyAlphaRgba
 import com.adm.utils.addVec
@@ -374,24 +373,6 @@ fun RenderExtractEvent.drawCylinder(
         }
     }
     poseStack.popPose()
-}
-
-private val waypointBoxes = BoxBatch()
-
-fun RenderExtractEvent.drawBoxes(waypoints: Collection<DungeonWaypoints.DungeonWaypoint>, disableDepth: Boolean) {
-    if (waypoints.isEmpty()) return
-
-    waypointBoxes.clear()
-    for ((blockPos, color, filled, depth1, aabb1, _, _, isClicked) in waypoints) {
-        if (isClicked || color.isTransparent) continue
-
-        val aabb = aabb1.move(blockPos)
-        val depth = depth1 && !disableDepth
-
-        if (filled) waypointBoxes.filled(aabb, color, depth = depth)
-        else waypointBoxes.outline(aabb, color, depth = depth)
-    }
-    drawBoxes(waypointBoxes)
 }
 
 object PrimitiveRenderer {

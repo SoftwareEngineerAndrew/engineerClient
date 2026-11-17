@@ -1,136 +1,133 @@
 package com.adm.features.impl.dungeon.dungeonwaypoints
 
+import com.adm.AdmMod
 import com.adm.config.WaypointPackFileUtils
-import com.adm.config.WaypointPackState
-import com.adm.config.normalized
+import com.adm.config.settlePackSelection
 import com.adm.features.ModuleManager
+import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints.DungeonWaypoint
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
 import com.adm.utils.modMessage
-import com.adm.utils.skyblock.dungeon.DungeonUtils
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import net.minecraft.world.phys.AABB
+import java.util.concurrent.atomic.AtomicInteger
 
-suspend fun DungeonWaypoints.loadWaypoints() {
-    val packState = ensurePackState()
-    loadedPacks = packState.selectedPackIds.associateWithTo(mutableMapOf()) { packId -> copyWaypointMap(WaypointPackFileUtils.loadPack(packId)) }
-    allActiveWaypoints = rebuildVisibleWaypoints()
-    DungeonUtils.currentRoom?.setWaypoints()
-}
+internal typealias PackRooms = MutableMap<String, MutableList<DungeonWaypoint>>
 
-suspend fun DungeonWaypoints.saveWaypoints() {
-    ensurePackState()
-    WaypointPackFileUtils.savePack(editPackId, copyWaypointMap(loadedPacks[editPackId] ?: mutableMapOf()))
-}
+// Merged room lists hold the pack objects themselves; a click lives on them until the next load or clearClicks.
+internal object WaypointStore {
+    @Volatile private var packs: MutableMap<String, PackRooms> = LinkedHashMap()
+    @Volatile private var merged: HashMap<String, ArrayList<DungeonWaypoint>> = HashMap()
+    private val version = AtomicInteger()
 
-internal suspend fun DungeonWaypoints.importPack(packName: String, waypoints: MutableMap<String, MutableList<DungeonWaypoints.DungeonWaypoint>>): Boolean {
-    if (!WaypointPackFileUtils.createPack(packName)) return false
-    WaypointPackFileUtils.savePack(packName, copyWaypointMap(waypoints))
-    ensurePackState(selectedPackIds + packName, packName)
-    loadWaypoints()
-    return true
-}
+    val revision: Int get() = version.get()
 
-internal suspend fun DungeonWaypoints.savePackSelection(selectedPackIds: List<String>, editPackId: String) {
-    ensurePackState(selectedPackIds, editPackId)
-    loadWaypoints()
-}
+    fun changed() { version.incrementAndGet() }
 
-internal suspend fun DungeonWaypoints.createPack(packName: String): Boolean {
-    if (!WaypointPackFileUtils.createPack(packName)) return false
-    ensurePackState(selectedPackIds + packName, packName)
-    loadWaypoints()
-    return true
-}
+    fun roomWaypoints(room: DungeonRoom): List<DungeonWaypoint>? = merged[room.data?.name ?: return null]
 
-internal suspend fun DungeonWaypoints.deletePack(packName: String): Boolean {
-    if (withContext(Dispatchers.IO) { WaypointPackFileUtils.listPackNames().size } <= 1) {
-        modMessage("§cCannot delete the only pack!")
-        return false
-    }
-    if (!WaypointPackFileUtils.deletePack(packName)) return false
-    ensurePackState(selectedPackIds.filter { it != packName }, editPackId.takeIf { it != packName } ?: "")
-    loadWaypoints()
-    return true
-}
-
-internal suspend fun DungeonWaypoints.renamePack(oldName: String, newName: String): Boolean {
-    if (!WaypointPackFileUtils.renamePack(oldName, newName)) return false
-    val renamedSelection = selectedPackIds.map { if (it == oldName) newName else it }
-    val renamedEditPack = if (editPackId == oldName) newName else editPackId
-    ensurePackState(renamedSelection, renamedEditPack)
-    loadWaypoints()
-    return true
-}
-
-fun DungeonWaypoints.exportEditableWaypoints(): MutableMap<String, MutableList<DungeonWaypoints.DungeonWaypoint>> =
-    copyWaypointMap(loadedPacks[editPackId] ?: mutableMapOf())
-
-fun DungeonWaypoints.resetClickedWaypoints() {
-    loadedPacks = loadedPacks.mapValuesTo(mutableMapOf()) { (_, packWaypoints) -> copyWaypointMap(packWaypoints) }
-    allActiveWaypoints = rebuildVisibleWaypoints()
-    DungeonUtils.currentRoom?.setWaypoints()
-}
-
-fun DungeonRoom.setWaypoints() {
-    val name = data?.name ?: return
-    waypoints = DungeonWaypoints.allActiveWaypoints[name]
-        ?.mapTo(mutableSetOf()) { waypoint ->
-            waypoint.copy(blockPos = getRealCoords(waypoint.blockPos), aabb = getRealAABB(waypoint.aabb))
-        } ?: mutableSetOf()
-}
-
-fun DungeonWaypoints.getWaypoints(room: DungeonRoom): MutableList<DungeonWaypoints.DungeonWaypoint> =
-    allActiveWaypoints.getOrPut(room.data?.name ?: return mutableListOf()) { mutableListOf() }
-
-fun DungeonWaypoints.getEditableWaypoints(room: DungeonRoom): MutableList<DungeonWaypoints.DungeonWaypoint> =
-    loadedPacks.getOrPut(editPackId) { mutableMapOf() }.getOrPut(room.data?.name ?: return mutableListOf()) { mutableListOf() }
-
-fun DungeonWaypoints.syncRoomToActive(room: DungeonRoom) {
-    val name = room.data?.name ?: return@syncRoomToActive
-    val mergedRoom = mergeRoomWaypoints(name)
-    if (mergedRoom.isEmpty()) allActiveWaypoints.remove(name)
-    else allActiveWaypoints[name] = mergedRoom
-    room.setWaypoints()
-}
-
-private suspend fun DungeonWaypoints.ensurePackState(
-    requestedSelection: List<String> = selectedPackIds,
-    requestedEditPackId: String = editPackId,
-): WaypointPackState {
-    val availablePackIds = withContext(Dispatchers.IO) { WaypointPackFileUtils.listPackNames() }
-
-    val normalizedState = WaypointPackState(
-        selectedPackIds = requestedSelection.ifEmpty { selectedPackIds }.toMutableList(),
-        editPackId = requestedEditPackId.ifBlank { editPackId },
-    ).normalized(availablePackIds)
-
-    selectedPackIds = normalizedState.selectedPackIds.toMutableList()
-    editPackId = normalizedState.editPackId
-    ModuleManager.saveConfigurations()
-    return normalizedState
-}
-
-private fun DungeonWaypoints.rebuildVisibleWaypoints(): MutableMap<String, MutableList<DungeonWaypoints.DungeonWaypoint>> {
-    val roomNames = loadedPacks.values.flatMap { it.keys }.distinct()
-    return roomNames.associateWithTo(mutableMapOf()) { roomName -> mergeRoomWaypoints(roomName) }.also { merged ->
-        merged.entries.removeIf { it.value.isEmpty() }
-    }
-}
-
-private fun DungeonWaypoints.mergeRoomWaypoints(roomName: String): MutableList<DungeonWaypoints.DungeonWaypoint> =
-    selectedPackIds.fold(mutableListOf()) { merged, packId ->
-        loadedPacks[packId]?.get(roomName)?.forEach { merged.add(it.resetRuntimeState()) }
-        merged
+    fun editable(room: DungeonRoom): MutableList<DungeonWaypoint>? {
+        val name = room.data?.name ?: return null
+        return packs.getOrPut(DungeonWaypoints.editPackId) { LinkedHashMap() }.getOrPut(name) { ArrayList() }
     }
 
-private fun copyWaypointMap(source: Map<String, List<DungeonWaypoints.DungeonWaypoint>>): MutableMap<String, MutableList<DungeonWaypoints.DungeonWaypoint>> =
-    source.entries.associateTo(mutableMapOf()) { (room, waypoints) ->
-        room to waypoints.mapTo(mutableListOf()) { it.resetRuntimeState() }
+    fun waypointCount(packId: String): Int = packs[packId]?.values?.sumOf { it.size } ?: -1
+
+    fun roomEdited(room: DungeonRoom) {
+        val name = room.data?.name ?: return
+        val list = ArrayList<DungeonWaypoint>()
+        for (id in DungeonWaypoints.selectedPackIds) packs[id]?.get(name)?.let { list.addAll(it) }
+        for (waypoint in list) waypoint.isClicked = false
+        if (list.isEmpty()) merged.remove(name) else merged[name] = list
+        changed()
+        val packId = DungeonWaypoints.editPackId
+        WaypointPackFileUtils.saveLater(packId, editPackCopy())
     }
 
-private fun DungeonWaypoints.DungeonWaypoint.resetRuntimeState() = copy(
-    color = color.copy(),
-    aabb = AABB(aabb.minX, aabb.minY, aabb.minZ, aabb.maxX, aabb.maxY, aabb.maxZ),
-    isClicked = false,
-)
+    fun editPackCopy(): PackRooms {
+        val copy: PackRooms = LinkedHashMap()
+        packs[DungeonWaypoints.editPackId]?.forEach { (room, list) -> copy[room] = ArrayList(list) }
+        return copy
+    }
+
+    fun clearClicks() {
+        for (list in merged.values) for (waypoint in list) waypoint.isClicked = false
+        changed()
+    }
+
+    fun reload() {
+        AdmMod.scope.launch { load() }
+    }
+
+    suspend fun load() {
+        val selected = settle()
+        val loaded = withContext(WaypointPackFileUtils.io) {
+            LinkedHashMap<String, PackRooms>().also { for (id in selected) it[id] = WaypointPackFileUtils.read(id) }
+        }
+        val rooms = HashMap<String, ArrayList<DungeonWaypoint>>()
+        for (id in selected) loaded[id]?.forEach { (room, list) ->
+            if (list.isNotEmpty()) rooms.getOrPut(room) { ArrayList() }.addAll(list)
+        }
+        packs = loaded
+        merged = rooms
+        changed()
+    }
+
+    suspend fun createPack(name: String): Boolean {
+        if (!WaypointPackFileUtils.create(name)) return false
+        settle(DungeonWaypoints.selectedPackIds + name, name)
+        load()
+        return true
+    }
+
+    suspend fun importPack(name: String, waypoints: PackRooms): Boolean {
+        if (!WaypointPackFileUtils.create(name)) return false
+        withContext(WaypointPackFileUtils.io) { WaypointPackFileUtils.write(name, waypoints) }
+        settle(DungeonWaypoints.selectedPackIds + name, name)
+        load()
+        return true
+    }
+
+    suspend fun deletePack(name: String): Boolean {
+        if (withContext(WaypointPackFileUtils.io) { WaypointPackFileUtils.packNames().size } <= 1) {
+            modMessage("§cCannot delete the only pack!")
+            return false
+        }
+        if (!WaypointPackFileUtils.delete(name)) return false
+        settle(DungeonWaypoints.selectedPackIds.filter { it != name }, DungeonWaypoints.editPackId.takeIf { it != name } ?: "")
+        load()
+        return true
+    }
+
+    suspend fun renamePack(from: String, to: String): Boolean {
+        if (!WaypointPackFileUtils.rename(from, to)) return false
+        val edit = DungeonWaypoints.editPackId
+        settle(DungeonWaypoints.selectedPackIds.map { if (it == from) to else it }, if (edit == from) to else edit)
+        load()
+        return true
+    }
+
+    suspend fun selectPacks(selected: List<String>, edit: String) {
+        settle(selected, edit, persist = true)
+        load()
+    }
+
+    private suspend fun settle(
+        selected: List<String> = DungeonWaypoints.selectedPackIds,
+        edit: String = DungeonWaypoints.editPackId,
+        persist: Boolean = false,
+    ): List<String> {
+        val available = withContext(WaypointPackFileUtils.io) { WaypointPackFileUtils.packNames() }
+        val result = settlePackSelection(
+            selected.ifEmpty { DungeonWaypoints.selectedPackIds },
+            edit.ifBlank { DungeonWaypoints.editPackId },
+            available,
+        )
+        val changed = result.selected != DungeonWaypoints.selectedPackIds || result.edit != DungeonWaypoints.editPackId
+        if (changed) {
+            DungeonWaypoints.selectedPackIds = result.selected.toMutableList()
+            DungeonWaypoints.editPackId = result.edit
+        }
+        if (changed || persist) ModuleManager.saveConfigurations()
+        return result.selected
+    }
+}

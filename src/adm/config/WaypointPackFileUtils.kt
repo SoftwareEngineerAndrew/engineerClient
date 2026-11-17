@@ -1,91 +1,101 @@
 package com.adm.config
 
 import com.google.gson.reflect.TypeToken
-import com.adm.AdmMod.mc
+import com.adm.AdmMod
 import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints.DungeonWaypoint
 import com.adm.utils.modMessage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.minecraft.util.FileUtil
 import java.io.File
 
-private typealias PackMap = MutableMap<String, MutableList<DungeonWaypoint>>
-
 object WaypointPackFileUtils {
+    private val folder = File(AdmMod.configFile, "dungeon-waypoints").apply { mkdirs() }
+    private val packType = object : TypeToken<MutableMap<String, MutableList<DungeonWaypoint>>>() {}.type
 
-    private val legacyConfigFile = File(com.adm.AdmMod.configFile, "dungeon-waypoint-config.json")
-    val packsFolder = File(com.adm.AdmMod.configFile, "dungeon-waypoints").apply { mkdirs() }
-    private val packType = object : TypeToken<PackMap>() {}.type
+    // One thread for every pack file touch, so saves land in order and never race a rename or delete.
+    internal val io = Dispatchers.IO.limitedParallelism(1)
 
     init {
-        if (listPackNames().isEmpty()) runCatching {
-            val content = legacyConfigFile.takeIf(File::exists)?.readText() ?: DungeonWaypointConfig.gson.toJson(emptyPack())
-            packFile("default").writeText(content)
+        if (packNames().isEmpty()) runCatching {
+            val legacy = File(AdmMod.configFile, "dungeon-waypoint-config.json")
+            file("default").writeText(if (legacy.exists()) legacy.readText() else DungeonWaypointConfig.gson.toJson(LinkedHashMap<String, Any>()))
         }.onFailure { it.printStackTrace() }
     }
 
-    private fun packFile(name: String) = File(packsFolder, "$name.json")
-    private fun emptyPack(): PackMap = mutableMapOf()
+    private fun file(name: String) = File(folder, "$name.json")
 
-    fun listPackNames(): List<String> =
-        packsFolder.listFiles { f -> f.extension == "json" }?.map { it.nameWithoutExtension }?.sorted() ?: emptyList()
-
-    suspend fun loadPack(packName: String): PackMap = withContext(Dispatchers.IO) {
-        runCatching {
-            packFile(packName).takeIf(File::exists)?.readText()
-                ?.let { DungeonWaypointConfig.gson.fromJson<PackMap>(it, packType) } ?: emptyPack()
-        }.getOrElse { it.printStackTrace(); emptyPack() }
+    fun packNames(): List<String> {
+        val names = ArrayList<String>()
+        folder.listFiles()?.forEach { if (it.extension == "json") names.add(it.nameWithoutExtension) }
+        names.sort()
+        return names
     }
 
-    suspend fun savePack(packName: String, waypoints: PackMap) = withContext(Dispatchers.IO) {
-        runCatching { packFile(packName).writeText(DungeonWaypointConfig.gson.toJson(waypoints)) }.onFailure { it.printStackTrace() }
+    internal fun read(name: String): MutableMap<String, MutableList<DungeonWaypoint>> = try {
+        val f = file(name)
+        (if (f.exists()) DungeonWaypointConfig.gson.fromJson<MutableMap<String, MutableList<DungeonWaypoint>>>(f.readText(), packType) else null)
+            ?: LinkedHashMap()
+    } catch (e: Exception) {
+        e.printStackTrace()
+        LinkedHashMap()
     }
 
-    suspend fun createPack(packName: String): Boolean = withContext(Dispatchers.IO) {
-        val file = packFile(packName)
+    internal fun write(name: String, waypoints: Map<String, List<DungeonWaypoint>>) {
+        try {
+            file(name).writeText(DungeonWaypointConfig.gson.toJson(waypoints))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    internal fun saveLater(name: String, waypoints: Map<String, List<DungeonWaypoint>>) {
+        AdmMod.scope.launch(io) { write(name, waypoints) }
+    }
+
+    suspend fun create(name: String): Boolean = withContext(io) {
+        val f = file(name)
         when {
-            !isValidPackName(packName) -> fail("Invalid pack name!")
-            file.exists() -> fail("Pack '$packName' already exists!")
-            else -> attempt("Created new pack: $packName", "Failed to create pack!") {
-                file.writeText(DungeonWaypointConfig.gson.toJson(emptyPack()))
+            !isValidName(name) -> refuse("Invalid pack name!")
+            f.exists() -> refuse("Pack '$name' already exists!")
+            else -> act("Created new pack: $name", "Failed to create pack!") {
+                f.writeText(DungeonWaypointConfig.gson.toJson(LinkedHashMap<String, Any>()))
             }
         }
     }
 
-    suspend fun deletePack(packName: String): Boolean = withContext(Dispatchers.IO) {
-        val file = packFile(packName)
+    suspend fun delete(name: String): Boolean = withContext(io) {
+        val f = file(name)
+        if (!f.exists()) refuse("Pack '$name' does not exist!")
+        else act("Deleted pack: $name", "Failed to delete pack!") { check(f.delete()) }
+    }
+
+    suspend fun rename(from: String, to: String): Boolean = withContext(io) {
+        val source = file(from)
+        val target = file(to)
         when {
-            !file.exists() -> fail("Pack '$packName' does not exist!")
-            else -> attempt("Deleted pack: $packName", "Failed to delete pack!") {
-                check(file.delete()) { "Failed to delete ${file.path}" }
-            }
+            !isValidName(to) -> refuse("Invalid pack name!")
+            !source.exists() -> refuse("Pack '$from' does not exist!")
+            target.exists() -> refuse("Pack '$to' already exists!")
+            else -> act("Renamed pack from '$from' to '$to'", "Failed to rename pack!") { check(source.renameTo(target)) }
         }
     }
 
-    suspend fun renamePack(oldName: String, newName: String): Boolean = withContext(Dispatchers.IO) {
-        val oldFile = packFile(oldName)
-        val newFile = packFile(newName)
-        when {
-            !isValidPackName(newName) -> fail("Invalid pack name!")
-            !oldFile.exists() -> fail("Pack '$oldName' does not exist!")
-            newFile.exists() -> fail("Pack '$newName' already exists!")
-            else -> attempt("Renamed pack from '$oldName' to '$newName'", "Failed to rename pack!") {
-                check(oldFile.renameTo(newFile)) { "Failed to rename ${oldFile.path}" }
-            }
-        }
-    }
-
-    private fun fail(message: String): Boolean {
+    private fun refuse(message: String): Boolean {
         modMessage("§c$message")
         return false
     }
 
-    private fun attempt(successMessage: String, failureMessage: String, action: () -> Unit): Boolean =
-        runCatching(action).fold(
-            onSuccess = { modMessage("§a$successMessage"); true },
-            onFailure = { it.printStackTrace(); fail(failureMessage) }
-        )
+    private inline fun act(done: String, failed: String, block: () -> Unit): Boolean = try {
+        block()
+        modMessage("§a$done")
+        true
+    } catch (e: Exception) {
+        e.printStackTrace()
+        refuse(failed)
+    }
 
-    private fun isValidPackName(name: String) =
+    private fun isValidName(name: String) =
         name.isNotBlank() && FileUtil.sanitizeName(name) == name && FileUtil.isPathPartPortable(name)
 }
