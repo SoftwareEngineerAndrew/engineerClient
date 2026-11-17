@@ -180,8 +180,8 @@ object Visibility : Module(
     private const val HEALER_FAIRY_TEXTURE = "ewogICJ0aW1lc3RhbXAiIDogMTcxOTQ2MzA5MTA0NywKICAicHJvZmlsZUlkIiA6ICIyNjRkYzBlYjVlZGI0ZmI3OTgxNWIyZGY1NGY0OTgyNCIsCiAgInByb2ZpbGVOYW1lIiA6ICJxdWludHVwbGV0IiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzJlZWRjZmZjNmExMWEzODM0YTI4ODQ5Y2MzMTZhZjdhMjc1MmEzNzZkNTM2Y2Y4NDAzOWNmNzkxMDhiMTY3YWUiCiAgICB9CiAgfQp9"
     private const val SOUL_WEAVER_TEXTURE = "eyJ0aW1lc3RhbXAiOjE1NTk1ODAzNjI1NTMsInByb2ZpbGVJZCI6ImU3NmYwZDlhZjc4MjQyYzM5NDY2ZDY3MjE3MzBmNDUzIiwicHJvZmlsZU5hbWUiOiJLbGxscmFoIiwic2lnbmF0dXJlUmVxdWlyZWQiOnRydWUsInRleHR1cmVzIjp7IlNLSU4iOnsidXJsIjoiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS8yZjI0ZWQ2ODc1MzA0ZmE0YTFmMGM3ODViMmNiNmE2YTcyNTYzZTlmM2UyNGVhNTVlMTgxNzg0NTIxMTlhYTY2In19fQ=="
 
-    // The gray placeholder skin Hypixel gives every non-player tab entry.
-    private const val GRAY_SKIN = "skins/f712b3a0a04da402d569cc02f3fcbc9228b2303a"
+    // Hypixel's info lines carry a real downloaded skin (plain gray), not a vanilla default, so only its texture path identifies them.
+    private const val FILLER_FACE = "skins/f712b3a0a04da402d569cc02f3fcbc9228b2303a"
 
     private const val STACK_RANGE = 100
     private val stacks = LinkedHashMap<String, Pair<Component, Int>>()
@@ -421,9 +421,9 @@ object Visibility : Module(
         text.accept { _, _, codePoint -> sb.appendCodePoint(codePoint); true }
     }
 
-    fun hidesPing(): Boolean = enabled && removePing
+    @JvmStatic fun drawsTabPing(): Boolean = !enabled || !removePing
 
-    fun hidesHead(texture: Identifier): Boolean = enabled && removeHeads && texture.path == GRAY_SKIN
+    @JvmStatic fun drawsTabFace(skin: Identifier): Boolean = !enabled || !removeHeads || skin.path != FILLER_FACE
 
     fun skipsLoadingScreen(): Boolean = enabled && skipLoadingScreen
 

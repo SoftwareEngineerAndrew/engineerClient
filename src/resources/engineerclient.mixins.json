@@ -30,7 +30,7 @@
     "ChatTweaksMixin",
     "ChatCopyAccessor",
     "ChatCopyMixin",
-    "TabTweaksMixin",
+    "PlayerTabOverlayMixin",
     "PearlCooldownMixin",
     "HotbarScrollMixin",
     "PlayerHeadSizeMixin",
