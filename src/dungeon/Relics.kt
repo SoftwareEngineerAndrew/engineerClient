@@ -58,7 +58,10 @@ object Relics : Module(
         Red("RED_KING_RELIC", 'c', Colors.MINECRAFT_RED, BlockPos(51, 7, 42)),
         Purple("PURPLE_KING_RELIC", '5', Colors.MINECRAFT_DARK_PURPLE, BlockPos(54, 7, 41)),
         Orange("ORANGE_KING_RELIC", '6', Colors.MINECRAFT_GOLD, BlockPos(57, 7, 42)),
-        Blue("BLUE_KING_RELIC", 'b', Colors.MINECRAFT_BLUE, BlockPos(59, 7, 44)),
+        Blue("BLUE_KING_RELIC", 'b', Colors.MINECRAFT_BLUE, BlockPos(59, 7, 44));
+
+        val box = AABB(cauldron)
+        val fill = color.withAlpha(0.3f)
     }
 
     private val PICKED = Regex("^(.+) picked the Corrupted (Red|Purple|Orange|Green|Blue) Relic!$")
@@ -72,6 +75,13 @@ object Relics : Module(
     private val inBoxSince = LinkedHashMap<String, Long>()
 
     private fun relicAt(pos: BlockPos) = Relic.entries.firstOrNull { pos.x == it.cauldron.x && pos.z == it.cauldron.z && (pos.y == 7 || pos.y == 6) }
+
+    private val RELICS = Relic.values()
+
+    private fun nearOpenCauldron(x: Double, z: Double): Boolean {
+        for (r in RELICS) if (r !in placed && hypot(x - r.cauldron.x - 0.5, z - r.cauldron.z - 0.5) < 1.5) return true
+        return false
+    }
 
     private fun reset() {
         currentRelic = null; relicPlaceTick = -1; p5Ticks = -1; placed.clear(); sent = false; inBoxSince.clear()
@@ -94,7 +104,7 @@ object Relics : Module(
     private fun drawHighlight(gfx: GuiGraphicsExtractor) {
         if (!enabled || !leapHighlight || mc.gui.hud.isHidden) return
         val self = mc.player ?: return
-        if (!look.screenAllows()) return
+        if (!look.screenAllows() || (inBoxSince.isEmpty() && !look.preview)) return
         val targets = if (look.preview) {
             listOf(LeapHighlightLook.Target(1, "Teammate", "mage", self.skin, System.currentTimeMillis() / 3000 * 3000))
         } else {
@@ -141,9 +151,8 @@ object Relics : Module(
             val relic = currentRelic ?: return@on
             if (relicBeacon) drawCustomBeacon("", relic.cauldron, relic.color, distance = false)
             if (cauldronHighlight) {
-                val box = AABB(relic.cauldron)
-                drawFilledBox(box, relic.color.withAlpha(0.3f), depth = false)
-                drawWireFrameBox(box, relic.color, depth = false)
+                drawFilledBox(relic.box, relic.fill, depth = false)
+                drawWireFrameBox(relic.box, relic.color, depth = false)
             }
         }
 
@@ -158,6 +167,7 @@ object Relics : Module(
             val level = mc.level ?: return@on
             for (e in level.entitiesForRendering()) {
                 if (e !is ArmorStand) continue
+                if (!nearOpenCauldron(e.x, e.z)) continue
                 val id = e.getItemBySlot(EquipmentSlot.MAINHAND).itemId.ifEmpty { e.getItemBySlot(EquipmentSlot.HEAD).itemId }
                 if (!id.contains("RELIC")) continue
                 for (r in Relic.entries) {
