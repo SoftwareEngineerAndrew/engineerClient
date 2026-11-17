@@ -32,8 +32,8 @@
     "ChatCopyMixin",
     "PlayerTabOverlayMixin",
     "PearlCooldownMixin",
-    "HotbarScrollMixin",
-    "PlayerHeadSizeMixin",
+    "HotbarWheelMixin",
+    "SlotHeadScaleMixin",
     "NametagAvatarMixin",
     "NametagEntityMixin",
     "NametagLivingMixin",
@@ -133,8 +133,8 @@
     "HeldItemSwapMixin",
     "HeldItemSwingMixin",
     "ItemProtectionClickMixin",
-    "HideRecipeBookScreenMixin",
-    "HideRecipeBookComponentMixin"
+    "RecipeBookButtonMixin",
+    "RecipeBookShownMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -459,7 +459,7 @@ object Visibility : Module(
         return ITEM_NAME_WIDTH to 12
     }
 
-    fun hidesRecipeBook(): Boolean = enabled && hideRecipeBook
+    @JvmStatic fun recipeBookHidden(): Boolean = enabled && hideRecipeBook
 
     fun hidesSheep(): Boolean = enabled && hideSheep && DungeonUtils.inDungeons
 

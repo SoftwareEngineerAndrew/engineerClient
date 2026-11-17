@@ -69,9 +69,11 @@ object ItemTweaks : Module(
 
     fun noPearlCooldown(): Boolean = enabled && noPearlCooldown
 
+    @JvmStatic
     fun smallHead(stack: ItemStack): Boolean = enabled && oldPlayerHead && stack.`is`(Items.PLAYER_HEAD)
 
-    fun noHotbarScroll(): Boolean = enabled && noHotbarScroll
+    @JvmStatic
+    fun lockHotbarWheel(): Boolean = enabled && noHotbarScroll
 
     /** In dungeons a shovel (AOTV and the like) right-clicked on grass makes no path on your side; the click still goes out. */
     @JvmStatic
