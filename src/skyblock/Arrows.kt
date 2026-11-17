@@ -15,7 +15,7 @@ import com.adm.utils.createSoundSettings
 import com.adm.utils.itemId
 import com.adm.utils.lore
 import com.adm.utils.playSoundSettings
-import com.adm.utils.render.textDim
+import com.adm.utils.render.text
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.resources.sounds.SoundInstance
 import net.minecraft.network.chat.Component
@@ -23,6 +23,7 @@ import net.minecraft.network.chat.Style
 import net.minecraft.network.chat.TextColor
 import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvents
+import net.minecraft.util.FormattedCharSequence
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
@@ -42,17 +43,19 @@ object Arrows : Module(
     private val countColor by ColorSetting("Count Color", Colors.MINECRAFT_GREEN, true, desc = "The color of the arrow count.").withDependency { quiverDropdown && quiverDisplay }
     private val quiverHud by HUD("Quiver HUD", "Displays the number of arrows in your quiver.", false) { example ->
         if (!quiverDisplay) return@HUD 0 to 0
-        val text = when {
-            example -> buildText(Component.literal("Flint Arrow"), "100")
-            arrows != null -> arrows?.let { buildText(it.first, it.second) }
-            else -> null
-        } ?: return@HUD 0 to 0
-        return@HUD textDim(text, 0, 0)
+        val name = if (example) exampleName else quiverName ?: return@HUD 0 to 0
+        val text = quiverLine(name, if (example) "100" else quiverCount)
+        text(text, 0, 0)
+        quiverSize
     }.withDependency { quiverDropdown && quiverDisplay }
     private val swapHud by HUD("Arrow Swap Title", "Shows your new arrow type when you swap arrows.", true, 400, 110, 2f) { example ->
-        val text = if (example) Component.literal("§aToxic Arrow Poison") else if (ticks > 0) arrow else return@HUD 0 to 0
-        text(mc.font, text, 0, 0, -1)
-        mc.font.width(text) to 9
+        if (example) {
+            text(mc.font, exampleSwap, 0, 0, -1)
+            return@HUD mc.font.width(exampleSwap) to 9
+        }
+        if (ticks <= 0) return@HUD 0 to 0
+        text(mc.font, arrow, 0, 0, -1)
+        arrowSize
     }.also { it.value.enabled = true }.withDependency { quiverDropdown }
 
     private val hitSoundDropdown by DropdownSetting("Hit Sound", desc = "Arrow Hit Sound.")
@@ -68,18 +71,41 @@ object Arrows : Module(
     private val swapped = Regex("^You set your selected arrow type to (.+)!$")
     private val arrowRegex = Regex("^Arrows Remaining: ([\\d,]+)$")
     private var arrow: Component = Component.empty()
+    private var arrowSize = 0 to 9
     private var ticks = 0
-    private var arrows: Pair<Component, String>? = null
+    private var quiverName: Component? = null
+    private var quiverCount = ""
 
-    private fun buildText(name: Component, count: String) =
-        (if (showName) name.copy().append("§8x") else Component.literal(""))
-            .append(Component.literal(count).withStyle(Style.EMPTY.withColor(TextColor.fromRgb(countColor.rgba and 0xFFFFFF))))
+    private val exampleName = Component.literal("Flint Arrow")
+    private val exampleSwap = Component.literal("§aToxic Arrow Poison")
+
+    private var lineName: Component? = null
+    private var lineCount = ""
+    private var lineShowName = false
+    private var lineColor = 0
+    private var line: FormattedCharSequence = FormattedCharSequence.EMPTY
+    private var quiverSize = 0 to 9
+
+    private fun quiverLine(name: Component, count: String): FormattedCharSequence {
+        val named = showName
+        val color = countColor.rgba and 0xFFFFFF
+        if (name === lineName && count == lineCount && named == lineShowName && color == lineColor) return line
+        lineName = name
+        lineCount = count
+        lineShowName = named
+        lineColor = color
+        line = (if (named) name.copy().append("§8x") else Component.literal(""))
+            .append(Component.literal(count).withStyle(Style.EMPTY.withColor(TextColor.fromRgb(color))))
             .visualOrderText
+        quiverSize = mc.font.width(line) to mc.font.lineHeight
+        return line
+    }
 
     init {
         on<MessageEvent.Chat> {
             if (!swapped.matches(message)) return@on
             arrow = component.siblings.getOrNull(1) ?: Component.literal(swapped.find(message)!!.groupValues[1])
+            arrowSize = mc.font.width(arrow) to 9
             ticks = 20
         }
 
@@ -90,9 +116,12 @@ object Arrows : Module(
         on<SetSlotEvent> {
             if (slotIndex != (if (DungeonUtils.inClear) 9 else 44) || (itemStack.item != Items.FEATHER && itemStack.item != Items.ARROW)) return@on
 
-            arrows = itemStack.hoverName to (itemStack.lore.find { arrowRegex.matches(it.string) }?.let {
-                arrowRegex.find(it.string)?.groupValues?.get(1)
-            } ?: return@on)
+            for (lore in itemStack.lore) {
+                val count = arrowRegex.matchEntire(lore.string)?.groupValues?.get(1) ?: continue
+                quiverName = itemStack.hoverName
+                quiverCount = count
+                return@on
+            }
         }
     }
 
