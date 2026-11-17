@@ -18,12 +18,14 @@ import com.adm.features.impl.dungeon.map.tile.RoomType
 import com.adm.utils.Color
 import com.adm.utils.Color.Companion.withAlpha
 import com.adm.utils.Colors
+import com.adm.utils.NameMemo
 import com.adm.utils.alert
-import com.adm.utils.equalsOneOf
 import com.adm.utils.render.BoxStyle
 import com.adm.utils.render.drawStyledBox
 import com.adm.utils.skyblock.dungeon.DungeonUtils
-import net.minecraft.world.entity.Entity
+import com.engineerclient.mappred.MapPrediction
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.phys.AABB
 import java.util.Collections
@@ -43,109 +45,151 @@ object DoorHighlight : Module(
     private val hideDone by BooleanSetting("Hide Done Doors", true, desc = "No box on a door when every room past it is green.").withDependency { normalDoors }
     private val normalColor by ColorSetting("Normal Door Color", Color(0, 128, 128, 0.8f), true, desc = "Color for normal doors.").withDependency { normalDoors }
 
-    private var currentKey: KeyType? = null
+    private const val WITHER_KEY = "Wither Key"
+    private const val BLOOD_KEY = "Blood Key"
+
     private var witherKeys = 0
     private var bloodKey = false
     private var bloodOpened = false
 
+    /** The key stand on the ground and which key it is ([WITHER_KEY] or [BLOOD_KEY]). */
+    private var keyStand: ArmorStand? = null
+    private var keyName: String? = null
+    private val keyNames = NameMemo { name -> name.string.takeIf { it == WITHER_KEY || it == BLOOD_KEY } }
+
     private val witherKeyObtainRegex = Regex("^(\\[[^]]*?])? ?(\\w{1,16}) has obtained Wither Key!?$")
-    private val witherKeyPickedUpRegex = Regex("^A Wither Key was picked up!$")
     private val witherDoorOpenRegex = Regex("^(\\[[^]]*?])? ?(\\w{1,16}) opened a WITHER door!$")
     private val bloodKeyObtainRegex = Regex("^(\\[[^]]*?])? ?(\\w{1,16}) has obtained Blood Key!$")
-    private val bloodKeyPickedUpRegex = Regex("^A Blood Key was picked up!$")
-    private val bloodDoorOpenRegex = Regex("^The BLOOD DOOR has been opened!$")
+
+    private val doorBoxes = Long2ObjectOpenHashMap<AABB>()
+    private val scannedDoors = LongOpenHashSet()
+
+    private val links = HashMap<DungeonRoom, ArrayList<DungeonRoom>>()
+    private val exits = ArrayList<DungeonDoor>()
+    private val pastExits = ArrayList<DungeonRoom>()
+    private val visited: MutableSet<DungeonRoom> = Collections.newSetFromMap(IdentityHashMap())
 
     init {
         on<MessageEvent.Chat> {
-            if (!DungeonUtils.inClear) return@on
-            when {
-                witherKeyObtainRegex.matches(message) || witherKeyPickedUpRegex.matches(message) -> witherKeys++
-                witherDoorOpenRegex.matches(message) -> witherKeys = (witherKeys - 1).coerceAtLeast(0)
-                bloodKeyObtainRegex.matches(message) || bloodKeyPickedUpRegex.matches(message) -> bloodKey = true
-                bloodDoorOpenRegex.matches(message) -> { bloodKey = false; bloodOpened = true }
-            }
+            if (DungeonUtils.inClear) onChat(message)
         }
 
         on<EntityEvent.SetData> {
             if (!DungeonUtils.inClear) return@on
-            val entity = entity as? ArmorStand ?: return@on
-            if (currentKey?.entity == entity) return@on
-            currentKey = KeyType.entries.find { it.displayName == entity.name.string } ?: return@on
-            currentKey?.entity = entity
-
-            if (announceKeySpawn) alert("§${currentKey?.colorCode}${entity.name.string}§7 spawned!")
+            val stand = entity as? ArmorStand ?: return@on
+            if (stand === keyStand) return@on
+            val name = keyNames[stand, stand.name] ?: return@on
+            keyStand = stand
+            keyName = name
+            if (announceKeySpawn) alert("§${if (name == WITHER_KEY) '8' else 'c'}$name§7 spawned!")
         }
 
+        // Every box in here goes through drawStyledBox right in this handler: DoorHighlightOutlineMixin restyles them.
         on<RenderExtractEvent> {
             if (!DungeonUtils.inClear) return@on
 
-            val known = DungeonScan.doors.values.map { it.worldX to it.worldZ }.toSet()
-            val predicted = if (predictedDoors) com.engineerclient.mappred.MapPrediction.certainDoors().filter { (it.worldX to it.worldZ) !in known } else emptyList()
-            (DungeonScan.doors.values + predicted).forEach { door ->
-                if (!door.type.equalsOneOf(DoorType.Wither, DoorType.Blood)) return@forEach
-                if (door.type == DoorType.Blood && bloodOpened) return@forEach
-
-                val box = AABB(door.worldX - 1.0, 69.0, door.worldZ - 1.0, door.worldX + 2.0, 73.0, door.worldZ + 2.0)
-
-                val isOpenable = when (door.type) {
-                    DoorType.Wither -> witherKeys > 0
-                    DoorType.Blood -> bloodKey
-                    else -> false
-                }
-                drawStyledBox(box, if (isOpenable) openableColor else doorHighlightColor, BoxStyle.FILLED_OUTLINE, false)
+            scannedDoors.clear()
+            for (door in DungeonScan.doors.values) {
+                scannedDoors.add(spot(door))
+                if (locked(door)) drawStyledBox(boxOf(door), lockedColor(door), BoxStyle.FILLED_OUTLINE, false)
+            }
+            if (predictedDoors) for (door in MapPrediction.certainDoors()) {
+                if (!scannedDoors.contains(spot(door)) && locked(door)) drawStyledBox(boxOf(door), lockedColor(door), BoxStyle.FILLED_OUTLINE, false)
             }
 
             if (normalDoors) drawNormalDoors()
 
-            if (currentKey == null || currentKey?.entity == null) return@on
-            currentKey?.let { keyType ->
-                if (keyType.entity?.isAlive == false) {
-                    currentKey = null
-                    return@on
-                }
-                val position = keyType.entity?.position() ?: return@on
-                drawStyledBox(AABB.unitCubeFromLowerCorner(position.add(-0.5, 1.0, -0.5)), keyType.color(), BoxStyle.FILLED_OUTLINE, true)
+            val stand = keyStand ?: return@on
+            if (!stand.isAlive) {
+                keyStand = null
+                keyName = null
+                return@on
             }
+            val x = stand.x + -0.5
+            val y = stand.y + 1.0
+            val z = stand.z + -0.5
+            drawStyledBox(AABB(x, y, z, x + 1.0, y + 1.0, z + 1.0), if (keyName == WITHER_KEY) witherColor else bloodColor, BoxStyle.FILLED_OUTLINE, true)
         }
 
         on<LevelEvent.Load> {
-            currentKey = null
+            keyStand = null
+            keyName = null
             witherKeys = 0
             bloodKey = false
             bloodOpened = false
+            doorBoxes.clear()
+            links.clear()
         }
+    }
+
+    private fun onChat(message: String) {
+        when {
+            message == "A Wither Key was picked up!" -> witherKeys++
+            (message.endsWith(" has obtained Wither Key!") || message.endsWith(" has obtained Wither Key")) && witherKeyObtainRegex.matches(message) -> witherKeys++
+            message.endsWith(" opened a WITHER door!") && witherDoorOpenRegex.matches(message) -> witherKeys = (witherKeys - 1).coerceAtLeast(0)
+            message == "A Blood Key was picked up!" -> bloodKey = true
+            message.endsWith(" has obtained Blood Key!") && bloodKeyObtainRegex.matches(message) -> bloodKey = true
+            message == "The BLOOD DOOR has been opened!" -> {
+                bloodKey = false
+                bloodOpened = true
+            }
+        }
+    }
+
+    private fun locked(door: DungeonDoor): Boolean =
+        door.type == DoorType.Wither || door.type == DoorType.Blood && !bloodOpened
+
+    private fun lockedColor(door: DungeonDoor): Color =
+        if (if (door.type == DoorType.Wither) witherKeys > 0 else bloodKey) openableColor else doorHighlightColor
+
+    private fun spot(door: DungeonDoor): Long = (door.worldX.toLong() shl 32) or (door.worldZ.toLong() and 0xFFFFFFFFL)
+
+    private fun boxOf(door: DungeonDoor): AABB {
+        val key = spot(door)
+        doorBoxes.get(key)?.let { return it }
+        val box = AABB(door.worldX - 1.0, 69.0, door.worldZ - 1.0, door.worldX + 2.0, 73.0, door.worldZ + 2.0)
+        doorBoxes.put(key, box)
+        return box
+    }
+
+    private fun roomAt(tile: Int): DungeonRoom? = DungeonScan.tiles.getOrNull(tile)?.room
+
+    private fun link(from: DungeonRoom, to: DungeonRoom) {
+        links.getOrPut(from) { ArrayList() }.add(to)
     }
 
     private fun RenderExtractEvent.drawNormalDoors() {
         val here = DungeonUtils.currentRoom ?: return
-        val links = HashMap<DungeonRoom, MutableList<DungeonRoom>>()
-        val mine = ArrayList<Pair<DungeonDoor, DungeonRoom>>()
-        for ((_, door) in DungeonScan.doors) {
-            val a = DungeonScan.tiles.getOrNull(door.originTileIndex)?.room ?: continue
-            val b = DungeonScan.tiles.getOrNull(door.destinationTileIndex)?.room ?: continue
-            links.getOrPut(a) { ArrayList() }.add(b)
-            links.getOrPut(b) { ArrayList() }.add(a)
-            if (!door.type.equalsOneOf(DoorType.Normal, DoorType.Fairy)) continue
-            if (a === here) mine += door to b else if (b === here) mine += door to a
+        for (next in links.values) next.clear()
+        exits.clear()
+        pastExits.clear()
+        for (door in DungeonScan.doors.values) {
+            val a = roomAt(door.originTileIndex) ?: continue
+            val b = roomAt(door.destinationTileIndex) ?: continue
+            link(a, b)
+            link(b, a)
+            if (door.type != DoorType.Normal && door.type != DoorType.Fairy) continue
+            val past = if (a === here) b else if (b === here) a else continue
+            exits.add(door)
+            pastExits.add(past)
         }
-        for ((door, past) in mine) {
-            if (hideDone && !leadsSomewhere(past, links, Collections.newSetFromMap(IdentityHashMap<DungeonRoom, Boolean>()).apply { add(here); add(past) })) continue
-            val box = AABB(door.worldX - 1.0, 69.0, door.worldZ - 1.0, door.worldX + 2.0, 73.0, door.worldZ + 2.0)
-            drawStyledBox(box, normalColor, BoxStyle.OUTLINE, false)
+        for (i in exits.indices) {
+            if (hideDone) {
+                visited.clear()
+                visited.add(here)
+                visited.add(pastExits[i])
+                if (!leadsSomewhere(pastExits[i])) continue
+            }
+            drawStyledBox(boxOf(exits[i]), normalColor, BoxStyle.OUTLINE, false)
         }
     }
 
     /** A room is worth going through while it, or a room only reachable past it, isn't green. */
-    private fun leadsSomewhere(room: DungeonRoom, links: Map<DungeonRoom, List<DungeonRoom>>, seen: MutableSet<DungeonRoom>): Boolean {
+    private fun leadsSomewhere(room: DungeonRoom): Boolean {
         if (room.type == RoomType.ENTRANCE) return false
         if (room.checkmark != MapCheckmark.GREEN) return true
-        return links[room].orEmpty().any { seen.add(it) && leadsSomewhere(it, links, seen) }
-    }
-
-    private enum class KeyType(val displayName: String, val color: () -> Color, val colorCode: Char) {
-        Wither("Wither Key", { witherColor }, '8'),
-        Blood("Blood Key", { bloodColor }, 'c');
-
-        var entity: Entity? = null
+        val next = links[room] ?: return false
+        for (i in next.indices) if (visited.add(next[i]) && leadsSomewhere(next[i])) return true
+        return false
     }
 }
