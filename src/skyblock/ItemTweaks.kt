@@ -6,8 +6,11 @@ import com.adm.features.Module
 import com.adm.utils.customData
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.FormattedText
+import net.minecraft.util.Unit as McUnit
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
+import java.util.Optional
 
 object ItemTweaks : Module(
     name = "Item Tweaks",
@@ -26,13 +29,41 @@ object ItemTweaks : Module(
     init {
         ItemTooltipCallback.EVENT.register { stack, _, _, lines ->
             if (!enabled) return@register
-            if (removeGearScore) lines.removeIf { it.string.startsWith("Gear Score: ") }
+            if (removeGearScore) dropGearScore(lines)
             if (itemQuality) {
                 val data = stack.customData
                 val boost = data.getInt("baseStatBoostPercentage").orElse(null) ?: return@register
                 val tier = data.getInt("item_tier").orElse(null) ?: return@register
                 lines.add(Component.literal("§4Stat boost: $boost/50 req: ${floors.getOrElse(tier) { "?" }}"))
             }
+        }
+    }
+
+    private fun dropGearScore(lines: MutableList<Component>) {
+        var i = 0
+        while (i < lines.size) {
+            if (GearScorePrefix.matches(lines[i])) lines.removeAt(i) else i++
+        }
+    }
+
+    private object GearScorePrefix : FormattedText.ContentConsumer<McUnit> {
+        private const val PREFIX = "Gear Score: "
+        private var seen = 0
+
+        fun matches(line: Component): Boolean {
+            seen = 0
+            line.visit(this)
+            return seen == PREFIX.length
+        }
+
+        override fun accept(piece: String): Optional<McUnit> {
+            val take = minOf(PREFIX.length - seen, piece.length)
+            if (!piece.regionMatches(0, PREFIX, seen, take)) {
+                seen = -1
+                return FormattedText.STOP_ITERATION
+            }
+            seen += take
+            return if (seen == PREFIX.length) FormattedText.STOP_ITERATION else Optional.empty()
         }
     }
 
