@@ -22,10 +22,6 @@ import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
-/**
- * Setting that lets you pick a number between a range.
- * @author Stivais, Aton
- */
 @Suppress("UNCHECKED_CAST")
 class NumberSetting<E>(
     name: String,
@@ -45,47 +41,53 @@ class NumberSetting<E>(
         unit: String = ""
     ) : this(name, default, range.first.toDouble()..range.last.toDouble(), increment, desc, unit)
 
-    private fun Double.asE(): E = when (default) {
-        is Int -> roundToInt()
-        is Long -> roundToLong()
-        is Float -> toFloat()
-        else -> this
-    } as E
-
+    private val kind = when (default) {
+        is Int -> INT
+        is Long -> LONG
+        is Float -> FLOAT
+        else -> DOUBLE
+    }
     private val step = increment.toDouble()
-    private val minimum = range.start
-    private val maximum = range.endInclusive
+    private val low = range.start
+    private val high = range.endInclusive
 
-    private var current by SettingState(default)
-
-    override var value: E
-        get() = current
-        set(value) {
-            current = (round(value.toDouble() / step) * step).coerceIn(minimum, maximum).asE()
-            display = format(current)
-        }
+    private var stored by SettingState(default)
 
     var display: String = format(default)
         private set
+
+    override var value: E
+        get() = stored
+        set(value) {
+            stored = typed((round(value.toDouble() / step) * step).coerceIn(low, high))
+            display = format(stored)
+        }
 
     init {
         value = default
     }
 
     var percent: Float
-        get() = ((value.toDouble() - minimum) / (maximum - minimum)).toFloat()
+        get() = ((value.toDouble() - low) / (high - low)).toFloat()
         set(percent) {
-            value = (minimum + percent.coerceIn(0f, 1f) * (maximum - minimum)).asE()
+            value = typed(low + percent.coerceIn(0f, 1f) * (high - low))
         }
 
-    private fun format(value: E): String {
-        val current = value.toDouble()
-        return if (current % 1.0 == 0.0) "${current.toInt()}$unit"
-        else "${(current * 100).roundToInt() / 100.0}$unit"
+    fun nudge(steps: Int) {
+        value = typed((value.toDouble() + steps * step).coerceIn(low, high))
     }
 
-    fun nudge(steps: Int) {
-        value = (value.toDouble() + steps * step).coerceIn(minimum, maximum).asE()
+    private fun typed(number: Double): E = when (kind) {
+        INT -> number.roundToInt()
+        LONG -> number.roundToLong()
+        FLOAT -> number.toFloat()
+        else -> number
+    } as E
+
+    private fun format(value: E): String {
+        val number = value.toDouble()
+        if (number % 1.0 == 0.0) return "${number.toInt()}$unit"
+        return "${(number * 100).roundToInt() / 100.0}$unit"
     }
 
     @Composable
@@ -93,52 +95,61 @@ class NumberSetting<E>(
         Column {
             SettingRow(height = 18) { Text({ display }) }.clickable {}
             Slider(percent, { percent = it }).size(GuiTheme.INNER_WIDTH, 11).offset({ GuiTheme.PADDING })
-        }
-            .onKey { event ->
-                val steps = when (event.key) {
-                    InputConstants.KEY_RIGHT, InputConstants.KEY_EQUALS -> 1
-                    InputConstants.KEY_LEFT, InputConstants.KEY_MINUS -> -1
-                    else -> return@onKey false
-                }
-                nudge(steps)
-                true
+        }.onKey { event ->
+            when (event.key) {
+                InputConstants.KEY_RIGHT, InputConstants.KEY_EQUALS -> nudge(1)
+                InputConstants.KEY_LEFT, InputConstants.KEY_MINUS -> nudge(-1)
+                else -> return@onKey false
             }
+            true
+        }
     }
 
     override fun write(gson: Gson): JsonElement = JsonPrimitive(value)
 
     override fun read(element: JsonElement, gson: Gson) {
-        element.asNumber?.let { value = it.toDouble().asE() }
+        element.asNumber?.let { value = typed(it.toDouble()) }
+    }
+
+    private companion object {
+        const val INT = 0
+        const val LONG = 1
+        const val FLOAT = 2
+        const val DOUBLE = 3
     }
 }
 
 @Composable
 private fun Slider(value: Float, onValueChange: (Float) -> Unit): UiNode {
-    val interaction = remember { InteractionSource() }
-    var dragging by remember { mutableStateOf(false) }
+    val pointer = remember { InteractionSource() }
+    var held by remember { mutableStateOf(false) }
     val fill = remember { Animatable(value) }
-    SideEffect { if (dragging) fill.snapTo(value) else fill.animateTo(value, 200) }
-    val knob = animateProgress { dragging || interaction.hovered }
+    SideEffect { if (held) fill.snapTo(value) else fill.animateTo(value, 200) }
+    val grow = animateProgress { held || pointer.hovered }
 
     val seek: UiNode.(MouseButtonEvent) -> Unit = { event -> onValueChange(((event.x() - x) / width).toFloat().coerceIn(0f, 1f)) }
 
     return Canvas { graphics ->
         val top = y + (height - TRACK_HEIGHT) / 2
-        graphics.roundedRect(x, top, right, top + TRACK_HEIGHT, GuiTheme.surface.rgba, TRACK_CORNERS)
-
+        val bottom = top + TRACK_HEIGHT
+        graphics.roundedRect(x, top, right, bottom, GuiTheme.surface.rgba, TRACK_CORNERS)
         val filled = (fill.value * width).roundToInt()
-        if (filled > 0) graphics.roundedRectClipped(x, top, right, top + TRACK_HEIGHT, x, top, x + filled, top + TRACK_HEIGHT, GuiTheme.accent.rgba, TRACK_CORNERS)
-        graphics.circle(x + filled, top + TRACK_HEIGHT / 2, 4f + 1.5f * knob.value, Colors.WHITE.rgba)
+        if (filled > 0) graphics.roundedRectClipped(x, top, right, bottom, x, top, x + filled, bottom, GuiTheme.accent.rgba, TRACK_CORNERS)
+        graphics.circle(x + filled, top + TRACK_HEIGHT / 2, 4f + 1.5f * grow.value, Colors.WHITE.rgba)
     }
-        .hoverable(interaction)
+        .hoverable(pointer)
         .pointerInput(
             onDrag = {
-                dragging = true
+                held = true
                 seek(it)
             },
-            onRelease = { dragging = false },
-        ) { event -> (event.button() == InputConstants.MOUSE_BUTTON_LEFT).also { if (it) seek(event) } }
-        .onFocusChanged { if (!it) dragging = false }
+            onRelease = { held = false },
+        ) { event ->
+            val left = event.button() == InputConstants.MOUSE_BUTTON_LEFT
+            if (left) seek(event)
+            left
+        }
+        .onFocusChanged { if (!it) held = false }
 }
 
 private const val TRACK_HEIGHT = 6
