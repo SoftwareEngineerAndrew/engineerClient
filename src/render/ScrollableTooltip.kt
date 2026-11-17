@@ -1,16 +1,16 @@
 package com.engineerclient.render
 
-import com.engineerclient.mixin.HoveredSlotAccessor
-import com.mojang.blaze3d.platform.InputConstants
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.features.Category
 import com.adm.features.Module
+import com.engineerclient.mixin.HoveredSlotAccessor
+import com.mojang.blaze3d.platform.InputConstants
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
+import net.minecraft.world.inventory.Slot
 import org.joml.Matrix3x2fStack
-import kotlin.math.sign
 
 object ScrollableTooltip : Module(
     name = "Scrollable Tooltip",
@@ -24,49 +24,58 @@ object ScrollableTooltip : Module(
     private val step by NumberSetting("Scroll Step", 10, 1..40, 1, desc = "Pixels moved per scroll.")
     private val resetOnNew by BooleanSetting("Reset On New Tooltip", true, desc = "Each new tooltip starts at its normal place and size.")
 
-    private var offsetX = 0f
-    private var offsetY = 0f
-    private var scale = 1f
-    private var lastKey: Any? = null
-    private var lastDrawn = 0L
+    private const val SCROLL_WINDOW_MS = 100L
+    private const val FORGET_AFTER_MS = 250L
+
+    private var panX = 0f
+    private var panY = 0f
+    private var zoom = 1f
+    private var shownFor: Slot? = null
+    private var shownAt = 0L
+
+    private val onScroll = ScreenMouseEvents.AfterMouseScroll { _, _, _, horizontalAmount, verticalAmount, consumed ->
+        if (enabled && System.currentTimeMillis() - shownAt < SCROLL_WINDOW_MS) nudge(horizontalAmount, verticalAmount)
+        consumed
+    }
 
     init {
-        ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
-            ScreenMouseEvents.afterMouseScroll(screen).register { _, _, _, dx, dy, consumed ->
-                if (enabled && System.currentTimeMillis() - lastDrawn < 100) scroll(dx, dy)
-                consumed
-            }
+        ScreenEvents.AFTER_INIT.register { _, screen, _, _ -> ScreenMouseEvents.afterMouseScroll(screen).register(onScroll) }
+    }
+
+    private fun held(left: Int, right: Int) = InputConstants.isKeyDown(left) || InputConstants.isKeyDown(right)
+
+    private fun dir(amount: Double): Float = if (amount > 0.0) 1f else if (amount < 0.0) -1f else 0f
+
+    private fun nudge(dx: Double, dy: Double) {
+        val ctrl = held(InputConstants.KEY_LCONTROL, InputConstants.KEY_RCONTROL)
+        val shift = held(InputConstants.KEY_LSHIFT, InputConstants.KEY_RSHIFT)
+        val px = step.toFloat()
+        if (ctrl && scaling) {
+            zoom = (zoom * (1f + 0.1f * dir(dy))).coerceIn(0.2f, 5f)
+        } else if (shift && horizontal) {
+            panX += px * dir(if (dy != 0.0) dy else dx)
+        } else if (!ctrl && !shift && vertical) {
+            panY += px * dir(dy)
+            if (horizontal) panX -= px * dir(dx)
         }
     }
 
-    private fun scroll(dx: Double, dy: Double) {
-        val ctrl = InputConstants.isKeyDown(InputConstants.KEY_LCONTROL) || InputConstants.isKeyDown(InputConstants.KEY_RCONTROL)
-        val shift = InputConstants.isKeyDown(InputConstants.KEY_LSHIFT) || InputConstants.isKeyDown(InputConstants.KEY_RSHIFT)
-        when {
-            ctrl && scaling -> scale = (scale * (1f + 0.1f * sign(dy).toFloat())).coerceIn(0.2f, 5f)
-            shift && horizontal -> offsetX += step * sign(if (dy != 0.0) dy else dx).toFloat()
-            !ctrl && !shift && vertical -> {
-                offsetY += step * sign(dy).toFloat()
-                if (horizontal) offsetX -= step * sign(dx).toFloat()
-            }
-        }
-    }
-
-    fun begin(pose: Matrix3x2fStack, x: Int, y: Int): Boolean {
-        if (!enabled) return false
+    @JvmStatic
+    fun place(pose: Matrix3x2fStack, x: Int, y: Int) {
+        if (!enabled) return
         val now = System.currentTimeMillis()
-        val key = (mc.gui.screen() as? AbstractContainerScreen<*>)?.let { (it as HoveredSlotAccessor).ecHoveredSlot() }
-        if (resetOnNew && (key !== lastKey || now - lastDrawn > 250)) {
-            offsetX = 0f
-            offsetY = 0f
-            scale = 1f
+        val screen = mc.gui.screen()
+        val slot = if (screen is AbstractContainerScreen<*>) (screen as HoveredSlotAccessor).ecHoveredSlot() else null
+        if (resetOnNew && (slot !== shownFor || now - shownAt > FORGET_AFTER_MS)) {
+            panX = 0f
+            panY = 0f
+            zoom = 1f
         }
-        lastKey = key
-        lastDrawn = now
-        pose.pushMatrix()
-        pose.translate(x + offsetX, y + offsetY)
-        pose.scale(scale, scale)
+        shownFor = slot
+        shownAt = now
+        if (panX == 0f && panY == 0f && zoom == 1f) return
+        pose.translate(x + panX, y + panY)
+        pose.scale(zoom)
         pose.translate(-x.toFloat(), -y.toFloat())
-        return true
     }
 }

@@ -115,7 +115,7 @@
     "RenderCleanupFireMixin",
     "RenderCleanupGlowMixin",
     "HoveredSlotAccessor",
-    "ScrollableTooltipMixin",
+    "TooltipOffsetMixin",
     "DarkModeMixin",
     "TimeChangerSkyMixin",
     "TimeChangerFogMixin",
