@@ -471,7 +471,7 @@ object LcmStyle {
                 MapCheckmark.RED -> cross
                 else -> return
             }
-            g.blit(RenderPipelines.GUI_TEXTURED, icon, cx - ROOM / 2 + 2, cz - ROOM / 2 + 2, 0f, 0f, 12, 12, 12, 12, -1)
+            if (!com.adm.features.impl.dungeon.map.MapChecks.draw(g, room, TILE, ROOM)) g.blit(RenderPipelines.GUI_TEXTURED, icon, cx - ROOM / 2 + 2, cz - ROOM / 2 + 2, 0f, 0f, 12, 12, 12, 12, -1)
             return
         }
 

@@ -27,8 +27,13 @@ object MapScan {
     @Volatile
     private var located = false
 
+    /** The dungeon map's last pixels, for drawing Hypixel's own check marks. */
+    @Volatile
+    var pixels: ByteArray? = null
+        private set
+
     init {
-        on<LevelEvent.Load> { located = false }
+        on<LevelEvent.Load> { located = false; pixels = null }
 
         onReceive<ClientboundMapItemDataPacket> {
             if (!DungeonUtils.inClear || mapId().id and 1000 != 0) return@onReceive
@@ -41,6 +46,7 @@ object MapScan {
             if (!located && !locate(pixels)) return@onReceive
             if (DungeonScan.roomSize == -1) return@onReceive
             read(pixels)
+            MapScan.pixels = pixels.copyOf()
             MapUpdateEvent.postAndCatch()
         }
     }

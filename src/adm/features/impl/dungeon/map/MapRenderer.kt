@@ -32,7 +32,7 @@ import java.awt.Color.HSBtoRGB
 private const val GRID = 20
 private const val ICON = 12
 
-private val playerMarker = Identifier.withDefaultNamespace("textures/map/decorations/player.png")
+private val selfMarker = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/self_marker.png")
 private val crossIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/cross.png")
 private val greenIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/green_check.png")
 private val whiteIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/white_check.png")
@@ -190,7 +190,7 @@ private fun GuiGraphicsExtractor.drawLabel(room: DungeonRoom, shift: Float) {
         if (!MapIcons.showCheckmarks) return
         pose().pushMatrix()
         pose().translate(shift, shift)
-        icon(room.topLeft.x * GRID, room.topLeft.z * GRID, id)
+        if (!MapChecks.draw(this, room, GRID, GRID - 4)) icon(room.topLeft.x * GRID, room.topLeft.z * GRID, id)
         pose().popMatrix()
         return
     }
@@ -282,8 +282,8 @@ fun GuiGraphicsExtractor.renderPlayers() {
             PlayerFaceExtractor.extractRenderState(this, skin, -4, -4, 8)
         }
     } else {
-        pose().translate(-0.5f, -0.5f).scale(DungeonMap.playerPointerScale)
-        blit(RenderPipelines.GUI_TEXTURED, playerMarker, -2, -4, 2f, 0f, 5, 7, 8, 8, LcmStyle.ownMarkerColor.value.rgba)
+        pose().scale(DungeonMap.playerPointerScale)
+        blit(RenderPipelines.GUI_TEXTURED, selfMarker, 5, 5, 10f, 10f, -10, -10, 10, 10, LcmStyle.ownMarkerColor.value.rgba)
     }
     pose().popMatrix()
 }
