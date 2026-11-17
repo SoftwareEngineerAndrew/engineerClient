@@ -7,10 +7,12 @@ import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.events.MessageEvent
 import com.adm.events.core.on
 import com.adm.features.Module
+import com.adm.utils.Color
 import com.adm.utils.Colors
-import com.adm.utils.render.textDim
+import com.adm.utils.render.text
 import com.adm.utils.skyblock.ActionBarListener
 import com.adm.utils.skyblock.LocationUtils
+import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.chat.Component
 import kotlin.math.abs
 
@@ -43,129 +45,182 @@ object PlayerDisplay : Module(
     private val showIcons by BooleanSetting("Show Icons", true, desc = "Shows icons indicating what the number means.")
 
     private val healthHud by HUD("Health HUD", "Displays the player's health.") { example ->
-        val text = when {
-            example -> 3000 to 4000
-            !LocationUtils.isInSkyblock -> return@HUD 0 to 0
-            ActionBarListener.currentHealth != 0 && ActionBarListener.maxHealth != 0 -> ActionBarListener.currentHealth to ActionBarListener.maxHealth
-            else -> return@HUD 0 to 0
+        val bar = ActionBarListener
+        when {
+            example -> health.ratio(this, 3000, 4000, HEALTH, healthColor)
+            !LocationUtils.isInSkyblock || bar.currentHealth == 0 || bar.maxHealth == 0 -> NONE
+            else -> health.ratio(this, bar.currentHealth, bar.maxHealth, HEALTH, healthColor)
         }
-        return@HUD textDim(generateText(text.first, text.second, "❤"), 0, 0, healthColor)
     }
     private val healthColor by ColorSetting("Health Color", Colors.MINECRAFT_RED, true, "The color of the health text.")
 
     private val manaHud by HUD("Mana HUD", "Displays the player's mana.") { example ->
-        val text = when {
-            example -> generateText(2000, 20000, "✎") + (if (!separateOverflow) " ${generateText(ActionBarListener.overflowMana, "ʬ", hideZeroSF)}" else "")
-
-            !LocationUtils.isInSkyblock -> return@HUD 0 to 0
-            ActionBarListener.maxMana != 0 -> when {
-                ActionBarListener.currentMana == 0 && separateOverflow -> return@HUD 0 to 0
-                else -> generateText(ActionBarListener.currentMana, ActionBarListener.maxMana, "✎") +
-                        (if (!separateOverflow && overflowManaHud.enabled) " ${generateText(ActionBarListener.overflowMana, "ʬ", hideZeroSF)}" else "")
-            }
-
-            else -> return@HUD 0 to 0
+        val bar = ActionBarListener
+        when {
+            example -> mana.mana(this, 2000, 20000, !separateOverflow)
+            !LocationUtils.isInSkyblock || bar.maxMana == 0 || bar.currentMana == 0 && separateOverflow -> NONE
+            else -> mana.mana(this, bar.currentMana, bar.maxMana, !separateOverflow && overflowManaHud.enabled)
         }
-        return@HUD textDim(text, 0, 0, manaColor)
     }
     private val manaColor by ColorSetting("Mana Color", Colors.MINECRAFT_AQUA, true, "The color of the mana text.")
 
     private val overflowManaHud by HUD("Overflow Mana HUD", "Displays the player's overflow mana.") { example ->
-        val text = when {
-            example -> 333
-            !LocationUtils.isInSkyblock -> return@HUD 0 to 0
-            separateOverflow -> ActionBarListener.overflowMana
-            else -> return@HUD 0 to 0
+        when {
+            example -> overflowMana.amount(this, 333, OVERFLOW, hideZeroSF, overflowManaColor)
+            !LocationUtils.isInSkyblock || !separateOverflow -> NONE
+            else -> overflowMana.amount(this, ActionBarListener.overflowMana, OVERFLOW, hideZeroSF, overflowManaColor)
         }
-        return@HUD textDim(generateText(text, "ʬ", hideZeroSF), 0, 0, overflowManaColor)
     }
     private val overflowManaColor by ColorSetting("Overflow Mana Color", Colors.MINECRAFT_DARK_AQUA, true, desc = "The color of the overflow mana text.")
 
     private val defenseHud by HUD("Defense HUD", "Displays the player's defense.") { example ->
-        val text = when {
-            example -> 1000
-            !LocationUtils.isInSkyblock -> return@HUD 0 to 0
-            ActionBarListener.currentDefense != 0 -> ActionBarListener.currentDefense
-            else -> return@HUD 0 to 0
-        }
-        return@HUD textDim(generateText(text, "❈", true), 0, 0, defenseColor)
+        val v = if (example) 1000 else if (LocationUtils.isInSkyblock) ActionBarListener.currentDefense else 0
+        if (v == 0) NONE else defense.amount(this, v, DEFENSE, true, defenseColor)
     }
     private val defenseColor by ColorSetting("Defense Color", Colors.MINECRAFT_GREEN, true, desc = "The color of the defense text.")
 
     private val vitalityHud by HUD("Vitality HUD", "Displays the player's vitality.") { example ->
-        val text = when {
-            example -> 100 to 100
-            !LocationUtils.isInSkyblock -> return@HUD 0 to 0
-            ActionBarListener.isVitalityShown && ActionBarListener.maxVitality != 0 -> ActionBarListener.currentVitality to ActionBarListener.maxVitality
-            else -> return@HUD 0 to 0
+        val bar = ActionBarListener
+        when {
+            example -> vitality.ratio(this, 100, 100, VITALITY, vitalityColor)
+            !LocationUtils.isInSkyblock || !bar.isVitalityShown || bar.maxVitality == 0 -> NONE
+            else -> vitality.ratio(this, bar.currentVitality, bar.maxVitality, VITALITY, vitalityColor)
         }
-        return@HUD textDim(generateText(text.first, text.second, "♨"), 0, 0, vitalityColor)
     }
     private val vitalityColor by ColorSetting("Vitality Color", Colors.MINECRAFT_DARK_RED, true, "The color of the vitality text.")
 
     private val ehpHud by HUD("EHP HUD", "Displays the player's effective health (EHP).") { example ->
-        val text = when {
-            example -> 1000000
-            !LocationUtils.isInSkyblock -> return@HUD 0 to 0
-            ActionBarListener.effectiveHP != 0 -> ActionBarListener.effectiveHP
-            else -> return@HUD 0 to 0
-        }
-        return@HUD textDim(generateText(text, "", true), 0, 0, ehpColor)
+        val v = if (example) 1000000 else if (LocationUtils.isInSkyblock) ActionBarListener.effectiveHP else 0
+        if (v == 0) NONE else ehp.amount(this, v, "", true, ehpColor)
     }
     private val ehpColor by ColorSetting("EHP color", Colors.MINECRAFT_DARK_GREEN, true, "The color of the effective health text.")
 
     private val speedHud by HUD("Speed HUD", "Displays the player's speed buff.") { example ->
-        val text = when {
-            example -> 100
-            !LocationUtils.isInSkyblock -> return@HUD 0 to 0
-            ActionBarListener.currentSpeed != 0 -> ActionBarListener.currentSpeed
-            else -> return@HUD 0 to 0
-        }
-        return@HUD textDim(generateText(text, "✦", true), 0, 0, speedColor)
+        val v = if (example) 100 else if (LocationUtils.isInSkyblock) ActionBarListener.currentSpeed else 0
+        if (v == 0) NONE else speed.amount(this, v, SPEED, true, speedColor)
     }
     private val speedColor by ColorSetting("Speed color", Colors.WHITE, true, "The color of the speed text.")
 
-    private val HEALTH_REGEX = Regex("[\\d|,]+/[\\d|,]+\\uE010")
-    private val MANA_REGEX = Regex("[\\d|,]+/[\\d|,]+\\uE003( Mana)?")
-    private val OVERFLOW_MANA_REGEX = Regex("§?[\\d|,]+\\uE017")
-    private val DEFENSE_REGEX = Regex("[\\d|,]+(§.)?\\uE008( Defense)?")
-    private val VITALITY_REGEX = Regex("[\\d.,]+/[\\d.,]+(§.)?\\uE028")
+    private val NONE = 0 to 0
 
-    init {
-        on<MessageEvent.ModifyOverlay> {
-            val toReturn = component.string
-                .let { if (hideHealth) it.replace(HEALTH_REGEX, "") else it }
-                .let { if (hideMana) it.replace(MANA_REGEX, "") else it }
-                .let { if (hideOverflow) it.replace(OVERFLOW_MANA_REGEX, "") else it }
-                .let { if (hideDefense) it.replace(DEFENSE_REGEX, "") else it }
-                .let { if (hideVitality) it.replace(VITALITY_REGEX, "") else it }
+    private const val HEALTH = "❤"
+    private const val MANA = "✎"
+    private const val OVERFLOW = "ʬ"
+    private const val DEFENSE = "❈"
+    private const val VITALITY = "♨"
+    private const val SPEED = "✦"
 
-            component = Component.literal(toReturn.trim())
+    // Each HUD keeps its last line and size; they are rebuilt only when a number or a setting it shows changes.
+    private class Readout {
+        private var a = 0
+        private var b = 0
+        private var c = 0
+        private var flags = -1
+        private var text = ""
+        private var size = 0 to 0
+
+        fun ratio(g: GuiGraphicsExtractor, current: Int, max: Int, icon: String, color: Color): Pair<Int, Int> {
+            val f = if (showIcons) 1 else 0
+            if (flags != f || a != current || b != max) remember(current, max, 0, f, StringBuilder().appendRatio(current, max, icon).toString())
+            return draw(g, color)
+        }
+
+        fun amount(g: GuiGraphicsExtractor, value: Int, icon: String, hideZero: Boolean, color: Color): Pair<Int, Int> {
+            val f = (if (showIcons) 1 else 0) or (if (hideZero) 2 else 0)
+            if (flags != f || a != value) remember(value, 0, 0, f, StringBuilder().appendAmount(value, icon, hideZero).toString())
+            return draw(g, color)
+        }
+
+        fun mana(g: GuiGraphicsExtractor, current: Int, max: Int, withOverflow: Boolean): Pair<Int, Int> {
+            val overflow = ActionBarListener.overflowMana
+            val f = (if (showIcons) 1 else 0) or (if (hideZeroSF) 2 else 0) or (if (withOverflow) 4 else 0)
+            if (flags != f || a != current || b != max || c != overflow) {
+                val sb = StringBuilder().appendRatio(current, max, MANA)
+                if (withOverflow) sb.append(' ').appendAmount(overflow, OVERFLOW, hideZeroSF)
+                remember(current, max, overflow, f, sb.toString())
+            }
+            return draw(g, manaColor)
+        }
+
+        private fun remember(a: Int, b: Int, c: Int, flags: Int, text: String) {
+            this.a = a
+            this.b = b
+            this.c = c
+            this.flags = flags
+            if (text != this.text || size.second == 0) {
+                this.text = text
+                size = mc.font.width(text) to mc.font.lineHeight
+            }
+        }
+
+        private fun draw(g: GuiGraphicsExtractor, color: Color): Pair<Int, Int> {
+            g.text(text, 0, 0, color, true)
+            return size
         }
     }
 
-    private fun generateText(current: Int, max: Int, icon: String): String =
-        "${formatNumber(current)}/${formatNumber(max)}${if (showIcons) icon else ""}"
+    private val health = Readout()
+    private val mana = Readout()
+    private val overflowMana = Readout()
+    private val defense = Readout()
+    private val vitality = Readout()
+    private val ehp = Readout()
+    private val speed = Readout()
 
-    private fun generateText(current: Int, icon: String, hideZero: Boolean): String =
-        if (!hideZero || current != 0) "${formatNumber(current)}${if (showIcons) icon else ""}" else ""
+    private fun StringBuilder.appendRatio(current: Int, max: Int, icon: String): StringBuilder {
+        appendGrouped(current).append('/').appendGrouped(max)
+        if (showIcons) append(icon)
+        return this
+    }
 
-    private fun formatNumber(n: Int): String {
-        val absStr = abs(n).toString()
-        val len = absStr.length
-        val sb = StringBuilder(len + len / 3)
-        val rem = len % 3
-        if (rem != 0) sb.append(absStr, 0, rem)
-        for (i in rem until len step 3) {
-            if (sb.isNotEmpty()) sb.append(',')
-            sb.append(absStr, i, i + 3)
+    private fun StringBuilder.appendAmount(value: Int, icon: String, hideZero: Boolean): StringBuilder {
+        if (hideZero && value == 0) return this
+        appendGrouped(value)
+        if (showIcons) append(icon)
+        return this
+    }
+
+    private fun StringBuilder.appendGrouped(n: Int): StringBuilder {
+        if (n < 0) append('-')
+        val digits = abs(n.toLong()).toString()
+        val lead = digits.length % 3
+        for (i in digits.indices) {
+            if (i > 0 && (i - lead) % 3 == 0) append(',')
+            append(digits[i])
         }
-        return if (n < 0) "-$sb" else sb.toString()
+        return this
+    }
+
+    private val HIDDEN_PARTS = arrayOf(
+        Regex("[\\d|,]+/[\\d|,]+\\uE010"),
+        Regex("[\\d|,]+/[\\d|,]+\\uE003( Mana)?"),
+        Regex("§?[\\d|,]+\\uE017"),
+        Regex("[\\d|,]+(§.)?\\uE008( Defense)?"),
+        Regex("[\\d.,]+/[\\d.,]+(§.)?\\uE028"),
+    )
+    private val MARKERS = charArrayOf('', '', '', '', '')
+
+    private fun hides(part: Int): Boolean = when (part) {
+        0 -> hideHealth
+        1 -> hideMana
+        2 -> hideOverflow
+        3 -> hideDefense
+        else -> hideVitality
+    }
+
+    init {
+        on<MessageEvent.ModifyOverlay> {
+            var text = component.string
+            for (i in MARKERS.indices) {
+                if (hides(i) && text.indexOf(MARKERS[i]) >= 0) text = HIDDEN_PARTS[i].replace(text, "")
+            }
+            component = Component.literal(text.trim())
+        }
     }
 
     @JvmStatic
     fun shouldCancelOverlay(type: OverlayType): Boolean =
-        !(!enabled || !LocationUtils.isInSkyblock) && when (type) {
+        enabled && LocationUtils.isInSkyblock && when (type) {
             OverlayType.ARMOR -> hideArmor
             OverlayType.HEARTS -> hideHearts
             OverlayType.FOOD -> hideFood
