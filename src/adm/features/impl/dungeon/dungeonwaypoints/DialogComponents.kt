@@ -12,52 +12,54 @@ import com.adm.utils.render.roundedShadow
 import com.adm.utils.ui.animations.Easing
 import com.adm.utils.ui.compose.*
 
-internal const val DIALOG_PADDING = 8
-internal const val DIALOG_BUTTON_HEIGHT = 20
+internal const val PANEL_PAD = 8
+internal const val BUTTON_H = 20
 
-private val CORNERS = Corners(GuiTheme.RADIUS)
+private const val OPEN_SCALE = 0.92f
+private const val PROMPT_W = 240
+private val panelCorners = Corners(GuiTheme.RADIUS)
 
 @Composable
-fun Dialog(width: Int, heightOf: () -> Int, content: @Composable () -> Unit): UiNode {
-    val open = remember { Animatable(0f) }
-    SideEffect { open.animateTo(1f, 150, Easing.EASE_IN_OUT) }
+internal fun ModalPanel(width: Int, height: () -> Int, content: @Composable () -> Unit): UiNode {
+    val grow = remember { Animatable(0f) }
+    SideEffect { grow.animateTo(1f, 150, Easing.EASE_IN_OUT) }
 
     return Box(content)
         .width(width)
-        .height { heightOf() }
-        .offset({ (mc.window.guiScaledWidth - width) / 2 }, { (mc.window.guiScaledHeight - heightOf()) / 2 })
-        .scale { 0.92f + (1f - 0.92f) * open.value }
-        .drawBehind { graphics ->
-            graphics.roundedShadow(x, y, right, bottom, GuiTheme.shadow.rgba, GuiTheme.PANEL_BLUR, CORNERS)
-            graphics.roundedRect(x, y, right, bottom, GuiTheme.background.rgba, CORNERS)
+        .height { height() }
+        .offset({ (mc.window.guiScaledWidth - width) / 2 }, { (mc.window.guiScaledHeight - height()) / 2 })
+        .scale { OPEN_SCALE + (1f - OPEN_SCALE) * grow.value }
+        .drawBehind { g ->
+            g.roundedShadow(x, y, right, bottom, GuiTheme.shadow.rgba, GuiTheme.PANEL_BLUR, panelCorners)
+            g.roundedRect(x, y, right, bottom, GuiTheme.background.rgba, panelCorners)
         }
 }
 
-fun UiNode.centeredX(parentWidth: Int, y: Int) = offset({ (parentWidth - width) / 2 }, { y })
+internal fun UiNode.centerIn(width: Int, y: Int) = offset({ (width - this.width) / 2 }, { y })
 
 @Composable
-fun PromptDialog(title: String, onConfirm: (String) -> Unit, onCancel: () -> Unit, scrim: Boolean = true) {
-    var text by remember { mutableStateOf("") }
-    val focus = remember { FocusRequester() }
+internal fun NamePrompt(title: String, onDone: (String) -> Unit, onCancel: () -> Unit, dim: Boolean = true) {
+    var typed by remember { mutableStateOf("") }
+    val field = remember { FocusRequester() }
     val host = LocalHost.current
     DisposableEffect(host) {
-        host.focus(focus)
+        host.focus(field)
         onDispose {}
     }
 
-    if (scrim) Canvas(size = { mc.window.guiScaledWidth to mc.window.guiScaledHeight }) { graphics ->
-        graphics.fill(x, y, right, bottom, 0x80000000.toInt())
+    if (dim) Canvas(size = { mc.window.guiScaledWidth to mc.window.guiScaledHeight }) { g ->
+        g.fill(x, y, right, bottom, 0x80000000.toInt())
     }
-    Dialog(240, { 80 }) {
-        Text({ "§l$title" }).centeredX(240, DIALOG_PADDING)
-        TextBox(text, { text = it }, placeholder = "Enter text", maxLength = 32, focusRequester = focus)
-            .size(240 - DIALOG_PADDING * 2, DIALOG_BUTTON_HEIGHT)
-            .at(DIALOG_PADDING, 24)
-        Button("Done", 100, DIALOG_BUTTON_HEIGHT) { onConfirm(text) }.at(16, 52)
-        Button("Cancel", 100, DIALOG_BUTTON_HEIGHT, onCancel).at(124, 52)
+    ModalPanel(PROMPT_W, { 80 }) {
+        Text({ "§l$title" }).centerIn(PROMPT_W, PANEL_PAD)
+        TextBox(typed, { typed = it }, placeholder = "Enter text", maxLength = 32, focusRequester = field)
+            .size(PROMPT_W - PANEL_PAD * 2, BUTTON_H)
+            .at(PANEL_PAD, 24)
+        Button("Done", 100, BUTTON_H) { onDone(typed) }.at(16, 52)
+        Button("Cancel", 100, BUTTON_H, onCancel).at(124, 52)
     }.onKey { event ->
         when (event.key) {
-            InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> onConfirm(text)
+            InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> onDone(typed)
             InputConstants.KEY_ESCAPE -> onCancel()
             else -> return@onKey false
         }

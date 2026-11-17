@@ -138,7 +138,7 @@ internal object WaypointEditor {
         }
         if (DungeonWaypoints.allowTextEdit && mc.player?.isCrouching == true) {
             val box = room.getRelativeAABB(boxAt(pos))
-            mc.setScreenAndShow(TextPromptScreen("Waypoint Name").setCallback { text ->
+            mc.setScreenAndShow(TextPromptScreen("Waypoint Name") { text ->
                 own.removeIf { it.blockPos == rel }
                 own.add(newWaypoint(rel, box, text))
                 devMessage("Added waypoint with $text at $rel")

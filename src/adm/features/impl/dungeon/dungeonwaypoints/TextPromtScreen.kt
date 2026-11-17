@@ -6,11 +6,9 @@ import com.adm.utils.ui.compose.UiHost
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.chat.Component
 
-class TextPromptScreen(val promptTitle: String) : AdmScreen(Component.literal(promptTitle)) {
-    private var callback: (String) -> Unit = {}
-
+internal class TextPromptScreen(heading: String, onDone: (String) -> Unit) : AdmScreen(Component.literal(heading)) {
     override val ui = UiHost {
-        PromptDialog(promptTitle, { callback(it) }, { mc.gui.setScreen(null) }, scrim = false)
+        NamePrompt(heading, onDone, { mc.gui.setScreen(null) }, dim = false)
     }
 
     override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
@@ -21,10 +19,5 @@ class TextPromptScreen(val promptTitle: String) : AdmScreen(Component.literal(pr
     override fun removed() {
         super.removed()
         ui.dispose()
-    }
-
-    fun setCallback(callback: (String) -> Unit): TextPromptScreen {
-        this.callback = callback
-        return this
     }
 }

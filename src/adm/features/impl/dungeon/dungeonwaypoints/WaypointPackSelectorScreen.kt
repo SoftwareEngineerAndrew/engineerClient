@@ -3,8 +3,8 @@ package com.adm.features.impl.dungeon.dungeonwaypoints
 import androidx.compose.runtime.*
 import com.adm.AdmMod
 import com.adm.AdmMod.mc
-import com.adm.clickgui.GuiTheme
 import com.adm.clickgui.AdmScreen
+import com.adm.clickgui.GuiTheme
 import com.adm.clickgui.ui.Button
 import com.adm.clickgui.ui.SWITCH_HEIGHT
 import com.adm.clickgui.ui.Switch
@@ -19,20 +19,30 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 
+private const val WIDTH = 340
+private const val ROW_W = WIDTH - PANEL_PAD * 2
+private const val ROW_H = 24
+private const val ROW_GAP = 4
+private const val TOOLBAR_Y = 24
+private const val LIST_TOP = 52
+
 class WaypointPackSelectorScreen(private val parent: Screen?) : AdmScreen(Component.literal("Waypoint Pack Manager")) {
 
-    private class Prompt(val title: String, val onConfirm: (String) -> Unit)
+    private class Ask(val title: String, val then: (String) -> Unit)
 
-    private var revision by mutableIntStateOf(0)
-    private var packs by mutableStateOf(WaypointPackFileUtils.packNames())
-    private var loading by mutableStateOf(false)
-    private var prompt by mutableStateOf<Prompt?>(null)
+    private var epoch by mutableIntStateOf(0)
+    private var names by mutableStateOf(WaypointPackFileUtils.packNames())
+    private var busy by mutableStateOf(false)
+    private var asking by mutableStateOf<Ask?>(null)
+
+    private val countLabels = HashMap<String, String>()
+    private var countsAt = -1
 
     override val ui = UiHost {
-        PackPanel()
-        prompt?.let { current ->
-            key(current) {
-                PromptDialog(current.title, { text -> prompt = null; current.onConfirm(text) }, { prompt = null })
+        Manager()
+        asking?.let { ask ->
+            key(ask) {
+                NamePrompt(ask.title, { text -> asking = null; ask.then(text) }, { asking = null })
             }
         }
     }
@@ -47,123 +57,121 @@ class WaypointPackSelectorScreen(private val parent: Screen?) : AdmScreen(Compon
         ui.dispose()
     }
 
-    private fun listHeight() = 224.coerceAtMost((mc.window.guiScaledHeight - LIST_Y - DIALOG_BUTTON_HEIGHT - DIALOG_PADDING * 2 - 20).coerceAtLeast(48))
+    private fun listViewport() = (mc.window.guiScaledHeight - LIST_TOP - BUTTON_H - PANEL_PAD * 2 - 20).coerceAtLeast(48).coerceAtMost(224)
 
-    @Composable
-    private fun PackPanel() {
-        val footerY = { LIST_Y + listHeight() + DIALOG_PADDING }
-        Dialog(PANEL_WIDTH, { footerY() + DIALOG_BUTTON_HEIGHT + DIALOG_PADDING }) {
-            Text({ "§lWaypoint Pack Manager" }).centeredX(PANEL_WIDTH, DIALOG_PADDING)
-            Button("Create Pack", 100, DIALOG_BUTTON_HEIGHT) {
-                prompt = Prompt("Create Pack") { name ->
-                    if (name.isNotBlank()) refreshAfter { WaypointStore.createPack(name) }
-                }
-            }.at(76, ACTIONS_Y)
-            Button("Import", 80, DIALOG_BUTTON_HEIGHT) {
-                prompt = Prompt("Import as New Pack") { name ->
-                    val clipboard = mc.keyboardHandler.clipboard
-                    refreshAfter {
-                        DungeonWaypointConfig.decodeWaypoints(null, clipboard)
-                            ?.takeIf { WaypointStore.importPack(name, it) }
-                            ?.let { modMessage("§aImported waypoints as pack '$name'!") }
-                            ?: modMessage("§cFailed to decode waypoints from clipboard.")
-                    }
-                }
-            }.at(184, ACTIONS_Y)
-            if (loading) Text({ "§7Loading..." }).centeredX(PANEL_WIDTH, LIST_Y + listHeight() / 2 - 4) else PackList()
-            Button("Done", 80, DIALOG_BUTTON_HEIGHT) { if (parent != null) mc.setScreenAndShow(parent) else mc.gui.setScreen(null) }
-                .offset({ (PANEL_WIDTH - 80) / 2 }, footerY)
+    private fun countLabel(pack: String): String {
+        val at = WaypointStore.revision
+        if (at != countsAt) {
+            countsAt = at
+            countLabels.clear()
+        }
+        return countLabels.getOrPut(pack) {
+            val n = WaypointStore.waypointCount(pack)
+            if (n >= 0) "§a$n §7wp" else "§7? wp"
         }
     }
 
     @Composable
-    private fun PackList() {
-        val selected = remember(revision) { DungeonWaypoints.selectedPackIds.toList() }
-        val edit = remember(revision) { DungeonWaypoints.editPackId }
+    private fun Manager() {
+        val doneY = { LIST_TOP + listViewport() + PANEL_PAD }
+        ModalPanel(WIDTH, { doneY() + BUTTON_H + PANEL_PAD }) {
+            Text({ "§lWaypoint Pack Manager" }).centerIn(WIDTH, PANEL_PAD)
+            Button("Create Pack", 100, BUTTON_H) {
+                asking = Ask("Create Pack") { name -> if (name.isNotBlank()) busyWhile { WaypointStore.createPack(name) } }
+            }.at(76, TOOLBAR_Y)
+            Button("Import", 80, BUTTON_H) {
+                asking = Ask("Import as New Pack") { name ->
+                    val clipboard = mc.keyboardHandler.clipboard
+                    busyWhile {
+                        val decoded = DungeonWaypointConfig.decodeWaypoints(null, clipboard)
+                        if (decoded != null && WaypointStore.importPack(name, decoded)) modMessage("§aImported waypoints as pack '$name'!")
+                        else modMessage("§cFailed to decode waypoints from clipboard.")
+                    }
+                }
+            }.at(184, TOOLBAR_Y)
+            if (busy) Text({ "§7Loading..." }).centerIn(WIDTH, LIST_TOP + listViewport() / 2 - 4) else Packs()
+            Button("Done", 80, BUTTON_H) { if (parent != null) mc.setScreenAndShow(parent) else mc.gui.setScreen(null) }
+                .offset({ (WIDTH - 80) / 2 }, doneY)
+        }
+    }
+
+    @Composable
+    private fun Packs() {
+        val chosen = remember(epoch) { DungeonWaypoints.selectedPackIds.toList() }
+        val editing = remember(epoch) { DungeonWaypoints.editPackId }
         val scroll = remember { ScrollState() }
 
         Box {
-            Column(ROW_SPACING) {
-                for (name in packs) key(name) {
-                    PackRow(name, name in selected, name == edit, packs.size > 1)
-                }
+            Column(ROW_GAP) {
+                for (name in names) key(name) { PackRow(name, name in chosen, name == editing, names.size > 1) }
             }.offset(y = { scroll.offset })
         }
-            .width(ROW_WIDTH)
+            .width(ROW_W)
             .height {
-                val viewport = listHeight()
+                val viewport = listViewport()
                 scroll.maxScroll = height - viewport
                 viewport
             }
             .clip()
-            .at(DIALOG_PADDING, LIST_Y)
+            .at(PANEL_PAD, LIST_TOP)
             .onScroll { amount -> scroll.by(amount); true }
     }
 
     @Composable
-    private fun PackRow(name: String, enabled: Boolean, editing: Boolean, canDelete: Boolean) {
-        val nameHover = remember { InteractionSource() }
+    private fun PackRow(name: String, on: Boolean, editing: Boolean, deletable: Boolean) {
+        val hover = remember { InteractionSource() }
 
         Box {
-            Switch(enabled) {
-                if (name in DungeonWaypoints.selectedPackIds) {
-                    if (DungeonWaypoints.selectedPackIds.size == 1) return@Switch
-                    if (name == DungeonWaypoints.editPackId)
-                        DungeonWaypoints.editPackId = DungeonWaypoints.selectedPackIds.first { it != name }
-                    DungeonWaypoints.selectedPackIds.remove(name)
-                } else DungeonWaypoints.selectedPackIds.add(name)
-                revision++
-                backgroundSave()
-            }.at(GuiTheme.PADDING, (ROW_HEIGHT - SWITCH_HEIGHT) / 2)
+            Switch(on) { toggle(name) }.at(GuiTheme.PADDING, (ROW_H - SWITCH_HEIGHT) / 2)
             Box {
-                Text({ (if (editing) "§e★ " else if (nameHover.hovered) "§f" else "§7") + name }).at(0, (ROW_HEIGHT - 8) / 2)
-            }.size(150, ROW_HEIGHT).clip().hoverable(nameHover).clickable(onClick = {
-                if (name !in DungeonWaypoints.selectedPackIds) DungeonWaypoints.selectedPackIds.add(name)
-                DungeonWaypoints.editPackId = name
-                revision++
-                backgroundSave()
-            }).at(36, 0)
-            Text({
-                val count = WaypointStore.waypointCount(name)
-                if (count >= 0) "§a$count §7wp" else "§7? wp"
-            }).at(190, (ROW_HEIGHT - 8) / 2)
+                Text({ (if (editing) "§e★ " else if (hover.hovered) "§f" else "§7") + name }).at(0, (ROW_H - 8) / 2)
+            }.size(150, ROW_H).clip().hoverable(hover).clickable(onClick = { makeEditPack(name) }).at(36, 0)
+            Text({ countLabel(name) }).at(190, (ROW_H - 8) / 2)
             Button("§7✎", 26, 18) {
-                prompt = Prompt("Rename Pack") { newName ->
-                    if (newName.isNotBlank() && newName != name) refreshAfter { WaypointStore.renamePack(name, newName) }
-                }
-            }.at(260, (ROW_HEIGHT - 18) / 2)
-            Button(if (canDelete) "§cX" else "§8X", 26, 18) {
-                if (canDelete) refreshAfter { WaypointStore.deletePack(name) }
-            }.at(292, (ROW_HEIGHT - 18) / 2)
-        }.size(ROW_WIDTH, ROW_HEIGHT).drawBehind { graphics ->
-            if (editing) graphics.roundedRectOutlined(x, y, right, bottom, GuiTheme.surface.rgba, GuiTheme.accent.rgba, 1f, GuiTheme.RADIUS)
-            else graphics.roundedRect(x, y, right, bottom, GuiTheme.surface.rgba, GuiTheme.RADIUS)
+                asking = Ask("Rename Pack") { to -> if (to.isNotBlank() && to != name) busyWhile { WaypointStore.renamePack(name, to) } }
+            }.at(260, (ROW_H - 18) / 2)
+            Button(if (deletable) "§cX" else "§8X", 26, 18) {
+                if (deletable) busyWhile { WaypointStore.deletePack(name) }
+            }.at(292, (ROW_H - 18) / 2)
+        }.size(ROW_W, ROW_H).drawBehind { g ->
+            if (editing) g.roundedRectOutlined(x, y, right, bottom, GuiTheme.surface.rgba, GuiTheme.accent.rgba, 1f, GuiTheme.RADIUS)
+            else g.roundedRect(x, y, right, bottom, GuiTheme.surface.rgba, GuiTheme.RADIUS)
         }
     }
 
-    private fun backgroundSave() {
-        AdmMod.scope.launch { WaypointStore.selectPacks(DungeonWaypoints.selectedPackIds.toList(), DungeonWaypoints.editPackId) }
+    private fun toggle(name: String) {
+        val chosen = DungeonWaypoints.selectedPackIds
+        if (name in chosen) {
+            if (chosen.size == 1) return
+            if (name == DungeonWaypoints.editPackId) DungeonWaypoints.editPackId = chosen.first { it != name }
+            chosen.remove(name)
+        } else chosen.add(name)
+        commitSelection()
     }
 
-    private fun refreshAfter(work: suspend () -> Unit) {
-        loading = true
+    private fun makeEditPack(name: String) {
+        if (name !in DungeonWaypoints.selectedPackIds) DungeonWaypoints.selectedPackIds.add(name)
+        DungeonWaypoints.editPackId = name
+        commitSelection()
+    }
+
+    private fun commitSelection() {
+        epoch++
+        val chosen = DungeonWaypoints.selectedPackIds.toList()
+        val edit = DungeonWaypoints.editPackId
+        AdmMod.scope.launch { WaypointStore.selectPacks(chosen, edit) }
+    }
+
+    private fun busyWhile(work: suspend () -> Unit) {
+        busy = true
         AdmMod.scope.launch {
             try {
                 work()
             } finally {
-                packs = WaypointPackFileUtils.packNames()
-                revision++
-                loading = false
+                names = WaypointPackFileUtils.packNames()
+                epoch++
+                busy = false
             }
         }
-    }
-
-    private companion object {
-        const val PANEL_WIDTH = 340
-        const val ROW_WIDTH = PANEL_WIDTH - DIALOG_PADDING * 2
-        const val ROW_HEIGHT = 24
-        const val ROW_SPACING = 4
-        const val ACTIONS_Y = 24
-        const val LIST_Y = 52
     }
 }
