@@ -66,10 +66,12 @@ object MapPrediction {
         desc = "ADM: unknown rooms coloured by their chances, from the rules every recorded map of the floor follows, updated as rooms open. Basic: a simple guess. Off: no guesses, every unknown tile in the unknown room colour (the blood room behind a blood door still shows). Added by engineerClient.")
     private val on: Boolean get() = mode.value == Mode.ADM
     private val off: Boolean get() = mode.value == Mode.OFF
+    private val performance = BooleanSetting("Performance Mode", false,
+        desc = "Uses the lighter fallback prediction: one thread, a few thousand guesses per map, a little less exact.").withDependency { on }
     private val threadsSetting = NumberSetting("Prediction Threads", 0, 0..4, 1,
-        desc = "Threads the guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on }
+        desc = "Threads the guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on && !performance.value }
     private val aheadSetting = BooleanSetting("Predict Ahead", true,
-        desc = "Keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on }
+        desc = "Keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on && !performance.value }
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
     private val splitSecrets = BooleanSetting("Split Secrets", true,
@@ -165,7 +167,7 @@ object MapPrediction {
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
-        for (s in listOf(mode, threadsSetting, aheadSetting, splitText, splitSecrets, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms, exactOpacity,
+        for (s in listOf(mode, performance, threadsSetting, aheadSetting, splitText, splitSecrets, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms, exactOpacity,
             colorsDropdown, customColors, predPuzzle, predTrap, predYellow, predRare, predBlood, predFairy, predRoom)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
@@ -251,7 +253,8 @@ object MapPrediction {
         // ADM fills rooms in from the map packets as they come; a read mid-change just waits for the next tick
         val v = try { view() } catch (_: ConcurrentModificationException) { null } ?: return
         val live = started()
-        val key = v.key() + if (live) "" else "|quiet"
+        val light = performance.value
+        val key = v.key() + (if (live) "" else "|quiet") + (if (light) "|light" else "")
         if (key == lastKey) return
         lastKey = key
         val gen = generation.incrementAndGet()
@@ -265,7 +268,7 @@ object MapPrediction {
                 // then top them up, publishing as it goes, and go on for the next room while the map stays;
                 // stops when the map changes again, when nothing fits even the loosest rules, or when no more fit
                 session.threads = threads; session.ahead = ahead
-                session.begin(v)
+                session.begin(v, game = !light)
                 // the names from the secret total once the map is known for sure, however many rooms are unnamed: a map
                 // all discovered at once, else once the prediction is sure of every room left
                 val namer = try { MapPredictor(v, gameProcess = false) } catch (_: Exception) { null }
