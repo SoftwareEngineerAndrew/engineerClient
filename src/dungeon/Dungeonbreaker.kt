@@ -45,7 +45,7 @@ object Dungeonbreaker : Module(
     key = null,
 ) {
     private val torchGuard by BooleanSetting("Torch Guard", true, desc = "Stops the Dungeon Breaker from hitting torches and the blocks they hang on.")
-    private val secretGuard by BooleanSetting("Stop Breaking Secrets", true, desc = "Stops the Dungeon Breaker from hitting chests, levers, skulls and the blocks levers hang on.")
+    private val secretGuard by BooleanSetting("Stop Breaking Secrets", true, desc = "Stops the Dungeon Breaker from hitting chests, levers, skulls other than the redstone key, and the blocks levers hang on.")
     private val instant by BooleanSetting("Instant Break", false, desc = "No wait between blocks while you hold left click.")
     private val alphaZpdb by BooleanSetting("Alpha ZPDB", false, desc = "Zero ping: blocks break the moment you hit them. Only on alpha.hypixel.net.")
     private val chargesDisplay by BooleanSetting("Charges Display", true, desc = "Shows the charges left in your Dungeon Breaker.")
@@ -122,7 +122,7 @@ object Dungeonbreaker : Module(
         val block = state.block
         if (zeroPing() && !canInstantMine(level, pos, state)) return true
         return (torchGuard && (block is BaseTorchBlock || holdsTorch(level, pos))) ||
-            (secretGuard && (block is ChestBlock || block is LeverBlock || block is AbstractSkullBlock || holdsLever(level, pos)))
+            (secretGuard && (block is ChestBlock || block is LeverBlock || (block is AbstractSkullBlock && !isRedstoneKey(level, pos)) || holdsLever(level, pos)))
     }
 
     private val UNBREAKABLE = setOf(
