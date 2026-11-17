@@ -26,22 +26,32 @@ object BlessingDisplay : Module(
     private val wisdom by BooleanSetting("Wisdom Blessing", false, desc = "Displays the wisdom blessing.")
     private val wisdomColor by ColorSetting("Wisdom Color", Colors.MINECRAFT_AQUA, true, desc = "The color of the wisdom blessing.").withDependency { wisdom }
 
-    private data class BlessingData(val type: Blessing, val enabled: () -> Boolean, val color: () -> Color)
-    private val blessings = listOf(
-        BlessingData(Blessing.POWER, { power }, { powerColor }),
-        BlessingData(Blessing.TIME, { time }, { timeColor }),
-        BlessingData(Blessing.STONE, { stone }, { stoneColor }),
-        BlessingData(Blessing.LIFE, { life }, { lifeColor }),
-        BlessingData(Blessing.WISDOM, { wisdom }, { wisdomColor })
-    )
+    private const val EXAMPLE_LEVEL = 19
+    private val shownOrder = arrayOf(Blessing.POWER, Blessing.TIME, Blessing.STONE, Blessing.LIFE, Blessing.WISDOM)
+    private val lineLevels = IntArray(shownOrder.size) { -1 }
+    private val lines = arrayOfNulls<String>(shownOrder.size)
+
+    private fun shown(i: Int) = when (i) { 0 -> power; 1 -> time; 2 -> stone; 3 -> life; else -> wisdom }
+    private fun color(i: Int): Color = when (i) { 0 -> powerColor; 1 -> timeColor; 2 -> stoneColor; 3 -> lifeColor; else -> wisdomColor }
+
+    private fun line(i: Int, level: Int): String {
+        if (lineLevels[i] != level || lines[i] == null) {
+            lines[i] = "${shownOrder[i].displayString} §a$level§r"
+            lineLevels[i] = level
+        }
+        return lines[i]!!
+    }
 
     private val hud by HUD(name, "Displays the current active blessings of the dungeon.", false) { example ->
-        if (!DungeonUtils.inDungeons && !example) return@HUD 0 to 0
-        (0..5).reduce { acc, index ->
-            val blessing = blessings[index - 1].takeIf { it.enabled() } ?: return@reduce acc
-            val level = if (example) 19 else if (blessing.type.current > 0) blessing.type.current else return@reduce acc
-            text("${blessing.type.displayString} §a$level§r", 0, 9 * acc, blessing.color())
-            acc + 1
-        }.let { getStringWidth("Power: 19") to 1 + 10 * it }
+        if (!example && !DungeonUtils.inDungeons) return@HUD 0 to 0
+        var row = 0
+        for (i in shownOrder.indices) {
+            if (!shown(i)) continue
+            val level = if (example) EXAMPLE_LEVEL else shownOrder[i].current
+            if (level <= 0) continue
+            text(line(i, level), 0, 9 * row, color(i))
+            row++
+        }
+        getStringWidth("Power: 19") to 1 + 10 * row
     }
 }
