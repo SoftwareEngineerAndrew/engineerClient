@@ -8,19 +8,23 @@ import com.adm.features.impl.dungeon.map.tile.DungeonRoom
 import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers.onPuzzleComplete
 import com.adm.utils.*
 import com.adm.utils.Color.Companion.withAlpha
+import com.adm.utils.Color.Companion.multiplyAlphaRgba
+import com.adm.utils.render.BoxBatch
 import com.adm.utils.render.BoxStyle
+import com.adm.utils.render.drawBoxes
 import com.adm.utils.render.drawLine
-import com.adm.utils.render.drawStyledBox
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.Mob
+import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.HitResult
+import net.minecraft.world.phys.Vec3
 import java.util.concurrent.ConcurrentHashMap
 
 object BeamsSolver {
@@ -29,46 +33,65 @@ object BeamsSolver {
 
     private var currentLanternPairs = ConcurrentHashMap<BlockPos, Pair<BlockPos, Color>>()
 
+    // Render-side copy of currentLanternPairs, in its order: two boxes and a tracer per pair.
+    private var boxes = emptyArray<AABB>()
+    private var fills = emptyArray<AABB>()
+    private var tracers = emptyArray<List<Vec3>>()
+    private var baseColors = emptyArray<Color>()
+    private var drawColors = emptyArray<Color>()
+    private var drawAlpha = Float.NaN
+    private val batch = BoxBatch()
+
     fun onRoomEnter(event: RoomEnterEvent) = with(event.room) {
         if (this?.data?.name != "Creeper Beams") return@with reset()
         recalculateLanternPairs(this)
     }
 
     private fun recalculateLanternPairs(room: DungeonRoom) {
+        val level = mc.level
         currentLanternPairs.clear()
-        lanternPairs.forEachIndexed { index, list ->
-            val pos = room.getRealCoords(BlockPos(list[0], list[1], list[2])).takeIf { mc.level?.getBlockState(it)?.block == Blocks.SEA_LANTERN } ?: return@forEachIndexed
-            val pos2 = room.getRealCoords(BlockPos(list[3], list[4], list[5])).takeIf { mc.level?.getBlockState(it)?.block == Blocks.SEA_LANTERN } ?: return@forEachIndexed
-
-            currentLanternPairs[pos] = pos2 to colors[index % colors.size]
-        }
         partners.clear()
-        val ends = setOf(Blocks.SEA_LANTERN, Blocks.PRISMARINE)
-        for (list in lanternPairs) {
+        lanternPairs.forEachIndexed { index, list ->
             val a = room.getRealCoords(BlockPos(list[0], list[1], list[2]))
             val b = room.getRealCoords(BlockPos(list[3], list[4], list[5]))
-            if (mc.level?.getBlockState(a)?.block !in ends || mc.level?.getBlockState(b)?.block !in ends) continue
-            partners[a] = b; partners[b] = a
+            val blockA = level?.getBlockState(a)?.block
+            val blockB = level?.getBlockState(b)?.block
+            if (blockA == Blocks.SEA_LANTERN && blockB == Blocks.SEA_LANTERN) currentLanternPairs[a] = b to colors[index % colors.size]
+            if (blockA.isBeamEnd() && blockB.isBeamEnd()) { partners[a] = b; partners[b] = a }
         }
+        val pairs = currentLanternPairs.entries.toList()
+        boxes = Array(pairs.size * 2) { AABB(if (it % 2 == 0) pairs[it / 2].key else pairs[it / 2].value.first) }
+        fills = Array(boxes.size) { boxes[it].inflate(0.00005) }
+        tracers = Array(pairs.size) { listOf(pairs[it].key.center, pairs[it].value.first.center) }
+        baseColors = Array(pairs.size) { pairs[it].value.second }
+        drawAlpha = Float.NaN
     }
 
+    private fun Block?.isBeamEnd() = this == Blocks.SEA_LANTERN || this == Blocks.PRISMARINE
+
     fun onRenderWorld(event: RenderExtractEvent, beamStyle: BoxStyle, beamsTracer: Boolean, beamsAlpha: Float) {
-        if (DungeonUtils.currentRoomName != "Creeper Beams" || currentLanternPairs.isEmpty()) return
-
-        currentLanternPairs.entries.forEach { positions ->
-            val color = positions.value.second.withAlpha(beamsAlpha)
-
-            event.drawStyledBox(AABB(positions.key), color, depth = true, style = beamStyle)
-            event.drawStyledBox(AABB(positions.value.first), color, depth = true, style = beamStyle)
-
-            if (beamsTracer)
-                event.drawLine(listOf(positions.key.center, positions.value.first.center), color = color, depth = false)
+        val boxes = boxes
+        if (boxes.isEmpty() || DungeonUtils.currentRoomName != "Creeper Beams") return
+        if (drawAlpha != beamsAlpha || drawColors.size != baseColors.size) {
+            drawColors = Array(baseColors.size) { baseColors[it].withAlpha(beamsAlpha) }
+            drawAlpha = beamsAlpha
         }
+        val colors = drawColors
+        batch.clear()
+        for (i in boxes.indices) {
+            val color = colors[i / 2]
+            if (beamStyle != BoxStyle.OUTLINE) {
+                if (beamStyle == BoxStyle.FILLED) batch.filled(boxes[i], color, true) else batch.filled(fills[i], color.multiplyAlphaRgba(0.5f), true)
+            }
+            if (beamStyle != BoxStyle.FILLED) batch.outline(boxes[i], color, depth = true)
+        }
+        event.drawBoxes(batch)
+        if (beamsTracer) for (i in tracers.indices) event.drawLine(tracers[i], color = colors[i], depth = false)
     }
 
     fun onBlockChange(event: BlockUpdateEvent) {
         if (DungeonUtils.currentRoomName != "Creeper Beams") return
-        if (event.pos == DungeonUtils.currentRoom?.getRealCoords(BlockPos(15, 69, 15)) && event.old.isAir && event.updated.block == Blocks.CHEST) onPuzzleComplete("Creeper Beams")
+        if (event.old.isAir && event.updated.block == Blocks.CHEST && event.pos == DungeonUtils.currentRoom?.getRealCoords(BlockPos(15, 69, 15))) onPuzzleComplete("Creeper Beams")
         if (event.pos == selected && event.updated.block == Blocks.PRISMARINE) selected = null
         if (
             event.old.block.equalsOneOf(Blocks.PRISMARINE, Blocks.SEA_LANTERN) &&
@@ -156,6 +179,10 @@ object BeamsSolver {
     fun reset() {
         scanned = false
         currentLanternPairs.clear()
+        boxes = emptyArray()
+        fills = emptyArray()
+        tracers = emptyArray()
+        baseColors = emptyArray()
         partners.clear()
         mine.clear()
         selected = null
