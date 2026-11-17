@@ -97,6 +97,7 @@ object LeapMenu : Module(
     private var clickedAt = 0L
     /** When the leap was used: our menu is up, the server's is on its way. */
     private var usedAt = 0L
+    private var leapedAt = 0L
     /** Closed before the server's menu came: it closes again as it opens. */
     private var dismissed = false
     @Volatile private var moved = false
@@ -256,11 +257,12 @@ object LeapMenu : Module(
         onReceive<ClientboundPlayerPositionPacket> { if (clickedAt != 0L) moved = true }
 
         on<MessageEvent.Chat> {
-            if (leapAnnounce && DungeonUtils.inDungeons)
-                leapedRegex.find(message)?.groupValues?.get(1)?.let { sendCommand("pc Leaped to ${it}!") }
+            val leaped = leapedRegex.find(message)?.groupValues?.get(1) ?: return@on
+            leapedAt = System.currentTimeMillis()
+            if (leapAnnounce && DungeonUtils.inDungeons) sendCommand("pc Leaped to ${leaped}!")
         }
 
-        on<LevelEvent.Load> { clear(); usedAt = 0L; dismissed = false }
+        on<LevelEvent.Load> { clear(); usedAt = 0L; leapedAt = 0L; dismissed = false }
     }
 
     /** The server's menu that's open is for a leap already clicked: nothing in it to pick. */
@@ -270,6 +272,9 @@ object LeapMenu : Module(
     private fun open(itemId: String) {
         if (!enabled || !instant || itemId !in LEAPS || !DungeonUtils.inDungeons) return
         if (mc.gui.screen() != null) return
+        // The server won't open its menu while the leap cools down, so ours stays shut too
+        val cooldown = DungeonUtils.getAbilityCooldown(if (itemId == "SPIRIT_LEAP") 5000L else 2000L)
+        if (System.currentTimeMillis() - leapedAt < cooldown) return
         if (leapTeammates.isEmpty() || leapTeammates.all { it == EMPTY }) return
         usedAt = System.currentTimeMillis()
         dismissed = false
