@@ -72,6 +72,8 @@ object Zpew {
     private class Click(val ether: Boolean, val yaw: Float, val pitch: Float, val sneaking: Boolean, val distance: Double, val witherImpact: Boolean = false, val swimming: Boolean = false) {
         val eye get() = if (swimming) TeleportLaw.SWIM_EYE else if (ether || sneaking) TeleportLaw.SNEAK_EYE else TeleportLaw.STAND_EYE
         var from: DoubleArray? = null
+        /** Where the law put it as it went out: the world can change before it's dropped. */
+        var predicted: DoubleArray? = null
         var cells: String? = null
         var player: DoubleArray? = null
         var sinceTeleport = -1L
@@ -282,8 +284,7 @@ object Zpew {
     fun register() {
         queue.onDrop = { c ->
             // the law warped you but the server never did: the screenshot case
-            val from = c.from
-            if (capture && from != null) land(from, c)?.let { miss("server-refused", c, it, null) }
+            if (capture) c.predicted?.let { miss("server-refused", c, it, null) }
         }
 
         on<LevelEvent.Load> { if (live()) { reset(); EtherSound.clear() } }
@@ -298,15 +299,15 @@ object Zpew {
             blockClick = null
             ticks++
             // A teleport not made 70 ms past the usual answer time isn't coming: the camera goes back to you.
-            // ADM's average ping can be stuck at a join-time spike (10 s), so the answers are timed here.
+            // ADM's average ping can be stuck at a join-time spike (10 s), so the answers are timed here; a ping spike still waits longer.
             val ping = com.adm.utils.ServerUtils.currentPing.takeIf { it in 1..1000 } ?: 250
-            val limit = (queue.answerMs?.plus(70) ?: (ping + 100L)).coerceIn(100L, 1500L)
+            val limit = maxOf(queue.answerMs?.plus(70) ?: 0L, ping + 100L).coerceIn(100L, 1500L)
             if (queue.expire(serverTicks.get(), ticks, System.currentTimeMillis(), limit)) sync("expire")
             queue.oldestCounting()?.let { c ->
                 // Hypixel sends no server ticks in dungeons, so the blocked line is timed in client ticks
                 if (queue.settleBlocked(ticks)) {
                     // the law warped you but the server said blocks in the way: a miss to learn from
-                    c.from?.let { from -> if (capture) land(from, c)?.let { miss("server-refused", c, it, null) } }
+                    if (capture) c.predicted?.let { miss("server-refused", c, it, null) }
                     sync("blocked")
                 }
             }
@@ -335,6 +336,7 @@ object Zpew {
             if (capture && counts) {
                 val from = camera?.let { doubleArrayOf(it.x, it.y, it.z) } ?: doubleArrayOf(p.x, p.y, p.z)
                 c.from = from
+                c.predicted = land(from, c)
                 c.cells = snapshot(from, c)
                 c.player = doubleArrayOf(p.x, p.y, p.z)
                 c.sinceTeleport = System.currentTimeMillis() - lastTeleportMs

@@ -29,7 +29,7 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
 
     val isEmpty get() = waiting.isEmpty()
 
-    /** Called with each click that stops counting without an answer (the server dropped or refused it silently). */
+    /** Called with each click that stopped counting and was never answered (the server dropped or refused it silently). */
     var onDrop: ((C) -> Unit)? = null
 
     /**
@@ -139,8 +139,11 @@ class ZpewQueue<C>(private val predict: (from: DoubleArray, click: C) -> DoubleA
     /** Clicks waiting longer than [limitMs] stop counting, and go after [KEEP]. True when the camera moved. */
     fun expire(tick: Long, wall: Long, now: Long, limitMs: Long): Boolean {
         var changed = false
-        for (w in waiting) if (w.counts && now - w.ms >= limitMs) { w.counts = false; changed = true; onDrop?.invoke(w.click) }
-        while (waiting.isNotEmpty() && (tick - waiting.first().tick >= KEEP || wall - waiting.first().wall >= HARD + KEEP)) waiting.removeFirst()
+        for (w in waiting) if (w.counts && now - w.ms >= limitMs) { w.counts = false; changed = true }
+        while (waiting.isNotEmpty() && (tick - waiting.first().tick >= KEEP || wall - waiting.first().wall >= HARD + KEEP)) {
+            val w = waiting.removeFirst()
+            if (!w.counts) onDrop?.invoke(w.click)
+        }
         if (!changed) return false
         rechain()
         return true
