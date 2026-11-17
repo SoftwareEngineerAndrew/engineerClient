@@ -1,6 +1,7 @@
 package com.adm.features.impl.dungeon.map.tile
 
 import com.adm.AdmMod.mc
+import com.adm.features.impl.dungeon.map.RoomLabel
 import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
 import com.adm.utils.IVec2
 import com.adm.utils.modMessage
@@ -39,6 +40,8 @@ class DungeonRoom(var type: RoomType, initialPosition: IVec2, var data: RoomData
 
     var foundSecrets: Int? = null
     var playerWalkedInto = false
+
+    @Transient internal var label: RoomLabel? = null
 
     val isViewable: Boolean get() = walkedInto || checkmark != MapCheckmark.UNDISCOVERED
     val shouldShowName get() = walkedInto || playerWalkedInto

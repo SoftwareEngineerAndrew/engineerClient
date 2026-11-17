@@ -10,11 +10,7 @@
     "HudOnScreenMixin",
     "PersonalBestSimMixin",
     "SecretItemChimeMixin",
-    "LcmStyleMixin",
     "PaulScoreMixin",
-    "MapPathHintsMixin",
-    "MapIconsMixin",
-    "MapSizeMixin",
     "TpMazeRenderMixin",
     "NumberSettingNoneMixin",
     "HudEditorCategoryMixin"

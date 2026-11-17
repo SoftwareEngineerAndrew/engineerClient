@@ -13,6 +13,9 @@ import com.adm.utils.network.WebUtils.gson
 import com.adm.utils.network.webSocket
 import com.adm.utils.render.hollowFill
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.engineerclient.lcm.LcmStyle
+import com.engineerclient.mapicons.MapSizes
+import net.minecraft.client.gui.GuiGraphicsExtractor
 
 object DungeonMap : Module(
     name = "Dungeon Map",
@@ -62,46 +65,51 @@ object DungeonMap : Module(
 
     private val exampleRooms by lazy { buildExampleRooms() }
     private val exampleDoors by lazy { buildExampleDoors() }
-    private const val MAP_PX = 128
+    private const val SIDE = 128
+    private val fullSize = SIDE to SIDE
+    private val noSize = 0 to 0
 
-    private val mapHud by HUD("Dungeon Map", "Displays the dungeon map.", false) { example ->
-        if ((!DungeonUtils.inDungeons || (disableBoss && DungeonUtils.inBoss)) && !example) return@HUD 0 to 0
-        fill(0, 0, MAP_PX, MAP_PX, backgroundColor.rgba)
-        hollowFill(0, 0, MAP_PX, MAP_PX, 1, backgroundOutline)
-        pose().pushMatrix()
+    private val mapHud by HUD("Dungeon Map", "Displays the dungeon map.", false) { example -> drawHud(this, example) }
 
+    private fun drawHud(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
+        val styled = if (LcmStyle.active()) LcmStyle.render(g, example) else MapSizes.renderHud(g, example)
+        if (styled != null) return styled
+        if (!example && (!DungeonUtils.inDungeons || (disableBoss && DungeonUtils.inBoss))) return noSize
+
+        g.fill(0, 0, SIDE, SIDE, backgroundColor.rgba)
+        g.hollowFill(0, 0, SIDE, SIDE, 1, backgroundOutline)
+        val pose = g.pose()
+        pose.pushMatrix()
         if (example) {
-            pose().translate(5f, 5f)
-            renderMap(exampleRooms, exampleDoors, emptyList())
+            pose.translate(5f, 5f)
+            g.renderMap(exampleRooms, exampleDoors, emptyList())
         } else {
-            pose().translate(DungeonScan.startX.toFloat(), DungeonScan.startY.toFloat())
-            pose().scale(DungeonScan.roomSize / 16f)
-
-            renderMap(DungeonScan.rooms, DungeonScan.doors.values, DungeonScan.pathHints)
-
-            if (!DungeonUtils.inBoss) renderPlayers()
+            pose.translate(DungeonScan.startX.toFloat(), DungeonScan.startY.toFloat())
+            pose.scale(DungeonScan.roomSize / 16f)
+            g.renderMap(DungeonScan.rooms, DungeonScan.doors.values, DungeonScan.pathHints)
+            if (!DungeonUtils.inBoss) g.renderPlayers()
         }
-        pose().popMatrix()
-
-        MAP_PX to MAP_PX
+        pose.popMatrix()
+        return fullSize
     }
 
-    private data class SyncPayload(val playerName: String, val roomName: String, val tiles: ArrayList<IVec2>, val foundSecrets: Int?)
+    private class Shared(val playerName: String, val roomName: String, val tiles: ArrayList<IVec2>, val foundSecrets: Int?)
 
     val syncSocket = webSocket {
-        onMessage { message ->
-            if (!allowWebsocket || !DungeonUtils.inDungeons) return@onMessage
-            val payload = try { gson.fromJson(message, SyncPayload::class.java) } catch (_: Exception) { return@onMessage }
-            if (DungeonUtils.dungeonTeammatesNoSelf.none { it.name == payload.playerName }) return@onMessage
+        onMessage { text -> if (allowWebsocket && DungeonUtils.inDungeons) receive(text) }
+    }
 
-            val room = DungeonScan.rooms.find { it.name == payload.roomName && it.tiles == payload.tiles } ?: return@onMessage
-
-            if ((room.foundSecrets ?: -1) < (payload.foundSecrets ?: -1)) room.foundSecrets = payload.foundSecrets
-            room.playerWalkedInto = true
-        }
+    private fun receive(text: String) {
+        val shared = try { gson.fromJson(text, Shared::class.java) } catch (_: Exception) { return } ?: return
+        if (DungeonUtils.dungeonTeammatesNoSelf.none { it.name == shared.playerName }) return
+        val room = DungeonScan.rooms.firstOrNull { it.name == shared.roomName && it.tiles == shared.tiles } ?: return
+        val theirs = shared.foundSecrets
+        if (theirs != null && (room.foundSecrets ?: -1) < theirs) room.foundSecrets = theirs
+        room.playerWalkedInto = true
     }
 
     fun sendSync(room: DungeonRoom) {
-        room.name?.let { roomName -> syncSocket.send(gson.toJson(SyncPayload(mc.user.name, roomName, room.tiles, room.foundSecrets))) }
+        val roomName = room.name ?: return
+        syncSocket.send(gson.toJson(Shared(mc.user.name, roomName, room.tiles, room.foundSecrets)))
     }
 }

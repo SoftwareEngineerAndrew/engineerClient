@@ -13,12 +13,11 @@ import com.adm.features.impl.dungeon.map.renderPlayers
 import com.adm.utils.render.hollowFill
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.features.impl.dungeon.map.DungeonMap
-import com.adm.features.impl.dungeon.map.tile.DungeonDoor
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 /**
  * Room Size and Door Width on ADM's Dungeon Map. ADM draws on a 20 px grid: each room 16 px with a 4 px gap, each
- * door 8 px across that gap, all written into its code as numbers (MapSizeMixin swaps them for these). The grid stays
+ * door 8 px across that gap; it draws with these instead. The grid stays
  * 20, so a bigger room is a smaller gap and the map keeps its size; doors always span the whole gap. LCM Style draws
  * dtMap's own sizes, so it keeps ADM's.
  */
@@ -50,7 +49,7 @@ object MapSizes {
     private var failed = false
 
     /**
-     * ADM's map HUD (its mapHud lambda, LcmStyleMixin) with Custom Map Padding: the same map at ADM's scale, but
+     * ADM's map HUD with Custom Map Padding: the same map at ADM's scale, but
      * the background fitted to the floor's rooms plus the padding. Its size, or null to leave the frame to ADM.
      */
     @JvmStatic
@@ -97,27 +96,4 @@ object MapSizes {
     /** How far a room's centre moves from where ADM centres it (on a 16 room), for its icons and text. */
     @JvmStatic
     fun shift(): Float = (room() - DEFAULT_ROOM) / 2f
-
-    @JvmStatic
-    fun isDefault(): Boolean = room() == DEFAULT_ROOM && door() == DEFAULT_DOOR
-
-    /** ADM's renderDoors at these sizes: each door across the gap after its room, centred on the room's side. */
-    @JvmStatic
-    fun drawDoors(g: GuiGraphicsExtractor, doors: Collection<DungeonDoor>) {
-        val room = room()
-        val gap = TILE - room
-        if (gap <= 0) return
-        val door = door()
-        val across = (room - door) / 2f
-        for (d in doors) {
-            val p = d.position; val o = d.rotation.offset
-            val east = o.x != 0
-            g.pose().pushMatrix()
-            g.pose().translate(
-                p.x * TILE + (if (east) room.toFloat() else across),
-                p.z * TILE + (if (east) across else room.toFloat()))
-            g.fill(0, 0, if (east) gap else door, if (east) door else gap, d.color.rgba)
-            g.pose().popMatrix()
-        }
-    }
 }
