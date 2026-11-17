@@ -19,7 +19,6 @@ import com.adm.features.ModuleManager
 import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.utils.Colors
 import com.adm.utils.handlers.schedule
-import com.adm.utils.render.textDim
 import com.adm.utils.sendCommand
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.Floor
@@ -33,14 +32,6 @@ object DungeonQueue : Module(
     description = "Requeuing, warp cooldowns and the kicked timer.",
     toggled = true,
 ) {
-    private val warpTimerHud by HUD("Warp Timer", "Displays the warp timer in the HUD.") { example ->
-        if (example) return@HUD textDim("§eWarp: §a30s", 0, 0, Colors.WHITE)
-        val left = warpTimer - System.currentTimeMillis()
-        if (left <= 0) return@HUD 0 to 0
-        val line = warpLine.at((left + 5) / 10)
-        text(mc.font, line.text, 0, 0, Colors.WHITE.rgba, true)
-        line.size
-    }
     private val warpCooldownHud by HUD("Warp Cooldown", "Time left until you can warp again.", true, 420, 70, 1f) { example ->
         val left = if (example) 2140L else endTime - System.currentTimeMillis()
         if (left <= 0) return@HUD 0 to 0
@@ -85,7 +76,6 @@ object DungeonQueue : Module(
     private val SECONDS = Regex("""(\d{1,3})\s*s(?:ec|econds?)?\b""")
     private val PB_TIME = Regex("""^\s*(\d{1,2}):([0-5]\d)\s*$""")
 
-    private val enterRegex = Regex("^-*\\n\\[[^]]+] (\\w+) entered (?:MM )?\\w+ Catacombs, Floor (\\w+)!\\n-*$")
     private val timeoutExeceptionRegex = Regex("^Exception Connecting:ReadTimeoutException : null$")
     private const val KICKED_INSTANCE = "You are no longer allowed to access this instance!"
     private const val KICKED_JOINING = "You were kicked while joining that server!"
@@ -93,7 +83,6 @@ object DungeonQueue : Module(
     private val instanceRegex = Regex("\\[[^]]+] \\w+ entered (?:MM )?\\w+ Catacombs, Floor \\w+!")
     private val warpRegex = Regex("^Sending to server .+")
 
-    private val warpLine = TimerLine("§eWarp: §a", 100)
     private val cooldownLine = TimerLine("§bWarp Cooldown: §f", 10)
     private val kickedLine = TimerLine("§5Time kicked: §f", 100)
 
@@ -116,7 +105,6 @@ object DungeonQueue : Module(
         }
     }
 
-    private var warpTimer = 0L
     var disableRequeue = false
     private var endTime = 0L
     private var kickedAt = 0L
@@ -138,13 +126,11 @@ object DungeonQueue : Module(
         on<MessageEvent.Chat> {
             val kicked = message == KICKED_JOINING || message == KICKED_INSTANCE
             if (kicked && System.currentTimeMillis() - kickedAt > 60_000) kickedAt = System.currentTimeMillis()
-            if (endTime <= System.currentTimeMillis()) when {
-                instanceRegex.containsMatchIn(message) -> endTime = System.currentTimeMillis() + 30_000L
-                warpRegex.containsMatchIn(message) -> endTime = System.currentTimeMillis() + 4_000L
-            }
+            // entering a run restarts the 30s even inside a warp's 4s
+            if (instanceRegex.containsMatchIn(message)) endTime = System.currentTimeMillis() + 30_000L
+            else if (endTime <= System.currentTimeMillis() && warpRegex.containsMatchIn(message)) endTime = System.currentTimeMillis() + 4_000L
             when {
                 announceKick && (kicked || message.matches(timeoutExeceptionRegex)) -> sendCommand("pc I was kicked!")
-                message.matches(enterRegex) -> warpTimer = System.currentTimeMillis() + 30_000L
                 autoRequeue && message.matches(extraStatsRegex) -> {
                     if (!disableRequeue.also { disableRequeue = false }) schedule(requeueDelay * 20) {
                         if (!disableRequeue) sendCommand("instancerequeue")
