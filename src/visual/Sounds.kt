@@ -22,6 +22,7 @@ import net.minecraft.sounds.SoundEvent
 import net.minecraft.world.entity.animal.wolf.WolfSoundVariants
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.phys.Vec3
 import org.lwjgl.openal.AL10
 import java.util.Collections
@@ -62,7 +63,6 @@ object Sounds : Module(
     private val bonzoVolume by NumberSetting("Bonzo Volume", 1f, 0.1..1.0, 0.05f, desc = "Volume of the moan.").withDependency { bonzo }
     private val bonzoPitch by NumberSetting("Bonzo Pitch", 1f, 0.5..2.0, 0.01f, desc = "Pitch of the moan.").withDependency { bonzo }
 
-    private val wolfDeath by lazy { SoundEvents.WOLF_SOUNDS[WolfSoundVariants.SoundSet.CLASSIC]!!.adultSounds().deathSound().value() }
     private val howl = SoundEvent.createVariableRangeEvent(Identifier.fromNamespaceAndPath("engineerclient", "wolf-howl"))
 
     private fun holdingAotv() = holding("Aspect of the End") || holding("Aspect of the Void")
@@ -77,90 +77,118 @@ object Sounds : Module(
     @Volatile var recentSoundsVersion = 0L
         private set
 
-    private var pullTicks = 0
-    private val cooldownMessage = Regex("^This ability is on cooldown for \\d+s\\.$")
+    private fun interface Drop {
+        fun test(p: ClientboundSoundPacket): Boolean
+    }
 
-    private fun inF7Boss() = DungeonUtils.inBoss && DungeonUtils.isFloor(7)
+    // first may drop before the boss rules, after always runs; spam is a pitch range muted at volume 0.5 in the boss.
+    private class Route {
+        var first: Drop? = null
+        var after: Drop? = null
+        var spamLow = Float.NaN
+        var spamHigh = Float.NaN
+    }
+
+    private val routes: Map<Identifier, Route> by lazy {
+        val m = HashMap<Identifier, Route>()
+        fun at(id: Identifier): Route = m.getOrPut(id) { Route() }
+        fun of(e: SoundEvent): Route = at(e.location())
+
+        of(SoundEvents.NOTE_BLOCK_HARP.value()).first = Drop { muteBlessing && it.volume == 0.7f && DungeonUtils.inDungeons }
+        of(SoundEvents.GENERIC_EXPLODE.value()).first = Drop {
+            // Hyperion's Implosion is the only explosion played at volume 1, pitch 1.
+            muteExplosions && !(keepHype && it.volume == 1f && it.pitch == 1f)
+        }
+        of(SoundEvents.ENDERMAN_TELEPORT).apply {
+            first = Drop { muteAotv && it.volume == 1f && it.pitch == 1f && holdingAotv() }
+            after = Drop { muteCooldown && it.pitch == 0f && it.volume == 8f }
+        }
+        of(SoundEvents.WITHER_DEATH).apply {
+            first = Drop { muteWitherborn && it.volume == 1f && abs(it.pitch - 1.1904762f) < 0.0001f }
+            spamLow = 0.87f
+            spamHigh = 1.16f
+        }
+        of(SoundEvents.WITHER_HURT).apply {
+            spamLow = Float.NEGATIVE_INFINITY
+            spamHigh = Float.POSITIVE_INFINITY
+        }
+        of(SoundEvents.GHAST_AMBIENT).first = Drop { muteBonzoStaff && it.volume == 1f && it.pitch in 1.39f..1.8f }
+        at(Identifier.withDefaultNamespace("mob.ghast.affectionate_scream")).first = Drop { muteBonzoStaff && it.volume == 1f }
+        of(SoundEvents.WOLF_SOUNDS[WolfSoundVariants.SoundSet.CLASSIC]!!.adultSounds().deathSound().value()).after = Drop { p ->
+            val swap = oldTuba && p.volume == 0.5f && holding("Tuba") ||
+                oldRagnarock && (p.volume == 1f || abs(p.pitch - 1.4920635f) < 0.001f) && holding("Ragnarock")
+            if (swap) {
+                val volume = p.volume
+                val pitch = p.pitch
+                mc.execute { mc.player?.playSound(howl, volume, pitch) }
+            }
+            swap
+        }
+        of(SoundEvents.GENERIC_EAT.value()).after = Drop { bonzoNewSound() && abs(it.pitch - 0.59f) < 0.02f }
+        of(SoundEvents.ZOMBIE_VILLAGER_CURE).after = Drop { bonzoNewSound() && abs(it.pitch - 2f) < 0.01f }
+        m
+    }
+
+    private fun bonzoNewSound() = bonzo && bonzoMute &&
+        mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.hoverName?.string?.contains("Bonzo's Mask") == true
+
+    private fun dropInBoss(p: ClientboundSoundPacket, route: Route?): Boolean {
+        val volume = p.volume
+        if (capF7 && volume > 1f) {
+            val sound = p.sound.value()
+            val source = p.source
+            val x = p.x
+            val y = p.y
+            val z = p.z
+            val pitch = p.pitch
+            mc.execute { mc.level?.playLocalSound(x, y, z, sound, source, 1f, pitch, false) }
+            return true
+        }
+        if (volume >= 2f || muteAboveCap && volume > 1f) return true
+        if (route == null || volume != 0.5f) return false
+        val pitch = p.pitch
+        return pitch >= route.spamLow && pitch <= route.spamHigh
+    }
+
+    private var drawTicks = 0
+    private val cooldownLine = Regex("^This ability is on cooldown for \\d+s\\.$")
+    private const val GOLEM_RISE = "The ground begins to shake as an End Stone Protector rises from below!"
+
+    private fun isLastBreath(stack: ItemStack): Boolean {
+        val id = stack.itemId
+        return id == "LAST_BREATH" || id == "STARRED_LAST_BREATH"
+    }
 
     init {
-        on<LevelEvent.Load> { recentSounds.clear(); pullTicks = 0 }
-        on<MessageEvent.Chat> {
-            if (hideCooldownMessage && cooldownMessage.matches(message)) cancel()
-            if (golemSound && message == "The ground begins to shake as an End Stone Protector rises from below!")
-                mc.player?.playSound(SoundEvents.ANVIL_PLACE, 1f, 1f)
+        on<LevelEvent.Load> { recentSounds.clear(); drawTicks = 0 }
+
+        onReceive<ClientboundSoundPacket> { event ->
+            val route = routes[sound.value().location()]
+            var drop = route?.first?.test(this) == true
+            if (!drop && muteF7 && DungeonUtils.inBoss && DungeonUtils.isFloor(7)) drop = dropInBoss(this, route)
+            if (route?.after?.test(this) == true) drop = true
+            if (drop) event.cancel()
         }
+
+        on<MessageEvent.Chat> {
+            if (hideCooldownMessage && cooldownLine.matches(message)) cancel()
+            if (golemSound && message == GOLEM_RISE) mc.player?.playSound(SoundEvents.ANVIL_PLACE, 1f, 1f)
+            if (bonzo && message.startsWith("Your") && message.endsWith("Bonzo's Mask saved your life!"))
+                mc.player?.playSound(SoundEvents.GHAST_AMBIENT, bonzoVolume, bonzoPitch)
+        }
+
         on<TickEvent.End> {
+            if (!lastBreath) { drawTicks = 0; return@on }
             val player = mc.player
-            val held = player?.mainHandItem
-            if (!lastBreath || player == null || held == null || held.isEmpty || !player.isUsingItem || player.useItem !== held ||
-                held.itemId.let { it != "LAST_BREATH" && it != "STARRED_LAST_BREATH" }) {
-                pullTicks = 0
+            val using = player?.useItem
+            if (player == null || !player.isUsingItem || using == null || using !== player.mainHandItem || using.isEmpty || !isLastBreath(using)) {
+                drawTicks = 0
                 return@on
             }
-            pullTicks++
-            val pitch = 0.5f + pullTicks.coerceAtMost(20) * 0.075f
-            if (pullTicks >= lastBreathThreshold) player.playSound(SoundEvents.ARROW_HIT_PLAYER, lastBreathVolume, pitch)
-            else player.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), lastBreathVolume, pitch)
-        }
-        onReceive<ClientboundSoundPacket> { event ->
-            val s = sound.value()
-            if (muteBlessing && s == SoundEvents.NOTE_BLOCK_HARP.value() && volume == 0.7f && DungeonUtils.inDungeons) {
-                event.cancel()
-                return@onReceive
-            }
-            if (muteAotv && s == SoundEvents.ENDERMAN_TELEPORT && volume == 1f && pitch == 1f && holdingAotv()) {
-                event.cancel()
-                return@onReceive
-            }
-            // Implosion is the only explosion Hypixel plays at volume 1, pitch 1.
-            if (muteExplosions && s == SoundEvents.GENERIC_EXPLODE.value() && !(keepHype && volume == 1f && pitch == 1f)) {
-                event.cancel()
-                return@onReceive
-            }
-            if (muteWitherborn && s == SoundEvents.WITHER_DEATH && volume == 1f && abs(pitch - 1.1904762f) < 0.0001f ||
-                muteBonzoStaff && volume == 1f && (s == SoundEvents.GHAST_AMBIENT && pitch in 1.39f..1.8f || s.location().path == "mob.ghast.affectionate_scream")) {
-                event.cancel()
-                return@onReceive
-            }
-            if (!muteF7 || !inF7Boss()) return@onReceive
-            if (capF7 && volume > 1f) {
-                event.cancel()
-                val snd = sound
-                val src = source
-                val px = x
-                val py = y
-                val pz = z
-                val pit = pitch
-                mc.execute { mc.level?.playLocalSound(px, py, pz, snd.value(), src, 1f, pit, false) }
-                return@onReceive
-            }
-            if (volume >= 2f || muteAboveCap && volume > 1f ||
-                volume == 0.5f && (s == SoundEvents.WITHER_HURT || s == SoundEvents.WITHER_DEATH && pitch in 0.87f..1.16f)) event.cancel()
-        }
-        on<MessageEvent.Chat> {
-            if (!bonzo || !message.startsWith("Your") || !message.endsWith("Bonzo's Mask saved your life!")) return@on
-            mc.player?.playSound(SoundEvents.GHAST_AMBIENT, bonzoVolume, bonzoPitch)
-        }
-        onReceive<ClientboundSoundPacket> { event ->
-            val s = sound.value()
-            if (muteCooldown && s == SoundEvents.ENDERMAN_TELEPORT && pitch == 0f && volume == 8f) {
-                event.cancel()
-                return@onReceive
-            }
-            if (s != wolfDeath) return@onReceive
-            val replace = oldTuba && volume == 0.5f && holding("Tuba") ||
-                oldRagnarock && (volume == 1f || abs(pitch - 1.4920635f) < 0.001f) && holding("Ragnarock")
-            if (!replace) return@onReceive
-            event.cancel()
-            val vol = volume
-            val pit = pitch
-            mc.execute { mc.player?.playSound(howl, vol, pit) }
-        }
-        onReceive<ClientboundSoundPacket> { event ->
-            if (!bonzo || !bonzoMute || mc.player?.getItemBySlot(EquipmentSlot.HEAD)?.hoverName?.string?.contains("Bonzo's Mask") != true) return@onReceive
-            val s = sound.value()
-            if ((s == SoundEvents.GENERIC_EAT.value() && abs(pitch - 0.59f) < 0.02f) ||
-                (s == SoundEvents.ZOMBIE_VILLAGER_CURE && abs(pitch - 2f) < 0.01f)) event.cancel()
+            val n = ++drawTicks
+            val pitch = 0.5f + minOf(n, 20) * 0.075f
+            val tick = if (n >= lastBreathThreshold) SoundEvents.ARROW_HIT_PLAYER else SoundEvents.NOTE_BLOCK_PLING.value()
+            player.playSound(tick, lastBreathVolume, pitch)
         }
     }
 
