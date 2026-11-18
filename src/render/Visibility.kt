@@ -141,6 +141,7 @@ object Visibility : Module(
     private val sidebarColors by BooleanSetting("Sidebar Colors", false, desc = "Custom scoreboard background colors.").withDependency { scoreboardDropdown }
     private val sidebarTitleColor by ColorSetting("Sidebar Title Color", Color(0, 0, 0, 0.4f), true, desc = "Behind the scoreboard title.").withDependency { scoreboardDropdown && sidebarColors }
     private val sidebarBodyColor by ColorSetting("Sidebar Body Color", Color(0, 0, 0, 0.3f), true, desc = "Behind the scoreboard lines.").withDependency { scoreboardDropdown && sidebarColors }
+    private val sidebarShadow by BooleanSetting("Scoreboard Text Shadow", false, desc = "Draws the sidebar text with a shadow.").withDependency { scoreboardDropdown }
     private val hideSbLines by BooleanSetting("Clean Scoreboard", false, desc = "Hides the noisy sidebar lines; Purse, Bits and teammates stay.").withDependency { scoreboardDropdown }
     private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", true, desc = "Hides The Catacombs location line in dungeons.").withDependency { scoreboardDropdown && hideSbLines }
     private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", false, desc = "Hides the dungeon's Time Elapsed line.").withDependency { scoreboardDropdown && hideSbLines }
@@ -323,6 +324,8 @@ object Visibility : Module(
         return Math.floorMod(now.hour * 1000L + now.minute * 1000L / 60 - 6000, 24000L)
     }
 
+    @JvmStatic fun sidebarShadow(vanilla: Boolean): Boolean = vanilla || (enabled && sidebarShadow)
+
     @JvmStatic fun sidebarBack(vanilla: Int, title: Boolean): Int = when {
         !enabled || !sidebarColors -> vanilla
         title -> sidebarTitleColor.rgba
@@ -398,7 +401,8 @@ object Visibility : Module(
                 count = prev.second + 1
             }
         }
-        val out = if (count > 1) contents.copy().append(Component.literal(" ($count)").withStyle(ChatFormatting.GRAY)) else contents
+        // Wrapped so the counter doesn't inherit the line's own style (Hypixel's separators are struck through).
+        val out = if (count > 1) Component.empty().append(contents).append(Component.literal(" ($count)").withStyle(ChatFormatting.GRAY)) else contents
         stacks[key] = out to count
         if (stacks.size > STACK_RANGE) stacks.remove(stacks.keys.first())
         return out

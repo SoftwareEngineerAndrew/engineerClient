@@ -9,6 +9,7 @@ import net.minecraft.client.gui.Hud;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 @Mixin(Hud.class)
 public class HudOverlayMixin {
@@ -31,5 +32,10 @@ public class HudOverlayMixin {
     @ModifyExpressionValue(method = "displayScoreboardSidebar", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Options;getBackgroundColor(F)I", ordinal = 1))
     private int ec$sidebarTitle(int color) {
         return Visibility.sidebarBack(color, true);
+    }
+
+    @ModifyArg(method = "displayScoreboardSidebar", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/GuiGraphicsExtractor;text(Lnet/minecraft/client/gui/Font;Lnet/minecraft/network/chat/Component;IIIZ)V"), index = 5)
+    private boolean ec$sidebarShadow(boolean shadow) {
+        return Visibility.sidebarShadow(shadow);
     }
 }
