@@ -155,6 +155,7 @@ object EngineerClient : ClientModInitializer {
         safely("secret waypoints") { com.engineerclient.dungeon.SecretWaypoints.install() }
         safely("item highlight") { com.engineerclient.misc.ItemHighlight.install() }
         safely("close chest on key") { com.engineerclient.skyblock.CloseChestOnKey.install() }
+        safely("posmsg command") { com.engineerclient.dungeon.PosMsgCommand.install() }
         safely("map configs") { ModuleManager.loadConfigurations() }
         runCatching { com.engineerclient.misc.LaunchStats.install() }
         runCatching { com.engineerclient.misc.UpdateCheck.install() }
