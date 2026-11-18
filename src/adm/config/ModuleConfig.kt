@@ -8,6 +8,8 @@ import com.adm.AdmMod.logger
 import com.adm.clickgui.settings.Saving
 import com.adm.features.Module
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * # ModuleConfig
@@ -34,58 +36,81 @@ class ModuleConfig internal constructor(file: File) {
     }
 
     /**
-     * Loads configuration from file, into [modules].
+     * Loads configuration from file, into [modules]. A bad module or setting is skipped, not the rest of the file.
      */
     fun load() {
-        try {
-            with(file.bufferedReader().use { it.readText() }) {
-                if (isEmpty()) return
-
-                val jsonArray = JsonParser.parseString(this).asJsonArray ?: return
-                for (modules in jsonArray) {
-                    val moduleObj = modules?.asJsonObject ?: continue
-                    val module = this@ModuleConfig.modules[moduleObj.get("name").asString.lowercase()] ?: continue
-                    if (moduleObj.get("enabled").asBoolean != module.enabled) module.toggle()
-                    val settingObj = moduleObj.get("settings")?.takeIf { it.isJsonObject }?.asJsonObject?.entrySet() ?: continue
-                    for ((key, value) in settingObj) {
-                        (module.settings[key] as? Saving)?.apply { read(value ?: continue, gson) }
+        val json = readFile() ?: return
+        for (entry in json) {
+            val moduleObj = entry as? JsonObject ?: continue
+            try {
+                val module = modules[moduleObj.get("name")?.asString?.lowercase() ?: continue] ?: continue
+                val enabled = moduleObj.get("enabled")?.takeIf { it.isJsonPrimitive }?.asBoolean
+                if (enabled != null && enabled != module.enabled) module.toggle()
+                val settingObj = moduleObj.get("settings")?.takeIf { it.isJsonObject }?.asJsonObject?.entrySet() ?: continue
+                for ((key, value) in settingObj) {
+                    try {
+                        (module.settings[key] as? Saving)?.read(value ?: continue, gson)
+                    } catch (e: Exception) {
+                        logger.error("Error loading setting $key of ${module.name}", e)
                     }
                 }
+            } catch (e: Exception) {
+                logger.error("Error loading module ${moduleObj.get("name")}", e)
             }
-        } catch (e: Exception) {
-            logger.error("Error initializing module config", e)
         }
     }
 
     /**
-     * Saves configuration to files, from [modules].
+     * Saves configuration to files, from [modules]. Modules and settings in the file that aren't registered
+     * (yet) are kept, so an early save or another build can't wipe them.
      */
-    fun save() {
+    fun save() = synchronized(lock) {
         try {
-            // reason doing this is better is that
-            // using like a custom serializer leaves 'null' in settings that don't save
-            // code looks hideous tho, but it fully works
-            val jsonArray = JsonArray().apply {
-                for ((_, module) in modules) {
-                    add(JsonObject().apply {
-                        add("name", JsonPrimitive(module.name))
-                        add("enabled", JsonPrimitive(module.enabled))
-                        add("settings", JsonObject().apply {
-                            for ((name, setting) in module.settings) {
-                                if (setting is Saving) add(name, setting.write(gson))
-                            }
-                        })
-                    })
+            val old = readFile()
+            val oldByName = old?.filterIsInstance<JsonObject>()?.associateBy { it.get("name")?.takeIf { n -> n.isJsonPrimitive }?.asString?.lowercase() }.orEmpty()
+            val jsonArray = JsonArray()
+            for ((key, module) in modules) {
+                val settings = oldByName[key]?.get("settings")?.takeIf { it.isJsonObject }?.asJsonObject?.deepCopy() ?: JsonObject()
+                for ((name, setting) in module.settings) {
+                    if (setting !is Saving) continue
+                    try { settings.add(name, setting.write(gson)) } catch (e: Exception) { logger.error("Error saving setting $name of ${module.name}", e) }
                 }
+                jsonArray.add(JsonObject().apply {
+                    add("name", JsonPrimitive(module.name))
+                    add("enabled", JsonPrimitive(module.enabled))
+                    add("settings", settings)
+                })
             }
-            file.bufferedWriter().use { it.write(gson.toJson(jsonArray)) }
+            for ((key, obj) in oldByName) if (key != null && key !in modules) jsonArray.add(obj)
+            val text = gson.toJson(jsonArray)
+            val tmp = File(file.parentFile, file.name + ".tmp")
+            tmp.writeText(text, Charsets.UTF_8)
+            try {
+                Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (e: Exception) {
+                Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
         } catch (e: Exception) {
             logger.error("Error saving module config.", e)
         }
     }
 
+    /** The file's modules; null when empty or missing. A file that can't be read is copied aside before anything overwrites it. */
+    private fun readFile(): JsonArray? {
+        val text = try { if (file.isFile) file.readText(Charsets.UTF_8) else return null } catch (e: Exception) { logger.error("Error reading module config", e); return null }
+        if (text.isBlank()) return null
+        return try {
+            JsonParser.parseString(text).asJsonArray
+        } catch (e: Exception) {
+            logger.error("Module config $file is broken, keeping a copy", e)
+            try { file.copyTo(File(file.parentFile, file.name + ".broken"), overwrite = true) } catch (_: Exception) {}
+            null
+        }
+    }
+
     private companion object {
         private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
+        private val lock = Any()
     }
 
     override fun toString(): String {

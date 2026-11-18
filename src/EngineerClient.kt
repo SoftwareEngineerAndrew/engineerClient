@@ -170,6 +170,9 @@ object EngineerClient : ClientModInitializer {
             ModuleManager.saveConfigurations()
         }
 
+        // Keybinds and commands change settings without a screen that saves on close.
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING.register { safely("save on exit") { ModuleManager.saveConfigurations() } }
+
         // ADM's event bus: world load resets class detection.
         on<LevelEvent.Load> { safely("levelLoad") { ClassDetect.reset() } }
         EventBus.subscribe(this)
