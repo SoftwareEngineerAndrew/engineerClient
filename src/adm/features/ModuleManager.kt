@@ -67,7 +67,7 @@ object ModuleManager {
             PuzzleSolvers, BlessingDisplay, LeapMenu, SecretClicked, Mimic,
             DoorHighlight, BloodCamp, TerracottaTimer, LividSolver,
             InvincibilityTimer, SpiritBear, DungeonWaypoints, BetterPartyFinder, Croesus, MageBeam,
-            DungeonMap,
+            DungeonMap, ClassColors,
 
             // boss
             MelodyMessage, WitherDragons,
@@ -78,7 +78,7 @@ object ModuleManager {
 
             //skyblock
             ChatCommands, Ragnarock, SpringBoots, MenuKeybinds,
-            CommandKeybinds, SlotBinds, Splits,
+            CommandKeybinds, SlotBinds, Splits, PetDisplay,
 
             // nether
             SupplyHelper, BuildHelper, RemovePerks, NoPre, PearlWaypoints, FreshTools, KuudraInfo, Misc, Vesuvius,

@@ -1,5 +1,6 @@
 package com.engineerclient.mixin;
 
+import com.adm.features.impl.skyblock.PetDisplay;
 import com.engineerclient.terminals.Terminals;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -52,6 +53,11 @@ public class TerminalNumberMixin {
         } catch (Throwable t) {
             // never cost someone their inventory counts over this
         }
-        graphics.itemDecorations(font, itemStack, x, y, countText);
+        String text = countText;
+        try {
+            text = PetDisplay.countText(itemStack, countText);
+        } catch (Throwable ignored) {
+        }
+        graphics.itemDecorations(font, itemStack, x, y, text);
     }
 }
