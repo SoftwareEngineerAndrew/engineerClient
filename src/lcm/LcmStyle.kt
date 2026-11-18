@@ -43,6 +43,7 @@ object LcmStyle {
         desc = "Draws the map like LCM's map: its doors, room text, Prince crowns and player heads, in the colors below.")
 
     internal val borderWidth = NumberSetting("Outline Width", 1, 1..5, 1, desc = "How thick the map's outline is in LCM Style.").withDependency { style.value }
+    private val princeCrowns = BooleanSetting("Prince Crowns", true, desc = "Crowns on opened rooms that can still have a Prince.").withDependency { style.value }
     internal val ownMarkerColor = ColorSetting("Own Marker Color", Color(0xFFFFFFFF.toInt()), true, desc = "Your own marker on the map, when it isn't your head.")
 
 
@@ -92,7 +93,7 @@ object LcmStyle {
     fun install() {
         DungeonMap.registerSetting(style)
         // right below LCM Style
-        for (s in listOf(borderWidth, ownMarkerColor)) DungeonMap.registerSetting(s)
+        for (s in listOf(borderWidth, princeCrowns, ownMarkerColor)) DungeonMap.registerSetting(s)
     }
 
     /** True while the map HUD is drawn here instead of by ADM (LcmStyleMixin). */
@@ -159,7 +160,7 @@ object LcmStyle {
             if (!room.isViewable) continue
             val color = if (room.checkmark == MapCheckmark.QUESTION_MARK) (if (room.type == RoomType.BLOOD) darker(BLOOD) else UNOPENED) else roomColor(room.type)
             if (room.tiles.isEmpty()) g.fillRoom(room, color) else fillTiles(g, room, color)
-            if (opened(room) && room.shouldShowName && room.name in princeRooms && !DungeonUtils.princeKilled) drawCrown(g, room)
+            if (princeCrowns.value && opened(room) && room.shouldShowName && room.name in princeRooms && !DungeonUtils.princeKilled) drawCrown(g, room)
         }
         if (!example && !MapPrediction.render(g, lcm = true)) drawUnopened(g, hints)
         for (door in doors) drawDoor(g, door, example)
