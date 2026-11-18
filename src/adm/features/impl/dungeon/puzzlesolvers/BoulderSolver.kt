@@ -117,10 +117,11 @@ object BoulderSolver {
         cellsFrame = null
     }
 
+    // The boulder block the button sits on, one in from the button.
     private fun facePos(step: Step): BlockPos {
         val x = 6 + 3 * (step.cell % 7)
         val z = 9 + 3 * (step.cell / 7)
-        return BlockPos(x - 2 * step.dc, 65, z - 2 * step.dr)
+        return BlockPos(x - step.dc, 65, z - step.dr)
     }
 
     /** The board after pushing [cell] by ([dc], [dr]), or null when that click doesn't push. */
