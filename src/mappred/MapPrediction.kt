@@ -48,9 +48,10 @@ import kotlin.math.roundToInt
  * leave only one way for the last rooms to be, they're drawn in full with their names. Everything
  * is worked out again on a background thread whenever the map shows more, so a wrong guess changes
  * as rooms open. Only what the map shows is used (never the world scan of rooms nobody has seen).
- * Every floor is predicted by the game's own steps ([GameSampler]: the big rooms one random spot each, the door tree
- * grown from the entrance, the puzzle column after it); the older classic sampler only takes a map those can't fit.
- * The prediction doesn't start over when a room opens: the whole maps it guessed before are kept, and the ones that
+ * By default a trained net ([RoomNet], in four sizes) predicts the whole map in one pass whenever it changes. The
+ * Sampler engine instead draws whole maps by the game's own steps ([GameSampler]: the big rooms one random spot each,
+ * the door tree grown from the entrance, the puzzle column after it; the older classic sampler only takes a map those
+ * can't fit). It doesn't start over when a room opens: the whole maps it guessed before are kept, and the ones that
  * agree with the new room are the new guess at once ([PredictionSession]); more guesses top them up, and Predict Ahead
  * keeps guessing while the map stays, on Prediction Threads threads, for the next room.
  *
@@ -66,12 +67,18 @@ object MapPrediction {
         desc = "ADM: unknown rooms coloured by their chances, from the rules every recorded map of the floor follows, updated as rooms open. Basic: a simple guess. Off: no guesses, every unknown tile in the unknown room colour (the blood room behind a blood door still shows). Added by engineerClient.")
     private val on: Boolean get() = mode.value == Mode.ADM
     private val off: Boolean get() = mode.value == Mode.OFF
+
+    private enum class Engine { BEST, BALANCED, FAST, FASTEST, SAMPLER }
+
+    private val engine = SelectorSetting("Prediction Engine", Engine.BEST,
+        desc = "Best is the most exact; Balanced, Fast and Fastest take less time per room; Sampler is the older guesser.").withDependency { on }
+    private val sampler: Boolean get() = engine.value == Engine.SAMPLER
     private val performance = BooleanSetting("Performance Mode", false,
-        desc = "Uses the lighter fallback prediction: one thread, a few thousand guesses per map, a little less exact.").withDependency { on }
+        desc = "Uses the lighter fallback prediction: one thread, a few thousand guesses per map, a little less exact.").withDependency { on && sampler }
     private val threadsSetting = NumberSetting("Prediction Threads", 0, 0..4, 1,
-        desc = "Threads the guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on && !performance.value }
+        desc = "Threads the guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on && sampler && !performance.value }
     private val aheadSetting = BooleanSetting("Predict Ahead", true,
-        desc = "Keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on && !performance.value }
+        desc = "Keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on && sampler && !performance.value }
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
     private val splitSecrets = BooleanSetting("Split Secrets", true,
@@ -167,7 +174,7 @@ object MapPrediction {
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
-        for (s in listOf(mode, performance, threadsSetting, aheadSetting, splitText, splitSecrets, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms, exactOpacity,
+        for (s in listOf(mode, engine, performance, threadsSetting, aheadSetting, splitText, splitSecrets, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms, exactOpacity,
             colorsDropdown, customColors, predPuzzle, predTrap, predYellow, predRare, predBlood, predFairy, predRoom)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
@@ -254,11 +261,26 @@ object MapPrediction {
         val v = try { view() } catch (_: ConcurrentModificationException) { null } ?: return
         val live = started()
         val light = performance.value
-        val key = v.key() + (if (live) "" else "|quiet") + (if (light) "|light" else "")
+        val eng = engine.value
+        val key = v.key() + (if (live) "" else "|quiet") + (if (light) "|light" else "") + "|" + eng.name
         if (key == lastKey) return
         lastKey = key
         val gen = generation.incrementAndGet()
         session.cancel()
+        if (eng != Engine.SAMPLER) {
+            val size = RoomNet.Size.entries[eng.ordinal]
+            // one pass of the net, off the render and tick threads; a newer map drops it
+            worker.execute {
+                EngineerClient.safely("map prediction worker") {
+                    if (generation.get() != gen) return@safely
+                    val p = RoomNet.of(size).predict(v)
+                    if (generation.get() != gen) return@safely
+                    val namer = try { MapPredictor(v, gameProcess = false) } catch (_: Exception) { null }
+                    shown = p; shownView = v; shownKey = key; shownNames = namer?.certainNames(p)
+                }
+            }
+            return
+        }
         val threads = if (!live) 1 else threadsSetting.value.let { if (it <= 0) PredictionSession.autoThreads() else it }
         val ahead = aheadSetting.value
         worker.execute {
