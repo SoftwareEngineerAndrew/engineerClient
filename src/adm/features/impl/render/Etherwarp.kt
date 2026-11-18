@@ -5,6 +5,7 @@ import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.events.InputEvent
 import com.adm.events.RenderExtractEvent
@@ -13,8 +14,10 @@ import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.features.Module
 import com.adm.utils.*
+import com.adm.utils.Color.Companion.multiplyAlphaRgba
 import com.adm.utils.render.BoxStyle
-import com.adm.utils.render.drawStyledBox
+import com.adm.utils.render.drawFilledBox
+import com.adm.utils.render.drawWireFrameBox
 import com.adm.utils.skyblock.Island
 import com.adm.utils.skyblock.LocationUtils
 import net.minecraft.core.BlockPos
@@ -43,6 +46,9 @@ object Etherwarp : Module(
     private val renderFail by BooleanSetting("Show when failed", true, desc = "Shows the box even when the guess failed.").withDependency { render }
     private val failColor by ColorSetting("Fail Color", Colors.MINECRAFT_RED, true, desc = "Color of the box if guess failed.").withDependency { renderFail }
     private val renderStyle by SelectorSetting("Box Style", BoxStyle.FILLED_OUTLINE, desc = "Style of the box.").withDependency { render }
+    private val fillOpacity by NumberSetting("Fill Opacity", 50, 0..100, 5, desc = "Opacity of the box fill.", unit = "%").withDependency { render && renderStyle != BoxStyle.OUTLINE }
+    private val outlineOpacity by NumberSetting("Outline Opacity", 100, 0..100, 5, desc = "Opacity of the box outline.", unit = "%").withDependency { render && renderStyle != BoxStyle.FILLED }
+    private val outlineThickness by NumberSetting("Outline Thickness", 3f, 0.5..10.0, 0.5, desc = "Width of the box outline.").withDependency { render && renderStyle != BoxStyle.FILLED }
     private val useServerPosition by BooleanSetting("Use Server Position", false, desc = "Uses the server position for etherwarp instead of the client position.").withDependency { render }
     private val fullBlock by BooleanSetting("Full Block", false, desc = "Renders the the 1x1x1 block instead of it's actual size.").withDependency { render }
     private val depth by BooleanSetting("Depth", false, desc = "Renders the box through walls.").withDependency { render }
@@ -99,7 +105,9 @@ object Etherwarp : Module(
             val pos = etherPos.pos ?: return@on
 
             val box = if (fullBlock) AABB(pos) else pos.getBlockBounds()?.move(pos) ?: AABB(pos)
-            drawStyledBox(box, if (etherPos.succeeded) color else failColor, renderStyle, depth)
+            val boxColor = if (etherPos.succeeded) color else failColor
+            if (renderStyle != BoxStyle.OUTLINE) drawFilledBox(box.inflate(0.00005), boxColor.multiplyAlphaRgba(fillOpacity / 100f), depth)
+            if (renderStyle != BoxStyle.FILLED) drawWireFrameBox(box, boxColor.multiplyAlphaRgba(outlineOpacity / 100f), outlineThickness, depth)
         }
 
         on<InputEvent> {
