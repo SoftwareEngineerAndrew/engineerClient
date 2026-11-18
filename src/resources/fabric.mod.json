@@ -12,6 +12,7 @@
   "mixins": ["adm.mixins.json", "engineerclient.mixins.json", "engineerclient.core.mixins.json", "engineerclient.sodium.mixins.json", "devgineerclient.mixins.json", "devgineerclient.core.mixins.json"],
   "entrypoints": {
     "modmenu": ["com.adm.clickgui.ModMenuIntegration"],
+    "preLaunch": [{ "adapter": "kotlin", "value": "com.engineerclient.ModTakeover" }],
     "client": [
       { "adapter": "kotlin", "value": "com.adm.AdmMod" },
       { "adapter": "kotlin", "value": "com.engineerclient.EngineerClient" },

@@ -56,17 +56,10 @@ object AdmMod : ClientModInitializer {
     val version: Version by lazy { FabricLoader.getInstance().getModContainer(MOD_ID).orElseThrow().metadata.version }
     val scope = CoroutineScope(SupervisorJob() + EmptyCoroutineContext)
 
-    /** Settings from before the folder was config/adm, copied over once. */
+    /** Settings from before the file was adm-config.json. Odin's are imported once by EngineerClient's ModTakeover. */
     private fun moveOldConfig(dir: File) {
-        val old = File(mc.gameDirectory, "config/odin")
         val file = File(dir, "adm-config.json")
-        if (File(old, "odin-config.json").isFile) {
-            old.copyRecursively(dir, overwrite = true)
-            File(dir, "odin-config.json").copyTo(file, overwrite = true)
-            File(dir, "odin-config.json").delete()
-            File(dir, "config.json").delete()
-            old.renameTo(File(old.parentFile, "odin-moved"))
-        } else if (!file.exists()) File(dir, "config.json").takeIf { it.isFile }?.renameTo(file)
+        if (!file.exists()) File(dir, "config.json").takeIf { it.isFile }?.renameTo(file)
     }
 
     override fun onInitializeClient() {
