@@ -126,10 +126,11 @@ open class HudElement(
     private var widest = 0
 
     // A HUD in the middle third keeps the width of its widest frame (the editor's example sets it) and centres what it draws in it.
-    val centerOffset: Int get() = if (inMiddle()) ((width - contentWidth) / 2).coerceAtLeast(0) else 0
+    // Drawn before it's measured, so it goes by the last width shown (kept while hidden) to centre a HUD's first frame back right.
+    val centerOffset: Int get() = if (inMiddle()) ((widest - contentWidth) / 2).coerceAtLeast(0) else 0
 
     fun onMeasured(measuredWidth: Int, measuredHeight: Int, example: Boolean = false) {
-        contentWidth = measuredWidth
+        if (measuredWidth > 0) contentWidth = measuredWidth
         widest = if (example) measuredWidth else maxOf(widest, measuredWidth)
         width = when {
             measuredWidth == 0 -> 0
@@ -142,7 +143,7 @@ open class HudElement(
     fun inMiddle(): Boolean {
         val w = liveWidth()
         if (w == 0) return false
-        val middle = x + scaledWidth / 2
+        val middle = x + ((if (width > 0) width else widest) * scale).toInt() / 2
         return middle > w / 3 && middle < w * 2 / 3
     }
 

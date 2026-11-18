@@ -17,6 +17,7 @@ import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
+import com.adm.events.core.onSend
 import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.Color
@@ -32,6 +33,8 @@ import com.adm.utils.toFixed
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.level.block.Blocks
@@ -81,10 +84,10 @@ object TickTimers : Module(
         maxorText()?.let { (t, c) -> draw(t, c) } ?: (0 to 0)
     }.withDependency { maxorDropdown && !combine && maxorOn }
     private val maxorMoveHud by HUD("Maxor Move", "Counts down to Maxor starting to move, 4.25 s after his first line.", true, 10, 100, 1.5f) { example ->
-        if (example) timer("Maxor", 100, MAXOR_MOVE, true) else left(maxorMoveAt, MAXOR_MOVE)?.let { timer("Maxor", it, MAXOR_MOVE) } ?: (0 to 0)
+        if (example) timer(100, MAXOR_MOVE) else left(maxorMoveAt, MAXOR_MOVE)?.let { timer(it, MAXOR_MOVE) } ?: (0 to 0)
     }.withDependency { maxorDropdown }
     private val crystalHud by HUD("Crystal Spawn", "Counts down 2 s to the top crystals coming back after a laser hit.", true, 10, 115, 1.5f) { example ->
-        if (example) timer("Crystals", 25, CRYSTALS_BACK, true) else left(crystalsAt, CRYSTALS_BACK)?.let { timer("Crystals", it, CRYSTALS_BACK) } ?: (0 to 0)
+        if (example) timer(25, CRYSTALS_BACK) else left(crystalsAt, CRYSTALS_BACK)?.let { timer(it, CRYSTALS_BACK) } ?: (0 to 0)
     }.withDependency { maxorDropdown }
 
     private val stormDropdown by DropdownSetting("Storm", desc = "Storm timer, Purple Pad, Giga Lightning and Storm Death Time.")
@@ -97,10 +100,10 @@ object TickTimers : Module(
         stormText()?.let { (t, c) -> draw(t, c) } ?: (0 to 0)
     }.withDependency { stormDropdown && !combine && stormOn }
     private val purplePadHud by HUD("Purple Pad", "Counts down to the pad read to be on Purple's pad for, so he's crushed on arrival.", true, 10, 160, 1.5f) { example ->
-        if (example) timer("Purple", 30, PAD_TOTAL, true) else padLeft(purpleReads())?.let { timer("Purple", it, PAD_TOTAL) } ?: (0 to 0)
+        if (example) timer(30, PAD_TOTAL) else padLeft(purpleReads())?.let { timer(it, PAD_TOTAL) } ?: (0 to 0)
     }.withDependency { stormDropdown }
     private val gigaHud by HUD("Giga Lightning", "Counts down to Storm's Giga Lightning striking.", true, 10, 205, 1.5f) { example ->
-        if (example) timer("Giga", 54, GIGA_TOTAL, true) else left(gigaAt, GIGA_TOTAL)?.let { timer("Giga", it, GIGA_TOTAL) } ?: (0 to 0)
+        if (example) timer(54, GIGA_TOTAL) else left(gigaAt, GIGA_TOTAL)?.let { timer(it, GIGA_TOTAL) } ?: (0 to 0)
     }.withDependency { stormDropdown }
     private val hideGigaTitle: Boolean by BooleanSetting("Hide Giga Title", true, desc = "Hides Storm's countdown title while Giga Lightning shows.").withDependency { stormDropdown && gigaHud.enabled }
     private val stormDeathHud by HUD("Storm Death Time", "At \"Storm is enraged!\", how long Storm took to die, in chat and here for 2 s.", true, 10, 145, 1.5f) { example ->
@@ -137,12 +140,12 @@ object TickTimers : Module(
 
     private val necronDropdown by DropdownSetting("Necron", desc = "Necron DPS.")
     private val necronHud by HUD("Necron DPS", "Counts down to Necron first taking damage, 4.45 s after his first line.", true, 10, 175, 1.5f) { example ->
-        if (example) timer("Necron", 35, NECRON_DPS, true) else left(necronDpsAt, NECRON_DPS)?.let { timer("Necron", it, NECRON_DPS) } ?: (0 to 0)
+        if (example) timer(35, NECRON_DPS) else left(necronDpsAt, NECRON_DPS)?.let { timer(it, NECRON_DPS) } ?: (0 to 0)
     }.withDependency { necronDropdown }
 
     private val otherDropdown by DropdownSetting("Other", desc = "Tac Insertion and M3's Fire Freeze.")
     private val tacHud by HUD("Tac Insertion", "Counts down 3 s to the Tactical Insertion taking you back.", true, 10, 190, 1.5f) { example ->
-        if (example) timer("Tac", 30, TAC_RETURN, true) else left(tacReturnAt, TAC_RETURN)?.let { timer("Tac", it, TAC_RETURN) } ?: (0 to 0)
+        if (example) timer(30, TAC_RETURN) else left(tacReturnAt, TAC_RETURN)?.let { timer(it, TAC_RETURN) } ?: (0 to 0)
     }.withDependency { otherDropdown }
     private val fireFreezeHud by HUD("Fire Freeze Hud", "Displays a timer for when to use fire freeze in M3.") {
         val timeTillFreeze = fireFreezeTime - 100
@@ -164,6 +167,7 @@ object TickTimers : Module(
     private const val STORM_DOWN_TICKS = 580
     private const val CAMP_TICKS = 50 * 20
     private const val TAC_RETURN = 60
+    private const val TAC_USE_MS = 2000L
     private const val PORTAL_TICKS = 4 * 20
     private const val PORTAL_TEXT = 36
     private const val EXIT_CORE_TEXT = 16
@@ -233,6 +237,7 @@ object TickTimers : Module(
     private var necronDpsAt: Int? = null
     private var gigaAt: Int? = null
     private var tacReturnAt: Int? = null
+    @Volatile private var tacUsedAt = 0L
     /** The section time last dinged for (TermInfo.sectionDoneAt). */
     private var dingedAt = 0L
     private var fireFreezeTime = -1
@@ -317,9 +322,13 @@ object TickTimers : Module(
 
     private fun time(ticks: Int): String = tickSeconds(ticks.toDouble())
 
-    /** The time left; [label] only in the HUD editor ([example]), to tell the timers apart there. */
-    private fun GuiGraphicsExtractor.timer(label: String, left: Int, total: Int, example: Boolean = false): Pair<Int, Int> =
-        draw((if (example) "§7$label: " else "") + colour(left, total) + time(left))
+    // The editor's example is drawn as the live one, centred in the width of the longest time, so both sit in the same box.
+    private fun GuiGraphicsExtractor.timer(left: Int, total: Int): Pair<Int, Int> {
+        val s = colour(left, total) + time(left)
+        val box = maxOf(mc.font.width(time(total)), mc.font.width(s))
+        text(s, (box - mc.font.width(s)) / 2, 0, Colors.WHITE, shadow = true)
+        return box to 9
+    }
 
     private fun GuiGraphicsExtractor.draw(s: String): Pair<Int, Int> {
         text(s, 0, 0, Colors.WHITE, shadow = true)
@@ -417,9 +426,11 @@ object TickTimers : Module(
         fireFreezeTime = -1
     }
 
+    private fun holdingTac() = mc.player?.mainHandItem?.itemId == "TACTICAL_INSERTION"
+
     private fun reset() {
         stopAll()
-        tacReturnAt = null
+        tacReturnAt = null; tacUsedAt = 0L
         bossAt = null; bloodSeen = false; portalOpen = false; portalUntil = 0; coreOpen = false; exitCoreUntil = 0
         maxorMoveAt = null; inMaxor = false; crystalsAt = null; lastHit = Int.MIN_VALUE / 2; maxorHealth = 0f
         stormStart = null; necronDpsAt = null; gigaAt = null
@@ -455,8 +466,12 @@ object TickTimers : Module(
         onReceive<ClientboundSoundPacket> {
             if (!stormHurt && phase in 2..3 && sound.value() == SoundEvents.WITHER_HURT && volume == 15f && pitch == 1f) stormHurt = true
             if (sound.value() != SoundEvents.FLINTANDSTEEL_USE || kotlin.math.abs(pitch - 0.746f) > 0.01f) return@onReceive
-            mc.execute { if (mc.player?.mainHandItem?.itemId == "TACTICAL_INSERTION") tacReturnAt = serverTicks + TAC_RETURN }
+            mc.execute { if (holdingTac() || System.currentTimeMillis() - tacUsedAt < TAC_USE_MS) { tacUsedAt = 0L; tacReturnAt = serverTicks + TAC_RETURN } }
         }
+
+        // Its sound comes a ping later, by when the hotbar may have moved on: the click is remembered.
+        onSend<ServerboundUseItemPacket> { if (holdingTac()) tacUsedAt = System.currentTimeMillis() }
+        onSend<ServerboundUseItemOnPacket> { if (holdingTac()) tacUsedAt = System.currentTimeMillis() }
 
         onReceive<ClientboundSetTitleTextPacket> {
             if (stormStart == null || !gigaHud.enabled) return@onReceive
