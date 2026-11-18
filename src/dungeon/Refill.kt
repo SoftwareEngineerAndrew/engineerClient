@@ -10,9 +10,11 @@ import com.adm.features.Module
 import com.adm.utils.itemId
 import com.adm.utils.sendCommand
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
+import net.minecraft.ChatFormatting
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents
 
 object Refill : Module(
     name = "Refill",
@@ -35,17 +37,21 @@ object Refill : Module(
         Item("twap", "Twilight Arrow Poison", "TWILIGHT_ARROW_POISON", "twilight_arrow_poison", 64, false),
     )
 
-    /** Hypixel drops commands sent too close together: one every [GAP] ticks. */
+    /** Hypixel drops a /gfs sent too soon after another: one at a time, the next once the last is answered. */
     private const val GAP = 10
-    private val queue = ArrayDeque<String>()
+    private const val TIMEOUT = 40
+    private class Pending(val item: Item, val amount: Int, var tries: Int = 0)
+    private val queue = ArrayDeque<Pending>()
+    private var sent: Pending? = null
     private var wait = 0
+    private val movedRegex = Regex("Moved \\d+.+ from your Sacks to your inventory")
 
     init {
         for (i in items) { registerSetting(i.enabled); registerSetting(i.amount) }
 
-        ClientTickEvents.END_CLIENT_TICK.register {
-            if (wait > 0) wait--
-            else queue.removeFirstOrNull()?.let { sendCommand(it); wait = GAP }
+        ClientTickEvents.END_CLIENT_TICK.register { tick() }
+        ClientReceiveMessageEvents.GAME.register { message, overlay ->
+            if (!overlay && sent != null && movedRegex.containsMatchIn(ChatFormatting.stripFormatting(message.string) ?: "")) { sent = null; wait = GAP }
         }
 
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
@@ -69,14 +75,33 @@ object Refill : Module(
         if (picked.map { refill(it, it.amount.value, false) }.none { it }) EngineerClient.msg("§7Everything is already full.")
     }
 
-    /** Queues the sack command for what's missing; false if nothing is. */
-    private fun refill(item: Item, amount: Int, say: Boolean): Boolean {
-        val inv = EngineerClient.mc.player?.inventory ?: return false
+    private fun tick() {
+        if (wait > 0) { wait--; return }
+        // no answer: sent again (what's missing is counted afresh), once
+        sent?.let { if (it.tries < 2) queue.addFirst(it); sent = null }
+        while (true) {
+            val p = queue.removeFirstOrNull() ?: return
+            val missing = p.amount - have(p.item)
+            if (missing <= 0) continue
+            sendCommand("gfs ${p.item.sack} $missing")
+            p.tries++; sent = p; wait = TIMEOUT
+            return
+        }
+    }
+
+    private fun have(item: Item): Int {
+        val inv = EngineerClient.mc.player?.inventory ?: return Int.MAX_VALUE
         var have = 0
         for (i in 0 until inv.containerSize) inv.getItem(i).takeIf { it.itemId == item.id }?.let { have += it.count }
+        return have
+    }
+
+    /** Queues a top-up for what's missing; false if nothing is. */
+    private fun refill(item: Item, amount: Int, say: Boolean): Boolean {
+        val have = have(item)
         if (have >= amount) { if (say) EngineerClient.msg("§7Already have $have ${item.name}."); return false }
-        val cmd = "gfs ${item.sack} ${amount - have}"
-        if (cmd !in queue) queue += cmd
+        queue.removeAll { it.item === item }
+        if (sent?.item !== item) queue += Pending(item, amount)
         return true
     }
 }
