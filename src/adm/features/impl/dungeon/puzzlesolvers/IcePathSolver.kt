@@ -61,12 +61,17 @@ object IcePathSolver {
     private fun cellOf(room: DungeonRoom, x: Double, z: Double): BlockPos =
         room.getRelativeCoords(BlockPos.containing(x, Y.toDouble(), z)).atY(Y)
 
+    private fun moving(fish: Silverfish): Boolean {
+        val dx = fish.x - fish.xo; val dz = fish.z - fish.zo
+        return dx * dx + dz * dz >= 1e-4
+    }
+
     // A sliding fish is judged from where it stops; a push already sent from where that one leaves it.
     private fun restCell(room: DungeonRoom, fish: Silverfish): BlockPos {
         pending?.takeIf { System.currentTimeMillis() < pendingUntil }?.let { return it }
         val now = cellOf(room, fish.x, fish.z)
+        if (!moving(fish)) return now
         val dx = fish.x - fish.xo; val dz = fish.z - fish.zo
-        if (dx * dx + dz * dz < 1e-4) return now
         val real = room.getRealCoords(now)
         val step = if (kotlin.math.abs(dx) > kotlin.math.abs(dz)) real.offset(if (dx > 0) 1 else -1, 0, 0) else real.offset(0, 0, if (dz > 0) 1 else -1)
         val rel = room.getRelativeCoords(step).atY(Y)
@@ -90,7 +95,8 @@ object IcePathSolver {
         val (to, out) = slide(room, from, d)
         if (out) return false to to
         val next = dist[to]
-        return (to == from || next == null || next != here - 1) to to
+        if (to == from) return false to null
+        return (next == null || next != here - 1) to to
     }
 
     private fun active(): Boolean = PuzzleSolvers.enabled && PuzzleSolvers.icePathBlockWrong && DungeonUtils.inClear
@@ -112,6 +118,7 @@ object IcePathSolver {
         if (!active()) return false
         val room = room() ?: return false
         val fish = (mc.hitResult as? EntityHitResult)?.entity as? Silverfish ?: return false
+        if (moving(fish)) return false
         if (!judge(room, restCell(room, fish), 0)) return false
         PuzzleSolvers.blocked()
         return true
