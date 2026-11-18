@@ -1,7 +1,7 @@
 package com.adm.utils.skyblock.dungeon
 
+import com.adm.features.impl.dungeon.ClassColors
 import com.adm.utils.Color
-import com.adm.utils.Colors
 import com.adm.utils.IVec2
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.entity.player.PlayerSkin
@@ -69,17 +69,18 @@ enum class PuzzleStatus {
  *
  */
 enum class DungeonClass(
-    val color: Color,
-    val colorCode: Char,
     val defaultQuadrant: Int,
     var priority: Int,
 ) {
-    ARCHER(Colors.MINECRAFT_GOLD, '6', 0, 2),
-    BERSERK(Colors.MINECRAFT_DARK_RED, '4', 1, 0),
-    HEALER(Colors.MINECRAFT_LIGHT_PURPLE, 'd', 2, 2),
-    MAGE(Colors.MINECRAFT_AQUA, 'b', 3, 2),
-    TANK(Colors.MINECRAFT_DARK_GREEN, '2', 3, 1),
-    EMPTY(Colors.WHITE, 'f', 0, 0)
+    ARCHER(0, 2),
+    BERSERK(1, 0),
+    HEALER(2, 2),
+    MAGE(3, 2),
+    TANK(3, 1),
+    EMPTY(0, 0);
+
+    val color: Color get() = ClassColors.color(this)
+    val colorCode: Char get() = ClassColors.code(this)
 }
 
 enum class Blessing(

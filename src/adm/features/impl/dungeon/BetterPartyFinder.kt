@@ -72,10 +72,6 @@ object BetterPartyFinder : Module(
     private val levelRequiredRegex = Regex("Dungeon Level Required:\\s*(\\d+)")
     private val floorRegex = Regex("Floor:\\s*Floor\\s+(\\w+)")
     private val classes = DungeonClass.entries.filter { it != DungeonClass.EMPTY }
-    private val headColors = mapOf(
-        DungeonClass.ARCHER to '4', DungeonClass.TANK to 'a', DungeonClass.BERSERK to '6',
-        DungeonClass.HEALER to '5', DungeonClass.MAGE to 'b',
-    )
     private val listingSlots = setOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34)
 
     private class Fetched(val member: HypixelData.MemberData?, val time: Long = System.currentTimeMillis())
@@ -179,7 +175,7 @@ object BetterPartyFinder : Module(
             levelRequiredRegex.find(clean)?.let { levelRequired = it.groupValues[1].toInt() }
             partyMemberRegex.matchEntire(clean)?.let { m -> classNamed(m.groupValues[2])?.let(taken::add) }
         }
-        val missing = classes.filter { it !in taken }.map { "§${headColors[it]}§l${it.name[0]}" }
+        val missing = classes.filter { it !in taken }.map { "§${it.colorCode}§l${it.name[0]}" }
         return Marks(
             stack,
             if (levelRequired != 0) "§c$levelRequired" else null,
@@ -237,7 +233,7 @@ object BetterPartyFinder : Module(
             val mine = ClassDetect.myClass()
             out.add(Component.literal("§cMissing: §7" + missing.joinToString(", ") { clazz ->
                 val label = clazz.name.lowercase().replaceFirstChar(Char::titlecase)
-                if (clazz == mine) "§${headColors[clazz]}§l$label§7" else label
+                if (clazz == mine) "§${clazz.colorCode}§l$label§7" else label
             }))
         }
         return out
