@@ -123,7 +123,7 @@ object WaterBoardSolver {
     fun install() {
         for (s in listOf(dropdown, on, lead, objective, clickSound, tracer, firstColor, secondColor, showSim)) PuzzleSolvers.registerSetting(s)
         coordinator.execute { PlanTable.load() }
-        on<LevelEvent.Load> { EngineerClient.safely("water board reset") { reset(); carried = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed } }
+        on<LevelEvent.Load> { EngineerClient.safely("water board reset") { reset(); carried = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed; timed = false } }
         onReceive<ClientboundBlockUpdatePacket> { val f = frame ?: return@onReceive; packet(f, pos, blockState) }
         onReceive<ClientboundSectionBlocksUpdatePacket> { val f = frame ?: return@onReceive; runUpdates { p, s -> packet(f, p, s) } }
         on<UseItemOnPostEvent> { EngineerClient.safely("water board click") { clicked(hitResult.blockPos) } }
@@ -142,6 +142,7 @@ object WaterBoardSolver {
 
     // ADM keeps the last run's status until the tab list names the puzzle again
     private var carried = false
+    private var timed = false
     private fun solved(): Boolean {
         val done = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed
         if (!done) carried = false
@@ -206,6 +207,8 @@ object WaterBoardSolver {
     // ---- client thread ------------------------------------------------------------------------------------------------------
 
     private fun tick() {
+        // the chest's block event doesn't always reach the puzzle timer: the tab list's tick does
+        if (!timed && DungeonUtils.inDungeons && solved()) { timed = true; PuzzleSolvers.onPuzzleComplete(ROOM) }
         if (!active()) { if (tracker != null) reset(); return }
         // the room we're in, or the one we were following (packets keep coming while you stand in its corridor)
         val r = DungeonUtils.currentRoom?.takeIf { it.data?.name == ROOM }
