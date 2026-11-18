@@ -124,7 +124,10 @@ object BrRoles {
      * setting is All Boxes, or a role the team size doesn't have.
      */
     val count: Int
-        get() = chatCount ?: baseRole.let { if (it == null || it > settingKilling) 0 else settingKilling }
+        get() = if (solo) 0 else chatCount ?: baseRole.let { if (it == null || it > settingKilling) 0 else settingKilling }
+
+    private val solo: Boolean
+        get() = DungeonUtils.inDungeons && DungeonUtils.dungeonTeammates.size == 1
 
     /** Whether you are on the door: you said so in chat, or it is your setting and chat hasn't given you a role. */
     val youOnDoor: Boolean
