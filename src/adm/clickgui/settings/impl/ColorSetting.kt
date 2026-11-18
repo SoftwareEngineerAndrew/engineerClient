@@ -145,7 +145,7 @@ class ColorSetting(
         const val FAVORITE_RADIUS = 3f
 
         const val SWATCH_WIDTH = 22
-        const val SWATCH_HEIGHT = 14
+        const val SWATCH_HEIGHT = 12
     }
 }
 

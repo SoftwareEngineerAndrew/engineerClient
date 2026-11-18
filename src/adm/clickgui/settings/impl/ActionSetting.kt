@@ -22,8 +22,8 @@ class ActionSetting(
     @Composable
     override fun Content() {
         Box {
-            Button(name, GuiTheme.ROW_WIDTH - INSET * 2, GuiTheme.ROW_HEIGHT - 4) { action() }.offset({ INSET }, { 2 })
-        }.size(GuiTheme.ROW_WIDTH, GuiTheme.ROW_HEIGHT).tooltip(description)
+            Button(name, GuiTheme.ROW_WIDTH - INSET * 2, GuiTheme.SETTING_HEIGHT - 2) { action() }.offset({ INSET }, { 1 })
+        }.size(GuiTheme.ROW_WIDTH, GuiTheme.SETTING_HEIGHT).tooltip(description)
     }
 
     private companion object {

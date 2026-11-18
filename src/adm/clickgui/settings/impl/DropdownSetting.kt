@@ -30,6 +30,6 @@ class DropdownSetting(
     private companion object {
         val CHEVRON: Identifier = Identifier.fromNamespaceAndPath("engineerclient", "textures/chevron.png")
         const val QUARTER_TURN = (PI / 2).toFloat()
-        const val CHEVRON_SIZE = 15
+        const val CHEVRON_SIZE = 13
     }
 }

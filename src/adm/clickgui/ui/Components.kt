@@ -18,17 +18,69 @@ import kotlin.math.roundToInt
 
 @Composable
 fun RenderableSetting<*>.SettingRow(
-    height: Int = GuiTheme.ROW_HEIGHT,
+    height: Int = GuiTheme.SETTING_HEIGHT,
     trailing: @Composable (hovered: () -> Boolean) -> Unit = {},
 ): UiNode {
     val pointer = remember { InteractionSource() }
+    val label = remember(name) { WrappedLabel(name) }
+    val minHeight = height
+    var room = GuiTheme.INNER_WIDTH
     val row = Box {
         val controls = Row(GuiTheme.PADDING) { trailing { pointer.hovered } }
-        controls.offset({ GuiTheme.ROW_WIDTH - GuiTheme.PADDING - controls.width }, { (height - controls.height) / 2 })
+        controls.offset({ GuiTheme.ROW_WIDTH - GuiTheme.PADDING - controls.width }, { ((controls.parent?.height ?: 0) - controls.height) / 2 })
     }
-    row.size(GuiTheme.ROW_WIDTH, height).hoverable(pointer).tooltip(description)
-    return row.drawBehind { graphics -> graphics.text(mc.font, name, x + GuiTheme.PADDING, y + (height - 8) / 2, Colors.WHITE.rgba, false) }
+    row.width(GuiTheme.ROW_WIDTH).height {
+        val controls = children.firstOrNull()
+        val used = controls?.width ?: 0
+        room = GuiTheme.INNER_WIDTH - if (used > 0) used + LABEL_GAP else 0
+        label.height(room, minHeight)
+    }.hoverable(pointer).tooltip(description)
+    return row.drawBehind { graphics -> label.draw(graphics, x + GuiTheme.PADDING, y, height, room) }
 }
+
+class WrappedLabel(private val text: String) {
+    private var wrappedFor = -1
+    private var lines: List<String> = listOf(text)
+
+    fun lines(room: Int): List<String> {
+        if (room != wrappedFor) {
+            wrappedFor = room
+            lines = wrapLabel(text, room)
+        }
+        return lines
+    }
+
+    fun height(room: Int, min: Int): Int = maxOf(min, lines(room).size * LINE_STEP + 3)
+
+    fun draw(graphics: GuiGraphicsExtractor, left: Int, top: Int, height: Int, room: Int, color: Int = Colors.WHITE.rgba) {
+        val shown = lines(room)
+        var lineY = top + (height - shown.size * LINE_STEP + 1) / 2
+        for (line in shown) {
+            graphics.text(mc.font, line, left, lineY, color, false)
+            lineY += LINE_STEP
+        }
+    }
+}
+
+fun wrapLabel(text: String, room: Int): List<String> {
+    val font = mc.font
+    if (room <= 0 || font.width(text) <= room) return listOf(text)
+    val lines = ArrayList<String>(2)
+    var line = ""
+    for (word in text.split(' ')) {
+        val joined = if (line.isEmpty()) word else "$line $word"
+        if (line.isEmpty() || font.width(joined) <= room) line = joined
+        else {
+            lines += line
+            line = word
+        }
+    }
+    if (line.isNotEmpty()) lines += line
+    return lines
+}
+
+const val LABEL_GAP = 4
+private const val LINE_STEP = 9
 
 @Composable
 fun Gap(height: Int): UiNode = Box().height(height)
@@ -170,12 +222,12 @@ fun TextBox(
     }
 }
 
-const val SWITCH_HEIGHT = 16
+const val SWITCH_HEIGHT = 13
 private const val SWITCH_WIDTH = 24
-private const val PILL_HEIGHT = 17
-private const val KNOB_RADIUS = (SWITCH_HEIGHT / 2 - 4).toFloat()
+private const val PILL_HEIGHT = 14
+private const val KNOB_RADIUS = SWITCH_HEIGHT / 2f - 2.5f
 private const val PRESS_SHRINK = 0.06f
 private const val ICON_GROW = 0.15f
 private const val BUBBLE_WRAP = 200
 private const val BUBBLE_PAD = 8
-private val SWITCH_CORNERS = Corners(9f)
+private val SWITCH_CORNERS = Corners(SWITCH_HEIGHT / 2f)

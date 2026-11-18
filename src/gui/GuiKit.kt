@@ -20,6 +20,7 @@ import kotlin.math.min
 object Theme {
     const val WIDTH = 140
     const val ROW = 21
+    const val SETTING = 17
     const val PAD = 6
     const val RADIUS = 5f
     const val CAP = 5

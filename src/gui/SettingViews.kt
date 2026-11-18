@@ -3,6 +3,8 @@ package com.engineerclient.gui
 import com.engineerclient.EngineerClient.mc
 import com.mojang.blaze3d.platform.InputConstants
 import com.adm.clickgui.HudManager
+import com.adm.clickgui.ui.LABEL_GAP
+import com.adm.clickgui.ui.WrappedLabel
 import com.adm.clickgui.settings.RenderableSetting
 import com.adm.clickgui.settings.Setting
 import com.adm.clickgui.settings.impl.*
@@ -28,8 +30,14 @@ abstract class SettingView(base: RenderableSetting<*>) {
 
     open fun key(event: KeyEvent, hovered: Boolean): Boolean = false
 
-    protected fun label(ui: Ui, x: Int, y: Int, h: Int) {
-        ui.text(setting.name, x + Theme.PAD, y + (h - 8) / 2)
+    private val wrapped by lazy { WrappedLabel(setting.name) }
+
+    private fun room(control: Int) = Theme.INNER - if (control > 0) control + LABEL_GAP else 0
+
+    protected fun rowHeight(control: Int, min: Int = Theme.SETTING) = wrapped.height(room(control), min)
+
+    protected fun label(ui: Ui, x: Int, y: Int, h: Int, control: Int = 0, color: Int = Theme.WHITE) {
+        wrapped.draw(ui.g, x + Theme.PAD, y, h, room(control), color)
         ui.tooltip(x, y, x + Theme.WIDTH, y + h, setting.description)
     }
 
@@ -53,9 +61,14 @@ abstract class SettingView(base: RenderableSetting<*>) {
     }
 }
 
+private const val SWITCH_W = 24
+private const val SWITCH_H = 13
+private const val PILL_H = 14
+private const val ICON = 13
+
 fun Ui.switch(x: Int, y: Int, on: Boolean, anim: Anim, hoverAnim: Anim, onClick: () -> Unit) {
-    val w = 24
-    val h = 13
+    val w = SWITCH_W
+    val h = SWITCH_H
     val hover = hoverAnim.update(hovered(x, y, x + w, y + h))
     val p = anim.update(on)
     val corners = Corners(h / 2f)
@@ -64,6 +77,8 @@ fun Ui.switch(x: Int, y: Int, on: Boolean, anim: Anim, hoverAnim: Anim, onClick:
     g.circle(x + h / 2 + ((w - h) * p).roundToInt(), y + h / 2, h / 2f - 2.5f, Theme.WHITE)
     click(x - 2, y - 2, x + w + 2, y + h + 2) { onClick() }
 }
+
+private fun pillWidth(text: String) = mc.font.width(text) + Theme.PAD * 2
 
 fun Ui.pill(text: String, right: Int, y: Int, h: Int, color: Int = Theme.WHITE, hoverAnim: Anim): Rect {
     val w = font.width(text) + Theme.PAD * 2
@@ -97,11 +112,12 @@ private val RIGHT = Theme.WIDTH - Theme.PAD
 class BooleanView(override val setting: BooleanSetting) : SettingView(setting) {
     private val anim = Anim(200f, setting.enabled)
     private val hover = Anim(150f)
-    override fun height() = Theme.ROW
+    override fun height() = rowHeight(SWITCH_W)
     override fun draw(ui: Ui, x: Int, y: Int) {
-        label(ui, x, y, Theme.ROW)
-        ui.switch(x + RIGHT - 24, y + 4, setting.enabled, anim, hover) { setting.enabled = !setting.enabled }
-        ui.click(x, y, x + Theme.WIDTH, y + Theme.ROW) { setting.enabled = !setting.enabled }
+        val h = height()
+        label(ui, x, y, h, SWITCH_W)
+        ui.switch(x + RIGHT - SWITCH_W, y + (h - SWITCH_H) / 2, setting.enabled, anim, hover) { setting.enabled = !setting.enabled }
+        ui.click(x, y, x + Theme.WIDTH, y + h) { setting.enabled = !setting.enabled }
     }
 }
 
@@ -118,16 +134,22 @@ class NumberView(override val setting: NumberSetting<*>) : SettingView(setting) 
         }
     }
 
-    override fun height() = 31
+    private val control get() = if (AdmClickGui.focus === field) FIELD_W else mc.font.width(setting.display)
+    private val head get() = rowHeight(control, HEAD)
+
+    override fun height() = head + 13
 
     override fun draw(ui: Ui, x: Int, y: Int) {
-        label(ui, x, y, 18)
+        val head = head
+        label(ui, x, y, head, control)
         if (AdmClickGui.focus === field) {
-            field.draw(ui, x + RIGHT - 52, y + 3, x + RIGHT, y + 16, radius = 3f)
+            val fy = y + (head - 13) / 2
+            field.draw(ui, x + RIGHT - FIELD_W, fy, x + RIGHT, fy + 13, radius = 3f)
         } else {
             val w = ui.font.width(setting.display)
-            ui.text(setting.display, x + RIGHT - w, y + 5)
-            ui.click(x + RIGHT - w - 3, y + 2, x + RIGHT + 2, y + 16) {
+            val textY = y + (head - 8) / 2
+            ui.text(setting.display, x + RIGHT - w, textY)
+            ui.click(x + RIGHT - w - 3, textY - 3, x + RIGHT + 2, textY + 11) {
                 field.set(setting.value.toString().removeSuffix(".0"))
                 AdmClickGui.focus(field)
             }
@@ -135,8 +157,8 @@ class NumberView(override val setting: NumberSetting<*>) : SettingView(setting) 
 
         val x0 = x + Theme.PAD
         val x1 = x + RIGHT
-        val ty = y + 21
-        val hovered = ui.hovered(x0 - 2, y + 17, x1 + 2, y + 29)
+        val ty = y + head + 3
+        val hovered = ui.hovered(x0 - 2, ty - 4, x1 + 2, ty + 8)
         val p = if (dragging) fill.update(setting.percent, 1000f) else fill.update(setting.percent)
         val k = knob.update(dragging || hovered)
         val track = Corners(3f)
@@ -146,7 +168,7 @@ class NumberView(override val setting: NumberSetting<*>) : SettingView(setting) 
         ui.g.circle(x0 + filled, ty + 3, 4f + 1.5f * k, Theme.WHITE)
 
         val seek = { mx: Double -> setting.percent = ((mx - x0) / (x1 - x0)).toFloat().coerceIn(0f, 1f) }
-        ui.hit(x0 - 4, y + 17, x1 + 4, y + 30) { button, mx, _ ->
+        ui.hit(x0 - 4, ty - 4, x1 + 4, ty + 9) { button, mx, _ ->
             if (button != InputConstants.MOUSE_BUTTON_LEFT) return@hit false
             dragging = true
             seek(mx)
@@ -164,6 +186,11 @@ class NumberView(override val setting: NumberSetting<*>) : SettingView(setting) 
         }
         return true
     }
+
+    private companion object {
+        const val HEAD = 15
+        const val FIELD_W = 52
+    }
 }
 
 val Enum<*>.optionLabel: String
@@ -177,15 +204,18 @@ class SelectorView(override val setting: SelectorSetting<*>) : SettingView(setti
     private var progress = 0f
     private val listHeight get() = setting.options.size * OPTION + 5
 
-    override fun height() = Theme.ROW + (listHeight * progress).roundToInt()
+    private val control get() = pillWidth(setting.value.optionLabel)
+
+    override fun height() = rowHeight(control) + (listHeight * progress).roundToInt()
 
     override fun draw(ui: Ui, x: Int, y: Int) {
         progress = openAnim.update(open)
-        label(ui, x, y, Theme.ROW)
-        val pill = ui.pill(setting.value.optionLabel, x + RIGHT, y + 3, Theme.ROW - 6, hoverAnim = hover)
+        val h = rowHeight(control)
+        label(ui, x, y, h, control)
+        val pill = ui.pill(setting.value.optionLabel, x + RIGHT, y + (h - PILL_H) / 2, PILL_H, hoverAnim = hover)
         ui.click(pill.x0, pill.y0, pill.x1, pill.y1, right = { setting.cycle() }) { open = !open }
         if (progress <= 0f) return
-        val top = y + Theme.ROW
+        val top = y + h
         val x0 = x + 4
         val x1 = x + Theme.WIDTH - 4
         ui.clipped(x, top, x + Theme.WIDTH, top + (listHeight * progress).roundToInt()) {
@@ -215,21 +245,23 @@ class ColorView(override val setting: ColorSetting) : SettingView(setting) {
     private var progress = 0f
     private val hex = TextField(if (allowAlpha) 8 else 6, { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) { setting.applyHex(it) }
 
-    override fun height() = Theme.ROW + (PICKER_TOTAL * progress).roundToInt()
+    override fun height() = rowHeight(SWATCH) + (PICKER_TOTAL * progress).roundToInt()
 
     override fun draw(ui: Ui, x: Int, y: Int) {
         progress = openAnim.update(open)
         val color = setting.value
-        label(ui, x, y, Theme.ROW)
+        val h = rowHeight(SWATCH)
+        label(ui, x, y, h, SWATCH)
         val sx1 = x + RIGHT
-        val sx0 = sx1 - 22
-        ui.g.roundedRectOutlined(sx0, y + 4, sx1, y + 17, color.rgba, color.withAlpha(1f).darker().rgba, 1.5f, Theme.RADIUS)
-        ui.click(sx0, y + 4, sx1, y + 17) { open = !open }
-        ui.click(x, y, x + Theme.WIDTH, y + Theme.ROW) { open = !open }
+        val sx0 = sx1 - SWATCH
+        val sy = y + (h - 13) / 2
+        ui.g.roundedRectOutlined(sx0, sy, sx1, sy + 13, color.rgba, color.withAlpha(1f).darker().rgba, 1.5f, Theme.RADIUS)
+        ui.click(sx0, sy, sx1, sy + 13) { open = !open }
+        ui.click(x, y, x + Theme.WIDTH, y + h) { open = !open }
         if (AdmClickGui.focus !== hex) hex.set(color.hex(allowAlpha))
         if (progress <= 0f) return
 
-        val top = y + Theme.ROW
+        val top = y + h
         ui.clipped(x, top, x + Theme.WIDTH, top + (PICKER_TOTAL * progress).roundToInt()) {
             val px0 = x + Theme.PAD
             val bars = if (allowAlpha) 2 else 1
@@ -287,6 +319,7 @@ class ColorView(override val setting: ColorSetting) : SettingView(setting) {
 
     private companion object {
         val HUE: Identifier = Identifier.fromNamespaceAndPath("engineerclient", "textures/huegradient.png")
+        const val SWATCH = 22
         const val GAP = 3
         const val BAR = 10
         const val PICKER_H = 100
@@ -299,7 +332,9 @@ class KeybindView(override val setting: KeybindSetting) : SettingView(setting) {
     private val hover = Anim(150f)
     val listening get() = AdmClickGui.focus === this
 
-    override fun height() = Theme.ROW
+    private val shownName get() = if (listening) "..." else setting.value.displayName.string
+
+    override fun height() = rowHeight(pillWidth(shownName))
 
     fun bindMouse(button: Int) {
         setting.value = InputConstants.Type.MOUSE.getOrCreate(button)
@@ -307,9 +342,10 @@ class KeybindView(override val setting: KeybindSetting) : SettingView(setting) {
     }
 
     override fun draw(ui: Ui, x: Int, y: Int) {
-        label(ui, x, y, Theme.ROW)
-        val name = if (listening) "..." else setting.value.displayName.string
-        val pill = ui.pill(name, x + RIGHT, y + 3, Theme.ROW - 6, if (listening) Colors.MINECRAFT_YELLOW.rgba else Theme.WHITE, hover)
+        val name = shownName
+        val h = rowHeight(pillWidth(name))
+        label(ui, x, y, h, pillWidth(name))
+        val pill = ui.pill(name, x + RIGHT, y + (h - PILL_H) / 2, PILL_H, if (listening) Colors.MINECRAFT_YELLOW.rgba else Theme.WHITE, hover)
         ui.hit(pill.x0, pill.y0, pill.x1, pill.y1, owner = this) { button, _, _ ->
             when {
                 listening -> bindMouse(button)
@@ -334,33 +370,39 @@ class StringView(override val setting: StringSetting) : SettingView(setting) {
     private val placeholder = privateField(setting, "placeholder") as? String ?: ""
     private val field = TextField(setting.length) { setting.value = it }
 
-    override fun height() = 17 + 20 + 3
+    override fun height() = rowHeight(0, HEAD) + 20 + 3
 
     override fun draw(ui: Ui, x: Int, y: Int) {
-        label(ui, x, y, 17)
+        val head = rowHeight(0, HEAD)
+        label(ui, x, y, head)
         if (AdmClickGui.focus !== field) field.set(setting.value)
-        field.draw(ui, x + Theme.PAD, y + 17, x + RIGHT, y + 37, placeholder)
+        field.draw(ui, x + Theme.PAD, y + head, x + RIGHT, y + head + 20, placeholder)
+    }
+
+    private companion object {
+        const val HEAD = 14
     }
 }
 
 class ActionView(override val setting: ActionSetting) : SettingView(setting) {
     private val hover = Anim(150f)
-    override fun height() = Theme.ROW
+    override fun height() = Theme.SETTING
     override fun draw(ui: Ui, x: Int, y: Int) {
-        ui.button(setting.name, x + 3, y + 2, x + Theme.WIDTH - 3, y + Theme.ROW - 2, hover) { setting.action() }
-        ui.tooltip(x, y, x + Theme.WIDTH, y + Theme.ROW, setting.description)
+        ui.button(setting.name, x + 3, y + 1, x + Theme.WIDTH - 3, y + Theme.SETTING - 1, hover) { setting.action() }
+        ui.tooltip(x, y, x + Theme.WIDTH, y + Theme.SETTING, setting.description)
     }
 }
 
 class DropdownView(override val setting: DropdownSetting) : SettingView(setting) {
     private val turn = Anim(200f, setting.value)
     private val hover = Anim(150f)
-    override fun height() = Theme.ROW
+    override fun height() = rowHeight(ICON)
     override fun draw(ui: Ui, x: Int, y: Int) {
-        label(ui, x, y, Theme.ROW)
-        val h = hover.update(ui.hovered(x, y, x + Theme.WIDTH, y + Theme.ROW))
-        ui.icon(CHEVRON, x + RIGHT - 15, y + 3, 15, h, turn.update(setting.value) * (PI / 2).toFloat())
-        ui.click(x, y, x + Theme.WIDTH, y + Theme.ROW) { setting.value = !setting.value }
+        val rh = height()
+        label(ui, x, y, rh, ICON)
+        val h = hover.update(ui.hovered(x, y, x + Theme.WIDTH, y + rh))
+        ui.icon(CHEVRON, x + RIGHT - ICON, y + (rh - ICON) / 2, ICON, h, turn.update(setting.value) * (PI / 2).toFloat())
+        ui.click(x, y, x + Theme.WIDTH, y + rh) { setting.value = !setting.value }
     }
 
     private companion object {
@@ -374,15 +416,19 @@ class HudView(override val setting: HUDSetting) : SettingView(setting) {
     private val switchHover = Anim(150f)
     private val iconHover = Anim(150f)
 
-    override fun height() = Theme.ROW
+    private val control = ICON + if (toggleable) 6 + SWITCH_W else 0
+
+    override fun height() = rowHeight(control)
 
     override fun draw(ui: Ui, x: Int, y: Int) {
-        label(ui, x, y, Theme.ROW)
-        val ix = x + RIGHT - 15
-        ui.icon(MOVE, ix, y + 3, 15, iconHover.update(ui.hovered(ix, y + 3, ix + 15, y + 18)))
-        ui.tooltip(ix, y + 3, ix + 15, y + 18, "Open the HUD editor.")
-        ui.click(ix, y + 3, ix + 15, y + 18) { mc.setScreenAndShow(HudManager) }
-        if (toggleable) ui.switch(ix - 6 - 24, y + 4, setting.hud.enabled, anim, switchHover) { setting.hud.enabled = !setting.hud.enabled }
+        val h = height()
+        label(ui, x, y, h, control)
+        val ix = x + RIGHT - ICON
+        val iy = y + (h - ICON) / 2
+        ui.icon(MOVE, ix, iy, ICON, iconHover.update(ui.hovered(ix, iy, ix + ICON, iy + ICON)))
+        ui.tooltip(ix, iy, ix + ICON, iy + ICON, "Open the HUD editor.")
+        ui.click(ix, iy, ix + ICON, iy + ICON) { mc.setScreenAndShow(HudManager) }
+        if (toggleable) ui.switch(ix - 6 - SWITCH_W, y + (h - SWITCH_H) / 2, setting.hud.enabled, anim, switchHover) { setting.hud.enabled = !setting.hud.enabled }
     }
 
     private companion object {
@@ -391,9 +437,8 @@ class HudView(override val setting: HUDSetting) : SettingView(setting) {
 }
 
 class PlainView(setting: RenderableSetting<*>) : SettingView(setting) {
-    override fun height() = Theme.ROW
+    override fun height() = rowHeight(0)
     override fun draw(ui: Ui, x: Int, y: Int) {
-        ui.text(setting.name, x + Theme.PAD, y + (Theme.ROW - 8) / 2, Theme.muted)
-        ui.tooltip(x, y, x + Theme.WIDTH, y + Theme.ROW, setting.description)
+        label(ui, x, y, height(), color = Theme.muted)
     }
 }

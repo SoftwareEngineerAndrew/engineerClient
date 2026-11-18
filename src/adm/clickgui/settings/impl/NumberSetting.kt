@@ -93,7 +93,7 @@ class NumberSetting<E>(
     @Composable
     override fun Content() {
         Column {
-            SettingRow(height = 18) { Text({ display }) }.clickable {}
+            SettingRow(height = 15) { Text({ display }) }.clickable {}
             Slider(percent, { percent = it }).size(GuiTheme.INNER_WIDTH, 11).offset({ GuiTheme.PADDING })
         }.onKey { event ->
             when (event.key) {
