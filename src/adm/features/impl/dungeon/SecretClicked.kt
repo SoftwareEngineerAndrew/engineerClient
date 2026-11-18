@@ -44,10 +44,16 @@ object SecretClicked : Module(
     private class Secret(val aabb: AABB, var locked: Boolean = false)
     private val clickedSecretsList = CopyOnWriteArrayList<Secret>()
     private var lastPlayed = System.currentTimeMillis()
+    private var lastInteract: BlockPos? = null
+    private var lastInteractAt = 0L
 
     init {
         on<SecretPickupEvent.Interact> {
             secretBox(blockPos)
+            // one click can post this more than once: one chime per block per click
+            val now = System.currentTimeMillis()
+            if (blockPos == lastInteract && now - lastInteractAt < 300) return@on
+            lastInteract = blockPos; lastInteractAt = now
             secretChime()
         }
 
