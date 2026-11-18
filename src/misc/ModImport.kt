@@ -16,7 +16,8 @@ object ModImport {
         val config = File(gameDir, "config")
         var on = 0
         val saved = File(config, "engineerclient/imported")
-        read(File(saved, "odin-config.json"))?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { e ->
+        fun source(name: String) = com.engineerclient.ModTakeover.imported[name] ?: File(saved, name)
+        read(source("odin-config.json"))?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { e ->
             val m = e as? JsonObject ?: return@forEach
             val name = m["name"]?.asString ?: return@forEach
             if (m["enabled"]?.asBoolean != true) return@forEach
@@ -27,8 +28,8 @@ object ModImport {
                 if (isOn(value) && turnOn("$module>${odin.renames[key] ?: key}", onlyIfExists = true)) on++
             }
         }
-        read(File(saved, "devonianConfig.json"))?.asJsonObject?.getAsJsonObject("config")?.let { on += apply(it, ImportTables.DEVONIAN) }
-        read(File(saved, "blade-addons.json"))?.asJsonObject?.let { on += apply(it, ImportTables.BLADE) }
+        read(source("devonianConfig.json"))?.asJsonObject?.getAsJsonObject("config")?.let { on += apply(it, ImportTables.DEVONIAN) }
+        read(source("blade-addons.json"))?.asJsonObject?.let { on += apply(it, ImportTables.BLADE) }
         if (on > 0) EngineerClient.logger.info("[ec] turned on $on settings from other mods' configs")
     }
 
