@@ -4,7 +4,11 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.customData
+import com.adm.utils.itemId
+import com.adm.utils.skyblock.LocationUtils
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
+import net.minecraft.core.component.DataComponentType
+import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.FormattedText
 import net.minecraft.util.Unit as McUnit
@@ -22,6 +26,7 @@ object ItemTweaks : Module(
     private val noPearlCooldown by BooleanSetting("Disable Ender Pearl Cooldown", false, desc = "Ender pearls never show or wait on the vanilla cooldown.")
     private val itemQuality by BooleanSetting("Item Quality", true, desc = "Adds a dungeon item's stat boost and floor to its tooltip.")
     private val oldPlayerHead by BooleanSetting("Old Player Head Size", true, desc = "Draws player heads in slots at their smaller 1.8 size.")
+    private val hideVanillaEnchants by BooleanSetting("Hide Vanilla Enchants", true, desc = "Drops the vanilla enchantment lines above SkyBlock lore.")
     private val noHotbarScroll by BooleanSetting("Disable Hotbar Scroll", true, desc = "The scroll wheel no longer changes your hotbar slot.")
 
     private val floors = listOf("E", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "M5", "M6", "M7")
@@ -71,6 +76,11 @@ object ItemTweaks : Module(
 
     @JvmStatic
     fun smallHead(stack: ItemStack): Boolean = enabled && oldPlayerHead && stack.`is`(Items.PLAYER_HEAD)
+
+    @JvmStatic
+    fun hidesVanillaTooltip(type: DataComponentType<*>, stack: ItemStack): Boolean =
+        enabled && hideVanillaEnchants && (type === DataComponents.ENCHANTMENTS || type === DataComponents.STORED_ENCHANTMENTS) &&
+            (LocationUtils.isInSkyblock || stack.itemId.isNotEmpty())
 
     @JvmStatic
     fun lockHotbarWheel(): Boolean = enabled && noHotbarScroll
