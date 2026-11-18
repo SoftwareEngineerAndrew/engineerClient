@@ -16,9 +16,13 @@ object Devices : Module(
     name = "Devices",
     key = null,
     category = Category.custom("Engineer Client", 860, 10),
-    description = "Floor 7 devices: Simon Says (and SS Practice), Arrow Align and the Arrows Device (i4).",
+    description = "Floor 7 devices: P3 Start Countdown, Simon Says (and SS Practice), Arrow Align and the Arrows Device (i4).",
     toggled = true,
 ) {
+    // ------------------------------------------------------------------ P3 Start
+    private val startDrop by DropdownSetting("P3 Start", false, desc = "The start of P3 at devices 1-3.")
+    val startCountdown by BooleanSetting("Start Countdown", true, desc = "Over devices 1-3, time until your clicks count, after your ping.").withDependency { startDrop }
+
     // ------------------------------------------------------------------ Simon Says
     private val ssDrop by DropdownSetting("Simon Says", true, desc = "The Simon Says device (S1).")
     val simonSays by BooleanSetting("Enable Simon Says", true, desc = "Shows which buttons to press, in order.").withDependency { ssDrop }
@@ -72,6 +76,7 @@ object Devices : Module(
     val thirdAimColor by ColorSetting("Third Aim Position", Colors.MINECRAFT_RED.withAlpha(0.5f), true, desc = "Third aim.").withDependency { arrowsDrop && showAimPositions }
     private val resetArrows by ActionSetting("Reset Arrows Device", desc = "Resets the solver.") { DevArrows.reset() }.withDependency { arrowsDrop }
 
+    val startCountdownOn get() = enabled && startCountdown
     val simonSaysOn get() = enabled && simonSays
     val arrowAlignOn get() = enabled && arrowAlign
     val arrowsOn get() = enabled && arrowsDevice
@@ -83,6 +88,7 @@ object Devices : Module(
     }
 
     fun install() {
+        DevStartCountdown.install()
         DevSimonSays.install()
         DevArrowAlign.install()
         DevArrows.install()
