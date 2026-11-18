@@ -27,13 +27,21 @@ object WitherDragons : Module(
     private val dragonTimer by BooleanSetting("Dragon Timer", true, desc = "Displays a timer for when M7 dragons spawn.").withDependency { dragonTimerDropDown }
     private val dragonTimerStyle by SelectorSetting("Timer Style", TimerStyle.MILLISECONDS, desc = "The style of the dragon timer.").withDependency { dragonTimer && dragonTimerDropDown }
     private val showSymbol by BooleanSetting("Timer Symbol", true, desc = "Displays a symbol for the timer.").withDependency { dragonTimer && dragonTimerDropDown }
+    private val displayStyle by SelectorSetting("Display Style", DisplayStyle.DEFAULT, desc = "Blade lists every spawning dragon by name with seconds.").withDependency { dragonTimer && dragonTimerDropDown }
     private val hud by HUD("Dragon Timer HUD", "Displays the dragon timer in the HUD.") { example ->
-        if (example) textDim("§5P §a4.5s", 0, 0, Colors.WHITE)
-        else {
-            val dragon = priorityDragon
-            if (dragon == null || dragon.timeToSpawn <= 0) 0 to 0
-            else textDim(timerLabel(dragon), 0, 0, Colors.WHITE)
+        if (example) {
+            val blade = displayStyle == DisplayStyle.BLADE
+            val a = textDim(if (blade) "§cRed: 3.25s" else "§cR: §a3250ms", 0, 0, Colors.WHITE)
+            val b = textDim(if (blade) "§5Purple: 4.50s" else "§5P: §a4500ms", 0, 10, Colors.WHITE)
+            return@HUD maxOf(a.first, b.first) to 19
         }
+        val count = collectSpawning()
+        var width = 0
+        for (i in 0 until count) {
+            val w = textDim(timerLabel(hudOrder[i]!!), 0, i * 10, Colors.WHITE).first
+            if (w > width) width = w
+        }
+        if (count == 0) 0 to 0 else width to count * 10 - 1
     }.withDependency { dragonTimerDropDown }
 
     private val dragonBoxes by BooleanSetting("Dragon Boxes", true, desc = "Displays boxes for where M7 dragons spawn.")
@@ -111,23 +119,26 @@ object WitherDragons : Module(
         boxes.clear()
         for (i in dragons.indices) {
             val dragon = dragons[i]
-            if (dragonTimer && dragon.timeToSpawn > 0) drawText(timerLabel(dragon), spawnCenters[i], 5f, false)
+            if (dragonTimer && dragon.timeToSpawn > 0)
+                drawText(timerLabel(dragon), spawnCenters[i], if (displayStyle == DisplayStyle.BLADE) 8f else 5f, false)
             if (dragonBoxes && dragon.state != WitherDragonState.DEAD) boxes.outline(dragon.aabbDimensions, dragon.color, depth = true)
         }
         drawBoxes(boxes)
 
-        val priority = priorityDragon ?: return
-        if (dragonTracers && priority.state == WitherDragonState.SPAWNING && mc.player != null)
-            drawTracer(spawnCenters[priority.ordinal], priority.color, true)
+        if (!dragonTracers || mc.player == null) return
+        val target = spawnOrder.firstOrNull { it.state == WitherDragonState.SPAWNING } ?: return
+        drawTracer(spawnCenters[target.ordinal], target.color, true)
     }
 
     private fun timerLabel(dragon: WitherDragonsEnum): String {
         val ticks = dragon.timeToSpawn
-        val key = (ticks shl 3) or (dragonTimerStyle.ordinal shl 1) or (if (showSymbol) 1 else 0)
+        val key = (ticks shl 4) or (displayStyle.ordinal shl 3) or (dragonTimerStyle.ordinal shl 1) or (if (showSymbol) 1 else 0)
         val i = dragon.ordinal
         if (labelKeys[i] != key || labels[i] == null) {
             labelKeys[i] = key
-            labels[i] = "§${dragon.colorCode}${dragon.name.first()}: ${timerText(ticks)}"
+            labels[i] =
+                if (displayStyle == DisplayStyle.BLADE) "§${dragon.colorCode}${dragon.name}: ${(ticks / 20f).toFixed(2)}s"
+                else "§${dragon.colorCode}${dragon.name.first()}: ${timerText(ticks)}"
         }
         return labels[i]!!
     }
@@ -142,6 +153,32 @@ object WitherDragons : Module(
     }
 
     enum class TimerStyle { MILLISECONDS, SECONDS, TICKS }
+
+    enum class DisplayStyle { DEFAULT, BLADE }
+
+    private val hudOrder = arrayOfNulls<WitherDragonsEnum>(dragons.size)
+
+    private fun collectSpawning(): Int {
+        var count = 0
+        for (dragon in dragons) {
+            if (dragon.timeToSpawn <= 0 || dragon.state != WitherDragonState.SPAWNING) continue
+            var j = count++
+            while (j > 0 && hudOrder[j - 1]!!.timeToSpawn > dragon.timeToSpawn) {
+                hudOrder[j] = hudOrder[j - 1]
+                j--
+            }
+            hudOrder[j] = dragon
+        }
+        return count
+    }
+
+    fun nextSpawnTicks(): Int {
+        if (!enabled || DungeonUtils.getF7Phase() != M7Phases.P5) return -1
+        var best = -1
+        for (dragon in dragons)
+            if (dragon.state == WitherDragonState.SPAWNING && dragon.timeToSpawn > 0 && (best < 0 || dragon.timeToSpawn < best)) best = dragon.timeToSpawn
+        return best
+    }
 
     private fun healthText(health: Float): String {
         val colour = when {
