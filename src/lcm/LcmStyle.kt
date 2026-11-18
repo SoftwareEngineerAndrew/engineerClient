@@ -10,6 +10,7 @@ import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.features.impl.dungeon.map.DungeonMap
 import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.selfArrow
 import com.adm.features.impl.dungeon.map.SpecialColumn
 import com.adm.features.impl.dungeon.map.buildExampleDoors
 import com.adm.features.impl.dungeon.map.buildExampleRooms
@@ -77,7 +78,6 @@ object LcmStyle {
     private val whiteCheck = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/white_check.png")
     private val cross = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/cross.png")
     private val crown = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/prince_crown_ziyno.png")
-    private val selfMarker = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/self_marker.png")
 
     /** The rooms that can have a Prince. */
     internal val princeRooms = setOf("Big Red Flag", "Chambers", "Doors", "Flags", "Grass Ruin", "Leaves", "Market",
@@ -531,14 +531,7 @@ object LcmStyle {
     private fun decorationX(x: Int): Float = ((x + 128) / 2f - DungeonScan.startX) * TILE / DungeonScan.roomGap.toFloat()
     private fun decorationZ(z: Int): Float = ((z + 128) / 2f - DungeonScan.startY) * TILE / DungeonScan.roomGap.toFloat()
 
-    private fun classColor(clazz: DungeonClass): Int = when (clazz) {
-        DungeonClass.ARCHER -> 0xFFFFAA00.toInt()
-        DungeonClass.BERSERK -> 0xFFFF5555.toInt()
-        DungeonClass.HEALER -> 0xFFFF55FF.toInt()
-        DungeonClass.MAGE -> 0xFF55FFFF.toInt()
-        DungeonClass.TANK -> 0xFF00AA00.toInt()
-        else -> NO_CLASS
-    }
+    private fun classColor(clazz: DungeonClass): Int = if (clazz == DungeonClass.EMPTY) NO_CLASS else clazz.color.rgba
 
     private fun drawHead(g: GuiGraphicsExtractor, x: Float, z: Float, yaw: Float, skin: PlayerSkin?, color: Int, name: String, showName: Boolean, own: Boolean = false) {
         g.pose().pushMatrix()
@@ -551,7 +544,7 @@ object LcmStyle {
         }
         g.pose().rotate(Math.toRadians(180.0 + yaw).toFloat())
         // yours: the white marker, no class square
-        if (own) g.blit(RenderPipelines.GUI_TEXTURED, selfMarker, 5, 5, 10f, 10f, -10, -10, 10, 10, ownMarkerColor.value.rgba)
+        if (own) g.selfArrow(ownMarkerColor.value.rgba)
         else {
             g.fill(-6, -6, 6, 6, color)
             if (skin != null) PlayerFaceExtractor.extractRenderState(g, skin, -5, -5, 10)

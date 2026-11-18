@@ -32,7 +32,6 @@ import java.awt.Color.HSBtoRGB
 private const val GRID = 20
 private const val ICON = 12
 
-private val selfMarker = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/self_marker.png")
 private val crossIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/cross.png")
 private val greenIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/green_check.png")
 private val whiteIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/white_check.png")
@@ -283,7 +282,62 @@ fun GuiGraphicsExtractor.renderPlayers() {
         }
     } else {
         pose().scale(DungeonMap.playerPointerScale)
-        blit(RenderPipelines.GUI_TEXTURED, selfMarker, 5, 5, 10f, 10f, -10, -10, 10, 10, LcmStyle.ownMarkerColor.value.rgba)
+        selfArrow(LcmStyle.ownMarkerColor.value.rgba)
+    }
+    pose().popMatrix()
+}
+
+private const val ARROW_RES = 8
+
+// An arrowhead pointing up (-y), centred on the origin, as rows of 1/ARROW_RES-unit spans: drawn under the pose's rotation it
+// stays sharp at any angle and map scale, where a pixel texture turns ragged.
+private class ArrowSpans(val y: IntArray, val x0: IntArray, val x1: IntArray)
+
+private fun arrowSpans(grow: Float): ArrowSpans {
+    val poly = arrayOf(floatArrayOf(0f, -4.25f), floatArrayOf(3.25f, 3.75f), floatArrayOf(0f, 1.75f), floatArrayOf(-3.25f, 3.75f))
+    fun spans(yc: Float): List<FloatArray> {
+        val xs = ArrayList<Float>()
+        for (i in poly.indices) {
+            val a = poly[i]; val b = poly[(i + 1) % poly.size]
+            if ((a[1] <= yc) != (b[1] <= yc)) xs += a[0] + (yc - a[1]) / (b[1] - a[1]) * (b[0] - a[0])
+        }
+        xs.sort()
+        return (0 until xs.size / 2).map { floatArrayOf(xs[2 * it], xs[2 * it + 1]) }
+    }
+    val ys = ArrayList<Int>(); val x0 = ArrayList<Int>(); val x1 = ArrayList<Int>()
+    val steps = (grow * ARROW_RES).toInt()
+    for (row in (-5 * ARROW_RES)..(5 * ARROW_RES)) {
+        val merged = ArrayList<FloatArray>()
+        for (d in -steps..steps) {
+            val dy = d.toFloat() / ARROW_RES
+            val dx = kotlin.math.sqrt(maxOf(0f, grow * grow - dy * dy))
+            for (sp in spans((row + 0.5f) / ARROW_RES + dy)) merged += floatArrayOf(sp[0] - dx, sp[1] + dx)
+        }
+        merged.sortBy { it[0] }
+        var cur: FloatArray? = null
+        fun emit(c: FloatArray) {
+            val a = Math.round(c[0] * ARROW_RES); val b = Math.round(c[1] * ARROW_RES)
+            if (b > a) { ys += row; x0 += a; x1 += b }
+        }
+        for (sp in merged) {
+            val c = cur
+            if (c != null && sp[0] <= c[1]) c[1] = maxOf(c[1], sp[1]) else { if (c != null) emit(c); cur = sp.copyOf() }
+        }
+        cur?.let { emit(it) }
+    }
+    return ArrowSpans(ys.toIntArray(), x0.toIntArray(), x1.toIntArray())
+}
+
+private val arrowOutline by lazy { arrowSpans(0.75f) }
+private val arrowFill by lazy { arrowSpans(0f) }
+
+/** Your own map marker: an outlined arrow, centred on the pose's origin. */
+fun GuiGraphicsExtractor.selfArrow(color: Int) {
+    pose().pushMatrix()
+    pose().scale(1f / ARROW_RES)
+    for (s in arrayOf(arrowOutline, arrowFill)) {
+        val c = if (s === arrowOutline) 0xFF000000.toInt() else color
+        for (i in s.y.indices) fill(s.x0[i], s.y[i], s.x1[i], s.y[i] + 1, c)
     }
     pose().popMatrix()
 }
