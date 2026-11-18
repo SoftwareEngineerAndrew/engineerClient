@@ -17,6 +17,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.client.player.LocalPlayer
 import net.minecraft.network.chat.Component
 import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ContainerInput
 import net.minecraft.world.inventory.Slot
@@ -93,6 +94,8 @@ object ItemProtection : Module(
         val stack = slot?.item ?: return false
         if (!isProtected(stack)) return false
         if (input == ContainerInput.THROW) { dropAlert(stack); return true }
+        // what the menu shows (a sold auction to claim, a trade's other side) is never yours to lose by clicking
+        if (slot.container !is Inventory) return false
         val what = blockedAction(screen) ?: return false
         EngineerClient.msg(Component.literal("§cStopped ").append(stack.hoverName).append("§c from being $what."))
         return true
@@ -100,7 +103,7 @@ object ItemProtection : Module(
 
     private fun blockedAction(screen: AbstractContainerScreen<*>): String? {
         val title = screen.title.string
-        if ("Auction" in title) return "auctioned"
+        if (title.startsWith("Create") && "Auction" in title) return "auctioned"
         if ("Salvage" in title) return "salvaged"
         val slots = screen.menu.slots
         if (slots.size <= 49) return null
