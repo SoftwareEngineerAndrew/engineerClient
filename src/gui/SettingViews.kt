@@ -396,7 +396,7 @@ class ActionView(override val setting: ActionSetting) : SettingView(setting) {
 class DropdownView(override val setting: DropdownSetting) : SettingView(setting) {
     private val turn = Anim(200f, setting.value)
     private val hover = Anim(150f)
-    override fun height() = rowHeight(ICON)
+    override fun height() = rowHeight(ICON, Theme.DROPDOWN)
     override fun draw(ui: Ui, x: Int, y: Int) {
         val rh = height()
         label(ui, x, y, rh, ICON)

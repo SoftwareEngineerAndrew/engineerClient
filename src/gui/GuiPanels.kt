@@ -99,7 +99,7 @@ class ModuleView(val module: Module) {
             settingP[i] = v.shown.update(if (settingMatch.isEmpty()) v.setting.isVisible else v in settingMatch)
             settingsHeight += (v.height() * settingP[i]).roundToInt()
         }
-        return ((Theme.ROW + settingsHeight * expandP) * shownP).roundToInt()
+        return ((Theme.MODULE + settingsHeight * expandP) * shownP).roundToInt()
     }
 
     fun draw(ui: Ui, x: Int, y: Int, height: Int) {
@@ -107,7 +107,7 @@ class ModuleView(val module: Module) {
         ui.clipped(x, y, x + Theme.WIDTH, y + height) {
             header(ui, x, y)
             if (expandP <= 0f) return@clipped
-            var sy = y + Theme.ROW
+            var sy = y + Theme.MODULE
             ui.clipped(x, sy, x + Theme.WIDTH, sy + (settingsHeight * expandP).roundToInt()) {
                 views.forEachIndexed { i, v ->
                     val p = settingP[i]
@@ -126,17 +126,17 @@ class ModuleView(val module: Module) {
 
     private fun header(ui: Ui, x: Int, y: Int) {
         val t = toggled.update(module.enabled)
-        val h = hover.update(ui.hovered(x, y, x + Theme.WIDTH, y + Theme.ROW))
+        val h = hover.update(ui.hovered(x, y, x + Theme.WIDTH, y + Theme.MODULE))
         var color = blend(Theme.background.rgba, Theme.accent.rgba, t)
         if (h > 0f) color = blend(color, blend(Theme.background.brighter(1.4f).rgba, Theme.accent.darker(0.8f).rgba, t), h)
-        ui.g.fill(x, y, x + Theme.WIDTH, y + Theme.ROW, color)
-        ui.textCentered(module.name, x, y, x + Theme.WIDTH, y + Theme.ROW)
+        ui.g.fill(x, y, x + Theme.WIDTH, y + Theme.MODULE, color)
+        ui.textCentered(module.name, x, y, x + Theme.WIDTH, y + Theme.MODULE)
         if (views.isNotEmpty()) {
             val dots = if (expanded) "-" else "+"
-            ui.text(dots, x + Theme.WIDTH - Theme.PAD - ui.font.width(dots), y + (Theme.ROW - 8) / 2, 0x80FFFFFF.toInt())
+            ui.text(dots, x + Theme.WIDTH - Theme.PAD - ui.font.width(dots), y + (Theme.MODULE - 8) / 2, 0x80FFFFFF.toInt())
         }
-        ui.tooltip(x, y, x + Theme.WIDTH, y + Theme.ROW, module.description)
-        ui.click(x, y, x + Theme.WIDTH, y + Theme.ROW, right = { if (views.isNotEmpty()) expanded = !expanded }) { module.toggle() }
+        ui.tooltip(x, y, x + Theme.WIDTH, y + Theme.MODULE, module.description)
+        ui.click(x, y, x + Theme.WIDTH, y + Theme.MODULE, right = { if (views.isNotEmpty()) expanded = !expanded }) { module.toggle() }
     }
 }
 

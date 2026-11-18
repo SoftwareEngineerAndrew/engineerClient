@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import com.adm.clickgui.settings.SettingState
 import com.adm.clickgui.settings.RenderableSetting
 import com.adm.clickgui.ui.Icon
+import com.adm.clickgui.GuiTheme
 import com.adm.clickgui.ui.SettingRow
 import com.adm.clickgui.ui.animateProgress
 import com.adm.utils.ui.animations.Easing
@@ -21,7 +22,7 @@ class DropdownSetting(
 
     @Composable
     override fun Content() {
-        SettingRow { hovered ->
+        SettingRow(GuiTheme.DROPDOWN_HEIGHT) { hovered ->
             val turn = animateProgress(enabled, 200, Easing.EASE_IN_OUT)
             Icon(CHEVRON, CHEVRON_SIZE, hovered = hovered, rotation = { turn.value * QUARTER_TURN }, onClick = { enabled = !enabled })
         }

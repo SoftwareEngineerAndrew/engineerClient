@@ -29,7 +29,7 @@ private fun ModuleHeader(module: Module, onExpand: () -> Unit) {
     val on = animateProgress(module.enabled)
     val hover = animateProgress { pointer.hovered }
 
-    Box().size(GuiTheme.ROW_WIDTH, GuiTheme.ROW_HEIGHT)
+    Box().size(GuiTheme.ROW_WIDTH, GuiTheme.MODULE_HEIGHT)
         .hoverable(pointer)
         .tooltip(module.description)
         .clickable(onRightClick = onExpand) { module.toggle() }

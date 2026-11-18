@@ -10,7 +10,9 @@ object GuiTheme {
 
     const val ROW_WIDTH = 160
     const val ROW_HEIGHT = 21
-    const val SETTING_HEIGHT = 17
+    const val SETTING_HEIGHT = 19
+    const val MODULE_HEIGHT = 19
+    const val DROPDOWN_HEIGHT = 17
     const val RADIUS = 5f
     const val CAP = 5
     const val PADDING = 6
