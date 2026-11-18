@@ -22,13 +22,15 @@ object DevStartCountdown {
     private const val GOLDOR_START = "[BOSS] Goldor: Who dares trespass into my domain?"
     private val spots = listOf(Vec3(110.5, 122.0, 91.5), Vec3(60.5, 134.0, 142.5), Vec3(-1.5, 122.0, 74.5))
 
+    private const val PING_WINDOW = 40
+
     private var active = false
     private var ticksLeft = 0
-    private var lastTick = 0L
+    private val pingTicks = ArrayDeque<Int>()
 
     private fun start(ticks: Int) {
         if (!DungeonUtils.inBoss) return
-        active = true; ticksLeft = ticks; lastTick = System.nanoTime()
+        active = true; ticksLeft = ticks
     }
 
     fun install() {
@@ -40,14 +42,18 @@ object DevStartCountdown {
                 GOLDOR_START -> active = false
             }
         }
-        on<TickEvent.Server> { if (ticksLeft > 0) { ticksLeft--; lastTick = System.nanoTime() } }
+        on<TickEvent.Server> {
+            if (ticksLeft > 0) ticksLeft--
+            pingTicks.addLast((ServerUtils.averagePing + 49) / 50)
+            if (pingTicks.size > PING_WINDOW) pingTicks.removeFirst()
+        }
         on<LevelEvent.Load> { active = false }
 
         on<RenderExtractEvent> {
             if (!Devices.startCountdownOn || !active) return@on
-            // A click reaches the server half a ping after it's sent, and the ticks counted here came half a ping late.
-            val ms = ticksLeft * 50 - (System.nanoTime() - lastTick) / 1_000_000 - ServerUtils.averagePing
-            val text = if (ms <= 0) "§a§lGO!" else "§b${String.format(Locale.ROOT, "%.2f", ms / 1000.0)}s"
+            // A click lands half a ping after it's sent and these ticks came half a ping late; when ping sits across a tick boundary, take the later tick.
+            val ticks = ticksLeft - (pingTicks.maxOrNull() ?: 0)
+            val text = if (ticks <= 0) "§a§lGO!" else "§b${String.format(Locale.ROOT, "%.2f", ticks / 20.0)}s"
             for (p in spots) drawText(text, p, 1.2f, false)
         }
         EventBus.subscribe(this)
