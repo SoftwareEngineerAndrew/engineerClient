@@ -67,6 +67,12 @@ object DungeonWaypoints : Module(
     }
 
     val partyWaypoints by BooleanSetting("Party Waypoints", true, desc = "Adds waypoints from coordinates party members send.")
+    val allChatWaypoints by BooleanSetting("From All Chat", false, desc = "Also from coordinates sent in all and co-op chat.").withDependency { partyWaypoints }
+    val personalWaypoints by BooleanSetting("Personal Waypoints", false, desc = "Also from coordinates you send.").withDependency { partyWaypoints }
+    val chatWaypointSeconds by NumberSetting("Chat Waypoint Duration", 60, 5..600, 5, desc = "How long a chat waypoint stays.", unit = "s").withDependency { partyWaypoints }
+    val removeOnArrival by BooleanSetting("Remove On Arrival", true, desc = "A chat waypoint goes once you are within 5 blocks.").withDependency { partyWaypoints }
+    val randomChatColor by BooleanSetting("Random Waypoint Color", true, desc = "Each chat waypoint gets its own color.").withDependency { partyWaypoints }
+    val chatWaypointColor by ColorSetting("Chat Waypoint Color", Colors.MINECRAFT_GOLD, true, desc = "Color of chat waypoints.").withDependency { partyWaypoints && !randomChatColor }
 
     init {
         // Boss waypoint commands register on load, whether or not this is on.
