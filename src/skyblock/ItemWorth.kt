@@ -10,7 +10,7 @@ import com.adm.utils.customData
 import com.adm.utils.itemId
 import com.adm.utils.network.WebUtils.fetchJson
 import com.adm.utils.skyblock.LocationUtils
-import kotlinx.coroutines.delay
+import com.adm.utils.noControlCodes
 import kotlinx.coroutines.launch
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
 import net.minecraft.client.Minecraft
@@ -26,28 +26,45 @@ object ItemWorth {
     private val showLbin = BooleanSetting("Show Lowest BIN", true, desc = "The item's lowest BIN in its tooltip.").withDependency { dropdown.value }
     private val showBazaar = BooleanSetting("Show Bazaar", true, desc = "Bazaar buy and sell prices in the tooltip.").withDependency { dropdown.value }
     private val showWorth = BooleanSetting("Show Item Worth", true, desc = "Estimated worth: the base item plus what's applied to it.").withDependency { dropdown.value }
+    private val showNpc = BooleanSetting("Show NPC Sell", true, desc = "What an NPC pays for the item.").withDependency { dropdown.value }
     private val onlyShift = BooleanSetting("Only While Shift", false, desc = "Price lines only while you hold shift.").withDependency { dropdown.value }
 
     @Volatile private var lbin: Map<String, Double> = emptyMap()
     @Volatile private var bazaarBuy: Map<String, Double> = emptyMap()
     @Volatile private var bazaarSell: Map<String, Double> = emptyMap()
+    @Volatile private var npcSell: Map<String, Double> = emptyMap()
+    @Volatile private var idsByName: Map<String, String> = emptyMap()
+
+    @Volatile private var fetching = false
+    @Volatile private var lastFetch = 0L
 
     fun install() {
-        for (s in listOf(dropdown, showLbin, showBazaar, showWorth, onlyShift)) Croesus.registerSetting(s)
-        AdmMod.scope.launch {
-            while (true) {
-                refresh()
-                delay(REFRESH_MS)
-            }
-        }
+        for (s in listOf(dropdown, showLbin, showBazaar, showWorth, showNpc, onlyShift)) Croesus.registerSetting(s)
         ItemTooltipCallback.EVENT.register { stack, _, _, lines ->
             if (!Croesus.enabled || !LocationUtils.isInSkyblock) return@register
             if (onlyShift.value && !Minecraft.getInstance().hasShiftDown()) return@register
-            for (text in tooltipText(stack)) lines.add(Component.literal(text))
+            ensureFresh()
+            for (text in tooltipText(stack, lines)) lines.add(Component.literal(text))
+        }
+    }
+
+    // Prices are fetched only while something asks for them, at most every few minutes.
+    private fun ensureFresh() {
+        if (fetching || System.currentTimeMillis() - lastFetch < REFRESH_MS) return
+        if (!Croesus.enabled || !LocationUtils.isInSkyblock) return
+        fetching = true
+        AdmMod.scope.launch {
+            try {
+                refresh()
+            } finally {
+                lastFetch = System.currentTimeMillis()
+                fetching = false
+            }
         }
     }
 
     private suspend fun refresh() {
+        if (idsByName.isEmpty()) loadItems()
         fetchJson<Map<String, Double>>(LBIN_URL).getOrNull()?.let { lbin = it }
         val products = fetchJson<JsonObject>(BAZAAR_URL).getOrNull()?.getAsJsonObject("products") ?: return
         val buy = HashMap<String, Double>(products.size())
@@ -61,34 +78,69 @@ object ItemWorth {
         bazaarSell = sell
     }
 
-    /** What one of [id] is worth: its bazaar instant-sell price, else its lowest BIN. */
-    fun price(id: String): Double? = bazaarSell[id]?.takeIf { it > 0 } ?: lbin[id]
+    private suspend fun loadItems() {
+        val items = fetchJson<JsonObject>(ITEMS_URL).getOrNull()?.getAsJsonArray("items") ?: return
+        val npc = HashMap<String, Double>(items.size())
+        val names = HashMap<String, String>(items.size())
+        for (e in items) {
+            val o = e.asJsonObject
+            val id = o["id"]?.asString ?: continue
+            o["npc_sell_price"]?.asDouble?.let { npc[id] = it }
+            o["name"]?.asString?.noControlCodes?.let { names.putIfAbsent(it, id) }
+        }
+        npcSell = npc
+        idsByName = names
+    }
 
-    private class TooltipKey(val data: CustomData, val count: Int, val lbin: Map<String, Double>, val buy: Map<String, Double>, val sell: Map<String, Double>, val flags: Int) {
-        fun same(o: TooltipKey) = data === o.data && count == o.count && lbin === o.lbin && buy === o.buy && sell === o.sell && flags == o.flags
+    /** What one of [id] is worth: its bazaar instant-sell price, else its lowest BIN. */
+    fun price(id: String): Double? {
+        ensureFresh()
+        return bazaarSell[id]?.takeIf { it > 0 } ?: lbin[id]
+    }
+
+    /** The item id Hypixel's item list gives for a display name without colour codes. */
+    fun idForName(name: String): String? {
+        ensureFresh()
+        return idsByName[name]
+    }
+
+    private class TooltipKey(val data: CustomData, val count: Int, val lbin: Map<String, Double>, val buy: Map<String, Double>, val sell: Map<String, Double>, val npc: Map<String, Double>, val flags: Int) {
+        fun same(o: TooltipKey) = data === o.data && count == o.count && lbin === o.lbin && buy === o.buy && sell === o.sell && npc === o.npc && flags == o.flags
     }
 
     // The hovered item's tooltip is rebuilt every frame; its price lines only change with the item or the prices.
     @Volatile private var lastTooltip: Pair<TooltipKey, List<String>>? = null
 
-    private fun tooltipText(stack: ItemStack): List<String> {
-        val flags = (if (showLbin.value) 1 else 0) or (if (showBazaar.value) 2 else 0) or (if (showWorth.value) 4 else 0)
-        val key = TooltipKey(stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY), stack.count, lbin, bazaarBuy, bazaarSell, flags)
+    private fun tooltipText(stack: ItemStack, lines: List<Component>): List<String> {
+        val flags = (if (showLbin.value) 1 else 0) or (if (showBazaar.value) 2 else 0) or (if (showWorth.value) 4 else 0) or (if (showNpc.value) 8 else 0)
+        val count = ownedShards(stack, lines) ?: stack.count
+        val key = TooltipKey(stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY), count, lbin, bazaarBuy, bazaarSell, npcSell, flags)
         lastTooltip?.let { (k, text) -> if (k.same(key)) return text }
-        val text = tooltip(stack)
+        val text = tooltip(stack, count)
         lastTooltip = key to text
         return text
     }
 
-    private fun tooltip(stack: ItemStack): List<String> {
+    // A shard's tooltip in the Hunting Box says how many are owned; its price is for all of them.
+    private fun ownedShards(stack: ItemStack, lines: List<Component>): Int? {
+        if (!stack.itemId.startsWith("SHARD_")) return null
+        for (line in lines) {
+            val s = line.string
+            if (!s.startsWith("Owned: ") || !(s.endsWith(" Shards") || s.endsWith(" Shard"))) continue
+            return s.substring(7).substringBefore(' ').replace(",", "").toIntOrNull()
+        }
+        return null
+    }
+
+    private fun tooltip(stack: ItemStack, count: Int): List<String> {
         val id = stack.itemId.ifEmpty { return emptyList() }
         val out = ArrayList<String>()
-        val count = stack.count
         if (showLbin.value) lbin[id]?.let { out += line("Lowest BIN", it, count) }
         if (showBazaar.value) {
             bazaarBuy[id]?.let { out += line("Bazaar Buy", it, count) }
             bazaarSell[id]?.let { out += line("Bazaar Sell", it, count) }
         }
+        if (showNpc.value) npcSell[id]?.takeIf { it > 0 }?.let { out += line("NPC Sell", it, count) }
         if (showWorth.value) worth(stack)?.takeIf { it.second.isNotEmpty() }?.let { (total, _) -> out += line("Item Worth", total, 1) }
         return out
     }
@@ -157,5 +209,6 @@ object ItemWorth {
     private val MASTER_STARS = listOf("FIRST_MASTER_STAR", "SECOND_MASTER_STAR", "THIRD_MASTER_STAR", "FOURTH_MASTER_STAR", "FIFTH_MASTER_STAR")
     private const val LBIN_URL = "https://lb.odtheking.com/lowestbins.json"
     private const val BAZAAR_URL = "https://api.hypixel.net/v2/skyblock/bazaar"
+    private const val ITEMS_URL = "https://api.hypixel.net/v2/resources/skyblock/items"
     private const val REFRESH_MS = 5 * 60_000L
 }
