@@ -7,6 +7,7 @@ import com.adm.events.RenderExtractEvent
 import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints.DungeonWaypoint
 import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints.WaypointType
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.features.impl.dungeon.map.tile.MapCheckmark
 import com.adm.features.impl.render.Etherwarp
 import com.adm.utils.Color
 import com.adm.utils.Color.Companion.withAlpha
@@ -37,6 +38,7 @@ internal object WaypointView {
 
     private var labelsFor: List<DungeonWaypoint>? = null
     private var labelScale = 0f
+    private var labelNumbered = false
     private var labelCount = 0
     private var labelText = arrayOfNulls<String>(8)
     private var labelPos = arrayOfNulls<Vec3>(8)
@@ -60,13 +62,14 @@ internal object WaypointView {
         val room = DungeonUtils.currentRoom ?: return
         if (!DungeonUtils.inClear) return
         val list = visible(room)
-        if (list.isNotEmpty()) {
+        if (list.isNotEmpty() && !(DungeonWaypoints.hideWhenDone && room.checkmark == MapCheckmark.GREEN)) {
             val noDepth = DungeonWaypoints.disableDepth
             if (boxesFor !== list || boxesNoDepth != noDepth) fillBoxes(list, noDepth)
             event.drawBoxes(boxes)
 
             val scale = DungeonWaypoints.titleScale
-            if (labelsFor !== list || labelScale != scale) fillLabels(list, scale)
+            val numbered = DungeonWaypoints.numberEtherwarps
+            if (labelsFor !== list || labelScale != scale || labelNumbered != numbered) fillLabels(list, scale, numbered)
             for (i in 0 until labelCount) event.drawText(labelText[i]!!, labelPos[i]!!, scale, labelDepth[i])
         }
         if (DungeonWaypoints.allowEdits) WaypointEditor.drawCursor(event)
@@ -84,17 +87,20 @@ internal object WaypointView {
         }
     }
 
-    private fun fillLabels(list: List<DungeonWaypoint>, scale: Float) {
+    private fun fillLabels(list: List<DungeonWaypoint>, scale: Float, numbered: Boolean) {
         labelsFor = list
         labelScale = scale
+        labelNumbered = numbered
         if (labelText.size < list.size) {
             labelText = arrayOfNulls(list.size)
             labelPos = arrayOfNulls(list.size)
             labelDepth = BooleanArray(list.size)
         }
         var n = 0
+        var warp = 0
         for (w in list) {
-            val title = w.title ?: continue
+            if (w.type == WaypointType.ETHERWARP) warp++
+            val title = if (numbered && w.type == WaypointType.ETHERWARP) w.title?.let { "§6$warp §r$it" } ?: "§6$warp" else w.title ?: continue
             if (w.isClicked) continue
             labelText[n] = title
             labelPos[n] = w.blockPos.center.add(0.0, 0.1 * scale, 0.0)

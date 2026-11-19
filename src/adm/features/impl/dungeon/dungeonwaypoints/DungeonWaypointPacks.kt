@@ -18,6 +18,7 @@ internal object WaypointStore {
     @Volatile private var packs: MutableMap<String, PackRooms> = LinkedHashMap()
     @Volatile private var merged: HashMap<String, ArrayList<DungeonWaypoint>> = HashMap()
     private val version = AtomicInteger()
+    @Volatile private var loadedStamp: List<Long>? = null
 
     val revision: Int get() = version.get()
 
@@ -54,15 +55,20 @@ internal object WaypointStore {
         changed()
     }
 
-    fun reload() {
-        AdmMod.scope.launch { load() }
+    fun reloadIfChanged() {
+        AdmMod.scope.launch {
+            val stamp = withContext(WaypointPackFileUtils.io) { WaypointPackFileUtils.stamp(DungeonWaypoints.selectedPackIds) }
+            if (stamp != loadedStamp) load()
+        }
     }
 
     suspend fun load() {
         val selected = settle()
-        val loaded = withContext(WaypointPackFileUtils.io) {
-            LinkedHashMap<String, PackRooms>().also { for (id in selected) it[id] = WaypointPackFileUtils.read(id) }
+        val (loaded, stamp) = withContext(WaypointPackFileUtils.io) {
+            LinkedHashMap<String, PackRooms>().also { for (id in selected) it[id] = WaypointPackFileUtils.read(id) } to
+                WaypointPackFileUtils.stamp(selected)
         }
+        loadedStamp = stamp
         val rooms = HashMap<String, ArrayList<DungeonWaypoint>>()
         for (id in selected) loaded[id]?.forEach { (room, list) ->
             if (list.isNotEmpty()) rooms.getOrPut(room) { ArrayList() }.addAll(list)

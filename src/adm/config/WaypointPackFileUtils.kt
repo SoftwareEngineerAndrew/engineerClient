@@ -33,6 +33,13 @@ object WaypointPackFileUtils {
         return names
     }
 
+    internal fun stamp(selected: List<String>): List<Long> {
+        val out = ArrayList<Long>()
+        out.add(packNames().hashCode().toLong())
+        for (id in selected) file(id).let { out.add(it.lastModified()); out.add(it.length()) }
+        return out
+    }
+
     internal fun read(name: String): MutableMap<String, MutableList<DungeonWaypoint>> = try {
         val f = file(name)
         (if (f.exists()) DungeonWaypointConfig.gson.fromJson<MutableMap<String, MutableList<DungeonWaypoint>>>(f.readText(), packType) else null)

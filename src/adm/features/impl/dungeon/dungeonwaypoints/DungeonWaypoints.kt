@@ -29,6 +29,8 @@ object DungeonWaypoints : Module(
 
     val titleScale by NumberSetting("Title Scale", 1f, 0.1..4.0, increment = 0.1f, desc = "The scale of the titles of waypoints.")
     val disableDepth by BooleanSetting("Global Depth", false, desc = "Disables depth testing for all waypoints.")
+    val hideWhenDone by BooleanSetting("Hide In Green Rooms", false, desc = "Hides a room's waypoints once its checkmark is green.")
+    val numberEtherwarps by BooleanSetting("Number Etherwarps", false, desc = "Labels etherwarp waypoints with their order in the room.")
 
     private val editorHud by HUD("Editor HUD", "Shows information about the waypoint you're placing or looking at.", false) {
         EditorHud.draw(this, it)
@@ -77,7 +79,7 @@ object DungeonWaypoints : Module(
         on<SecretPickupEvent.Bat> { SecretWaypoints.onPickup(BlockPos.containing(packet.x, packet.y, packet.z), 5) }
 
         on<LevelEvent.Load> {
-            WaypointStore.reload()
+            WaypointStore.reloadIfChanged()
             WaypointStore.clearClicks()
             SecretWaypoints.forgetEtherwarp()
         }
