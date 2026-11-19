@@ -50,7 +50,7 @@ object Etherwarp : Module(
     private val fillOpacity by NumberSetting("Fill Opacity", 50, 0..100, 5, desc = "Opacity of the box fill.", unit = "%").withDependency { render && renderStyle != BoxStyle.OUTLINE }
     private val outlineOpacity by NumberSetting("Outline Opacity", 100, 0..100, 5, desc = "Opacity of the box outline.", unit = "%").withDependency { render && renderStyle != BoxStyle.FILLED }
     private val outlineThickness by NumberSetting("Outline Thickness", 3f, 0.5..10.0, 0.5, desc = "Width of the box outline.").withDependency { render && renderStyle != BoxStyle.FILLED }
-    private val useServerPosition by BooleanSetting("Use Server Position", false, desc = "Uses the server position for etherwarp instead of the client position.").withDependency { render }
+    private val useServerPosition by BooleanSetting("Use Server Position", false, desc = "Casts from the last position and look sent to the server.").withDependency { render }
     private val fullBlock by BooleanSetting("Full Block", false, desc = "Renders the the 1x1x1 block instead of it's actual size.").withDependency { render }
     private val depth by BooleanSetting("Depth", false, desc = "Renders the box through walls.").withDependency { render }
 
@@ -100,7 +100,7 @@ object Etherwarp : Module(
             if (!player.isShiftKeyDown && !cachedIsConduit) return@on
 
             val etherPos = (
-                if (useServerPosition) getEtherPos(Vec3(player.xLast, player.yLast, player.zLast), distance, etherWarp = true, sneaking = player.lastSentInput.shift())
+                if (useServerPosition) castEther(Vec3(player.xLast, player.yLast, player.zLast), distance, false, true, player.lastSentInput.shift(), Vec3.directionFromRotation(player.xRotLast, player.yRotLast))
                 else getEtherPos(player.position(), distance, etherWarp = true)
             ).also { etherPos = it }
             if (!etherPos.succeeded && !renderFail) return@on
@@ -149,11 +149,12 @@ object Etherwarp : Module(
         returnEnd: Boolean = false,
         etherWarp: Boolean = false,
         sneaking: Boolean = mc.player?.isCrouching == true
-    ): EtherPos {
+    ): EtherPos = castEther(position, distance, returnEnd, etherWarp, sneaking, mc.player?.lookAngle ?: return EtherPos.NONE)
+
+    private fun castEther(position: Vec3?, distance: Double, returnEnd: Boolean, etherWarp: Boolean, sneaking: Boolean, look: Vec3): EtherPos {
         val player = mc.player ?: return EtherPos.NONE
         if (position == null) return EtherPos.NONE
         val eye = if (player.pose == Pose.SWIMMING) 0.4 else if (sneaking) 1.27 else 1.62
-        val look = player.lookAngle
         val fromX = position.x
         val fromY = position.y + eye
         val fromZ = position.z
