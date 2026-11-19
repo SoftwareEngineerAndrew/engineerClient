@@ -3,7 +3,6 @@ package com.engineerclient.devices
 import com.devgineerclient.practice.I4Aims
 import com.engineerclient.EngineerClient.mc
 import com.adm.events.*
-import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.utils.alert
 import com.adm.utils.modMessage
@@ -100,7 +99,6 @@ object DevArrows {
             if (isDeviceComplete || !inP3 || !isPlayerInRoom) return@on
             if (stand.customName?.string == "Active") onComplete("Entity")
         }
-        EventBus.subscribe(this)
     }
 
     private fun onComplete(method: String) {

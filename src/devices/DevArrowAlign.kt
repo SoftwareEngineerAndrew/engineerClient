@@ -2,10 +2,10 @@ package com.engineerclient.devices
 
 import com.engineerclient.EngineerClient.mc
 import com.adm.clickgui.settings.impl.KeybindSetting.Companion.isDown
+import com.adm.events.EntityEvent
 import com.adm.events.EntityInteractEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.utils.render.drawText
 import com.adm.utils.skyblock.dungeon.DungeonUtils
@@ -13,6 +13,7 @@ import com.adm.utils.skyblock.dungeon.M7Phases
 import net.minecraft.core.BlockPos
 import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.item.Items
+import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 
 /** Arrow Align: how many clicks each frame needs, and wrong clicks blocked. */
@@ -30,9 +31,14 @@ object DevArrowAlign {
     private var targetSolution: IntArray? = null
 
     private val rotations = IntArray(FRAMES)
-    private val seen = IntArray(FRAMES)
+    /** Each frame's rotation as the server last sent it (-1 for no arrow), and our clicks it hasn't echoed yet. */
+    private val serverRot = IntArray(FRAMES) { -1 }
+    private val pending = IntArray(FRAMES)
+    private val frames = arrayOfNulls<ItemFrame>(FRAMES)
+    private var cached = false
     private var framesToClick = 0
     private val deviceCenter = BlockPos(0, 120, 77)
+    private val grid = AABB(WALL_X - 1.0, BOTTOM_Y.toDouble(), LEFT_Z.toDouble(), WALL_X + 2.0, (BOTTOM_Y + SIDE).toDouble(), (LEFT_Z + SIDE).toDouble())
 
     private val labelAt = Array(FRAMES) { Vec3.atCenterOf(BlockPos(WALL_X, BOTTOM_Y + it % SIDE, LEFT_Z + it / SIDE)).add(-0.3, 0.1, 0.0) }
     private val label = Array(8) { n -> "§" + (if (n < 3) 'a' else if (n < 5) '6' else 'c') + n }
@@ -44,8 +50,22 @@ object DevArrowAlign {
     fun install() {
         on<TickEvent.Server> { if (active) mc.execute(refresh) }
 
+        on<EntityEvent.SetData> {
+            val frame = entity as? ItemFrame ?: return@on
+            if (!cached) return@on
+            val pos = frame.blockPosition()
+            val i = slot(pos.x, pos.y, pos.z)
+            if (i < 0 || !active) return@on
+            frames[i] = frame
+            val now = if (frame.item.item == Items.ARROW) frame.rotation else -1
+            val was = serverRot[i]
+            // Any turn the server shows uses up that many of our clicks still on their way.
+            if (was >= 0 && now >= 0) pending[i] = maxOf(0, pending[i] - (now - was + 8) % 8) else pending[i] = 0
+            serverRot[i] = now
+            solve()
+        }
+
         on<EntityInteractEvent> {
-            if (!Devices.arrowAlignOn) return@on
             val frame = entity as? ItemFrame ?: return@on
             if (frame.item.item != Items.ARROW || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             val pos = frame.blockPosition()
@@ -61,12 +81,8 @@ object DevArrowAlign {
 
             recentClickTimestamps[i] = System.currentTimeMillis()
             if (rot == null) return@on
-            rot[i] = (rot[i] + 1) % 8
-            val solution = targetSolution ?: return@on
-            if (clicksRemaining[i] != 0 && clicks(rot[i], solution[i]) == 0) {
-                clicksRemaining[i] = 0
-                framesToClick--
-            }
+            pending[i]++
+            solve()
         }
 
         on<RenderExtractEvent> {
@@ -76,20 +92,51 @@ object DevArrowAlign {
                 if (n != 0) drawText(label[n], labelAt[i], 1f, false)
             }
         }
-        EventBus.subscribe(this)
+    }
+
+    fun forget() {
+        cached = false
+        frames.fill(null)
+        serverRot.fill(-1)
+        pending.fill(0)
+        clicksRemaining.fill(0)
+        framesToClick = 0
+        currentFrameRotations = null
+        targetSolution = null
     }
 
     private fun refresh() {
-        clicksRemaining.fill(0)
-        framesToClick = 0
         val player = mc.player ?: return
         if (player.blockPosition().distSqr(deviceCenter) > 200) {
-            currentFrameRotations = null
-            targetSolution = null
+            if (cached || currentFrameRotations != null) forget()
             return
         }
-
+        if (cached && frames.none { it != null && it.isRemoved }) return
         readFrames()
+        solve()
+    }
+
+    private fun readFrames() {
+        frames.fill(null)
+        serverRot.fill(-1)
+        pending.fill(0)
+        val level = mc.level ?: return
+        for (e in level.getEntitiesOfClass(ItemFrame::class.java, grid)) {
+            val pos = e.blockPosition()
+            val i = slot(pos.x, pos.y, pos.z)
+            if (i < 0 || frames[i] != null) continue
+            frames[i] = e
+            if (e.item.item == Items.ARROW) serverRot[i] = e.rotation
+        }
+        cached = frames.any { it != null }
+    }
+
+    private fun solve() {
+        clicksRemaining.fill(0)
+        framesToClick = 0
+        var anyArrow = false
+        for (i in 0 until FRAMES) if (serverRot[i] >= 0) anyArrow = true
+        for (i in 0 until FRAMES) rotations[i] = if (!anyArrow || serverRot[i] < 0) -1 else (serverRot[i] + pending[i]) % 8
         currentFrameRotations = rotations
 
         for (solution in SOLUTIONS) {
@@ -100,28 +147,6 @@ object DevArrowAlign {
                 if (n == 0) continue
                 if (clicksRemaining[i] == 0) framesToClick++
                 clicksRemaining[i] = n
-            }
-        }
-    }
-
-    // A frame clicked in the last second keeps the rotation counted locally: the server's may not have caught up yet.
-    private fun readFrames() {
-        seen.fill(-1)
-        var anyArrow = false
-        mc.level?.entitiesForRendering()?.forEach { e ->
-            if (e !is ItemFrame || e.item.item != Items.ARROW) return@forEach
-            anyArrow = true
-            val pos = e.blockPosition()
-            val i = slot(pos.x, pos.y, pos.z)
-            if (i >= 0 && seen[i] == -1) seen[i] = e.rotation
-        }
-        val kept = currentFrameRotations != null
-        val now = System.currentTimeMillis()
-        for (i in 0 until FRAMES) {
-            rotations[i] = when {
-                !anyArrow -> -1
-                kept && recentClickTimestamps[i] != 0L && now - recentClickTimestamps[i] < 1000 -> rotations[i]
-                else -> seen[i]
             }
         }
     }

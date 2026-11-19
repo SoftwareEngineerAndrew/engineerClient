@@ -4,6 +4,9 @@ import com.engineerclient.practice.SimonSaysPractice
 import com.mojang.blaze3d.platform.InputConstants
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.*
+import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
+import com.adm.events.core.on
 import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.Color.Companion.withAlpha
@@ -85,6 +88,26 @@ object Devices : Module(
     enum class Target(private val label: String) {
         PARTY("Party"), SELF("Self");
         override fun toString() = label
+    }
+
+    init {
+        on<TickEvent.End> { syncSections() }
+    }
+
+    override fun onDisable() {
+        super.onDisable()
+        syncSections()
+    }
+
+    private fun syncSections() {
+        sync(DevArrowAlign, arrowAlignOn) { DevArrowAlign.forget() }
+        sync(DevArrows, arrowsOn) { DevArrows.restart() }
+        sync(com.engineerclient.misc.SimonSaysAlerts, simonSaysOn) { com.engineerclient.misc.SimonSaysAlerts.reset() }
+    }
+
+    private inline fun sync(section: Any, on: Boolean, reset: () -> Unit) {
+        if (on == section in EventBus.activeSubscribers) return
+        if (on) { reset(); EventBus.subscribe(section) } else EventBus.unsubscribe(section)
     }
 
     fun install() {

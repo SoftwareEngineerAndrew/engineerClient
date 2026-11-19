@@ -2,10 +2,10 @@ package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.devices.Devices
+import com.engineerclient.practice.SimonSaysSolver
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.utils.modMessage
 import com.adm.utils.playSoundAtPlayer
@@ -20,13 +20,14 @@ import net.minecraft.world.level.block.ButtonBlock
 
 object SimonSaysAlerts {
 
-    private const val STAGES = 5
+    private const val STAGES = SimonSaysSolver.MAX_ROUNDS
     private const val BREAK_TICKS = 12
-    private val lamps = (120..123).flatMap { y -> (92..95).map { z -> BlockPos(111, y, z) } }
-    private val buttons = lamps.map { it.west() }
+    private val lamps = (120..123).flatMap { y -> (92..95).map { z -> BlockPos(111, y, z) } }.toTypedArray()
+    private val buttons = Array(lamps.size) { lamps[it].west() }
     private val deviceRegex = Regex("""^\w{1,16} (?:activated|completed) a device! \(\d/\d\)$""")
 
     private val shown = HashSet<BlockPos>()
+    private val runTick = Runnable { EngineerClient.safely("ss alerts") { tick() } }
     private var roundLength = 0
     private var pendingStage = 0
     private var goneTicks = 0
@@ -35,7 +36,7 @@ object SimonSaysAlerts {
 
     private fun active() = Devices.simonSaysOn && DungeonUtils.getF7Phase() == M7Phases.P3
 
-    private fun reset() {
+    fun reset() {
         shown.clear(); roundLength = 0; pendingStage = 0; goneTicks = 0; running = false; wasBroken = false
     }
 
@@ -48,8 +49,9 @@ object SimonSaysAlerts {
     private fun tick() {
         if (!active()) return
         val level = EngineerClient.mc.level ?: return
-        val lit = lamps.filter { level.getBlockState(it).block == Blocks.SEA_LANTERN }
-        if (lit.isNotEmpty()) {
+        var lit = false
+        for (l in lamps) if (level.getBlockState(l).block == Blocks.SEA_LANTERN) { lit = true; shown.add(l) }
+        if (lit) {
             if (pendingStage > 0) stageDone(pendingStage)
             pendingStage = 0
             goneTicks = 0
@@ -58,7 +60,6 @@ object SimonSaysAlerts {
                 wasBroken = false
                 running = true
             }
-            shown.addAll(lit)
             return
         }
         if (!running) return
@@ -92,10 +93,9 @@ object SimonSaysAlerts {
 
     fun install() {
         on<LevelEvent.Load> { EngineerClient.mc.execute { reset() } }
-        on<TickEvent.Server> { EngineerClient.mc.execute { EngineerClient.safely("ss alerts") { tick() } } }
+        on<TickEvent.Server> { if (active()) EngineerClient.mc.execute(runTick) }
         on<MessageEvent.Chat> {
             if (deviceRegex.matches(message)) EngineerClient.mc.execute { EngineerClient.safely("ss alerts device") { deviceDone() } }
         }
-        EventBus.subscribe(this)
     }
 }
