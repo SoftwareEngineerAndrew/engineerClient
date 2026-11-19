@@ -112,8 +112,16 @@ object SimonSaysPractice {
         val signs = LinkedHashMap<BlockPos, net.minecraft.world.level.block.entity.SignBlockEntity>()
         /** Where the device takes its light from: the spot you stood on to summon it, at head height. */
         val lightPos: BlockPos = origin.above()
+        /** Each block's render state, kept from frame to frame (only its block state changes). */
+        val renders = HashMap<BlockPos, DeviceBlock>()
+        val biome: net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> = level.getBiome(origin)
+        /** Every block the device has had, for a cheap miss before raycasting each one. */
+        var bounds: AABB? = null
         fun setWorld(pos: BlockPos, state: BlockState) {
-            if (state.isAir) blocks.remove(pos) else blocks[pos.immutable()] = state.rotate(rotation)
+            if (state.isAir) { blocks.remove(pos); return }
+            blocks[pos.immutable()] = state.rotate(rotation)
+            val b = AABB(pos)
+            bounds = bounds?.minmax(b) ?: b
         }
         fun set(real: BlockPos, state: BlockState) = setWorld(at(real), state)
         /** A box given in the real device's frame, turned into the world like the blocks are. */
@@ -677,7 +685,7 @@ object SimonSaysPractice {
      * A block drawn as a falling block is (all of its model, no world needed), lit from the
      * device's [Placement.lightPos], so one summoned into a wall or the ground isn't drawn dark.
      */
-    private class DeviceBlock(val lightPos: BlockPos) : net.minecraft.client.renderer.block.MovingBlockRenderState() {
+    private class DeviceBlock(var lightPos: BlockPos) : net.minecraft.client.renderer.block.MovingBlockRenderState() {
         override fun getBrightness(layer: net.minecraft.world.level.LightLayer, pos: BlockPos): Int =
             lightEngine.getLayerListener(layer).getLightValue(lightPos)
         override fun getRawBrightness(pos: BlockPos, darkening: Int): Int = lightEngine.getRawBrightness(lightPos, darkening)
@@ -691,33 +699,42 @@ object SimonSaysPractice {
         val level = p.level
         val lightPos = if (Devices.followYou) v.lightPos else p.lightPos
         val light = net.minecraft.util.LightCoordsUtil.getLightCoords(level, lightPos)
-        fun at(pos: BlockPos, draw: () -> Unit) {
-            val w = v.toWorld(Vec3(pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble()))
-            pose.pushPose()
-            pose.translate(w.x - cam.x, w.y - cam.y, w.z - cam.z)
-            if (v.k != 0) pose.mulPose(org.joml.Matrix4f().rotateY(Math.toRadians(-90.0 * v.k).toFloat()))
-            if (v.s != 1.0) pose.scale(v.s.toFloat(), v.s.toFloat(), v.s.toFloat())
-            draw()
-            pose.popPose()
-        }
+        val cardinal = level.cardinalLighting()
         for ((pos, state) in p.blocks) {
             if (pos in p.signs) continue
-            val s = DeviceBlock(lightPos)
-            s.randomSeedPos = pos; s.blockPos = pos; s.blockState = state
-            s.biome = level.getBiome(pos); s.cardinalLighting = level.cardinalLighting(); s.lightEngine = level.lightEngine
-            at(pos) { out.submitMovingBlock(pose, s, 0) }
+            val s = p.renders.getOrPut(pos) { DeviceBlock(lightPos).also { it.randomSeedPos = pos; it.blockPos = pos; it.biome = p.biome } }
+            s.blockState = state; s.lightPos = lightPos; s.cardinalLighting = cardinal; s.lightEngine = level.lightEngine
+            push(pose, v, pos, cam)
+            out.submitMovingBlock(pose, s, 0)
+            pose.popPose()
         }
         val signs = mc.blockEntityRenderDispatcher
         val camera = context.levelState().cameraRenderState
         for ((pos, be) in p.signs) {
             val s = signs.tryExtractRenderState<net.minecraft.world.level.block.entity.SignBlockEntity, net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState>(be, 0f, null, false) ?: continue
             s.lightCoords = light
-            at(pos) { signs.submit(s, pose, out, camera) }
+            push(pose, v, pos, cam)
+            signs.submit(s, pose, out, camera)
+            pose.popPose()
         }
         val target = target() ?: return
         val state = p.blocks[target] ?: return
         val width = mc.gameRenderer.gameRenderState().windowRenderState.appropriateLineWidth
-        at(target) { out.submitShapeOutline(pose, shapeOf(target, state), net.minecraft.client.renderer.rendertype.RenderTypes.linesTranslucent(), net.minecraft.util.ARGB.black(102), width, false) }
+        push(pose, v, target, cam)
+        out.submitShapeOutline(pose, shapeOf(target, state), net.minecraft.client.renderer.rendertype.RenderTypes.linesTranslucent(), net.minecraft.util.ARGB.black(102), width, false)
+        pose.popPose()
+    }
+
+    private val TURNS = Array(4) { org.joml.Matrix4f().rotateY(Math.toRadians(-90.0 * it).toFloat()) }
+
+    /** Pushes the pose to draw the device's block at [pos] where [v] puts it; the caller pops it. */
+    private fun push(pose: com.mojang.blaze3d.vertex.PoseStack, v: View, pos: BlockPos, cam: Vec3) {
+        var a = pos.x - v.p.eye.x; var b = pos.z - v.p.eye.z
+        repeat(v.k) { val t = a; a = -b; b = t }
+        pose.pushPose()
+        pose.translate(v.eye.x + a * v.s - cam.x, v.eye.y + (pos.y - v.p.eye.y) * v.s - cam.y, v.eye.z + b * v.s - cam.z)
+        if (v.k != 0) pose.mulPose(TURNS[v.k])
+        if (v.s != 1.0) pose.scale(v.s.toFloat(), v.s.toFloat(), v.s.toFloat())
     }
 
     // ------------------------------------------------------------------ input (from the mixin)
@@ -751,6 +768,8 @@ object SimonSaysPractice {
             val worldEye = player.getEyePosition(partialTicks)
             val eye = v.toDevice(worldEye)
             val end = eye.add(v.dirToDevice(player.getViewVector(partialTicks)).scale(player.blockInteractionRange()))
+            val bounds = p.bounds ?: return@safely
+            if (!bounds.contains(eye) && bounds.clip(eye, end).isEmpty) return@safely
             var best: BlockHitResult? = null
             var bestD = Double.MAX_VALUE
             for ((pos, state) in p.blocks) {
