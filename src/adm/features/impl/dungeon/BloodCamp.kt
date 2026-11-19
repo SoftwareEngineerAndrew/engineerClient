@@ -14,15 +14,20 @@ import com.adm.utils.render.drawBoxes
 import com.adm.utils.render.drawLine
 import com.adm.utils.render.drawText
 import com.adm.utils.render.textDim
+import com.adm.features.impl.dungeon.map.tile.RoomType
+import com.adm.utils.skyblock.dungeon.DungeonClass
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.client.gui.components.LerpingBossEvent
 import net.minecraft.network.chat.Component
-import net.minecraft.world.BossEvent
+import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.monster.zombie.Zombie
 import net.minecraft.world.item.Items
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
+import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -31,9 +36,11 @@ object BloodCamp : Module(
     description = "Features for Blood Camping."
 ) {
     private val sendMoveTime by BooleanSetting("Move alert", true, desc = "Sends a message & title indicating when the watcher will move.")
+    private val moveSound by BooleanSetting("Move Sound", true, desc = "Plays a sound with the move alert.").withDependency { sendMoveTime }
+    private val mageOnly by BooleanSetting("Mage Only", false, desc = "Move alert and HUD only as Mage or in the blood room.")
     private val moveTimer by HUD("Move HUD", "Displays the time until the watcher moves.") { example ->
         val ticks = if (example) 10 else moveTicks
-        if (ticks <= 0) return@HUD 0 to 0
+        if (ticks <= 0 || !example && !moveForMe) return@HUD 0 to 0
         textDim(moveText(ticks), 0, 0, Colors.MINECRAFT_RED)
     }
 
@@ -49,11 +56,12 @@ object BloodCamp : Module(
     private val advanced by DropdownSetting("Advanced", desc = "Shows advanced timing settings for the blood camp assist.").withDependency { bloodAssist && assistDropdown }
     private val offset by NumberSetting("Offset", 40, -100..100, desc = "Tick offset to adjust between ticks.").withDependency { advanced && bloodAssist && assistDropdown }
     private val tick by NumberSetting("Tick", 38, 35..41, desc = "Tick to assume spawn. Adjust offset to offset this value to the ms.").withDependency { advanced && bloodAssist && assistDropdown }
-    @Suppress("unused")
-    private val interpolation by BooleanSetting("Interpolation", true, desc = "Interpolates rendering boxes between ticks. Makes the jitter smoother, at the expense of some accuracy.").withDependency { advanced && bloodAssist && assistDropdown}
     private val pingOffset by BooleanSetting("Ping Offset", true, desc = "Offsets the mob box by your ping.").withDependency { advanced && bloodAssist && assistDropdown }
     private val manualOffset by NumberSetting("Mob Box Offset", 0f, 0.0..300.0, 1, desc = "Manually offsets the mob box.").withDependency { advanced && bloodAssist && assistDropdown && !pingOffset}
+    private val hitSound by BooleanSetting("Hit Sound", false, desc = "Plays a sound when a mob can be hit, early by your ping.").withDependency { bloodAssist && assistDropdown }
+    private val hitLead by NumberSetting("Hit Sound Lead", 65, 0..500, desc = "Extra time the hit sound plays early.", unit = "ms").withDependency { hitSound && bloodAssist && assistDropdown }
     private val watcherBar by BooleanSetting("Watcher Bar", true, desc = "Shows the watcher's health.")
+    private val hideOutsideBlood by BooleanSetting("Hide Outside Blood", false, desc = "Hides the Watcher's bar when you are not in the blood room.").withDependency { watcherBar }
 
     private const val WATCHER = "[BOSS] The Watcher: "
     private val openLines = listOf(
@@ -66,6 +74,8 @@ object BloodCamp : Module(
     private const val MOVE_TICKS = 410
     private const val FIRST_WAVE_REACH = 16.1
     private const val LATER_WAVE_REACH = 11.9
+    private const val STEP_MS = 150L
+    private val SPAWN_Y = doubleArrayOf(71.75, 75.75, 79.75)
 
     // Each spawning mob is a head on an armor stand that slides from its start towards where it lands.
     private class Spawn(val start: Vec3, val startedMs: Long, val firstWave: Boolean) {
@@ -81,6 +91,7 @@ object BloodCamp : Module(
         var velX = 0.0
         var velY = 0.0
         var velZ = 0.0
+        var hitPlayed = false
     }
 
     private val spawns = HashMap<ArmorStand, Spawn>()
@@ -92,6 +103,10 @@ object BloodCamp : Module(
 
     private var lastBarName: Component? = null
     private var lastBarIsWatcher = false
+    private var barCount = -1
+    private var barTotal = -1
+    private var barText: Component = Component.empty()
+    @Volatile private var moveForMe = true
 
     private var moveTextTicks = -1
     private var moveTextValue = ""
@@ -126,7 +141,7 @@ object BloodCamp : Module(
             if (head.item != Items.PLAYER_HEAD || head.texture !in bloodMobHeads) return@on
 
             val now = serverMs
-            val spawn = spawns.getOrPut(stand) { Spawn(newPos, now, firstWave) }
+            val spawn = spawns[stand] ?: newSpawn(stand.position(), newPos, now).also { spawns[stand] = it }
             val dx = newPos.x - spawn.last.x
             val dy = newPos.y - spawn.last.y
             val dz = newPos.z - spawn.last.z
@@ -154,7 +169,8 @@ object BloodCamp : Module(
             if (!DungeonUtils.inClear) return@on
             if (message in openLines) {
                 moveTicks = MOVE_TICKS
-                if (sendMoveTime) modMessage("Watcher will move in 20.50s.")
+                moveForMe = isMoveForMe()
+                if (sendMoveTime && moveForMe) modMessage("Watcher will move in 20.50s.")
             } else if (message == SECOND_WAVE_LINE) firstWave = false
         }
 
@@ -164,13 +180,18 @@ object BloodCamp : Module(
         }
 
         on<EntityEvent.Remove> {
+            if (spawns.isNotEmpty() && entity is ArmorStand) spawns.remove(entity)
             val boss = watcher ?: return@on
             if (entity.id == boss.id) watcher = null
         }
 
+        on<TickEvent.End> {
+            if (moveTicks > 0) moveForMe = isMoveForMe()
+        }
+
         on<TickEvent.Server> {
             serverMs += 50
-            if (moveTicks > 0 && --moveTicks == 0) mc.execute { if (sendMoveTime) alert("Kill Mobs") }
+            if (moveTicks > 0 && --moveTicks == 0) mc.execute { if (sendMoveTime && moveForMe) alert("Kill Mobs", moveSound) }
         }
 
         on<LevelEvent.Load> {
@@ -182,14 +203,8 @@ object BloodCamp : Module(
         }
 
         on<RenderBossBarEvent> {
-            if (!watcherBar || !DungeonUtils.inClear) return@on
-            val bar = bossBar
-            val name = bar.name
-            if (name !== lastBarName) {
-                lastBarName = name
-                lastBarIsWatcher = name.string == "§c§lThe Watcher"
-            }
-            if (lastBarIsWatcher) renameWatcherBar(bar)
+            if (!watcherBar || !hideOutsideBlood || !DungeonUtils.inClear) return@on
+            if (isWatcherBar(bossBar.name) && DungeonUtils.currentRoom?.type != RoomType.BLOOD) cancel()
         }
 
         on<RenderExtractEvent> {
@@ -197,6 +212,7 @@ object BloodCamp : Module(
             val size = boxSize
             val half = size / -2.0
             val lead = if (pingOffset) ServerUtils.averagePing.toFloat() else manualOffset
+            val hitAt = if (hitSound) ServerUtils.averagePing + hitLead else Int.MIN_VALUE
             val now = serverMs
             boxes.clear()
             for ((stand, spawn) in spawns) {
@@ -208,6 +224,10 @@ object BloodCamp : Module(
                 val landY = from.y + (to.y - from.y) * blend
                 val landZ = from.z + (to.z - from.z) * blend
                 val untilSpawn = msUntilSpawn(spawn)
+                if (untilSpawn <= hitAt && !spawn.hitPlayed) {
+                    spawn.hitPlayed = true
+                    playSoundAtPlayer(SoundEvents.NOTE_BLOCK_BELL.value())
+                }
 
                 val landBox = cube(landX, landY, landZ, half, size)
                 if (lead < untilSpawn) {
@@ -230,14 +250,57 @@ object BloodCamp : Module(
         return AABB(minX, minY, minZ, size + minX, size + minY, size + minZ)
     }
 
-    private fun renameWatcherBar(bar: BossEvent) {
-        val progress = bar.progress
-        if (progress < 0.05) return
+    // A head first seen mid-flight: walk its last step back to a wall spawn to find when it left.
+    private fun newSpawn(prev: Vec3, next: Vec3, now: Long): Spawn {
+        val dx = next.x - prev.x
+        val dy = next.y - prev.y
+        val dz = next.z - prev.z
+        val steps = if (atSpawn(prev) || abs(dy) < 1e-4) 0 else stepsFromSpawn(prev, dx, dy, dz)
+        if (steps <= 0) return Spawn(next, now, firstWave)
+        val back = (steps - 1).toDouble()
+        return Spawn(Vec3(prev.x - back * dx, prev.y - back * dy, prev.z - back * dz), now - steps * STEP_MS, firstWave)
+    }
+
+    private fun stepsFromSpawn(prev: Vec3, dx: Double, dy: Double, dz: Double): Int {
+        for (y in SPAWN_Y) {
+            val n = (prev.y - y) / dy
+            val steps = n.roundToInt()
+            if (steps < 1 || abs(n - steps) > 0.05) continue
+            if (isCentre(prev.x - steps * dx) && isCentre(prev.z - steps * dz)) return steps
+        }
+        return 0
+    }
+
+    private fun atSpawn(pos: Vec3) = isCentre(pos.x) && isCentre(pos.z) && SPAWN_Y.any { abs(pos.y - it) < 0.01 }
+
+    private fun isCentre(v: Double) = abs(v - floor(v) - 0.5) < 0.02
+
+    private fun isMoveForMe(): Boolean =
+        !mageOnly || DungeonUtils.currentDungeonPlayer.clazz == DungeonClass.MAGE || DungeonUtils.currentRoom?.type == RoomType.BLOOD
+
+    private fun isWatcherBar(name: Component): Boolean {
+        if (name !== lastBarName) {
+            lastBarName = name
+            lastBarIsWatcher = name.string == "§c§lThe Watcher"
+        }
+        return lastBarIsWatcher
+    }
+
+    // Hypixel's name stays on the bar; only the drawn text carries the count, read from the bar's target instead of its lerp.
+    @JvmStatic
+    fun barName(event: LerpingBossEvent, name: Component): Component {
+        if (!enabled || !watcherBar || !DungeonUtils.inClear || !isWatcherBar(name)) return name
+        if (hideOutsideBlood && DungeonUtils.currentRoom?.type != RoomType.BLOOD) return Component.empty()
+        val progress = event.targetPercent
+        if (progress < 0.05f) return name
         val total = 8 + (DungeonUtils.floor?.floorNumber ?: 0)
-        val renamed = Component.literal("§c§lThe Watcher ${(total * progress).roundToInt()}/$total")
-        bar.name = renamed
-        lastBarName = renamed
-        lastBarIsWatcher = false
+        val count = (total * progress).roundToInt()
+        if (count != barCount || total != barTotal) {
+            barCount = count
+            barTotal = total
+            barText = Component.literal("§c§lThe Watcher $count/$total")
+        }
+        return barText
     }
 
     private val watcherHeads = setOf(
