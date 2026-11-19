@@ -6,7 +6,7 @@ import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.events.LevelEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.on
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.features.impl.dungeon.MageBeam
 import net.minecraft.client.Minecraft
 import com.adm.utils.alert
@@ -55,6 +55,6 @@ object LcmMeleeWarning {
             if (sinceAlert < Int.MAX_VALUE) sinceAlert++
             if (near && sinceAlert >= repeatTicks) { alert(TITLE, playSound); sinceAlert = 0 }
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, ::reset) { MageBeam.enabled && on.value }
     }
 }

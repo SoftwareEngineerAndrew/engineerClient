@@ -3,7 +3,7 @@ package com.engineerclient.dungeon
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.events.PacketEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.onReceive
 import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
 import com.adm.utils.skyblock.dungeon.DungeonUtils
@@ -37,7 +37,7 @@ object CreeperBeamsDing {
         onReceive<ClientboundSoundPacket> { event ->
             if (on.value && PuzzleSolvers.enabled && DungeonUtils.currentRoomName == "Creeper Beams") filter(sound.value(), pitch, event)
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this) { on.value && PuzzleSolvers.enabled }
     }
 
     private fun filter(sound: SoundEvent, pitch: Float, event: PacketEvent.Receive) {

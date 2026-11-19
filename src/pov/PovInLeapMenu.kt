@@ -6,7 +6,7 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.KeybindSetting
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.LeapMenu
 
@@ -29,6 +29,6 @@ object PovInLeapMenu {
         }
         on.value = PosePov.enabled
         on<TickEvent.End> { if (on.value != PosePov.enabled) PosePov.toggle() }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this) { on.value != PosePov.enabled }
     }
 }

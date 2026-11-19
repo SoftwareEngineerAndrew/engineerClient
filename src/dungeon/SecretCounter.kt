@@ -5,7 +5,7 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.events.LevelEvent
 import com.adm.events.RoomEnterEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.SecretClicked
 import com.adm.utils.Colors
@@ -44,7 +44,7 @@ object SecretCounter {
         SecretClicked.registerSetting(hud)
         on<LevelEvent.Load> { count = null }
         on<RoomEnterEvent> { count = null }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { count = null }) { SecretClicked.enabled && show.value }
     }
 
     @JvmStatic

@@ -8,7 +8,7 @@ import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.events.LevelEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.SecretClicked
 import com.adm.utils.Color
@@ -96,6 +96,6 @@ object ItemHighlight {
             }
             drawBoxes(boxes)
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { boxed.clear() }) { SecretClicked.enabled && on.value }
     }
 }

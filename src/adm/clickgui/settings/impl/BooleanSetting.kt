@@ -5,6 +5,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonPrimitive
 import com.adm.clickgui.settings.SettingState
+import com.adm.events.core.SubscribeWhile
 import com.adm.clickgui.settings.RenderableSetting
 import com.adm.clickgui.settings.Saving
 import com.adm.clickgui.ui.SettingRow
@@ -16,7 +17,14 @@ class BooleanSetting(
     desc: String,
 ) : RenderableSetting<Boolean>(name, desc), Saving {
 
-    override var value: Boolean by SettingState(default)
+    private var stored: Boolean by SettingState(default)
+    override var value: Boolean
+        get() = stored
+        set(v) {
+            if (stored == v) return
+            stored = v
+            SubscribeWhile.changed()
+        }
     var enabled: Boolean by this::value
 
     @Composable

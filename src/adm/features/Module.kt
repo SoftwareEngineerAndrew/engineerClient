@@ -103,6 +103,7 @@ abstract class Module(
         enabled = !enabled
         if (enabled) onEnable()
         else onDisable()
+        com.adm.events.core.SubscribeWhile.changed()
     }
 
     /**
