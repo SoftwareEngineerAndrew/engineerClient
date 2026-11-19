@@ -118,6 +118,7 @@ object Visibility : Module(
     private val hideFairy by BooleanSetting("Hide Healer Fairy", true, desc = "Hides the healer fairy held by some mobs.").withDependency { cleanupDropdown }
     private val hideWeaver by BooleanSetting("Hide Soul Weaver", true, desc = "Hides the soul weaver helmet worn by some mobs.").withDependency { cleanupDropdown }
     private val hideTentacle by BooleanSetting("Hide Tentacle Head", true, desc = "Hides the tentacle head worn by some mobs.").withDependency { cleanupDropdown }
+    private val hideBoneShield by BooleanSetting("Hide Skeleton Helmet Bones", false, desc = "Hides the bones circling a Skeleton's Helmet wearer.").withDependency { cleanupDropdown }
     private var hidePlayers by BooleanSetting("Hide Players", false, desc = "Hides players near you.").withDependency { cleanupDropdown }
     private val playersOnlyInDungeons by BooleanSetting("Hide Players Only In Dungeons", false, desc = "Players are only hidden in dungeons.").withDependency { cleanupDropdown && hidePlayers }
     private val hideAllPlayers by BooleanSetting("Hide All Players", false, desc = "Hides players at any distance.").withDependency { cleanupDropdown && hidePlayers }
@@ -256,6 +257,10 @@ object Visibility : Module(
         }
 
         on<EntityEvent.SetItemSlot> {
+            if (hideBoneShield && stack.item == Items.BONE && entity is net.minecraft.world.entity.decoration.ArmorStand) {
+                entity.remove(Entity.RemovalReason.DISCARDED)
+                return@on
+            }
             val head = slot == EquipmentSlot.HEAD
             val wanted = if (head) hideWeaver || hideTentacle else slot == EquipmentSlot.MAINHAND && hideFairy
             if (!wanted || !DungeonUtils.inDungeons || stack.isEmpty) return@on
