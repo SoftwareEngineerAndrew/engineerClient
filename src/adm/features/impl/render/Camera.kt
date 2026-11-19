@@ -1,5 +1,6 @@
 package com.adm.features.impl.render
 
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.events.TickEvent
@@ -9,6 +10,7 @@ import com.adm.features.Module
 import net.minecraft.client.CameraType
 import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.Pose
 
 object Camera : Module(
     name = "Camera",
@@ -17,6 +19,7 @@ object Camera : Module(
     private val noFrontCamera by BooleanSetting("No Front Camera", true, desc = "Skips the front-facing third person view.")
     private val offset by NumberSetting("Offset", 0.0, -1.0..1.0, 0.05, desc = "First person camera, in blocks: + forward, - back.")
     private val instantSneak by BooleanSetting("Instant Sneak", false, desc = "The camera snaps to sneak height instead of sliding.")
+    private val legacySneak by BooleanSetting("Legacy Sneak Height", false, desc = "Sneaking lowers the camera only to 1.8's height.").withDependency { instantSneak }
     private val noHurtCamera by BooleanSetting("No Hurt Camera", false, desc = "No camera shake when you take damage.")
     private val fixRidingCamera by BooleanSetting("Fix Riding Camera", false, desc = "The camera no longer lags behind while riding (MC-259512).")
     private val ridingInputFix by BooleanSetting("Riding Input Delay Fix", false, desc = "No mouse input delay while riding (MC-206540).")
@@ -33,12 +36,13 @@ object Camera : Module(
 
         onReceive<ClientboundSetEntityDataPacket> {
             if (!doubleSneakFix || id != mc.player?.id) return@onReceive
-            runCatching { packedItems.removeIf { it.id == POSE_ID } }
+            runCatching { packedItems.removeIf { it.id == POSE_ID && (it.value == Pose.CROUCHING || it.value == Pose.STANDING) } }
         }
     }
 
     @JvmStatic fun offsetBlocks(): Float = if (enabled) offset.toFloat() else 0f
     @JvmStatic fun instantSneak() = enabled && instantSneak
+    @JvmStatic fun legacySneakHeight() = legacySneak
     @JvmStatic fun noHurtCamera() = enabled && noHurtCamera
     @JvmStatic fun usesLiveRideAngles(viewer: Entity) = enabled && fixRidingCamera && viewer.isPassenger && viewer === mc.player
 

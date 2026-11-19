@@ -6,6 +6,7 @@
   "client": [
     "ClickGuiSwapMixin",
     "CameraInstantSneakMixin",
+    "CameraOffsetMixin",
     "HudEditorOpenMixin",
     "StreamerFontMixin",
     "EtherSoundMixin",
