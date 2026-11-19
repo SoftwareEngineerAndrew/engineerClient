@@ -74,6 +74,7 @@ public class ScoreboardSidebarMixin {
 
     @Inject(method = "displayScoreboardSidebar", at = @At("HEAD"), cancellable = true)
     private void ec$moveSidebar(GuiGraphicsExtractor graphics, Objective objective, CallbackInfo ci) {
+        if (ScoreboardLines.hideAll) { ci.cancel(); return; }
         if (!ScoreboardNametags.moving || ScoreboardNametags.drawing) return;
         ScoreboardNametags.objective = objective;
         ci.cancel();

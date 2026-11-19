@@ -33,6 +33,9 @@ object ScoreboardLines {
     /** Random Stuff's Hide Scoreboard Lines, and the module being on. */
     @JvmField var hideLines: Boolean = false
 
+    /** Random Stuff's Hide Scoreboard, and the module being on: no sidebar at all. */
+    @JvmField var hideAll: Boolean = false
+
     // --- what gets hidden ----------------------------------------------------------------------
     //
     // Every sidebar line seen in recorded dungeon runs and their lobbies falls into one of these
@@ -135,7 +138,15 @@ object ScoreboardLines {
      */
     fun visibleEntries(scoreboard: Scoreboard, objective: Objective): Collection<PlayerScoreEntry> {
         val all = scoreboard.listPlayerScores(objective)
-        if (!hideLines) return all
+        if (!hideLines) {
+            shownObjective = null
+            return all
+        }
+        val settings = (if (hideCatacombsLocation) 1 else 0) or (if (hideTimeElapsed) 2 else 0) or (if (hideCleared) 4 else 0)
+        if (System.currentTimeMillis() > dirtyUntil && objective === shownObjective && settings == shownSettings && all.size == shownSize) return shown
+        shownObjective = objective
+        shownSettings = settings
+        shownSize = all.size
         val hidden = HashSet<PlayerScoreEntry>()
         var previous: Kind? = null
         for (entry in all.filter { !it.isHidden }.sortedWith(DISPLAY_ORDER)) {
@@ -144,7 +155,19 @@ object ScoreboardLines {
             if (hidesKind(kind)) hidden += entry
             previous = kind
         }
-        return all.filter { it !in hidden }
+        shown = all.filter { it !in hidden }
+        return shown
+    }
+
+    private var shown: Collection<PlayerScoreEntry> = emptyList()
+    private var shownObjective: Objective? = null
+    private var shownSettings = -1
+    private var shownSize = -1
+    @Volatile private var dirtyUntil = 0L
+
+    // Packets are read before the client thread applies them, so rebuild for a short while, not once.
+    fun markDirty() {
+        dirtyUntil = System.currentTimeMillis() + 250
     }
 
     // --- text helpers --------------------------------------------------------------------------

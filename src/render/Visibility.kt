@@ -24,6 +24,7 @@ import com.adm.events.MessageEvent
 import com.adm.events.ParticleEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.on
+import com.adm.events.core.onReceive
 import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.Color
@@ -40,6 +41,11 @@ import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.TitleScreen
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.client.particle.Particle
+import net.minecraft.network.protocol.game.ClientboundResetScorePacket
+import net.minecraft.network.protocol.game.ClientboundSetDisplayObjectivePacket
+import net.minecraft.network.protocol.game.ClientboundSetObjectivePacket
+import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket
+import net.minecraft.network.protocol.game.ClientboundSetScorePacket
 import net.minecraft.client.particle.SmokeParticle
 import net.minecraft.client.particle.TerrainParticle
 import net.minecraft.core.particles.ParticleTypes
@@ -143,6 +149,7 @@ object Visibility : Module(
     private val sidebarTitleColor by ColorSetting("Sidebar Title Color", Color(0, 0, 0, 0.4f), true, desc = "Behind the scoreboard title.").withDependency { scoreboardDropdown && sidebarColors }
     private val sidebarBodyColor by ColorSetting("Sidebar Body Color", Color(0, 0, 0, 0.3f), true, desc = "Behind the scoreboard lines.").withDependency { scoreboardDropdown && sidebarColors }
     private val sidebarShadow by BooleanSetting("Scoreboard Text Shadow", false, desc = "Draws the sidebar text with a shadow.").withDependency { scoreboardDropdown }
+    private val hideSidebar by BooleanSetting("Hide Scoreboard", false, desc = "Hides the whole sidebar.").withDependency { scoreboardDropdown }
     private val hideSbLines by BooleanSetting("Clean Scoreboard", false, desc = "Hides the noisy sidebar lines; Purse, Bits and teammates stay.").withDependency { scoreboardDropdown }
     private val hideSbCatacombs by BooleanSetting("Scoreboard: Hide Catacombs Location", true, desc = "Hides The Catacombs location line in dungeons.").withDependency { scoreboardDropdown && hideSbLines }
     private val hideSbElapsed by BooleanSetting("Scoreboard: Hide Time Elapsed", false, desc = "Hides the dungeon's Time Elapsed line.").withDependency { scoreboardDropdown && hideSbLines }
@@ -215,6 +222,7 @@ object Visibility : Module(
     init {
         on<TickEvent.End> {
             ScoreboardLines.hideLines = enabled && hideSbLines
+            ScoreboardLines.hideAll = enabled && hideSidebar
             ScoreboardLines.hideCatacombsLocation = hideSbCatacombs
             ScoreboardLines.hideTimeElapsed = hideSbElapsed
             ScoreboardLines.hideCleared = hideSbCleared
@@ -222,6 +230,11 @@ object Visibility : Module(
             if (lavaAsWater() != lavaShown) { lavaShown = lavaAsWater(); mc.level?.let { mc.levelRenderer.invalidateCompiledGeometry(it, mc.options, mc.gameRenderer.mainCamera(), mc.blockColors) } }
         }
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
+        onReceive<ClientboundSetScorePacket> { ScoreboardLines.markDirty() }
+        onReceive<ClientboundResetScorePacket> { ScoreboardLines.markDirty() }
+        onReceive<ClientboundSetObjectivePacket> { ScoreboardLines.markDirty() }
+        onReceive<ClientboundSetDisplayObjectivePacket> { ScoreboardLines.markDirty() }
+        onReceive<ClientboundSetPlayerTeamPacket> { ScoreboardLines.markDirty() }
 
         // Hidden where it's drawn: what reads the action bar (secrets, mana) still gets it
         net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.replaceElement(net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.OVERLAY_MESSAGE) { original ->
@@ -515,6 +528,7 @@ object Visibility : Module(
     override fun onDisable() {
         super.onDisable()
         ScoreboardLines.hideLines = false
+        ScoreboardLines.hideAll = false
         ScoreboardNametags.moving = false
     }
 }
