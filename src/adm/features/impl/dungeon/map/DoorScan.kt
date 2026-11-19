@@ -29,6 +29,8 @@ object DoorScan {
     private const val UNLOADED = -1
     private val decided = BooleanArray(EDGES)
     private val found = arrayOfNulls<DoorType>(EDGES)
+    private const val AIR_READS = 3
+    private val airReads = IntArray(EDGES)
     @Volatile private var anyDoor = false
     private var ticks = 0
     private val probe = BlockPos.MutableBlockPos()
@@ -38,6 +40,7 @@ object DoorScan {
         on<LevelEvent.Load> {
             decided.fill(false)
             found.fill(null)
+            airReads.fill(0)
             anyDoor = false
         }
         on<RoomEnterEvent> { reveal() }
@@ -67,6 +70,8 @@ object DoorScan {
             val chunk = level.chunkSource.getChunk(x shr 4, z shr 4, ChunkStatus.FULL, false) ?: continue
             val top = surface(chunk, x, z)
             if (top == UNLOADED) continue
+            // A chunk can be loaded before its blocks arrive: an all-air column only counts once it has stayed that way.
+            if (top == 0 && ++airReads[edge] < AIR_READS) continue
 
             val fairy = a?.type == RoomType.FAIRY || b?.type == RoomType.FAIRY
             val type = when {

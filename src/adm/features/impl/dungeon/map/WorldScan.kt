@@ -31,6 +31,7 @@ object WorldScan {
 
     private val roomsByData = HashMap<RoomData, DungeonRoom>()
     private val pending = HashSet<IVec2>()
+    @Volatile private var refreshDue = false
     private val blockNames = ConcurrentHashMap<Block, String>()
 
     init {
@@ -86,6 +87,13 @@ object WorldScan {
             }
             pending.clear()
         }
+
+        // A dungeon's room chunks arrive together on joining; one refresh covers them all.
+        on<TickEvent.End> {
+            if (!refreshDue) return@on
+            refreshDue = false
+            DungeonScan.refresh()
+        }
     }
 
     private fun scan(chunk: LevelChunk) {
@@ -128,7 +136,7 @@ object WorldScan {
             room.type = data.type
         }
 
-        mc.execute { DungeonScan.refresh() }
+        refreshDue = true
     }
 
     fun getRoomCore(chunk: LevelChunk, position: IVec2): Pair<Int, Int> {
