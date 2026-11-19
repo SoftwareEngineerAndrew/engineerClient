@@ -1,6 +1,7 @@
 package com.adm.features.impl.dungeon
 
 import com.adm.AdmMod
+import com.engineerclient.skyblock.ItemWorth
 import com.adm.AdmMod.scope
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.ActionSetting
@@ -8,6 +9,7 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.clickgui.settings.impl.drawAtHud
 import com.adm.events.GuiEvent
+import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.ScreenCloseEvent
 import com.adm.events.SetSlotEvent
@@ -20,10 +22,13 @@ import com.adm.utils.render.getStringWidth
 import com.adm.utils.render.roundedOutline
 import com.adm.utils.render.text
 import com.adm.utils.render.textDim
+import com.adm.utils.skyblock.Island
+import com.adm.utils.skyblock.LocationUtils
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import kotlinx.coroutines.launch
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.Screen
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.world.item.ItemStack
@@ -39,6 +44,16 @@ object Croesus : Module(
     private val hideClaimed by BooleanSetting("Hide Claimed", true, desc = "Hides chests that have already been claimed.")
     private val includeKey by BooleanSetting("Include Key", desc = "Count Dungeon Chest Key as unclaimed.").withDependency { hideClaimed }
     private val minimized by BooleanSetting("Minimized", false, desc = "Only display profit for each chest instead of all items.")
+    private val includeEssence by BooleanSetting("Include Essence", true, desc = "Counts essence in chest profit.")
+    private val rerollGuard by NumberSetting("Reroll Guard", 5, 0..100, desc = "Blocks rerolling a chest worth more than this; hold Ctrl to reroll anyway. 0 is off.", unit = "M")
+
+    private val openedHud by HUD("Opened Chests HUD", "The chests you opened, with their profit, after the menu closes.") { example ->
+        val lines = if (example) sampleOpened else openedLines
+        if (lines.isEmpty() || !example && mc.gui.screen() != null) return@HUD 0 to 0
+        var width = 0
+        for ((i, line) in lines.withIndex()) width = maxOf(width, textDim(line, 0, i * 9).first)
+        width to lines.size * 9
+    }
 
     private val croesusHud by HUD("Croesus Chest HUD", "Displays all chest contents with prices, sorted by profit.") {
         if (!it) return@HUD 0 to 0
@@ -46,10 +61,10 @@ object Croesus : Module(
     }
 
     private val chestCount by HUD("Chest Count HUD", "Displays the number of chests opened in the current Croesus session.") {
-        if (it || DungeonUtils.inDungeons) textDim(countText(), 0, 0) else 0 to 0
+        if (it || DungeonUtils.inDungeons || LocationUtils.currentArea == Island.DungeonHub) textDim(countText(), 0, 0) else 0 to 0
     }
 
-    private val chestWarning by NumberSetting("Chest Warning Threshold", 55, 0..60, desc = "Displays a warning in the chest profit HUD if the profit is below this amount.").withDependency { chestCount.enabled }
+    private val chestWarning by NumberSetting("Chest Warning Threshold", 55, 0..60, desc = "Alerts once when your unclaimed chests pass this count.").withDependency { chestCount.enabled }
     private val refresh by ActionSetting("Refresh Prices", desc = "Manually refresh the cached prices used for profit calculations.") {
         scope.launch {
             loadPrices()
@@ -62,6 +77,10 @@ object Croesus : Module(
     private const val PRICES_URL = "https://lb.odtheking.com/averages/7day"
     private const val KISMET = "Kismet Feather"
     private const val KEY = "Dungeon Chest Key"
+    private const val KEY_ID = "DUNGEON_CHEST_KEY"
+    private const val REROLL_SLOT = 50
+    private const val OPEN_SLOT = 31
+    private const val REROLL_READY = "Click to reroll this chest!"
     private const val NO_MORE = "No more chests to open!"
     private const val OPENED = "Opened Chest: "
     private const val UNCLAIMED = " Unclaimed chests: "
@@ -102,16 +121,29 @@ object Croesus : Module(
     private val runChests = linkedMapOf<Int, Chest>()
     private val rewardsBySlot = linkedMapOf<Int, Reward>()
     private val costsBySlot = linkedMapOf<Int, Double>()
+    private var openedLines = emptyList<String>()
+    private val sampleOpened = listOf("§fBedrock Chest§7: §2+12,500,000", "§fObsidian Chest§7: §c-450,000")
 
     @Volatile private var openedChests = 0
+    @Volatile private var alerted = false
+    private var countedThisRun = false
     private var countShown = -1
     private var countLine = ""
+
+    private const val MAX_CHESTS = 60
+    private const val WIPE_LINE = "Warning! The instance will close in 10s."
 
     private fun countText(): String {
         val n = openedChests
         if (n != countShown) {
             countShown = n
-            countLine = "§6Chests: §a$n"
+            val color = when {
+                n >= MAX_CHESTS * 3 / 4 -> "§4"
+                n >= MAX_CHESTS / 2 -> "§c"
+                n >= MAX_CHESTS / 4 -> "§e"
+                else -> "§a"
+            }
+            countLine = "§6Chests: $color$n§7/$MAX_CHESTS"
         }
         return countLine
     }
@@ -136,9 +168,13 @@ object Croesus : Module(
         return view
     }
 
-    private fun countChest() {
-        val n = ++openedChests
-        if (n > chestWarning) alert("§cChest limit reached!")
+    private fun setChestCount(n: Int) {
+        openedChests = n.coerceIn(0, MAX_CHESTS)
+        if (n <= chestWarning) alerted = false
+        else if (!alerted) {
+            alerted = true
+            mc.execute { alert("§cChest limit reached!") }
+        }
     }
 
     init {
@@ -199,16 +235,48 @@ object Croesus : Module(
                 if (!line.startsWith(UNCLAIMED)) continue
                 val digits = line.substring(UNCLAIMED.length)
                 if (digits.isEmpty() || !digits.all { it in '0'..'9' }) continue
-                val n = digits.toIntOrNull() ?: continue
-                openedChests = n
-                if (n > chestWarning) mc.execute { alert("§cChest limit reached!") }
+                setChestCount(digits.toIntOrNull() ?: continue)
             }
         }
 
         on<MessageEvent.Chat> {
-            if (message == EXTRA_STATS && DungeonUtils.inBoss) countChest()
+            if (message == EXTRA_STATS && DungeonUtils.inBoss && !countedThisRun) {
+                countedThisRun = true
+                setChestCount(openedChests + 1)
+            } else if (message == WIPE_LINE && countedThisRun) {
+                // A wiped run gives no chest.
+                countedThisRun = false
+                setChestCount(openedChests - 1)
+            }
+        }
+
+        on<LevelEvent.Load> {
+            countedThisRun = false
+            openedLines = emptyList()
+        }
+
+        on<GuiEvent.SlotClick> {
+            if (viewOf(screen) != View.REWARD_CHEST) return@on
+            val chest = chests.singleOrNull() ?: return@on
+            when (slotIndex) {
+                OPEN_SLOT -> recordOpened(screen.title.string, chest.profit)
+                REROLL_SLOT -> {
+                    if (rerollGuard <= 0 || mc.hasControlDown() || chest.profit <= rerollGuard * 1_000_000.0) return@on
+                    val menu = (screen as? AbstractContainerScreen<*>)?.menu ?: return@on
+                    if (slotIndex >= menu.slots.size || menu.getSlot(slotIndex).item.loreString.lastOrNull() != REROLL_READY) return@on
+                    cancel()
+                    modMessage("§cReroll blocked: this chest is worth §6${"%,.0f".format(chest.profit)}§c. Hold Ctrl to reroll.")
+                }
+            }
         }
     }
+
+    private fun recordOpened(title: String, profit: Double) {
+        val line = "§f$title§7: ${if (profit >= 0) "§2+" else "§c"}${"%,.0f".format(profit)}"
+        openedLines = (openedLines + line).takeLast(10)
+    }
+
+    private fun priceOf(id: String): Double? = cachedPrices[id] ?: ItemWorth.price(id)
 
     private fun readRunHead(stack: ItemStack): RunHead {
         val name = stack.hoverName.string
@@ -246,7 +314,8 @@ object Croesus : Module(
         if (first == 0) return null
         val end = lore.indexOfFirst { it.isEmpty() }
         if (end < first) return null
-        val cost = lore.getOrNull(end + 2)?.let { coinsLine.find(it)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() } ?: 0.0
+        var cost = lore.getOrNull(end + 2)?.let { coinsLine.find(it)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull() } ?: 0.0
+        for (i in end + 1 until minOf(lore.size, end + 6)) if (lore[i] == KEY) cost += priceOf(KEY_ID) ?: 0.0
         var total = 0.0
         val rewards = ArrayList<Reward>(end - first)
         for (i in first until end) {
@@ -265,11 +334,12 @@ object Croesus : Module(
             return cachedPrices["ENCHANTED_BOOK-$prefix${name.uppercase().replace(" ", "_")}-${romanToInt(level)}"]
         }
         essenceLine.find(line)?.let { m ->
+            if (!includeEssence) return 0.0
             val (name, amount) = m.destructured
-            return cachedPrices["ESSENCE_${name.uppercase()}"]?.let { it * amount.toDouble() }
+            return priceOf("ESSENCE_${name.uppercase()}")?.let { it * amount.toDouble() }
         }
-        shardLine.find(line)?.let { m -> return cachedPrices["SHARD_${m.groupValues[1].uppercase().replace(" ", "_")}"] }
-        renamedIds[line]?.let { return cachedPrices[it] }
+        shardLine.find(line)?.let { m -> return priceOf("SHARD_${m.groupValues[1].uppercase().replace(" ", "_")}") }
+        ItemWorth.idForName(line.removePrefix("Shiny "))?.let { id -> priceOf(id)?.let { return it } }
         return cachedPrices[line.uppercase().replace("'", "").replace(" -", "").replace(" ", "_")]
     }
 
@@ -277,8 +347,14 @@ object Croesus : Module(
         if (stack.isEmpty || stack.item == Items.CHEST) {
             rewardsBySlot.remove(slot)
             costsBySlot.remove(slot)
-            if (!stack.isEmpty) for (line in stack.loreString) {
-                coinsLine.find(line)?.let { costsBySlot[slot] = it.groupValues[1].replace(",", "").toDouble() }
+            if (!stack.isEmpty) {
+                var cost = 0.0
+                var found = false
+                for (line in stack.loreString) {
+                    coinsLine.find(line)?.let { cost += it.groupValues[1].replace(",", "").toDouble(); found = true }
+                    if (line == KEY) { cost += priceOf(KEY_ID) ?: 0.0; found = true }
+                }
+                if (found) costsBySlot[slot] = cost
             }
         } else {
             costsBySlot.remove(slot)
@@ -299,14 +375,15 @@ object Croesus : Module(
     private fun stackReward(stack: ItemStack): Reward? {
         val name = stack.hoverName.string
         essenceLine.find(name)?.let { m ->
+            if (!includeEssence) return null
             val (essence, amount) = m.destructured
-            val price = cachedPrices["ESSENCE_${essence.uppercase()}"] ?: return null
+            val price = priceOf("ESSENCE_${essence.uppercase()}") ?: return null
             return Reward(name, price * amount.toDouble())
         }
         shardStack.find(name)?.let { m ->
-            cachedPrices["SHARD_${m.groupValues[1].uppercase().replace(" ", "_").replace("'s", "")}"]?.let { return Reward(name, it) }
+            priceOf("SHARD_${m.groupValues[1].uppercase().replace(" ", "_").replace("'s", "")}")?.let { return Reward(name, it) }
         }
-        return cachedPrices[stack.itemId]?.let { Reward(name, it) }
+        return priceOf(stack.itemId)?.let { Reward(name, it) }
     }
 
     private fun GuiGraphicsExtractor.drawChests(list: List<Chest>): Pair<Int, Int> {
@@ -328,25 +405,6 @@ object Croesus : Module(
         }
         return width to y
     }
-
-    private val renamedIds = mapOf(
-        "Shiny Wither Chestplate" to "WITHER_CHESTPLATE",
-        "Shiny Wither Leggings" to "WITHER_LEGGINGS",
-        "Shiny Necron's Handle" to "NECRON_HANDLE",
-        "Necron's Handle" to "NECRON_HANDLE",
-        "Shiny Wither Helmet" to "WITHER_HELMET",
-        "Shiny Wither Boots" to "WITHER_BOOTS",
-        "Wither Shield" to "WITHER_SHIELD_SCROLL",
-        "Implosion" to "IMPLOSION_SCROLL",
-        "Shadow Warp" to "SHADOW_WARP_SCROLL",
-        "Necron Dye" to "DYE_NECRON",
-        "Livid Dye" to "DYE_LIVID",
-        "Giant's Sword" to "GIANTS_SWORD",
-        "NECROMANCERS_BROOCH" to "NECROMANCER_BROOCH",
-        "SHADOW_WARP" to "SHADOW_WARP_SCROLL",
-        "SPIRIT_STONE" to "SPIRIT_DECOY",
-        "WARPED_STONE" to "AOTE_STONE"
-    )
 
     private val sampleChests by lazy {
         listOf(
