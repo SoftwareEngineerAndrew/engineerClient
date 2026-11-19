@@ -20,6 +20,7 @@ import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.utils.Colors
 import com.adm.utils.handlers.schedule
 import com.adm.utils.sendCommand
+import com.adm.utils.skyblock.PartyUtils
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.Floor
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
@@ -51,6 +52,7 @@ object DungeonQueue : Module(
     private val autoRequeue by BooleanSetting("Auto Requeue", false, desc = "Automatically starts a new dungeon at the end of a dungeon.")
     private val requeueDelay by NumberSetting("Requeue Delay", 2, 0..30, 1, desc = "The delay in seconds before requeuing.", unit = "s").withDependency { autoRequeue }
     private val disablePartyLeave by BooleanSetting("Disable on leave/kick", true, desc = "Disables the requeue on party leave message.").withDependency { autoRequeue }
+    private val requeueMinParty by NumberSetting("Requeue Min Party Size", 1, 1..5, 1, desc = "Skips the requeue when the party is smaller.").withDependency { autoRequeue }
 
     private val soloClear by BooleanSetting("Solo Clear Queue", false, desc = "Requeues a solo F7 or M7 run that isn't worth finishing.")
     private val autoSend by BooleanSetting("Auto Send", true, desc = "Sends /joininstance when a trigger fires; off only alerts.").withDependency { soloClear }
@@ -133,7 +135,7 @@ object DungeonQueue : Module(
                 announceKick && (kicked || message.matches(timeoutExeceptionRegex)) -> sendCommand("pc I was kicked!")
                 autoRequeue && message.matches(extraStatsRegex) -> {
                     if (!disableRequeue.also { disableRequeue = false }) schedule(requeueDelay * 20) {
-                        if (!disableRequeue) sendCommand("instancerequeue")
+                        if (!disableRequeue && canRequeue()) sendCommand("instancerequeue")
                     }
                 }
             }
@@ -230,6 +232,13 @@ object DungeonQueue : Module(
         say("§c$reason§7, sending /$cmd")
         command = cmd; attempts = 1; retryAt = 0L
         sendCommand(cmd)
+    }
+
+    // A party whose leader is unknown (joined before launch) still requeues.
+    private fun canRequeue(): Boolean {
+        if (!PartyUtils.isInParty) return requeueMinParty <= 1
+        if (PartyUtils.partyLeader != null && !PartyUtils.isLeader()) return false
+        return PartyUtils.members.size >= requeueMinParty
     }
 
     private fun manualRequeue() {
