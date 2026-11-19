@@ -88,13 +88,19 @@ object Highlight : Module(
             val level = mc.level ?: return@on
             val self = mc.player?.gameProfile?.name ?: return@on
             val mates = DungeonUtils.dungeonTeammates
+            val eye = mc.gameRenderer.mainCamera().position()
             outlines.clear()
             for (i in mates.indices) {
                 val mate = mates[i]
                 if (mate.clazz == DungeonClass.EMPTY || mate.name == self) continue
                 val p = entityOf(mate, level) ?: continue
                 if (teammateBox) outlines.outline(p.renderBoundingBox, mate.clazz.color, depth = false)
-                if (teammateName) drawText(labelOf(mate), p.renderPos.add(0.0, 2.75, 0.0), 2f, false)
+                if (teammateName) {
+                    val pos = p.renderPos
+                    // Grows with distance so a far label stays readable.
+                    val scale = maxOf(2f, (eye.distanceTo(pos) * 0.12).toFloat())
+                    drawText(labelOf(mate), pos.add(0.0, 2.75, 0.0), scale, false)
+                }
             }
             drawBoxes(outlines)
         }
