@@ -68,12 +68,16 @@ object BoulderSolver {
     private fun findRoom(): DungeonRoom? =
         room ?: DungeonScan.rooms.firstOrNull { it.data?.name == "Boulder" && it.clayPos != null }?.also { room = it }
 
-    fun onTick(mode: Mode) {
+    fun onTick(mode: Mode) = onTick(mode, true)
+
+    fun onTick(mode: Mode, planning: Boolean) {
         val room = findRoom() ?: return
         val read = readBoard(room) ?: return
         if (read != seen) { seen = read; stableTicks = 0; return }
         // a push reaches the client as one packet per chunk section, so wait for the board to settle
-        if (++stableTicks < 2 || (read == board && mode == planMode)) return
+        if (++stableTicks < 2) return
+        if (stableTicks == 2) checkLater(read)
+        if (!planning || read == board && mode == planMode) return
 
         if (mode == planMode && board != -1L) {
             val done = plan.indexOfFirst { it.after == read }
@@ -143,6 +147,20 @@ object BoulderSolver {
     }
 
     private val solvable = ConcurrentHashMap<Long, Boolean>()
+    private val checking = ConcurrentHashMap.newKeySet<Long>()
+
+    // The board and every board one push away, so a click only reads answers already worked out.
+    private fun checkLater(b: Long) {
+        if (solvable.containsKey(b) || !checking.add(b)) return
+        worker.execute {
+            try {
+                if (canSolve(b)) for (cell in 0 until 42) {
+                    if (b shr cell and 1L == 0L) continue
+                    for ((dc, dr) in PUSHES) canSolve(push(b, cell, dc, dr) ?: continue)
+                }
+            } catch (_: Throwable) {} finally { checking.remove(b) }
+        }
+    }
 
     /** Whether anyone dropping in from the north can still open the way to the chest from [start]. Unknown counts as yes. */
     private fun canSolve(start: Long): Boolean = solvable.getOrPut(start) {
@@ -182,7 +200,7 @@ object BoulderSolver {
         val room = findRoom() ?: return false
         if (DungeonUtils.currentRoomName != "Boulder") return false
         val b = readBoard(room) ?: return false
-        if (!canSolve(b)) return false
+        if (solvable[b] != true) return false
         val rel = room.getRelativeCoords(pos)
         if (rel.y != 65) return false
         for ((dc, dr) in PUSHES) {
@@ -193,7 +211,7 @@ object BoulderSolver {
             val r = (z - 9) / 3
             if (c !in 0..6 || r !in 0..5 || b shr (c + 7 * r) and 1L == 0L) continue
             val after = push(b, c + 7 * r, dc, dr) ?: return false
-            return !canSolve(after)
+            return solvable[after] == false
         }
         return false
     }

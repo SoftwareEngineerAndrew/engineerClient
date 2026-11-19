@@ -58,6 +58,8 @@ object PuzzleSolvers : Module(
     private val blazeSecondColor by ColorSetting("Second Color", Colors.MINECRAFT_GOLD.withAlpha(.75f), true, desc = "Color for the second blaze.").withDependency { blazeSolver && blazeDropDown }
     private val blazeThirdColor by ColorSetting("Third Color", Colors.MINECRAFT_RED.withAlpha(.75f), true, desc = "Color for the third blaze.").withDependency { blazeSolver && blazeDropDown }
     private val blazeAllColor by ColorSetting("Other Color", Colors.WHITE.withAlpha(.3f), true, desc = "Color for the other blazes.").withDependency { blazeSolver && blazeDropDown }
+    private val blazeSpot by BooleanSetting("Blaze Standing Spot", false, desc = "Marks the block to stand on, and in Higher Blaze to etherwarp to.").withDependency { blazeSolver && blazeDropDown }
+    private val blazeSpotColor by ColorSetting("Standing Spot Color", Colors.MINECRAFT_AQUA.withAlpha(.5f), true, desc = "Color of the standing spot.").withDependency { blazeSolver && blazeDropDown && blazeSpot }
     private val blazeSendComplete by BooleanSetting("Send Complete", false, desc = "Send complete message.").withDependency { blazeSolver && blazeDropDown }
     private val hideBlazes by BooleanSetting("Hide Blazes", true, desc = "Hides the blazes while the solver is active.").withDependency { blazeSolver && blazeDropDown }
     val blazeBlockWrong by BooleanSetting("Blaze Block Wrong Shots", true, desc = "Blocks bow shots that would hit a blaze out of order.").withDependency { blazeDropDown }
@@ -234,7 +236,7 @@ object PuzzleSolvers : Module(
 
         on<TickEvent.End> {
             if (!DungeonUtils.inClear) return@on
-            if (boulderSolver) BoulderSolver.onTick(boulderMode)
+            if (boulderSolver || boulderBlockWrong) BoulderSolver.onTick(boulderMode, boulderSolver)
         }
 
         on<RenderExtractEvent> {
@@ -243,6 +245,7 @@ object PuzzleSolvers : Module(
             if (weirdosSolver) WeirdosSolver.onRenderWorld(this, weirdosColor, weirdosWrongColor, weirdosStyle)
             if (boulderSolver) BoulderSolver.onRenderWorld(this, showAllBoulderClicks, boulderTarget, boulderStyle, boulderColor)
             if (blazeSolver)   BlazeSolver.onRenderWorld(this, blazeLineNext, blazeLineAmount, blazeStyle, blazeFirstColor, blazeSecondColor, blazeThirdColor, blazeAllColor, blazeLineWidth)
+            if (blazeSolver && blazeSpot) BlazeSolver.renderSpot(this, blazeSpotColor)
             if (beamsSolver)   BeamsSolver.onRenderWorld(this, beamStyle, beamsTracer, beamsAlpha)
             if (quizSolver)    QuizSolver.onRenderWorld(this, quizColor, quizDepth)
             if (tpMaze)        TPMazeSolver.onRenderWorld(this, mazeColorOne, mazeColorMultiple, mazeColorVisited, mazeShowTracer, mazeTracerColor)

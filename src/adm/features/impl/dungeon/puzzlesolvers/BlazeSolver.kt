@@ -13,6 +13,8 @@ import com.adm.utils.skyblock.dungeon.DungeonListener
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.Puzzle
 import com.adm.utils.skyblock.dungeon.PuzzleStatus
+import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import net.minecraft.core.BlockPos
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.monster.Blaze
@@ -96,6 +98,25 @@ object BlazeSolver {
         if (sendComplete) sendCommand("pc Blaze puzzle solved!")
     }
 
+    // The block most players stand on to shoot from (Higher: also where they etherwarp to), in the room's frame.
+    private val HIGHER_SPOT = BlockPos(9, 95, 18)
+    private val LOWER_SPOT = BlockPos(21, 56, 15)
+    private var spotRoom: DungeonRoom? = null
+    private var spotBox: AABB? = null
+
+    fun renderSpot(event: RenderExtractEvent, color: Color) {
+        val room = DungeonUtils.currentRoom ?: return
+        val name = room.data?.name
+        if (name != "Lower Blaze" && name != "Higher Blaze") return
+        if (Puzzle.BLAZE.status == PuzzleStatus.Completed) return
+        if (spotRoom !== room || spotBox == null) {
+            if (room.clayPos == null) return
+            spotBox = AABB(room.getRealCoords(if (name == "Higher Blaze") HIGHER_SPOT else LOWER_SPOT))
+            spotRoom = room
+        }
+        event.drawStyledBox(spotBox!!, color, BoxStyle.FILLED_OUTLINE, depth = false)
+    }
+
     private fun box(stand: ArmorStand): AABB = stand.boundingBox.inflate(0.5, 1.0, 0.5).move(0.0, -1.0, 0.0)
 
     fun onRenderWorld(event: RenderExtractEvent, blazeLineNext: Boolean, blazeLineAmount: Int, blazeStyle: BoxStyle, blazeFirstColor: Color, blazeSecondColor: Color, blazeThirdColor: Color, blazeAllColor: Color, blazeLineWidth: Float) {
@@ -133,5 +154,7 @@ object BlazeSolver {
 
     fun reset() {
         blazes.clear()
+        spotRoom = null
+        spotBox = null
     }
 }
