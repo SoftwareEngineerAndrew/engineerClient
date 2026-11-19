@@ -1,5 +1,6 @@
 package com.adm.features.impl.dungeon.map
 
+import com.adm.AdmMod.mc
 import com.adm.events.CheckmarkUpdateEvent
 import com.adm.events.LevelEvent
 import com.adm.events.MapUpdateEvent
@@ -35,20 +36,26 @@ object MapScan {
     init {
         on<LevelEvent.Load> { located = false; pixels = null }
 
+        // Read on the client thread so the map and the rooms are never seen half updated.
         onReceive<ClientboundMapItemDataPacket> {
             if (!DungeonUtils.inClear || mapId().id and 1000 != 0) return@onReceive
-            val marks = decorations()
-            if (marks.isPresent) placeTeammates(marks.get())
-            val patch = colorPatch()
-            if (!patch.isPresent) return@onReceive
-            val pixels = patch.get().mapColors()
-            if (pixels.size < SIDE * SIDE || pixels[0] != BLANK) return@onReceive
-            if (!located && !locate(pixels)) return@onReceive
-            if (DungeonScan.roomSize == -1) return@onReceive
-            read(pixels)
-            MapScan.pixels = pixels.copyOf()
-            MapUpdateEvent.postAndCatch()
+            val marks = decorations().orElse(null)
+            val patch = colorPatch().orElse(null)?.mapColors()
+            val pixels = if (patch != null && patch.size >= SIDE * SIDE && patch[0] == BLANK) patch.copyOf() else null
+            if (marks == null && pixels == null) return@onReceive
+            mc.execute { update(marks, pixels) }
         }
+    }
+
+    private fun update(marks: List<MapDecoration>?, pixels: ByteArray?) {
+        if (!DungeonUtils.inClear) return
+        if (marks != null) placeTeammates(marks)
+        if (pixels == null) return
+        if (!located && !locate(pixels)) return
+        if (DungeonScan.roomSize == -1) return
+        read(pixels)
+        MapScan.pixels = pixels
+        MapUpdateEvent.postAndCatch()
     }
 
     private fun locate(pixels: ByteArray): Boolean {
