@@ -8,6 +8,7 @@ import com.adm.events.core.on
 import com.adm.features.Module
 import com.adm.utils.customData
 import com.adm.utils.loreString
+import com.adm.utils.setTitle
 import com.adm.utils.render.text
 import com.adm.utils.skyblock.LocationUtils
 import com.google.gson.JsonParser
@@ -20,12 +21,12 @@ import java.util.Optional
 
 object PetDisplay : Module(
     name = "Pet Display",
-    description = "Current pet HUD and candy used on max level pets.",
+    description = "Current pet HUD and candy used on pets.",
     key = null,
 ) {
     private val candyOverlay by BooleanSetting("Candy On Item", true, desc = "Shows candy used on max level pets in slots.")
-    private val candyTooltip by BooleanSetting("Candy In Tooltip", true, desc = "Adds the candy used line to max level pet tooltips.")
-    private val showSource by BooleanSetting("Show Autopet", true, desc = "Notes when Autopet equipped the pet.")
+    private val candyTooltip by BooleanSetting("Candy In Tooltip", true, desc = "Adds the candy used line to pet tooltips.")
+    private val showSource by BooleanSetting("Autopet Title", true, desc = "A short title with the pet an Autopet rule equipped.")
     private val showRules by BooleanSetting("Show Autopet Rules", false, desc = "Lists the rules read from the Autopets menu.")
 
     private val hud by HUD("Current Pet", "Shows your current pet.") { example ->
@@ -33,12 +34,6 @@ object PetDisplay : Module(
         var w = mc.font.width(name)
         text(name, 1, 1)
         var y = 1 + mc.font.lineHeight
-        if (showSource && (example || byAutopet)) {
-            val s = "§7Autopet"
-            text(s, 1, y)
-            w = maxOf(w, mc.font.width(s))
-            y += mc.font.lineHeight
-        }
         if (showRules) for (rule in if (example) listOf("§aRule 1") else rules) {
             text("§8- §r$rule", 1, y)
             w = maxOf(w, mc.font.width("- $rule"))
@@ -48,7 +43,6 @@ object PetDisplay : Module(
     }
 
     @Volatile private var pet: String? = null
-    private var byAutopet = false
     private val rules = ArrayList<String>()
 
     private val autopet = Regex("^Autopet equipped your \\[Lvl (\\d+)] (.+?)!(?: VIEW RULE)?$")
@@ -58,25 +52,22 @@ object PetDisplay : Module(
     private val candyLore = Regex("Pet Candy Used: (\\d+)")
     private val ignoredRuleItems = setOf("Close", "Go Back", "Create Rule", "Next Page", "Previous Page", "")
 
-    private val candyCache = HashMap<String, Int>()
+    private val candyCache = HashMap<String, PetCandy>()
     private const val NOT_MAX = -1
 
     init {
         on<MessageEvent.Chat> {
             autopet.matchEntire(message)?.let { m ->
-                pet = "§7[Lvl ${m.groupValues[1]}] " + colored(component, m.groupValues[2])
-                byAutopet = true
+                val equipped = "§7[Lvl ${m.groupValues[1]}] " + colored(component, m.groupValues[2])
+                pet = equipped
+                if (showSource) setTitle(equipped)
                 return@on
             }
             summoned.matchEntire(message)?.let { m ->
                 pet = colored(component, m.groupValues[1])
-                byAutopet = false
                 return@on
             }
-            if (despawned.matches(message)) {
-                pet = null
-                byAutopet = false
-            }
+            if (despawned.matches(message)) pet = null
         }
 
         on<SetSlotEvent> {
@@ -86,7 +77,6 @@ object PetDisplay : Module(
                 title.startsWith("Pets") -> {
                     if (itemStack.loreString.any { "Click to despawn" in it }) {
                         pet = itemStack.hoverName.legacy()
-                        byAutopet = false
                     }
                 }
                 title.startsWith("Autopet") -> {
@@ -104,9 +94,14 @@ object PetDisplay : Module(
 
         ItemTooltipCallback.EVENT.register { stack, _, _, lines ->
             if (!enabled || !candyTooltip || !LocationUtils.isInSkyblock) return@register
-            val candy = maxedCandy(stack)
-            if (candy == NOT_MAX || lines.any { "Pet Candy Used" in it.string }) return@register
-            lines.add(1.coerceAtMost(lines.size), Component.literal("§7Pet Candy Used: ${if (candy > 0) "§c" else "§a"}$candy§7/10"))
+            val candy = pet(stack)?.candy ?: return@register
+            if (lines.any { "Pet Candy Used" in it.string }) return@register
+            // Where Hypixel puts it on a pet that isn't max level: above the level progress
+            val at = lines.indexOfFirst { "MAX LEVEL" in it.string || "Progress to Level" in it.string }
+            val line = Component.literal("§7Pet Candy Used: ${if (candy > 0) "§c" else "§a"}$candy§7/10")
+            if (at < 0) lines.add(1.coerceAtMost(lines.size), line)
+            else if (at > 0 && lines[at - 1].string.isBlank()) lines.addAll(at, listOf(line, Component.empty()))
+            else lines.add(at, line)
         }
     }
 
@@ -119,8 +114,13 @@ object PetDisplay : Module(
     }
 
     /** Candy used if the stack is a max level pet, else [NOT_MAX]. */
-    private fun maxedCandy(stack: ItemStack): Int {
-        val info = stack.customData.getString("petInfo").orElse(null) ?: return NOT_MAX
+    private fun maxedCandy(stack: ItemStack): Int = pet(stack)?.takeIf { it.maxed }?.candy ?: NOT_MAX
+
+    private class PetCandy(val maxed: Boolean, val candy: Int)
+
+    /** Whether the stack is a max level pet and the candy used on it; null if it isn't a pet. */
+    private fun pet(stack: ItemStack): PetCandy? {
+        val info = stack.customData.getString("petInfo").orElse(null) ?: return null
         val name = stack.hoverName.string
         val key = name + info
         candyCache[key]?.let { return it }
@@ -129,11 +129,9 @@ object PetDisplay : Module(
         val type = json?.get("type")?.asString ?: ""
         val level = levelRegex.find(name)?.groupValues?.get(1)?.toIntOrNull() ?: 0
         val maxed = lore.any { "MAX LEVEL" in it } || level >= maxLevel(type, name)
-        val candy = if (!maxed) NOT_MAX
-            else json?.get("candyUsed")?.asInt ?: lore.firstNotNullOfOrNull { candyLore.find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 0
+        val candy = json?.get("candyUsed")?.asInt ?: lore.firstNotNullOfOrNull { candyLore.find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 0
         if (candyCache.size >= 512) candyCache.clear()
-        candyCache[key] = candy
-        return candy
+        return PetCandy(maxed, candy).also { candyCache[key] = it }
     }
 
     private fun maxLevel(type: String, name: String): Int =
@@ -149,16 +147,29 @@ object PetDisplay : Module(
 
     /** [name] with the colour it has in [component]. */
     private fun colored(component: Component, name: String): String {
+        // The colour comes either as the style or as § codes inside the text
         val plain = StringBuilder()
-        val starts = ArrayList<Pair<Int, String>>()
+        val codes = ArrayList<String>()
         component.visit(FormattedText.StyledContentConsumer<Unit> { style, piece ->
-            if (piece.isNotEmpty()) starts.add(plain.length to codeOf(style))
-            plain.append(piece)
+            val base = codeOf(style)
+            var code = base
+            var i = 0
+            while (i < piece.length) {
+                val c = piece[i]
+                if (c == '§' && i + 1 < piece.length) {
+                    val k = piece[i + 1].lowercaseChar()
+                    if (k in "0123456789abcdef") code = "§$k" else if (k == 'r') code = base
+                    i += 2
+                    continue
+                }
+                plain.append(c)
+                codes.add(code)
+                i++
+            }
             Optional.empty()
         }, Style.EMPTY)
         val at = plain.indexOf(name)
-        val code = if (at < 0) "§f" else starts.lastOrNull { it.first <= at }?.second ?: "§f"
-        return code + name
+        return (if (at < 0) "§f" else codes[at]) + name
     }
 
     private fun codeOf(style: Style): String {
