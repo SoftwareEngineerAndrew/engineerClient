@@ -21,7 +21,7 @@ object Placement {
     /** Kept out of the panels; opened on their own instead. */
     val HIDDEN = setOf("POV Previews")
 
-    val PANELS = listOf("Dungeons", "Clear", "F7/M7 Boss", "Crimson Isle", "Skyblock", "Render", "AscentClient", "Devgineer Client", "Ashley Client", "QA")
+    val PANELS = listOf("Dungeons", "Clear", "F7/M7 Boss", "Crimson Isle", "Skyblock", "Render", "AscentClient", "Devgineer Client", "Ashley Client")
 
     /** Where a panel starts: six to a row. */
     fun home(name: String): Pair<Int, Int> {
@@ -55,7 +55,7 @@ object Placement {
         // The addons' modules keep their own panel, named by the category each gives them.
         when (module.category.name) {
             "Ascent Client" -> return "AscentClient"
-            "Devgineer Client", "Ashley Client", "QA" -> return module.category.name
+            "Devgineer Client", "Ashley Client" -> return module.category.name
         }
         byName[module.name]?.let { return it }
         return when (module.category) {
