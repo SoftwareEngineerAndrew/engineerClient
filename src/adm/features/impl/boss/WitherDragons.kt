@@ -2,6 +2,7 @@ package com.adm.features.impl.boss
 
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.events.*
@@ -55,6 +56,17 @@ object WitherDragons : Module(
 
     private val dragonHealth by BooleanSetting("Dragon Health", true, desc = "Displays the health of M7 dragons.")
 
+    private val lastBreathDropDown by DropdownSetting("Last Breath Dropdown", desc = "Times Last Breath shots to land as a dragon spawns.", label = "Last Breath")
+    private val lastBreath by BooleanSetting("Last Breath Release", false, desc = "Times a full draw to land as the next dragon spawns.").withDependency { lastBreathDropDown }
+    private val lastBreathDing by BooleanSetting("Release Ding", true, desc = "Dings when to release with your current aim.").withDependency { lastBreathDropDown && lastBreath }
+    private val lastBreathBunch by BooleanSetting("Bunch Marker", true, desc = "Marks where to aim so a shot released now lands at the spawn.").withDependency { lastBreathDropDown && lastBreath }
+    private val lastBreathColor by ColorSetting("Marker Color", Colors.MINECRAFT_GREEN, true, desc = "Colour of the aim marker.").withDependency { lastBreathDropDown && lastBreath && lastBreathBunch }
+    private val lastBreathHud by HUD("Last Breath HUD", "Time to release with your current aim.") { example ->
+        if (example) return@HUD textDim("§cRed §frelease in §e1.25s", 0, 0, Colors.WHITE)
+        if (!lastBreath) return@HUD 0 to 0
+        LastBreathRelease.hudText()?.let { textDim(it, 0, 0, Colors.WHITE) } ?: (0 to 0)
+    }.withDependency { lastBreathDropDown && lastBreath }
+
     val spawnOrder = mutableListOf<WitherDragonsEnum>()
     val priorityDragon: WitherDragonsEnum? get() = spawnOrder.firstOrNull()
     var currentTick = 0L
@@ -91,10 +103,14 @@ object WitherDragons : Module(
                 else if (it.state == WitherDragonState.SPAWNING) it.setAlive(null)
             }
             currentTick++
+            if (lastBreath) LastBreathRelease.tick(lastBreathDing, lastBreathBunch)
         }
 
         on<RenderExtractEvent> {
-            if (DungeonUtils.getF7Phase() == M7Phases.P5) drawDragons()
+            if (DungeonUtils.getF7Phase() == M7Phases.P5) {
+                drawDragons()
+                if (lastBreath && lastBreathBunch) LastBreathRelease.render(this, lastBreathColor)
+            }
         }
 
         on<LevelEvent.Load> {
