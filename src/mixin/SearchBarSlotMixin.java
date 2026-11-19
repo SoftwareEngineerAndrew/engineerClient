@@ -1,5 +1,6 @@
 package com.engineerclient.mixin;
 
+import com.engineerclient.skyblock.ItemProtection;
 import com.engineerclient.skyblock.SearchBar;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -13,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class SearchBarSlotMixin {
     @Inject(method = "extractSlot", at = @At("TAIL"))
     private void ec$shadeMiss(GuiGraphicsExtractor graphics, Slot slot, int mouseX, int mouseY, CallbackInfo ci) {
+        ItemProtection.markSlot(graphics, slot);
         SearchBar.INSTANCE.shadeSlot(graphics, slot);
     }
 }

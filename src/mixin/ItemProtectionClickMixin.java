@@ -13,6 +13,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class ItemProtectionClickMixin {
     @Inject(method = "slotClicked(Lnet/minecraft/world/inventory/Slot;IILnet/minecraft/world/inventory/ContainerInput;)V", at = @At("HEAD"), cancellable = true)
     private void ec$protect(Slot slot, int slotId, int button, ContainerInput input, CallbackInfo ci) {
-        if (ItemProtection.blocksClick((AbstractContainerScreen<?>) (Object) this, slot, slotId, input)) ci.cancel();
+        if (ItemProtection.blocksClick((AbstractContainerScreen<?>) (Object) this, slot, slotId, button, input)) ci.cancel();
     }
 }
