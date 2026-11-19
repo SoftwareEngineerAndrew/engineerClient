@@ -5,6 +5,7 @@ import com.engineerclient.lcm.LcmMapInfo
 import com.engineerclient.lcm.PaulScore
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
@@ -12,6 +13,8 @@ import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.features.impl.boss.ExtraStats
 import com.adm.features.impl.dungeon.MapInfo
+import com.adm.utils.Color.Companion.withAlpha
+import com.adm.utils.Colors
 
 /** Score and stats through the clear, one section each; the logic lives in the section objects. */
 object ClearInfo : Module(
@@ -28,7 +31,10 @@ object ClearInfo : Module(
     }.withDependency { mapDrop && mapInfo }
     val disableInBoss by BooleanSetting("Disable in boss", true, desc = "No HUD in the boss.").withDependency { mapDrop && mapInfo }
     val scoreAlert by BooleanSetting("300 Score Alert", true, desc = "A title and the run time in chat at 300.").withDependency { mapDrop && mapInfo }
-    val highlightPortal by BooleanSetting("Highlight Portal", true, desc = "Highlights the blood portal from 300.").withDependency { mapDrop && mapInfo }
+    val highlightPortal by BooleanSetting("Highlight Portal", true, desc = "Highlights the blood portal, colored by score.").withDependency { mapDrop && mapInfo }
+    val portalUnderS by ColorSetting("Portal Under S", Colors.MINECRAFT_RED.withAlpha(0.5f), true, desc = "Portal color under 270. Alpha 0 hides it.").withDependency { mapDrop && mapInfo && highlightPortal }
+    val portalS by ColorSetting("Portal S", Colors.MINECRAFT_YELLOW.withAlpha(0.5f), true, desc = "Portal color from 270. Alpha 0 hides it.").withDependency { mapDrop && mapInfo && highlightPortal }
+    val portalSPlus by ColorSetting("Portal S+", Colors.MINECRAFT_GREEN.withAlpha(0.5f), true, desc = "Portal color from 300. Alpha 0 hides it.").withDependency { mapDrop && mapInfo && highlightPortal }
     val paulScore by SelectorSetting("Paul Score", PaulScore.Mode.AUTO, desc = "Whether Paul's +10 counts: Auto goes by the mayor.").withDependency { mapDrop }
 
     // ------------------------------------------------------------------ Skip Counter

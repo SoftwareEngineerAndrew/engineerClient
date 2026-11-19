@@ -5,11 +5,12 @@ import com.adm.events.LevelEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.RoomEnterEvent
 import com.adm.events.ScoreUpdateEvent
+import com.adm.events.TickEvent
 import com.adm.events.core.EventBus
 import com.adm.events.core.on
+import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.tile.DungeonRoom
 import com.adm.features.impl.dungeon.map.tile.RoomType
-import com.adm.utils.Color.Companion.withAlpha
-import com.adm.utils.Colors
 import com.adm.utils.alert
 import com.adm.utils.modMessage
 import com.adm.utils.render.drawFilledBox
@@ -21,6 +22,7 @@ import net.minecraft.world.phys.AABB
 object MapInfo {
     private var portalAABB: AABB? = null
     private var shownTitle = false
+    private var ticks = 0
 
     fun install() {
         on<ScoreUpdateEvent> {
@@ -31,15 +33,24 @@ object MapInfo {
         }
 
         on<RoomEnterEvent> {
-            if (room?.type == RoomType.BLOOD)
-                portalAABB = AABB.encapsulatingFullBlocks(room.getRealCoords(BlockPos(16, 69, 29)), room.getRealCoords(BlockPos(14, 69, 29))).inflate(0.0, 4.0, 0.0)
+            if (portalAABB == null && room?.type == RoomType.BLOOD) portalAABB = portalOf(room)
+        }
+
+        // The scanned map knows blood's place and rotation long before anyone walks in.
+        on<TickEvent.End> {
+            if (portalAABB != null || ++ticks % 10 != 0 || !ClearInfo.mapInfoOn || !ClearInfo.highlightPortal || !DungeonUtils.inClear) return@on
+            for (room in DungeonScan.rooms) if (room.type == RoomType.BLOOD) {
+                portalAABB = portalOf(room)
+                break
+            }
         }
 
         on<RenderExtractEvent> {
-            if (!ClearInfo.mapInfoOn || !ClearInfo.highlightPortal || !DungeonUtils.inClear || DungeonUtils.score < 300) return@on
-            portalAABB?.let { pos ->
-                drawFilledBox(pos, Colors.MINECRAFT_GREEN.withAlpha(0.5f), depth = true)
-            }
+            val box = portalAABB ?: return@on
+            if (!ClearInfo.mapInfoOn || !ClearInfo.highlightPortal || !DungeonUtils.inClear) return@on
+            val score = DungeonUtils.score
+            val color = if (score >= 300) ClearInfo.portalSPlus else if (score >= 270) ClearInfo.portalS else ClearInfo.portalUnderS
+            if (!color.isTransparent) drawFilledBox(box, color, depth = true)
         }
 
         on<LevelEvent.Load> {
@@ -47,5 +58,10 @@ object MapInfo {
             portalAABB = null
         }
         EventBus.subscribe(this)
+    }
+
+    private fun portalOf(room: DungeonRoom): AABB? {
+        if (room.rotation == null || room.clayPos == null) return null
+        return AABB.encapsulatingFullBlocks(room.getRealCoords(BlockPos(16, 69, 29)), room.getRealCoords(BlockPos(14, 69, 29))).inflate(0.0, 4.0, 0.0)
     }
 }
