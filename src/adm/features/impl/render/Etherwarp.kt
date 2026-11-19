@@ -15,6 +15,7 @@ import com.adm.events.core.onReceive
 import com.adm.features.Module
 import com.adm.utils.*
 import com.adm.utils.Color.Companion.multiplyAlphaRgba
+import com.adm.utils.Color.Companion.withAlpha
 import com.adm.utils.render.BoxStyle
 import com.adm.utils.render.drawFilledBox
 import com.adm.utils.render.drawWireFrameBox
@@ -42,9 +43,9 @@ object Etherwarp : Module(
     description = "Provides configurable visual feedback for Etherwarp."
 ) {
     private val render by BooleanSetting("Show Guess", true, desc = "Shows where Etherwarp will take you.")
-    private val color by ColorSetting("Success Color", Colors.MINECRAFT_GREEN, true, desc = "Color of the box.").withDependency { render }
+    private val color by ColorSetting("Success Color", Colors.MINECRAFT_GREEN, desc = "Color of the box.").withDependency { render }
     private val renderFail by BooleanSetting("Show when failed", true, desc = "Shows the box even when the guess failed.").withDependency { render }
-    private val failColor by ColorSetting("Fail Color", Colors.MINECRAFT_RED, true, desc = "Color of the box if guess failed.").withDependency { renderFail }
+    private val failColor by ColorSetting("Fail Color", Colors.MINECRAFT_RED, desc = "Color of the box if guess failed.").withDependency { renderFail }
     private val renderStyle by SelectorSetting("Box Style", BoxStyle.FILLED_OUTLINE, desc = "Style of the box.").withDependency { render }
     private val fillOpacity by NumberSetting("Fill Opacity", 50, 0..100, 5, desc = "Opacity of the box fill.", unit = "%").withDependency { render && renderStyle != BoxStyle.OUTLINE }
     private val outlineOpacity by NumberSetting("Outline Opacity", 100, 0..100, 5, desc = "Opacity of the box outline.", unit = "%").withDependency { render && renderStyle != BoxStyle.FILLED }
@@ -105,7 +106,7 @@ object Etherwarp : Module(
             val pos = etherPos.pos ?: return@on
 
             val box = if (fullBlock) AABB(pos) else pos.getBlockBounds()?.move(pos) ?: AABB(pos)
-            val boxColor = if (etherPos.succeeded) color else failColor
+            val boxColor = (if (etherPos.succeeded) color else failColor).withAlpha(1f)
             if (renderStyle != BoxStyle.OUTLINE) drawFilledBox(box.inflate(0.00005), boxColor.multiplyAlphaRgba(fillOpacity / 100f), depth)
             if (renderStyle != BoxStyle.FILLED) drawWireFrameBox(box, boxColor.multiplyAlphaRgba(outlineOpacity / 100f), outlineThickness, depth)
         }
