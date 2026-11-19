@@ -14,6 +14,9 @@ import com.adm.features.impl.dungeon.SecretClicked
 import com.adm.utils.Color
 import com.adm.utils.NameMemo
 import com.adm.utils.render.BoxBatch
+import com.adm.utils.renderX
+import com.adm.utils.renderY
+import com.adm.utils.renderZ
 import com.adm.utils.render.drawBoxes
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.world.entity.item.ItemEntity
@@ -86,9 +89,9 @@ object ItemHighlight {
                 }
                 val size = item.getDimensions(item.pose)
                 val half = size.width() / 2f
-                val x = item.x
-                val y = item.y
-                val z = item.z
+                val x = item.renderX
+                val y = item.renderY
+                val z = item.renderZ
                 boxes.filled(
                     AABB(x - half - 0.1, y - 0.1 + 0.05, z - half - 0.1, x + half + 0.1, y + size.height() + 0.1 + 0.05, z + half + 0.1),
                     color, depth = false,
