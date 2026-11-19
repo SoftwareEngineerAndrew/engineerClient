@@ -20,6 +20,7 @@ import com.adm.utils.render.drawText
 import com.adm.utils.render.drawWireFrameBox
 import com.adm.utils.render.text
 import com.adm.utils.sendCommand
+import com.adm.utils.skyblock.dungeon.DungeonClass
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
@@ -194,7 +195,8 @@ object PositionalMessages : Module(
             place.heard = true
         }
         if (hideOwn && sender == mc.user.name) return
-        alert = "§6$sender§e is $verb$where!"
+        val code = DungeonUtils.dungeonTeammates.firstOrNull { it.name == sender }?.clazz?.takeIf { it != DungeonClass.EMPTY }?.colorCode ?: '6'
+        alert = "§$code$sender§e is $verb$where!"
         alertSize = mc.font.width(alert) to 9
         alertTicksLeft = alertTicks
         soundsLeft = soundRepeats
