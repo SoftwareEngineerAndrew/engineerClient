@@ -13,7 +13,11 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import net.fabricmc.loader.api.metadata.ModOrigin
 import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import java.time.Duration
 
 /**
@@ -28,7 +32,9 @@ import java.time.Duration
 object UpdateCheck {
     enum class Level { NONE, SOFT, HARD, NOW }
 
-    class Update(val version: String, val note: String, val hard: String, val now: String)
+    class Update(val version: String, val note: String, val hard: String, val now: String, val sha256: String) {
+        constructor(version: String, note: String, hard: String, now: String) : this(version, note, hard, now, "")
+    }
 
     private const val REPO = "https://github.com/undonecoffee/adm"
     private val mc by lazy { FabricLoader.getInstance().getModContainer("minecraft").map { it.metadata.version.friendlyString }.orElse("") }
@@ -64,14 +70,18 @@ object UpdateCheck {
         fun s(k: String) = o.get(k)?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
         val v = s("version"); val hard = s("hard"); val now = s("now")
         if (!VERSION.matches(v) || (hard.isNotEmpty() && !VERSION.matches(hard)) || (now.isNotEmpty() && !VERSION.matches(now))) return null
-        Update(v, s("note").replace(Regex("§."), "").take(160), hard, now)
+        Update(v, s("note").replace(Regex("§."), "").take(160), hard, now, s("sha256").lowercase().takeIf { SHA256.matches(it) }.orEmpty())
     }.getOrNull()
+
+    private val SHA256 = Regex("[0-9a-f]{64}")
 
     fun install() {
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
-            for (name in EngineerClient.COMMANDS) dispatcher.register(literal(name).then(literal("update").executes { sendLink(); 1 }))
+            for (name in EngineerClient.COMMANDS) dispatcher.register(literal(name).then(literal("update").executes { sendLink(); 1 }
+                .then(literal("install").executes { download(); 1 })))
         }
         EngineerClient.HELP += "§f /adm update§7 — the link to the newest ADM jar"
+        EngineerClient.HELP += "§f /adm update install§7 — downloads it and swaps it in when the game closes"
         if (!VERSION.matches(mine) || mc.isEmpty()) return
         ClientPlayConnectionEvents.JOIN.register { _, _, client -> client.execute { EngineerClient.safely("update check") { onJoin() } } }
         Thread.ofVirtual().name("adm-update").start {
@@ -127,6 +137,61 @@ object UpdateCheck {
         }
         EngineerClient.msg(Component.literal("§7ADM jar: ").append(link()).append(Component.literal(" $state")))
         EngineerClient.msg(Component.literal("§8 $jarUrl"))
+    }
+
+    @Volatile private var staged: Path? = null
+
+    /** /adm update install: the newest jar, checked against update.json's SHA-256, put in place of this one on exit. */
+    private fun download() {
+        val u = found
+        val current = FabricLoader.getInstance().getModContainer("engineerclient").map { it.origin }.orElse(null)
+            ?.takeIf { it.kind == ModOrigin.Kind.PATH }?.paths?.singleOrNull()?.takeIf { it.toString().endsWith(".jar") }
+        when {
+            !VERSION.matches(mine) || current == null -> return EngineerClient.msg("§7A dev build updates itself.")
+            u == null -> return EngineerClient.msg("§7No update info yet; try again in a moment.")
+            level(mine, u) == Level.NONE -> return EngineerClient.msg("§aYou have the newest, $mine.")
+            u.sha256.isEmpty() -> return EngineerClient.msg("§cThis release has no checksum; download it by hand: ").also { sendLink() }
+            staged != null -> return EngineerClient.msg("§a${u.version} is ready and goes in when the game closes.")
+        }
+        val jar = current ?: return
+        val up = u ?: return
+        EngineerClient.msg("§7Downloading ADM ${up.version}...")
+        Thread.ofVirtual().name("adm-update-download").start {
+            val result = runCatching {
+                val http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).connectTimeout(Duration.ofSeconds(10)).build()
+                val res = http.send(HttpRequest.newBuilder(URI.create(jarUrl)).timeout(Duration.ofMinutes(2)).GET().build(), HttpResponse.BodyHandlers.ofByteArray())
+                check(res.statusCode() == 200) { "HTTP ${res.statusCode()}" }
+                val bytes = res.body()
+                val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+                check(hash == up.sha256) { "checksum does not match" }
+                val dir = FabricLoader.getInstance().configDir.resolve("engineerclient")
+                Files.createDirectories(dir)
+                val file = dir.resolve("update.jar")
+                Files.write(file, bytes)
+                file
+            }
+            EngineerClient.mc.execute {
+                result.onSuccess { file ->
+                    if (staged == null) Runtime.getRuntime().addShutdownHook(Thread({ swap(jar) }, "adm-update-swap"))
+                    staged = file
+                    EngineerClient.msg("§aADM ${up.version} downloaded; it goes in when the game closes.")
+                }.onFailure { EngineerClient.msg("§cUpdate failed: ${it.message}") }
+            }
+        }
+    }
+
+    private fun swap(current: Path) {
+        val file = staged ?: return
+        try {
+            Files.move(file, current, StandardCopyOption.REPLACE_EXISTING)
+        } catch (_: Exception) {
+            // Windows keeps the running jar locked until the game has exited: a small process waits for that and moves it.
+            if (!System.getProperty("os.name").startsWith("Windows")) return
+            val pid = ProcessHandle.current().pid()
+            fun q(p: Path) = "'" + p.toString().replace("'", "''") + "'"
+            val script = "Wait-Process -Id $pid -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500; Move-Item -Force -LiteralPath ${q(file)} -Destination ${q(current)}"
+            runCatching { ProcessBuilder("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", script).start() }
+        }
     }
 
     private fun seen(): String? = runCatching { Files.readString(seenFile).trim() }.getOrNull()
