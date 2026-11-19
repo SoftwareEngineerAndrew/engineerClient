@@ -2,6 +2,7 @@ package com.engineerclient.dungeon
 
 import com.adm.AdmMod.mc
 import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.features.impl.dungeon.map.tile.MapCheckmark
 import com.adm.utils.render.text
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.Floor
@@ -40,12 +41,17 @@ object SkipCounter {
         return rooms.sumOf { it.data?.maxSecrets ?: 0 }
     }
 
-    /** Secrets not found in rooms someone has been in, other than the one you're in. */
+    /**
+     * Secrets not found in rooms left behind, other than the one you're in. Solo, only rooms you've cleared: one you
+     * left uncleared you're coming back to. In a party, any room someone has been in.
+     */
     private fun skipped(): Int {
         val here = DungeonUtils.currentRoom
+        val solo = DungeonUtils.dungeonTeammates.size <= 1
         return DungeonScan.rooms.sumOf { room ->
             val max = room.data?.maxSecrets ?: 0
-            if (room === here || max == 0 || !(room.walkedInto || room.playerWalkedInto)) 0
+            val left = if (solo) room.checkmark == MapCheckmark.WHITE else room.walkedInto || room.playerWalkedInto
+            if (room === here || max == 0 || !left) 0
             else (max - (room.foundSecrets ?: 0)).coerceAtLeast(0)
         }
     }

@@ -37,7 +37,7 @@ object ClearInfo : Module(
         SkipCounter.render(this, example)
     }.withDependency { skipDrop }
     val skipBonusM67 by NumberSetting("Planned Bonus M6/M7", 9.0, 0.0..18.0, 1.0, desc = "Bonus score you plan to get: crypts, Mimic, Prince, bats.").withDependency { skipDrop }
-    val skipBonusOther by NumberSetting("Planned Bonus Other", 6.0, 0.0..18.0, 1.0, desc = "The same on other floors.").withDependency { skipDrop }
+    val skipBonusOther by NumberSetting("Planned Bonus Other", 7.0, 0.0..18.0, 1.0, desc = "The same on other floors.").withDependency { skipDrop }
     val skipHideInBoss by BooleanSetting("Hide Skip Counter In Boss", true, desc = "No skip counter in the boss.").withDependency { skipDrop }
 
     // ------------------------------------------------------------------ Score Time
