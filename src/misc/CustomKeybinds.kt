@@ -10,7 +10,7 @@ import com.adm.utils.sendCommand
 import net.minecraft.client.Minecraft
 
 object CustomKeybinds {
-    private const val SLOTS = 20
+    private const val SLOTS = 50
 
     private class Slot(val key: KeybindSetting, val command: StringSetting) {
         fun used() = key.value != InputConstants.UNKNOWN || command.value.isNotBlank()
