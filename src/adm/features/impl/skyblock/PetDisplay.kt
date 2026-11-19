@@ -1,18 +1,24 @@
 package com.adm.features.impl.skyblock
 
 import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.StringSetting
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.SetSlotEvent
 import com.adm.events.core.on
+import com.adm.events.core.onReceive
 import com.adm.features.Module
+import com.adm.features.ModuleManager
 import com.adm.utils.customData
 import com.adm.utils.loreString
 import com.adm.utils.render.text
 import com.adm.utils.skyblock.LocationUtils
+import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.engineerclient.misc.DiskWrites
 import com.google.gson.JsonParser
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
 import net.minecraft.network.chat.Component
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.network.chat.FormattedText
 import net.minecraft.network.chat.Style
 import net.minecraft.world.item.ItemStack
@@ -26,9 +32,11 @@ object PetDisplay : Module(
     private val candyOverlay by BooleanSetting("Candy On Item", true, desc = "Shows candy used on pets in slots.")
     private val candyTooltip by BooleanSetting("Candy In Tooltip", true, desc = "Adds the candy used line to pet tooltips.")
     private val autopetLevel by BooleanSetting("Autopet Level", true, desc = "Shows the pet's level in the Autopet popup.")
+    private val autopetDungeons by BooleanSetting("Autopet Only In Dungeons", false, desc = "Only shows the Autopet popup in dungeons.")
+    private var savedPet by StringSetting("Last Pet", "", 128, "", "").hide()
 
     private val hud by HUD("Current Pet", "Shows your current pet.") { example ->
-        val name = if (example) "§7[Lvl 100] §6Golden Dragon" else pet ?: return@HUD 0 to 0
+        val name = if (example) "§7[Lvl 100] §6Golden Dragon" else pet ?: savedPet.takeIf { it.isNotEmpty() } ?: return@HUD 0 to 0
         text(name, 1, 1)
         mc.font.width(name) + 2 to 1 + mc.font.lineHeight
     }
@@ -41,6 +49,14 @@ object PetDisplay : Module(
     }
 
     @Volatile private var pet: String? = null
+        set(value) {
+            if (field == value && savedPet == (value ?: "")) return
+            field = value
+            mc.execute {
+                savedPet = value ?: ""
+                DiskWrites.write { ModuleManager.saveConfigurations() }
+            }
+        }
     @Volatile private var autopetShown: String? = null
     @Volatile private var autopetUntil = 0L
     private const val AUTOPET_MS = 2500L
@@ -57,6 +73,7 @@ object PetDisplay : Module(
             autopet.matchEntire(message)?.let { m ->
                 val name = colored(component, m.groupValues[2])
                 pet = "§7[Lvl ${m.groupValues[1]}] $name"
+                if (autopetDungeons && !DungeonUtils.inDungeons) return@on
                 autopetShown = if (autopetLevel) pet else name
                 autopetUntil = System.currentTimeMillis() + AUTOPET_MS
                 return@on
@@ -72,6 +89,17 @@ object PetDisplay : Module(
             val title = mc.gui.screen()?.title?.string ?: return@on
             if (slotIndex >= menu.slots.size - 36) return@on
             if (title.startsWith("Pets") && itemStack.loreString.any { "Click to despawn" in it }) pet = itemStack.hoverName.legacy()
+        }
+
+        // The tab list's Pet widget line, " [Lvl 100] Golden Dragon", gives the pet and its level without a summon.
+        onReceive<ClientboundPlayerInfoUpdatePacket> {
+            if (!LocationUtils.isInSkyblock || !actions().contains(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME)) return@onReceive
+            for (entry in entries()) {
+                val line = entry.displayName ?: continue
+                if (!line.string.startsWith(" [Lvl ")) continue
+                pet = line.legacy().replaceFirst(" [Lvl ", "[Lvl ").let { if (it.startsWith("[")) "§7$it" else it }
+                return@onReceive
+            }
         }
 
         on<LevelEvent.Load> { candyCache.clear() }
