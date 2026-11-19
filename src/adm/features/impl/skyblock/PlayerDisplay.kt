@@ -210,11 +210,12 @@ object PlayerDisplay : Module(
 
     init {
         on<MessageEvent.ModifyOverlay> {
-            var text = component.string
+            val original = component.string
+            var text = original
             for (i in MARKERS.indices) {
                 if (hides(i) && text.indexOf(MARKERS[i]) >= 0) text = HIDDEN_PARTS[i].replace(text, "")
             }
-            component = Component.literal(text.trim())
+            if (text != original) component = Component.literal(text.trim())
         }
     }
 

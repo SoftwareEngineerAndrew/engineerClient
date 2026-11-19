@@ -97,7 +97,7 @@ object ActionBarListener {
                 maxVitality = mVitality.replace(",", "").toDoubleOrNull()?.toInt() ?: maxVitality
             }
 
-            effectiveHP = (currentHealth * (1 + currentDefense / 100))
+            effectiveHP = (currentHealth * (1 + currentDefense / 100f)).toInt()
         }
     }
 }
