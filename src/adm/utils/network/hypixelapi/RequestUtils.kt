@@ -12,13 +12,18 @@ object RequestUtils {
         private val entries = ConcurrentHashMap<String, Entry<T>>()
 
         operator fun get(name: String): T? {
-            val now = System.currentTimeMillis()
-            entries.values.removeIf { now - it.timestamp >= ttlMs }
+            prune()
             return entries[name.lowercase()]?.value
         }
 
         operator fun set(name: String, value: T) {
+            prune()
             entries[name.lowercase()] = Entry(value)
+        }
+
+        private fun prune() {
+            val now = System.currentTimeMillis()
+            entries.values.removeIf { now - it.timestamp >= ttlMs }
         }
     }
 
@@ -34,7 +39,10 @@ object RequestUtils {
 
         return fetchJson<HypixelData.ProfilesData>(getServer(EndPoint.GET, uuidData.id)).mapCatching { data ->
             data.cause?.let { throw Exception("Failed to get hypixel data: $it") }
-            HypixelData.PlayerInfo(data, uuidData.id, uuidData.name).also {
+            // Only the selected profile's own member is kept: whole responses run to megabytes.
+            val member = data.profiles.find { it.selected }?.members?.get(uuidData.id)?.slim()
+            val kept = HypixelData.ProfilesData(profileList = member?.let { listOf(HypixelData.Profiles(mapOf(uuidData.id to it), true)) }.orEmpty())
+            HypixelData.PlayerInfo(kept, uuidData.id, uuidData.name).also {
                 if (data.profiles.isNotEmpty()) playerCache[name] = it
             }
         }

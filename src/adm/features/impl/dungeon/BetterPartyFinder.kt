@@ -8,6 +8,7 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.commands.fetchAndDisplayCataStats
+import com.adm.events.GuiEvent
 import com.adm.events.MessageEvent
 import com.adm.events.core.on
 import com.adm.features.Module
@@ -52,10 +53,14 @@ object BetterPartyFinder : Module(
     private val sendKickLine by BooleanSetting("Send Kick Line", true, desc = "Sends a line in party chat to kick a player.").withDependency { statsDisplay }
 
     private val autoKickToggle by BooleanSetting("Auto Kick", desc = "Automatically kicks players who don't meet requirements.")
-    private val floor by SelectorSetting("Floor", Floor.F7, desc = "Determines which floor to check pb.", options = Floor.entries.filter { !it.isMM }).withDependency { autoKickToggle }
-    private val mmToggle by BooleanSetting("Master Mode", true, desc = "Use master mode times").withDependency { autoKickToggle }
+    private val floorSetting = SelectorSetting("Floor", Floor.F7, desc = "Determines which floor to check pb.", options = Floor.entries.filter { !it.isMM }).withDependency { autoKickToggle }
+    private val floor by floorSetting
+    private val mmSetting = BooleanSetting("Master Mode", true, desc = "Use master mode times").withDependency { autoKickToggle }
+    private val mmToggle by mmSetting
     private val informKicked by BooleanSetting("Inform Kicked", desc = "Informs the player why they were kicked.").withDependency { autoKickToggle }
-    private val maximumSeconds by NumberSetting("Minimum PB", 400, 60..480, 5, desc = "Minimum amount of seconds before kicking.", unit = "s").withDependency { autoKickToggle }
+    private val pbSetting = NumberSetting("Minimum PB", 400, 60..480, 5, desc = "Minimum amount of seconds before kicking.", unit = "s").withDependency { autoKickToggle }
+    private val maximumSeconds by pbSetting
+    private val fromListing by BooleanSetting("Kick From Listing", true, desc = "Takes the floor and a time in the note from the party you list.").withDependency { autoKickToggle }
     private val secretsMin by NumberSetting("Minimum Secrets", 0, 0..200, desc = "Secret minimum in thousands for kicking.", unit = "k").withDependency { autoKickToggle }
     private val magicalPowerReq by NumberSetting("Magical Power", 1300, 0..2000, 20, desc = "Magical power minimum for kicking.").withDependency { autoKickToggle  }
     private val apiOffKick by BooleanSetting("Api Off Kick", false, desc = "Kicks if the player's api is off. If this setting is disabled, it will ignore the item check when players have api disabled.").withDependency { autoKickToggle }
@@ -74,7 +79,19 @@ object BetterPartyFinder : Module(
     private val classes = DungeonClass.entries.filter { it != DungeonClass.EMPTY }
     private val listingSlots = setOf(10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34)
 
-    private class Fetched(val member: HypixelData.MemberData?, val time: Long = System.currentTimeMillis())
+    /** What the tooltip shows of a member; PBs by floor number, NaN when none. */
+    private class Stats(val cata: Int, val secrets: Long, val avgSecrets: Double, val mp: Int?, val pb: DoubleArray, val pbMaster: DoubleArray)
+    private class Fetched(val stats: Stats?, val time: Long = System.currentTimeMillis())
+
+    private fun pbs(t: HypixelData.DungeonTypeData) = DoubleArray(8) { t.fastestTimeSPlus["$it"] ?: Double.NaN }
+
+    private fun statsOf(member: HypixelData.MemberData): Stats {
+        val types = member.dungeons.dungeonTypes
+        return Stats(
+            types.catacombs.level.toInt(), member.dungeons.secrets, member.dungeons.avrSecrets,
+            if (member.inventoryApi) member.magicalPower else null, pbs(types.catacombs), pbs(types.mastermode),
+        )
+    }
     private val profiles = ConcurrentHashMap<String, Fetched>()
     private val pending = ConcurrentHashMap.newKeySet<String>()
     private val fetchPermits = Semaphore(5)
@@ -134,6 +151,36 @@ object BetterPartyFinder : Module(
                 }
             }
         }
+
+        on<GuiEvent.SlotClick> {
+            if (!autoKickToggle || !fromListing) return@on
+            val screen = screen as? AbstractContainerScreen<*> ?: return@on
+            if (screen.title.string != "Group Builder") return@on
+            if (screen.menu.slots.getOrNull(slotIndex)?.item?.hoverName?.string != "Confirm Group") return@on
+            readListing(screen)
+        }
+    }
+
+    private val noteSub = Regex("""(?i)\bsub\s*(\d{1,2})(?:[:.]([0-5]\d))?\b""")
+    private val noteTime = Regex("""\b(\d{1,2}):([0-5]\d)\b""")
+
+    private fun selected(screen: AbstractContainerScreen<*>, name: String): String? =
+        screen.menu.slots.firstOrNull { it.item.hoverName.string == name }?.item?.lore
+            ?.firstNotNullOfOrNull { it.string.noControlCodes.substringAfter("Currently Selected: ", "").takeIf(String::isNotEmpty) }
+
+    /** The Group Builder's confirm: its dungeon type, floor and a time in its note become the auto-kick requirements. */
+    private fun readListing(screen: AbstractContainerScreen<*>) {
+        val type = selected(screen, "Select Dungeon Type") ?: return
+        val number = selected(screen, "Select Floor")?.substringAfter("Floor ", "")?.takeIf { it.isNotEmpty() }?.let(::romanToInt) ?: return
+        if (number !in 1..7) return
+        floorSetting.value = Floor.entries[number]
+        mmSetting.value = type.startsWith("Master Mode")
+        val note = screen.menu.slots.firstOrNull { it.item.hoverName.string == "Set Group Note" }?.item?.lore
+            ?.joinToString(" ") { it.string.noControlCodes }.orEmpty()
+        val seconds = noteSub.find(note)?.let { it.groupValues[1].toInt() * 60 + (it.groupValues[2].toIntOrNull() ?: 0) }
+            ?: noteTime.find(note)?.let { it.groupValues[1].toInt() * 60 + it.groupValues[2].toInt() }
+        if (seconds != null && seconds in 60..480) pbSetting.value = seconds
+        modMessage("§aAuto Kick set to ${if (mmToggle) "M" else "F"}$number, ${formatTime(maximumSeconds * 1000L, 0)}.")
     }
 
     private var finderScreen: AbstractContainerScreen<*>? = null
@@ -246,21 +293,20 @@ object BetterPartyFinder : Module(
             if (pending.add(key)) scope.launch {
                 fetchPermits.withPermit {
                     val result = RequestUtils.getProfile(name)
-                    profiles[key] = Fetched(result.getOrNull()?.memberData)
+                    profiles[key] = Fetched(result.getOrNull()?.memberData?.let(::statsOf))
                     pending.remove(key)
                 }
             }
             return "§7(Loading...)"
         }
-        val member = fetched.member ?: return "§c(Failed)"
+        val stats = fetched.stats ?: return "§c(Failed)"
         return buildString {
-            if (tooltipCata) append("§b(§6${member.dungeons.dungeonTypes.catacombs.level.toInt()}§b)§r ")
-            if (tooltipSecrets) append("§8[§a${member.dungeons.secrets}§8/§b${"%.2f".format(member.dungeons.avrSecrets)}§8]§r ")
-            if (tooltipMp) append("§8[§d${if (member.inventoryApi) member.magicalPower else "API off"}§8]§r ")
+            if (tooltipCata) append("§b(§6${stats.cata}§b)§r ")
+            if (tooltipSecrets) append("§8[§a${stats.secrets}§8/§b${"%.2f".format(stats.avgSecrets)}§8]§r ")
+            if (tooltipMp) append("§8[§d${stats.mp ?: "API off"}§8]§r ")
             if (tooltipPb) {
-                val types = member.dungeons.dungeonTypes
-                val pb = (if (master) types.mastermode else types.catacombs).fastestTimeSPlus["$floor"]
-                append("§8[§9${pb?.let { mmss(it.toLong()) } ?: "N/A"}§8]§r ")
+                val pb = (if (master) stats.pbMaster else stats.pb).getOrNull(floor) ?: Double.NaN
+                append("§8[§9${if (pb.isNaN()) "N/A" else mmss(pb.toLong())}§8]§r ")
             }
         }
     }

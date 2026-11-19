@@ -48,12 +48,21 @@ object HypixelData {
     ) {
         @Transient
         private var cachedMagicalPower: Int? = null
+        @Transient
+        private var cachedInventoryApi: Boolean? = null
 
         val magicalPower: Int get() = cachedMagicalPower ?: calculateMagicalPower().also { cachedMagicalPower = it }
 
         val currentTunings: Map<String, Int> get() = accessoryBagStorage.tuning.currentTunings
 
-        val inventoryApi get() = inventory?.eChestContents?.data?.isNotEmpty() == true
+        val inventoryApi get() = cachedInventoryApi ?: (inventory?.eChestContents?.data?.isNotEmpty() == true)
+
+        /** This member with magical power worked out and the inventory blobs dropped. */
+        internal fun slim(): MemberData {
+            val mp = magicalPower
+            val api = inventoryApi
+            return copy(inventory = null).also { it.cachedMagicalPower = mp; it.cachedInventoryApi = api }
+        }
 
         val assumedMagicalPower get() = magicalPower.takeUnless { it == 0 } ?: (currentTunings.values.sum() * 10)
 
