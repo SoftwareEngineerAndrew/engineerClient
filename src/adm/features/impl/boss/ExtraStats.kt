@@ -171,9 +171,9 @@ object ExtraStats {
 
         if (ClearInfo.showTeammates) {
             val others = DungeonUtils.dungeonTeammatesNoSelf
-            out.append(getCenteredText(
-                if (others.isEmpty()) "§3Solo" else others.joinToString(separator = "§r, ") { "§${it.clazz.colorCode}${it.name}" }
-            )).append("\n")
+            out.append(hexText(getCenteredText(
+                if (others.isEmpty()) "§3Solo" else others.joinToString(separator = "§r§f, ") { "${it.clazz.hexCode}${it.name}" }
+            ))).append("\n")
         }
 
         out.append("\n").append(Component.literal(getChatBreak()))

@@ -84,7 +84,7 @@ object SecretsCounter {
     private fun show(team: List<DungeonPlayer>, gained: Map<String, Long?>) {
         for (player in team.sortedWith(compareBy<DungeonPlayer> { it.clazz.ordinal }.thenByDescending { gained[it.name] ?: -1L })) {
             val n = gained[player.name]
-            modMessage("§${player.clazz.colorCode}${player.name} §7-> " + if (n == null) "§cFailed to get secrets" else "§f$n Secrets")
+            modMessage("${player.clazz.hexCode}${player.name} §7-> " + if (n == null) "§cFailed to get secrets" else "§f$n Secrets")
         }
     }
 }

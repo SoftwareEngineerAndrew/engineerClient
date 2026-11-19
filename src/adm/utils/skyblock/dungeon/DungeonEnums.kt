@@ -81,6 +81,7 @@ enum class DungeonClass(
 
     val color: Color get() = ClassColors.color(this)
     val colorCode: Char get() = ClassColors.code(this)
+    val hexCode: String get() = ClassColors.hexCode(this)
 }
 
 enum class Blessing(

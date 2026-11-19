@@ -1,5 +1,6 @@
 package com.adm.features.impl.dungeon
 
+import com.adm.clickgui.settings.impl.ActionSetting
 import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.features.Module
 import com.adm.utils.Color
@@ -12,11 +13,16 @@ object ClassColors : Module(
     key = null,
     toggled = true,
 ) {
-    private val archer by ColorSetting("Archer", Colors.MINECRAFT_RED, desc = "Archer's colour.")
-    private val berserk by ColorSetting("Berserk", Colors.MINECRAFT_GOLD, desc = "Berserk's colour.")
-    private val healer by ColorSetting("Healer", Colors.MINECRAFT_LIGHT_PURPLE, desc = "Healer's colour.")
-    private val mage by ColorSetting("Mage", Colors.MINECRAFT_AQUA, desc = "Mage's colour.")
-    private val tank by ColorSetting("Tank", Colors.MINECRAFT_DARK_GREEN, desc = "Tank's colour.")
+    private var archer by ColorSetting("Archer", Colors.MINECRAFT_RED, desc = "Archer's colour.")
+    private var berserk by ColorSetting("Berserk", Colors.MINECRAFT_GOLD, desc = "Berserk's colour.")
+    private var healer by ColorSetting("Healer", Colors.MINECRAFT_LIGHT_PURPLE, desc = "Healer's colour.")
+    private var mage by ColorSetting("Mage", Colors.MINECRAFT_AQUA, desc = "Mage's colour.")
+    private var tank by ColorSetting("Tank", Colors.MINECRAFT_DARK_GREEN, desc = "Tank's colour.")
+    private var empty by ColorSetting("Empty", Colors.WHITE, desc = "Colour of an unknown class.")
+    private val reset by ActionSetting("Reset Colours", desc = "Puts every class colour back to default.") {
+        archer = Colors.MINECRAFT_RED.copy(); berserk = Colors.MINECRAFT_GOLD.copy(); healer = Colors.MINECRAFT_LIGHT_PURPLE.copy()
+        mage = Colors.MINECRAFT_AQUA.copy(); tank = Colors.MINECRAFT_DARK_GREEN.copy(); empty = Colors.WHITE.copy()
+    }
 
     private const val CODES = "0123456789abcdef"
     private val RGB = intArrayOf(
@@ -30,7 +36,14 @@ object ClassColors : Module(
         DungeonClass.HEALER -> healer
         DungeonClass.MAGE -> mage
         DungeonClass.TANK -> tank
-        DungeonClass.EMPTY -> Colors.WHITE
+        DungeonClass.EMPTY -> empty
+    }
+
+    /** The exact colour as a §x hex code, for chat text that goes through hexText. */
+    fun hexCode(clazz: DungeonClass): String {
+        val c = color(clazz)
+        val hex = "%02x%02x%02x".format(c.red, c.green, c.blue)
+        return buildString(14) { append("§x"); for (ch in hex) append('§').append(ch) }
     }
 
     /** The chat colour code nearest the class's colour. */

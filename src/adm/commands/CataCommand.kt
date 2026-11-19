@@ -43,7 +43,7 @@ private fun displayCataStats(name: String, member: HypixelData.MemberData) {
 }
 
 private fun hoverText(text: String, hover: Component) =
-    Component.literal(text).withStyle { it.withHoverEvent(HoverEvent.ShowText(hover)) }
+    hexText(text).withStyle { it.withHoverEvent(HoverEvent.ShowText(hover)) }
 
 private fun buildCataSecretsWatcherLine(dungeons: HypixelData.DungeonsData, bloodMobKills: Int): Component {
     val cata = dungeons.dungeonTypes.catacombs
@@ -62,10 +62,10 @@ private fun buildCataSecretsWatcherLine(dungeons: HypixelData.DungeonsData, bloo
 private fun buildClassLevelsLine(dungeons: HypixelData.DungeonsData) =
     Component.literal("§7Classes: ").apply {
         dungeons.classLevels.forEachIndexed { index, (dungeonClass, xp, level) ->
-            val colorCode = "§${dungeonClass.colorCode}"
+            val colorCode = dungeonClass.hexCode
             if (index > 0) append(Component.literal("§8/"))
             append(hoverText("$colorCode${level.toFixed()}",
-                Component.literal("$colorCode${dungeonClass.name} ${colorCode}Level\n§7XP: §b${formatNumber(xp.toString())}")))
+                hexText("$colorCode${dungeonClass.name} ${colorCode}Level\n§7XP: §b${formatNumber(xp.toString())}")))
         }
         append(hoverText(" §8(§7Avg: §a${dungeons.classAverage.toFixed(1)}§8)",
             Component.literal("§7Class Average\n§7Total Class XP: §b${formatNumber(dungeons.totalClassXp.toString())}")))
