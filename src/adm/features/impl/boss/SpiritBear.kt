@@ -1,15 +1,28 @@
 package com.adm.features.impl.boss
 
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.events.BlockUpdateEvent
+import com.adm.events.EntityEvent
 import com.adm.events.LevelEvent
+import com.adm.events.RenderExtractEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.on
 import com.adm.features.Module
 import com.adm.utils.Colors
+import com.adm.utils.render.BoxStyle
+import com.adm.utils.render.drawStyledBox
 import com.adm.utils.render.textDim
+import com.adm.utils.renderBoundingBox
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet
 import net.minecraft.core.BlockPos
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.monster.Ghast
+import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.block.Blocks
 
 object SpiritBear : Module(
@@ -21,6 +34,24 @@ object SpiritBear : Module(
         val floor = DungeonUtils.floor
         if (floor?.floorNumber != 4 || !DungeonUtils.inBoss) return@HUD 0 to 0
         textDim(label(floor.isMM), 0, 0, Colors.WHITE)
+    }
+
+    private val thorn by BooleanSetting("Highlight Thorn", false, desc = "Draws a box around Thorn.")
+    private val thornColor by ColorSetting("Thorn Color", Colors.MINECRAFT_RED, true, desc = "Color of Thorn's box.").withDependency { thorn }
+    private val bow by BooleanSetting("Highlight Spirit Bow", false, desc = "Draws a box around the Spirit Bow.")
+    private val bowColor by ColorSetting("Spirit Bow Color", Colors.MINECRAFT_AQUA, true, desc = "Color of the Spirit Bow's box.").withDependency { bow }
+    private val bear by BooleanSetting("Highlight Spirit Bear", false, desc = "Draws a box around the Spirit Bear.")
+    private val bearColor by ColorSetting("Spirit Bear Color", Colors.MINECRAFT_LIGHT_PURPLE, true, desc = "Color of the Spirit Bear's box.").withDependency { bear }
+
+    private var thornEntity: Entity? = null
+    private var bowEntity: Entity? = null
+    private var bearEntity: Entity? = null
+
+    private fun inF4() = DungeonUtils.inDungeons && DungeonUtils.floor?.floorNumber == 4
+
+    private fun RenderExtractEvent.box(entity: Entity?, color: com.adm.utils.Color) {
+        if (entity == null || entity.isRemoved) return
+        drawStyledBox(entity.renderBoundingBox, color, BoxStyle.FILLED_OUTLINE, true)
     }
 
     private const val LAMP_Y = 77
@@ -85,7 +116,32 @@ object SpiritBear : Module(
             if (spawnTicks > 0) spawnTicks--
         }
 
+        on<EntityEvent.Add> {
+            if (!inF4()) return@on
+            when (entity) {
+                is Ghast -> thornEntity = entity
+                is Player -> if (entity.plainTextName.startsWith("Spirit Bear")) bearEntity = entity
+                is ArmorStand -> if (entity.getItemBySlot(EquipmentSlot.MAINHAND).hoverName.string == "Bow") bowEntity = entity
+            }
+        }
+
+        on<EntityEvent.SetItemSlot> {
+            if (slot != EquipmentSlot.MAINHAND || entity !is ArmorStand || !inF4()) return@on
+            if (stack.hoverName.string == "Bow") bowEntity = entity
+            else if (entity === bowEntity) bowEntity = null
+        }
+
+        on<RenderExtractEvent> {
+            if (!thorn && !bow && !bear || !inF4() || !DungeonUtils.inBoss) return@on
+            if (thorn) box(thornEntity, thornColor)
+            if (bow) box(bowEntity, bowColor)
+            if (bear) box(bearEntity, bearColor)
+        }
+
         on<LevelEvent.Load> {
+            thornEntity = null
+            bowEntity = null
+            bearEntity = null
             lit = 0
             spawnTicks = -1
         }
