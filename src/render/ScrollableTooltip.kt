@@ -22,6 +22,7 @@ object ScrollableTooltip : Module(
     private val horizontal by BooleanSetting("Horizontal", true, desc = "Shift-scroll moves the tooltip sideways.")
     private val scaling by BooleanSetting("Scale", true, desc = "Ctrl-scroll scales the tooltip.")
     private val step by NumberSetting("Scroll Step", 10, 1..40, 1, desc = "Pixels moved per scroll.")
+    private val baseScale by NumberSetting("Base Scale", 1f, 0.5..2.0, 0.05, desc = "Size every tooltip starts at.")
     private val resetOnNew by BooleanSetting("Reset On New Tooltip", true, desc = "Each new tooltip starts at its normal place and size.")
 
     private const val SCROLL_WINDOW_MS = 100L
@@ -33,20 +34,21 @@ object ScrollableTooltip : Module(
     private var shownFor: Slot? = null
     private var shownAt = 0L
 
-    private val onScroll = ScreenMouseEvents.AfterMouseScroll { _, _, _, horizontalAmount, verticalAmount, consumed ->
-        if (enabled && System.currentTimeMillis() - shownAt < SCROLL_WINDOW_MS) nudge(horizontalAmount, verticalAmount)
-        consumed
+    // Taken before the screen sees it, so a scrollable menu under the tooltip stays put.
+    private val onScroll = ScreenMouseEvents.AllowMouseScroll { _, _, _, horizontalAmount, verticalAmount ->
+        if (!enabled || System.currentTimeMillis() - shownAt >= SCROLL_WINDOW_MS) return@AllowMouseScroll true
+        !nudge(horizontalAmount, verticalAmount)
     }
 
     init {
-        ScreenEvents.AFTER_INIT.register { _, screen, _, _ -> ScreenMouseEvents.afterMouseScroll(screen).register(onScroll) }
+        ScreenEvents.AFTER_INIT.register { _, screen, _, _ -> if (enabled) ScreenMouseEvents.allowMouseScroll(screen).register(onScroll) }
     }
 
     private fun held(left: Int, right: Int) = InputConstants.isKeyDown(left) || InputConstants.isKeyDown(right)
 
     private fun dir(amount: Double): Float = if (amount > 0.0) 1f else if (amount < 0.0) -1f else 0f
 
-    private fun nudge(dx: Double, dy: Double) {
+    private fun nudge(dx: Double, dy: Double): Boolean {
         val ctrl = held(InputConstants.KEY_LCONTROL, InputConstants.KEY_RCONTROL)
         val shift = held(InputConstants.KEY_LSHIFT, InputConstants.KEY_RSHIFT)
         val px = step.toFloat()
@@ -57,7 +59,8 @@ object ScrollableTooltip : Module(
         } else if (!ctrl && !shift && vertical) {
             panY += px * dir(dy)
             if (horizontal) panX -= px * dir(dx)
-        }
+        } else return false
+        return true
     }
 
     @JvmStatic
@@ -73,9 +76,10 @@ object ScrollableTooltip : Module(
         }
         shownFor = slot
         shownAt = now
-        if (panX == 0f && panY == 0f && zoom == 1f) return
+        val scale = zoom * baseScale
+        if (panX == 0f && panY == 0f && scale == 1f) return
         pose.translate(x + panX, y + panY)
-        pose.scale(zoom)
+        pose.scale(scale)
         pose.translate(-x.toFloat(), -y.toFloat())
     }
 }
