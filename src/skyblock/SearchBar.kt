@@ -16,6 +16,8 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.client.input.KeyEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.world.inventory.Slot
+import net.minecraft.world.item.ItemStack
+import java.util.IdentityHashMap
 import java.util.Locale
 import java.util.Stack
 
@@ -27,17 +29,18 @@ object SearchBar : Module(
     toggled = true,
 ) {
     private val formatMath by BooleanSetting("Format Math Results", true, desc = "Shows results as 1.5M instead of 1500000.")
+    private val searchLore by BooleanSetting("Search Lore", true, desc = "Also matches text in the item's lore.")
     private val missColor by ColorSetting("Miss Color", Color(0x11, 0x11, 0x11, 0xaa / 255f), true, desc = "Drawn over items that don't match.")
 
     private var shown = false
     private var value = ""
     private var result = Double.NaN
-    private var terms = emptyList<String>()
+    private var terms = emptyList<List<String>>()
     private var box: EditBox? = null
 
     init {
         ScreenEvents.AFTER_INIT.register { _, screen, width, _ ->
-            if (screen !is AbstractContainerScreen<*>) return@register
+            if (!enabled || screen !is AbstractContainerScreen<*>) return@register
             val edit = EditBox(mc.font, (width - 150) / 2, 20, 150, 20, Component.empty())
             edit.setMaxLength(100)
             edit.value = value
@@ -57,7 +60,7 @@ object SearchBar : Module(
             ScreenEvents.afterExtract(screen).register { _, graphics, mouseX, mouseY, delta ->
                 if (active()) render(edit, graphics, mouseX, mouseY, delta)
             }
-            ScreenEvents.remove(screen).register { if (box === edit) box = null }
+            ScreenEvents.remove(screen).register { if (box === edit) box = null; matches.clear() }
         }
     }
 
@@ -85,7 +88,8 @@ object SearchBar : Module(
         val lower = text.lowercase()
         result = MathParser.parse(lower)
         resultLine = null
-        terms = lower.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        terms = lower.split(",").map { term -> term.split("&").map { it.trim() }.filter { it.isNotEmpty() } }.filter { it.isNotEmpty() }
+        matches.clear()
     }
 
     private fun render(edit: EditBox, graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, delta: Float) {
@@ -104,12 +108,23 @@ object SearchBar : Module(
     private var resultFormatted = false
     private var resultX = 0
 
+    private val matches = IdentityHashMap<ItemStack, Boolean>()
+
     fun shadeSlot(graphics: GuiGraphicsExtractor, slot: Slot) {
         if (!active() || box == null || terms.isEmpty() || !result.isNaN()) return
         val stack = slot.item
-        val name = stack.hoverName.string.lowercase()
-        val hit = !stack.isEmpty && terms.any { term -> term in name || stack.loreString.any { term in it.lowercase() } }
+        val hit = matches[stack] ?: matches(stack).also {
+            if (matches.size >= 1024) matches.clear()
+            matches[stack] = it
+        }
         if (!hit) graphics.fill(slot.x, slot.y, slot.x + 16, slot.y + 16, missColor.rgba)
+    }
+
+    private fun matches(stack: ItemStack): Boolean {
+        if (stack.isEmpty) return false
+        val name = stack.hoverName.string.lowercase()
+        val lore = if (searchLore) stack.loreString.map { it.lowercase() } else emptyList()
+        return terms.any { term -> term.all { part -> part in name || lore.any { part in it } } }
     }
 
     private fun format(num: Double): String = when {
