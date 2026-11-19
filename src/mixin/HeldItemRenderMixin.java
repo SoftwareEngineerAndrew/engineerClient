@@ -3,6 +3,8 @@ package com.engineerclient.mixin;
 import com.engineerclient.render.ItemAnimations;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
@@ -70,9 +72,10 @@ public class HeldItemRenderMixin {
         return ItemAnimations.staticSwing() ? 0f : wave;
     }
 
-    @WrapWithCondition(method = "swingArm", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(FFF)V"))
-    private boolean ec$itemReach(PoseStack pose, float x, float y, float z) {
-        return !ItemAnimations.staticSwing();
+    @WrapOperation(method = "swingArm", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(FFF)V"))
+    private void ec$itemReach(PoseStack pose, float x, float y, float z, Operation<Void> original) {
+        if (ItemAnimations.staticSwing()) return;
+        original.call(pose, x * ItemAnimations.swingX(), y * ItemAnimations.swingY(), z * ItemAnimations.swingZ());
     }
 
     @WrapWithCondition(method = "renderOneHandedMap", at = @At(value = "INVOKE", ordinal = 2, target = "Lcom/mojang/blaze3d/vertex/PoseStack;translate(FFF)V"))

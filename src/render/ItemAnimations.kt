@@ -38,6 +38,9 @@ object ItemAnimations : Module(
     private val changeEmptyHand by BooleanSetting("Change Empty Hand", true, desc = "Also applies to an empty hand.")
     private val changeMap by BooleanSetting("Change Holding Map", true, desc = "Also applies while holding a map.")
     private var swingSpeed by NumberSetting("Swing Speed", 0.0, -4.0..4.0, 0.01, desc = "Each 1 doubles the swing speed, each -1 halves it.")
+    private var swingX by NumberSetting("Swing X", 1.0, -2.0..2.0, 0.05, desc = "Scales how far the swing moves the item sideways.")
+    private var swingY by NumberSetting("Swing Y", 1.0, -2.0..2.0, 0.05, desc = "Scales how far the swing moves the item up.")
+    private var swingZ by NumberSetting("Swing Z", 1.0, -2.0..2.0, 0.05, desc = "Scales how far the swing moves the item forward.")
     private val ignoreEffects by BooleanSetting("Ignore Effects", false, desc = "Haste, mining fatigue and conduit power don't change the swing.")
     private val inPlaceSwing by BooleanSetting("In Place Swing", false, desc = "The swing only turns the item.")
     private val disableSwing by BooleanSetting("Disable Swing", false, desc = "No swing animation.")
@@ -90,6 +93,7 @@ object ItemAnimations : Module(
         xOffset = 0.0; yOffset = 0.0; zOffset = 0.0
         yaw = 0.0; pitch = 0.0; roll = 0.0
         size = 0.0; swingSpeed = 0.0
+        swingX = 1.0; swingY = 1.0; swingZ = 1.0
     }
 
     private fun syncSliders() {
@@ -215,6 +219,10 @@ object ItemAnimations : Module(
 
     @JvmStatic
     fun staticSwing() = swingStill
+
+    @JvmStatic fun swingX() = if (enabled) swingX.toFloat() else 1f
+    @JvmStatic fun swingY() = if (enabled) swingY.toFloat() else 1f
+    @JvmStatic fun swingZ() = if (enabled) swingZ.toFloat() else 1f
 
     @JvmStatic
     fun blockPose(pose: PoseStack, arm: HumanoidArm, stack: ItemStack, hand: InteractionHand): Boolean {
