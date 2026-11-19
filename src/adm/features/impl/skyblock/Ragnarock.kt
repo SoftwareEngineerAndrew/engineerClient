@@ -56,6 +56,8 @@ object Ragnarock : Module(
         return if (lead > 0) "§6Rag in §f${(lead / 20f).toFixed(2)}s" else "§aRag now!"
     }
 
+    private val cooldownLine = Regex("^This ability is on cooldown for \\d+s\\.$")
+
     private const val CAST_PITCH = 1.4920635f
 
     // The cast plays a wolf death sound at this pitch; any wolf variant's death sound counts.
@@ -71,6 +73,8 @@ object Ragnarock : Module(
                 castStart = -1
                 if (cancelAlert) alert("§cRagnarock Cancelled!")
             }
+            // On cooldown the use is refused: no channel started
+            if (castStart >= 0 && cooldownLine.matches(message)) castStart = -1
         }
 
         onSend<ServerboundUseItemPacket> {
@@ -79,7 +83,7 @@ object Ragnarock : Module(
 
         on<TickEvent.Server> {
             tick++
-            if (castStart >= 0 && tick - castStart > CHANNEL_TICKS + 20) castStart = -1
+            if (castStart >= 0 && (tick - castStart > CHANNEL_TICKS + 20 || mc.player?.mainHandItem?.itemId != "RAGNAROCK_AXE")) castStart = -1
             if (buffStart >= 0 && tick - buffStart >= BUFF_TICKS) buffStart = -1
         }
 
