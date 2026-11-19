@@ -223,8 +223,9 @@ object Visibility : Module(
         }
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
 
-        on<MessageEvent.Overlay> {
-            if (hideActionBar) cancel()
+        // Hidden where it's drawn: what reads the action bar (secrets, mana) still gets it
+        net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.replaceElement(net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.OVERLAY_MESSAGE) { original ->
+            net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement { g, dt -> if (!enabled || !hideActionBar) original.extractRenderState(g, dt) }
         }
 
         ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
@@ -460,7 +461,7 @@ object Visibility : Module(
         val timer = hud.`ec$toolHighlightTimer`()
         val shown = !hideItemNames && timer > 0 && stack != null && !stack.isEmpty
         val name: Component = when {
-            shown -> Component.empty().append(stack.hoverName).withStyle(stack.rarity.color())
+            shown -> Component.empty().append(com.engineerclient.skyblock.ItemTweaks.shownName(stack.hoverName)).withStyle(stack.rarity.color())
                 .let { if (stack.has(DataComponents.CUSTOM_NAME)) it.withStyle(ChatFormatting.ITALIC) else it }
             example -> Component.literal("Item Name")
             else -> return ITEM_NAME_WIDTH to 12
