@@ -4,11 +4,13 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.clearbreakdown.OdinSync
 import com.engineerclient.pov.PoseShare
 import com.engineerclient.tpmaze.TeamTpMaze
-import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import com.adm.features.impl.boss.MelodyMessage
 import com.adm.features.impl.dungeon.map.DungeonMap
 import com.adm.utils.network.WebSocketConnection
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import java.io.StringReader
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
@@ -52,11 +54,22 @@ object OdinLink {
         val channel = channels.getOrNull(b.get().toInt() and 255) ?: return
         val json = StandardCharsets.UTF_8.decode(b).toString()
         // A teammate may only speak for themselves.
-        val name = runCatching { JsonParser.parseString(json).asJsonObject[channel.nameField].asString }.getOrNull() ?: return
+        val name = runCatching { field(json, channel.nameField) }.getOrNull() ?: return
         if (!name.equals(sender, ignoreCase = true)) return
         EngineerClient.mc.execute {
             channel.socket.receive(json)
             for (s in channel.also) s.receive(json)
         }
+    }
+
+    /** One top-level string field, read without building the tree the handlers parse again. */
+    private fun field(json: String, name: String): String? {
+        val r = JsonReader(StringReader(json))
+        r.beginObject()
+        while (r.hasNext()) {
+            if (r.nextName() == name && r.peek() == JsonToken.STRING) return r.nextString()
+            r.skipValue()
+        }
+        return null
     }
 }
