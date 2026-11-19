@@ -1,6 +1,7 @@
 package com.engineerclient.skyblock
 
 import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.customData
@@ -31,8 +32,7 @@ object ItemTweaks : Module(
     private val hideVanillaEnchants by BooleanSetting("Hide Vanilla Enchants", true, desc = "Drops the vanilla enchantment lines above SkyBlock lore.")
     private val noHotbarScroll by BooleanSetting("Disable Hotbar Scroll", true, desc = "The scroll wheel no longer changes your hotbar slot.")
     private val oldMasterStars by BooleanSetting("Old Master Stars", false, desc = "Master stars as red stars instead of a number.")
-
-    private val floors = listOf("E", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "M5", "M6", "M7")
+    private val qualityStyle by SelectorSetting("Item Quality Style", QualityStyle.FRACTION, desc = "Stat boost out of 50, or as a percent of the best.")
 
     init {
         ItemTooltipCallback.EVENT.register { stack, _, _, lines ->
@@ -43,9 +43,21 @@ object ItemTweaks : Module(
                 val data = stack.customData
                 val boost = data.getInt("baseStatBoostPercentage").orElse(null) ?: return@register
                 val tier = data.getInt("item_tier").orElse(null) ?: return@register
-                lines.add(Component.literal("§4Stat boost: $boost/50 req: ${floors.getOrElse(tier) { "?" }}"))
+                val floor = floorOf(tier, data.getString("dungeon_skill_req").orElse(""))
+                val shown = if (qualityStyle == QualityStyle.PERCENT) "${boost * 2}%" else "$boost/50"
+                lines.add(Component.literal("§4Stat boost: $shown req: $floor"))
             }
         }
+    }
+
+    enum class QualityStyle(private val label: String) { FRACTION("Out of 50"), PERCENT("Percent"); override fun toString() = label }
+
+    // Master Mode drops share item_tier 4-7 with F4-F7; their Catacombs requirement is the tell.
+    private fun floorOf(tier: Int, req: String): String {
+        if (tier <= 0) return "E"
+        if (tier >= 8) return "M${tier - 3}"
+        val level = if (req.startsWith("CATACOMBS:")) req.substring(10).toIntOrNull() ?: 0 else 0
+        return if (tier >= 4 && level - tier > 19) "M${tier - 3}" else "F$tier"
     }
 
     private const val CIRCLED = "➊➋➌➍➎"
