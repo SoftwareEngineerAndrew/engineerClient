@@ -18,6 +18,11 @@ object MenuKeybinds : Module(
     description = "Keybinds for the wardrobe, loadout and pets menus.",
     key = null
 ) {
+    private val wardrobeOn by BooleanSetting("Wardrobe Keybinds", true, desc = "Keybinds work in the wardrobe.")
+    private val loadoutOn by BooleanSetting("Loadout Keybinds", true, desc = "Keybinds work in the loadout menu.")
+    private val petOn by BooleanSetting("Pet Keybinds", true, desc = "Keybinds work in the pets menu.")
+    private val useHotbarBinds by BooleanSetting("Use Hotbar Binds", false, desc = "Wardrobe and loadout slots 1-9 follow your hotbar keys.")
+
     private val wardrobeNext by KeybindSetting("Wardrobe Next Page", InputConstants.KEY_RIGHT, desc = "Next wardrobe page.")
     private val wardrobePrevious by KeybindSetting("Wardrobe Previous Page", InputConstants.KEY_LEFT, desc = "Previous wardrobe page.")
     private val wardrobeUnequip by KeybindSetting("Wardrobe Unequip", InputConstants.UNKNOWN, desc = "Unequips the equipped wardrobe set.")
@@ -67,14 +72,30 @@ object MenuKeybinds : Module(
     private fun onClick(screen: AbstractContainerScreen<*>, key: InputConstants.Key): Boolean {
         val title = screen.title.string
         val index = when {
-            wardrobeRegex.containsMatchIn(title) -> wardrobe(screen, title, key)
-            loadoutRegex.containsMatchIn(title) -> loadout(title, key)
-            petsRegex.containsMatchIn(title) -> pet(screen, title, key)
+            wardrobeOn && wardrobeRegex.containsMatchIn(title) -> wardrobe(screen, title, key)
+            loadoutOn && loadoutRegex.containsMatchIn(title) -> loadout(screen, title, key)
+            petOn && petsRegex.containsMatchIn(title) -> pet(screen, title, key)
             else -> null
         } ?: return false
+        if (index == LOCKED) return true
         mc.player?.clickSlot(index)
         return true
     }
+
+    private const val LOCKED = -2
+    private const val LOCKOUT_MS = 300L
+    private var lastEquip = 0L
+
+    // A second press before the menu redraws would click the same slot again: equip, then unequip.
+    private fun equip(index: Int): Int {
+        val now = System.currentTimeMillis()
+        if (now - lastEquip < LOCKOUT_MS) return LOCKED
+        lastEquip = now
+        return index
+    }
+
+    private fun hotbarIndex(key: InputConstants.Key): Int =
+        if (useHotbarBinds) mc.options.keyHotbarSlots.indexOfFirst { it.matches(key) } else -1
 
     private fun wardrobe(screen: AbstractContainerScreen<*>, title: String, key: InputConstants.Key): Int? {
         val (current, total) = wardrobeRegex.find(title)?.destructured?.let {
@@ -89,16 +110,17 @@ object MenuKeybinds : Module(
             wardrobePrevious -> if (current > 1) 45 else return null
             wardrobeUnequip -> equippedIndex ?: return null
             else -> {
-                val keyIndex = wardrobeKeys.indexOfFirst { it.value == key }.takeIf { it != -1 } ?: return null
+                val keyIndex = hotbarIndex(key).takeIf { it != -1 }
+                    ?: (if (useHotbarBinds) null else wardrobeKeys.indexOfFirst { it.value == key }.takeIf { it != -1 }) ?: return null
                 if (equippedIndex == keyIndex + 36 && wardrobeNoUnequip) return modMessage("§cSet already equipped.").let { null }
                 keyIndex + 36
             }
         }
         if (wardrobeNoUnequip && screen.menu.slots[index].item.isEmpty) return null
-        return index
+        return if (index == 45 || index == 53) index else equip(index)
     }
 
-    private fun loadout(title: String, key: InputConstants.Key): Int? {
+    private fun loadout(screen: AbstractContainerScreen<*>, title: String, key: InputConstants.Key): Int? {
         val (current, total) = loadoutRegex.find(title)?.destructured?.let {
             it.component1().toIntOrNull() to it.component2().toIntOrNull()
         } ?: return null
@@ -107,7 +129,14 @@ object MenuKeybinds : Module(
         return when (key) {
             loadoutNext -> if (current < total) 44 else null
             loadoutPrevious -> if (current > 1) 17 else null
-            else -> loadoutSlots.getOrNull(loadoutKeys.indexOfFirst { it.value == key })
+            else -> {
+                val keyIndex = hotbarIndex(key).takeIf { it != -1 }
+                    ?: loadoutKeys.indexOfFirst { it.value == key }.takeIf { !useHotbarBinds || it >= 9 } ?: return null
+                val index = loadoutSlots.getOrNull(keyIndex) ?: return null
+                // Empty, locked or already worn loadouts have no equip line.
+                if (screen.menu.slots.getOrNull(index)?.item?.loreString?.any { "Left-click to equip!" in it } != true) return null
+                equip(index)
+            }
         }
     }
 
@@ -132,6 +161,6 @@ object MenuKeybinds : Module(
             if (closeIfAlreadyEquipped) index = 49
             else if (petNoUnequip) return null
         }
-        return index
+        return if (index == 45 || index == 53 || index == 49) index else equip(index)
     }
 }
