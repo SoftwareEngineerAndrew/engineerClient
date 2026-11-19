@@ -1,5 +1,6 @@
 package com.adm.features.impl.dungeon.puzzlesolvers
 
+import com.adm.AdmMod
 import com.adm.events.RenderExtractEvent
 import com.adm.events.RoomEnterEvent
 import com.adm.utils.Color
@@ -11,13 +12,27 @@ import com.adm.utils.toFixed
 import net.minecraft.core.BlockPos
 import net.minecraft.resources.Identifier
 import net.minecraft.world.phys.AABB
+import com.google.gson.reflect.TypeToken
+import java.io.File
 
 object QuizSolver {
     private const val START_TICKS = 220
     private const val QUESTION_TICKS = 100
     private const val ORUO = "[STATUE] Oruo the Omniscient: "
 
-    private val answers: MutableMap<String, List<String>> = JsonResourceLoader.loadJson(Identifier.fromNamespaceAndPath("engineerclient", "puzzles/quiz-answers.json")) ?: mutableMapOf()
+    private val answers: MutableMap<String, List<String>> =
+        (JsonResourceLoader.loadJson<MutableMap<String, List<String>>>(Identifier.fromNamespaceAndPath("engineerclient", "puzzles/quiz-answers.json")) ?: mutableMapOf())
+            .also { it.putAll(extraAnswers()) }
+
+    // config/adm/quiz-answers.json, same shape as the bundled file, adds or replaces questions without an update.
+    private fun extraAnswers(): Map<String, List<String>> = try {
+        val file = File(AdmMod.configFile, "quiz-answers.json")
+        if (!file.exists()) emptyMap()
+        else JsonResourceLoader.defaultGson.fromJson<Map<String, List<String>>>(file.readText(), object : TypeToken<Map<String, List<String>>>() {}.type) ?: emptyMap()
+    } catch (e: Exception) {
+        e.printStackTrace()
+        emptyMap()
+    }
     private var triviaAnswers: List<String>? = null
 
     // Answer stands ⓐ ⓑ ⓒ, the block under each, and which are right.
@@ -116,7 +131,7 @@ object QuizSolver {
 
     fun isWrongClick(pos: BlockPos): Boolean {
         if (!correct[0] && !correct[1] && !correct[2]) return false
-        if (DungeonUtils.currentRoomName != "Quiz") return false
+        if (DungeonUtils.currentRoomName != "Quiz" || AdmMod.mc.player?.isShiftKeyDown == true) return false
         for (i in 0 until 3) {
             val at = triviaOptions[i] ?: continue
             if (at.distSqr(pos) <= 2.0) return !correct[i]
