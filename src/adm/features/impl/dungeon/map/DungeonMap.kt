@@ -39,7 +39,14 @@ object DungeonMap : Module(
     val playerHead by BooleanSetting("Own Player Head", desc = "Shows the player head on the map.").withDependency { playerDropdown }
     val playerHeadScale by NumberSetting("Player Head Scale",1f,0.5..2.0,0.1, desc = "Scale of rendered player heads").withDependency { playerDropdown && playerHead }
     val playerHeadBackgroundScale by NumberSetting("Player Class Color Size",1,0..2, desc = "Scale of rendered player head background").withDependency { playerDropdown && playerHead }
-    val playerPointerScale by NumberSetting("Player Pointer Scale",1f,0.5..2.0,0.1, desc = "Scale of rendered player head background").withDependency { playerDropdown && !playerHead }
+    val playerPointerScale by NumberSetting("Player Pointer Scale",1f,0.5..2.0,0.1, desc = "Scale of your map pointer.").withDependency { playerDropdown && !playerHead }
+    val pointerStyle by SelectorSetting("Pointer Style", PointerStyle.ADM, desc = "How your map pointer looks.").withDependency { playerDropdown && !playerHead }
+    val pointerOutline by ColorSetting("Pointer Outline", Colors.BLACK, true, desc = "Outline colour of the ADM pointer.").withDependency { playerDropdown && !playerHead && pointerStyle == PointerStyle.ADM }
+
+    enum class PointerStyle(private val label: String) {
+        ADM("ADM"), VANILLA("Vanilla"), LEGACY("1.8 Vanilla");
+        override fun toString() = label
+    }
 
     private val roomDropdown by DropdownSetting("Room Colors", desc = "The color of each type of room.")
     val normalRoomColor by ColorSetting("Normal Room", Color(107, 58, 17), true, desc = "Color of normal rooms.").withDependency { roomDropdown }

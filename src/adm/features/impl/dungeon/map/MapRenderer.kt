@@ -331,12 +331,36 @@ private fun arrowSpans(grow: Float): ArrowSpans {
 private val arrowOutline by lazy { arrowSpans(0.75f) }
 private val arrowFill by lazy { arrowSpans(0f) }
 
-/** Your own map marker: an outlined arrow, centred on the pose's origin. */
+// Vanilla's player marker sprites, as shades of grey (0 = none, 1 = the black edge) tinted by the marker colour.
+private val vanillaMarker = arrayOf(
+    "....1...", "...1b1..", "...1e1..", "..1efe1.", "..1fff1.", "..1efe1.", "..1beb1.", "...111..",
+)
+private val legacyMarker = arrayOf(
+    "....1...", "...1b1..", "..1beb1.", "..1efe1.", "..1efe1.", "..1beb1.", "...111..", "........",
+)
+
+private fun GuiGraphicsExtractor.pixelMarker(rows: Array<String>, color: Int) {
+    for (y in rows.indices) for (x in 0 until 8) {
+        val shade = when (rows[y][x]) { 'b' -> 0xBC; 'e' -> 0xE0; 'f' -> 0xFF; '1' -> 0; else -> continue }
+        val c = if (shade == 0) 0xFF000000.toInt() else {
+            fun ch(sh: Int) = ((color shr sh and 0xFF) * shade / 255) shl sh
+            (color and 0xFF000000.toInt()) or ch(16) or ch(8) or ch(0)
+        }
+        fill(x - 4, y - 4, x - 3, y - 3, c)
+    }
+}
+
+/** Your own map marker in the chosen style, centred on the pose's origin. */
 fun GuiGraphicsExtractor.selfArrow(color: Int) {
+    when (DungeonMap.pointerStyle) {
+        DungeonMap.PointerStyle.VANILLA -> return pixelMarker(vanillaMarker, color)
+        DungeonMap.PointerStyle.LEGACY -> return pixelMarker(legacyMarker, color)
+        DungeonMap.PointerStyle.ADM -> {}
+    }
     pose().pushMatrix()
     pose().scale(1f / ARROW_RES)
     for (s in arrayOf(arrowOutline, arrowFill)) {
-        val c = if (s === arrowOutline) 0xFF000000.toInt() else color
+        val c = if (s === arrowOutline) DungeonMap.pointerOutline.rgba else color
         for (i in s.y.indices) fill(s.x0[i], s.y[i], s.x1[i], s.y[i] + 1, c)
     }
     pose().popMatrix()
