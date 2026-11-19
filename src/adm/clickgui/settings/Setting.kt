@@ -46,6 +46,7 @@ class SettingState<T>(initial: T) : ReadWriteProperty<Any?, T> {
 
 abstract class RenderableSetting<T>(name: String, description: String) : Setting<T>(name, description) {
     var hidden: Boolean = false
+    open val shownName: String get() = name
     var visibilityDependency: (() -> Boolean)? = null
 
     val isVisible: Boolean

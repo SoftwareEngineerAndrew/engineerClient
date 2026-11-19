@@ -58,7 +58,7 @@ object Etherwarp : Module(
     private val sounds by BooleanSetting("Custom Sounds", false, desc = "Plays the selected custom sound when you etherwarp.").withDependency { dropdown }
     private val soundSettings = createSoundSettings("Etherwarp Sound", "entity.experience_orb.pickup") { sounds && dropdown }
 
-    private val zpewDropdown by DropdownSetting("Legit Zpew Dropdown", desc = "Shows the zero ping camera settings.")
+    private val zpewDropdown by DropdownSetting("Legit Zpew Dropdown", desc = "Shows the zero ping camera settings.", label = "Legit Zpew")
     val legitZpew by BooleanSetting("Legit Zpew", false, desc = "Zero ping camera: your view jumps to where a teleport lands as you click.").withDependency { zpewDropdown }
     val zpewEtherwarp by BooleanSetting("Etherwarp", true, desc = "Sneaking etherwarps.").withDependency { zpewDropdown && legitZpew }
     val zpewSound by BooleanSetting("0 Ping Etherwarp Sound", true, desc = "The etherwarp sound plays as your camera warps, not when the server's arrives.").withDependency { zpewDropdown && legitZpew && zpewEtherwarp }

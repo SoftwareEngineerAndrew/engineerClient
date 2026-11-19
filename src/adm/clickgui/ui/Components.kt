@@ -22,7 +22,7 @@ fun RenderableSetting<*>.SettingRow(
     trailing: @Composable (hovered: () -> Boolean) -> Unit = {},
 ): UiNode {
     val pointer = remember { InteractionSource() }
-    val label = remember(name) { WrappedLabel(name) }
+    val label = remember(shownName) { WrappedLabel(shownName) }
     val minHeight = height
     var room = GuiTheme.INNER_WIDTH
     val row = Box {

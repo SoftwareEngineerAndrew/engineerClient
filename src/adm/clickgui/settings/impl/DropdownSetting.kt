@@ -14,8 +14,10 @@ import kotlin.math.PI
 class DropdownSetting(
     name: String,
     override val default: Boolean = false,
-    desc: String
+    desc: String,
+    private val label: String = name
 ) : RenderableSetting<Boolean>(name, desc) {
+    override val shownName: String get() = label
 
     override var value: Boolean by SettingState(default)
     private var enabled: Boolean by this::value
