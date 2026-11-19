@@ -89,6 +89,6 @@ class DoorPack(
             PatchCell(c[0].asIntOrNull()!!, c[1].asIntOrNull()!!, c[2].asIntOrNull()!!, state(c[3].asStr()!!))
         }
 
-        private fun state(s: String) = if (':' in s.substringBefore('[')) s else "minecraft:$s"
+        private fun state(s: String) = (if (':' in s.substringBefore('[')) s else "minecraft:$s").intern()
     }
 }

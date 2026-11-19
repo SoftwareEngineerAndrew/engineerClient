@@ -346,14 +346,18 @@ class RoomPack internal constructor(
             o.arr("cells")?.mapNotNull { c ->
                 val a = c.asArr() ?: return@mapNotNull null
                 if (a.size() < 4) return@mapNotNull null
-                SealCell(Pos(a[0].asIntOrNull() ?: return@mapNotNull null, a[1].asIntOrNull() ?: return@mapNotNull null, a[2].asIntOrNull() ?: return@mapNotNull null), a[3].asStr() ?: return@mapNotNull null)
+                SealCell(Pos(a[0].asIntOrNull() ?: return@mapNotNull null, a[1].asIntOrNull() ?: return@mapNotNull null, a[2].asIntOrNull() ?: return@mapNotNull null), a[3].asStr()?.intern() ?: return@mapNotNull null)
             }.orEmpty(),
         )
 
+        private val crcs = HashMap<String, String>()
+
         private fun fileCrc32(path: Path): String {
+            val key = "$path|${Files.size(path)}|${Files.getLastModifiedTime(path).toMillis()}"
+            synchronized(crcs) { crcs[key] }?.let { return it }
             val c = java.util.zip.CRC32()
             Files.newInputStream(path).use { s -> val buf = ByteArray(1 shl 16); while (true) { val n = s.read(buf); if (n < 0) break; c.update(buf, 0, n) } }
-            return "%08x".format(c.value)
+            return "%08x".format(c.value).also { synchronized(crcs) { crcs[key] = it } }
         }
     }
 }

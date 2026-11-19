@@ -82,7 +82,7 @@ class SecretPack(
                             s.arr("fw")?.strings()?.takeIf { it.size == 4 }, ints(s, "rw"))
                     },
                     o.arr("levers").objects().mapNotNull { l ->
-                        SecretLever(l.get("p").asPos() ?: return@mapNotNull null, l.arr("states").strings().takeIf { it.size == 4 } ?: return@mapNotNull null)
+                        SecretLever(l.get("p").asPos() ?: return@mapNotNull null, l.arr("states").strings().takeIf { it.size == 4 }?.map { it.intern() } ?: return@mapNotNull null)
                     },
                     o.obj("key")?.let { k ->
                         KeyRoom(
@@ -94,7 +94,7 @@ class SecretPack(
                             k.arr("cells")?.mapNotNull { c ->
                                 val a = c.asArr() ?: return@mapNotNull null
                                 if (a.size() < 4) return@mapNotNull null
-                                Pos(a[0].asIntOrNull() ?: return@mapNotNull null, a[1].asIntOrNull() ?: return@mapNotNull null, a[2].asIntOrNull() ?: return@mapNotNull null) to (a[3].asStr() ?: return@mapNotNull null)
+                                Pos(a[0].asIntOrNull() ?: return@mapNotNull null, a[1].asIntOrNull() ?: return@mapNotNull null, a[2].asIntOrNull() ?: return@mapNotNull null) to (a[3].asStr()?.intern() ?: return@mapNotNull null)
                             }.orEmpty(),
                         )
                     },

@@ -102,7 +102,9 @@ class PackSource private constructor(
             val hashes = HashMap<String, String>()
             val outer = MessageDigest.getInstance("SHA-256")
             for (n in all) {
-                val (size, hex) = (bundled.open(n) ?: continue).use { digest(it) }
+                val jar = bundled === BundledPacks.JAR
+                val (size, hex) = (if (jar) synchronized(jarDigests) { jarDigests[n] } else null)
+                    ?: (bundled.open(n) ?: continue).use { digest(it) }.also { if (jar) synchronized(jarDigests) { jarDigests[n] = it } }
                 sizes[n] = size
                 hashes[n] = hex
                 outer.update("$n\n$size\n$hex\n".toByteArray())
@@ -146,8 +148,17 @@ class PackSource private constructor(
          * length for ever; the hash is of about 3.5 MB in all, so checking it on each load is cheap.
          */
         private fun isIntact(file: Path, size: Long, sha256: String): Boolean = try {
-            Files.isRegularFile(file) && Files.size(file) == size && Files.newInputStream(file).use { digest(it) }.second == sha256
+            if (!Files.isRegularFile(file) || Files.size(file) != size) false
+            else {
+                val key = "$file|$sha256|${Files.getLastModifiedTime(file).toMillis()}"
+                synchronized(intact) { key in intact } ||
+                    (Files.newInputStream(file).use { digest(it) }.second == sha256).also { if (it) synchronized(intact) { intact += key } }
+            }
         } catch (_: IOException) { false }
+
+        // The jar can't change while the game runs, and an unpacked file only by a new write: each is hashed once per launch.
+        private val jarDigests = HashMap<String, Pair<Long, String>>()
+        private val intact = HashSet<String>()
 
         /** Deletes the hash folders of earlier versions (best effort: a folder another game still uses just stays until it is free). */
         private fun removeOlder(cacheRoot: Path, keep: String, report: PackReport) {

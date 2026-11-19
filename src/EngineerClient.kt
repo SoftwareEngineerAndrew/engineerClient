@@ -32,6 +32,7 @@ object EngineerClient : ClientModInitializer {
     val mc: Minecraft get() = Minecraft.getInstance()
 
     private var tickCounter = 0
+    @Volatile private var packsWarmed = false
     /** [keepWindowUp] has run (once is enough: the attribute sticks). */
     private var windowKept = false
 
@@ -131,9 +132,6 @@ object EngineerClient : ClientModInitializer {
         // (from Ascent Client, same names, so saved values carry over); ADM's configs are read again so they apply
         // (reading never writes the file).
         safely("lcm style") { com.engineerclient.lcm.LcmStyle.install() }
-        // Read on the first dungeon otherwise, on the render thread.
-        Thread({ safely("warm packs") { com.engineerclient.dungeonpack.pack.doors.DoorPack.bundled; com.engineerclient.dungeonpack.pack.secrets.SecretPack.bundled } }, "ec warm packs")
-            .apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
         safely("map prediction") { com.engineerclient.mappred.MapPrediction.install() }
         safely("map icons") { com.engineerclient.mapicons.MapIcons.install() }
         safely("map sizes") { com.engineerclient.mapicons.MapSizes.install() }
@@ -176,6 +174,13 @@ object EngineerClient : ClientModInitializer {
 
         // ADM's event bus: world load resets class detection.
         on<LevelEvent.Load> { safely("levelLoad") { ClassDetect.reset() } }
+        // The door and secret packs are only read in dungeons: off the render thread, on the first one.
+        on<com.adm.events.LocationChangeEvent> {
+            if (packsWarmed || !com.adm.utils.skyblock.dungeon.DungeonUtils.inDungeons) return@on
+            packsWarmed = true
+            Thread({ safely("warm packs") { com.engineerclient.dungeonpack.pack.doors.DoorPack.bundled; com.engineerclient.dungeonpack.pack.secrets.SecretPack.bundled } }, "ec warm packs")
+                .apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
+        }
         EventBus.subscribe(this)
 
         // Own-class poll: once a second is plenty; ADM keeps the teammate list fresh from packets.
