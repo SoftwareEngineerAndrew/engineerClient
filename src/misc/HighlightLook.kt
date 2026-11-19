@@ -55,6 +55,7 @@ object HighlightLook {
     private val notWhileBlind = BooleanSetting("Not While Blind", true, desc = "No boxes while you have Blindness.").withDependency { mobHighlight.value }
     private val witherWidth = NumberSetting("Wither Extra Width", 0.0, 0.0..3.0, 0.1, desc = "Widens the boss withers' boxes.").withDependency { mobHighlight.value }
     private val starWidth = NumberSetting("Starred Extra Width", 0.0, 0.0..3.0, 0.1, desc = "Widens starred mobs' boxes.").withDependency { mobHighlight.value }
+    private val spawnSpots = BooleanSetting("Box At Spawn Spots", false, desc = "Boxes mobs on known starred spawn spots before their name tags load.").withDependency { mobHighlight.value }
 
     private class Colours(kind: String, fill: Int, outline: Int) {
         val fill = ColorSetting("$kind Fill", Color(fill), true, desc = "$kind filled colour.").withDependency { mobHighlight.value && style.value != Style.OUTLINE }
@@ -87,6 +88,10 @@ object HighlightLook {
     // Tags the rescan just found no mob for: nothing moves before match() runs, so it would find none either.
     private val missed = IntOpenHashSet()
     private var rescanning = false
+    /** Mobs boxed from their spawn spot alone, with the tick they were: dropped when no starred tag claims them in time. */
+    private val seeded = it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap()
+    private var ticks = 0
+    private const val SEED_TICKS = 100
 
     private val mc: Minecraft get() = Minecraft.getInstance()
     private val batch = BoxBatch()
@@ -121,8 +126,25 @@ object HighlightLook {
 
     private fun mobUnder(level: ClientLevel, tag: ArmorStand, offset: Int): Entity? {
         level.getEntity(tag.id - offset)?.takeIf { under(tag, it) }?.let { return it }
-        for (o in 1..6) if (o != offset) level.getEntity(tag.id - o)?.takeIf { under(tag, it) && it.id !in found }?.let { return it }
-        return level.getEntities(tag, tag.boundingBox.inflate(1.5, 4.5, 1.5)) { under(tag, it) && it.id !in found }.minByOrNull { it.distanceToSqr(tag) }
+        for (o in 1..6) if (o != offset) level.getEntity(tag.id - o)?.takeIf { under(tag, it) && unclaimed(it) }?.let { return it }
+        return level.getEntities(tag, tag.boundingBox.inflate(1.5, 4.5, 1.5)) { under(tag, it) && unclaimed(it) }.minByOrNull { it.distanceToSqr(tag) }
+    }
+
+    private fun unclaimed(e: Entity) = e.id !in found || seeded.containsKey(e.id)
+
+    /** A mob just spawned on a known starred spot: boxed now, before its tag. */
+    private fun seed(e: Entity) {
+        if (e !is LivingEntity || e is ArmorStand || e.id in found || !DungeonUtils.inClear) return
+        if (e is Player && e.uuid.version() != 2) return
+        val arch = MobSpawnSpots.near(e.blockX, e.blockY, e.blockZ) ?: return
+        val kind = when {
+            arch.cls == "miniboss" -> Kind.MINI
+            arch.name == "Fels" -> Kind.FEL
+            TANKS.any { it == arch.name } -> Kind.TANK
+            else -> Kind.STAR
+        }
+        found[e.id] = e to kind
+        seeded.put(e.id, ticks)
     }
 
     private fun active(): Boolean = Highlight.enabled && mobHighlight.value && DungeonUtils.inDungeons
@@ -151,6 +173,7 @@ object HighlightLook {
     private fun offsetOf(tag: ArmorStand, kind: Kind) = if (kind == Kind.TANK && tag.customName?.let { withermancers[tag, it] } == true) 3 else 1
 
     private fun claim(tag: ArmorStand, mob: Entity, kind: Kind) {
+        seeded.remove(mob.id)
         claimedTags += tag.id
         tagOf[mob.id] = tag.id
         found[mob.id] = mob to kind
@@ -174,18 +197,25 @@ object HighlightLook {
             claim(tag, mob, kind)
             it.remove()
         }
-        found.entries.removeIf { (id, v) -> (!v.first.isAlive || v.first.isRemoved).also { if (it) unclaim(id, v.first) } }
+        if (!seeded.isEmpty()) {
+            val s = seeded.int2IntEntrySet().iterator()
+            while (s.hasNext()) {
+                val e = s.next()
+                if (ticks - e.intValue > SEED_TICKS) { found.remove(e.intKey); s.remove() }
+            }
+        }
+        found.entries.removeIf { (id, v) -> (!v.first.isAlive || v.first.isRemoved).also { if (it) { unclaim(id, v.first); seeded.remove(id) } } }
     }
 
     /** Adds the settings to ADM's Highlight; before SplitsLook.install, which re-reads ADM's config. */
     fun install() {
-        val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth, starWidth) + colours.flatMap { listOf(it.fill, it.outline) }
+        val all = listOf(mobHighlight, style, outlineWidth, hideInvisible, notWhileBlind, witherWidth, starWidth, spawnSpots) + colours.flatMap { listOf(it.fill, it.outline) }
         for (s in all) Highlight.registerSetting(s)
 
         // Each entity is judged as it changes; every few ticks, everything again, for what came in before the dungeon or boss was known.
-        var ticks = 0
         on<TickEvent.End> {
             if (!active()) return@on
+            if (spawnSpots.value && ticks % 20 == 0 && DungeonUtils.inClear) MobSpawnSpots.refresh()
             if (++ticks % 5 == 0) {
                 rescanning = true
                 try { mc.level?.entitiesForRendering()?.forEach(::consider) } finally { rescanning = false }
@@ -193,13 +223,17 @@ object HighlightLook {
             if (pending.isNotEmpty() || found.isNotEmpty()) match()
             missed.clear()
         }
-        on<EntityEvent.Add> { if (active()) consider(entity) }
+        on<EntityEvent.Add> {
+            if (!active()) return@on
+            consider(entity)
+            if (spawnSpots.value) seed(entity)
+        }
         on<EntityEvent.SetData> { if (active()) consider(entity) }
         on<EntityEvent.SetItemSlot> { if (entity is Player && active()) consider(entity) }
         on<EntityEvent.Remove> {
             val id = entity.id
             if (entity is ArmorStand) { claimedTags.remove(id); pending.remove(id) }
-            else if (found.remove(id) != null) unclaim(id, entity)
+            else if (found.remove(id) != null) { unclaim(id, entity); seeded.remove(id) }
         }
 
         on<RenderExtractEvent> {
@@ -220,7 +254,19 @@ object HighlightLook {
             drawBoxes(batch)
         }
 
-        on<LevelEvent.Load> { found.clear(); claimedTags.clear(); pending.clear(); tagOf.clear() }
-        EventBus.subscribe(this)
+        on<LevelEvent.Load> { reset() }
+
+        // Listening only while it can draw: off, nothing here runs for any entity.
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register {
+            val want = active()
+            val on = this in EventBus.activeSubscribers
+            if (want && !on) EventBus.subscribe(this)
+            else if (!want && on) { EventBus.unsubscribe(this); reset() }
+        }
+    }
+
+    private fun reset() {
+        found.clear(); claimedTags.clear(); pending.clear(); tagOf.clear(); seeded.clear(); missed.clear()
+        MobSpawnSpots.clear()
     }
 }
