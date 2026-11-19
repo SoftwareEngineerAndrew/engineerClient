@@ -7,6 +7,7 @@ import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.features.impl.dungeon.LeapMenu
 import com.adm.features.impl.dungeon.LeapMenu.coreSorting
+import com.adm.features.impl.dungeon.Mimic
 import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.utils.network.WebUtils.hasBonusPaulScore
 import com.adm.utils.noControlCodes
@@ -17,6 +18,7 @@ import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket
 import net.minecraft.network.protocol.game.ClientboundTabListPacket
 import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.monster.zombie.Zombie
 import net.minecraft.world.entity.player.Player
 import kotlin.jvm.optionals.getOrNull
 
@@ -116,6 +118,7 @@ object DungeonListener {
                     teammate.name == (match.groupValues[1].takeUnless { it == "You" } ?: mc.player?.name?.string)
                 }?.deaths?.inc()
             }
+            if (!dungeonStats.mimicKilled && DungeonUtils.isFloor(6, 7) && message.contains(MIMIC_CHARMED)) mimicFound()
 
             val partyMatch = partyMessageRegex.find(message) ?: return@on
             when (partyMatch.groupValues[2].lowercase()) {
@@ -136,6 +139,12 @@ object DungeonListener {
             DungeonUtils.updateScore()
         }
 
+        // The Mimic dies as a baby zombie; its death event counts for the score whether or not the Mimic module is on.
+        on<EntityEvent.Event> {
+            if (id != 3.toByte() || dungeonStats.mimicKilled || !DungeonUtils.isFloor(6, 7) || !DungeonUtils.inClear) return@on
+            if ((entity as? Zombie)?.isBaby == true) mimicFound()
+        }
+
         on<EntityEvent.Remove> {
             DungeonUtils.dungeonTeammates.forEach {
                 val id = it.entity?.id ?: return@forEach
@@ -147,6 +156,14 @@ object DungeonListener {
             if (entity.type == EntityTypes.PLAYER && entity.uuid.version() != 4 && DungeonUtils.inDungeons)
                 DungeonUtils.dungeonTeammates.find { it.entity == null && it.name == entity.name.string }?.entity = entity as? Player
         }
+    }
+
+    private const val MIMIC_CHARMED = "You charmed a Mimic"
+
+    private fun mimicFound() {
+        dungeonStats.mimicKilled = true
+        DungeonUtils.updateScore()
+        Mimic.announceMimic()
     }
 
     private fun getDungeonPuzzles(tabList: List<String>) {
