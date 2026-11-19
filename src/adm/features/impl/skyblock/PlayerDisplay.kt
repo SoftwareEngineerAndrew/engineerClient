@@ -20,7 +20,8 @@ enum class OverlayType {
     ARMOR,
     HEARTS,
     FOOD,
-    XP;
+    XP,
+    HOTBAR;
 }
 
 object PlayerDisplay : Module(
@@ -32,6 +33,7 @@ object PlayerDisplay : Module(
     private val hideFood by BooleanSetting("Hide Food", false, desc = "Hides the food bar.").withDependency { hideElements }
     private val hideHearts by BooleanSetting("Hide Hearts", false, desc = "Hides the hearts.").withDependency { hideElements }
     private val hideXP by BooleanSetting("Hide XP Level", false, desc = "Hides the XP level.").withDependency { hideElements }
+    private val hideHotbar by BooleanSetting("Hide Hotbar", false, desc = "Hides the hotbar.").withDependency { hideElements }
     private val hideActionBar by DropdownSetting("Hide Action Bar Elements", desc = "Shows toggles for hiding action bar elements.")
     private val hideHealth by BooleanSetting("Hide Health", true, desc = "Hides the health bar.").withDependency { hideActionBar }
     private val hideMana by BooleanSetting("Hide Mana", true, desc = "Hides the mana bar.").withDependency { hideActionBar }
@@ -226,5 +228,6 @@ object PlayerDisplay : Module(
             OverlayType.HEARTS -> hideHearts
             OverlayType.FOOD -> hideFood
             OverlayType.XP -> hideXP
+            OverlayType.HOTBAR -> hideHotbar
         }
 }

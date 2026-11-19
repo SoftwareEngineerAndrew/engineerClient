@@ -3,6 +3,7 @@ package com.adm.mixin.mixins;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.adm.features.impl.skyblock.OverlayType;
 import com.adm.features.impl.skyblock.PlayerDisplay;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.Hud;
 import net.minecraft.world.entity.player.Player;
@@ -27,6 +28,11 @@ public class HUDMixin {
     @Inject(method = "extractFood", at = @At("HEAD"), cancellable = true)
     private void cancelFoodBar(GuiGraphicsExtractor graphics, Player player, int yLineBase, int xRight, CallbackInfo ci) {
         if (PlayerDisplay.shouldCancelOverlay(OverlayType.FOOD)) ci.cancel();
+    }
+
+    @Inject(method = "extractItemHotbar", at = @At("HEAD"), cancellable = true)
+    private void cancelHotbar(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker, CallbackInfo ci) {
+        if (PlayerDisplay.shouldCancelOverlay(OverlayType.HOTBAR)) ci.cancel();
     }
 
     @ModifyExpressionValue(method = "extractHotbarAndDecorations", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/MultiPlayerGameMode;hasExperience()Z"))
