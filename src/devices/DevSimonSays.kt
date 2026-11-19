@@ -2,6 +2,7 @@ package com.engineerclient.devices
 
 import com.engineerclient.EngineerClient.mc
 import com.adm.events.BlockInteractEvent
+import com.adm.events.BlockUpdateEvent
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.RenderExtractEvent
@@ -13,6 +14,8 @@ import com.adm.utils.sendCommand
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.M7Phases
 import net.minecraft.core.BlockPos
+import net.minecraft.world.level.block.ButtonBlock
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.phys.AABB
 
 /** Simon Says: boxes the buttons to press from the solver's answer ([com.engineerclient.practice.SimonSaysTracker]), blocks wrong ones, announces rounds. */
@@ -22,15 +25,25 @@ object DevSimonSays {
     val clickInOrder = ArrayList<BlockPos>()
     var clickNeeded = 0
     private var startClickCounter = 0
+    /** Before the device's buttons first come up: the start button may be spammed only then; a fail's restart arms it again. */
+    private var firstPhase = true
 
     fun install() {
-        on<LevelEvent.Load> { clickInOrder.clear(); clickNeeded = 0; startClickCounter = 0 }
-        on<MessageEvent.Chat> { if (message == "[BOSS] Goldor: Who dares trespass into my domain?") startClickCounter = 0 }
+        on<LevelEvent.Load> { clickInOrder.clear(); clickNeeded = 0; startClickCounter = 0; firstPhase = true }
+        on<MessageEvent.Chat> { if (message == "[BOSS] Goldor: Who dares trespass into my domain?") { startClickCounter = 0; firstPhase = true } }
+        on<BlockUpdateEvent> {
+            if (!Devices.simonSaysOn || !Devices.blockWrongStart) return@on
+            if (pos == startButton) { if (updated.block is ButtonBlock && updated.getValue(BlockStateProperties.POWERED)) firstPhase = true }
+            else if (firstPhase && pos.x == 110 && pos.y in 120..123 && pos.z in 92..95 && updated.block is ButtonBlock && old.block !is ButtonBlock) {
+                firstPhase = false
+                startClickCounter = 0
+            }
+        }
 
         on<BlockInteractEvent> {
             if (!Devices.simonSaysOn || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             val sneaking = mc.player?.isShiftKeyDown == true
-            if (pos == startButton && Devices.blockWrongStart) {
+            if (pos == startButton && Devices.blockWrongStart && firstPhase) {
                 if (startClickCounter++ >= Devices.maxStartClicks && !sneaking) {
                     if (Devices.customClickSounds) playSoundSettings(Devices.wrongSound())
                     cancel()

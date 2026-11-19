@@ -59,6 +59,7 @@ object SimonSaysTracker {
         // change. Stamped with the server tick on arrival, and what the lamp was taken from the packets before
         // it (in arrival order), then handled on the client thread.
         on<PacketEvent.Receive> {
+            if (!active() || (packet !is ClientboundBlockUpdatePacket && packet !is ClientboundSectionBlocksUpdatePacket) || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             val changes = when (val p = packet) {
                 is ClientboundBlockUpdatePacket -> if (onDevice(p.pos)) listOf(p.pos.immutable() to p.blockState) else return@on
                 is ClientboundSectionBlocksUpdatePacket -> ArrayList<Pair<BlockPos, BlockState>>().also { l ->
