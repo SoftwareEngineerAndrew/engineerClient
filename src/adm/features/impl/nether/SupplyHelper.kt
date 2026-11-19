@@ -85,11 +85,12 @@ object SupplyHelper : Module(
         }
 
         on<RenderExtractEvent> {
-            if (KuudraUtils.phase != 1 || !KuudraUtils.inKuudra) return@on
+            val phase = KuudraUtils.phase
+            if (phase != 1 && phase != 3 || !KuudraUtils.inKuudra) return@on
             val player = mc.player ?: return@on
             boxes.clear()
 
-            if (supplyDropWaypoints) {
+            if (supplyDropWaypoints && phase == 1) {
                 val missing = NoPre.missing
                 for (spot in dropSpots) {
                     if (!spot.supply.isActive) continue
@@ -116,7 +117,7 @@ object SupplyHelper : Module(
 
             drawBoxes(boxes)
 
-            if (renderArea) for ((text, at) in areaLabels) drawText(text, at, 2f, true)
+            if (renderArea && phase == 1) for ((text, at) in areaLabels) drawText(text, at, 2f, true)
         }
     }
 
