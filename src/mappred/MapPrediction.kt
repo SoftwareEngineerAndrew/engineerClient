@@ -30,7 +30,7 @@ import kotlin.math.roundToInt
 
 /**
  * Map Prediction on ADM's Dungeon Map (F1-F7, M1-M7): what the unknown tiles probably are, from what the
- * map has shown so far and the rules every recorded map of the floor follows ([MapPredictor], [FloorRules]).
+ * map has shown so far, by a net trained on every recorded map of the floor ([RoomNet], [FloorRules]).
  * On F4-F6 that includes the puzzle column east of the main grid, where a tile is a puzzle or nothing.
  *
  * Each "?" tile behind a door is coloured by its chances (purple puzzle, orange trap, yellow
@@ -48,12 +48,7 @@ import kotlin.math.roundToInt
  * leave only one way for the last rooms to be, they're drawn in full with their names. Everything
  * is worked out again on a background thread whenever the map shows more, so a wrong guess changes
  * as rooms open. Only what the map shows is used (never the world scan of rooms nobody has seen).
- * By default a trained net ([RoomNet], in four sizes) predicts the whole map in one pass whenever it changes. The
- * Sampler engine instead draws whole maps by the game's own steps ([GameSampler]: the big rooms one random spot each,
- * the door tree grown from the entrance, the puzzle column after it; the older classic sampler only takes a map those
- * can't fit). It doesn't start over when a room opens: the whole maps it guessed before are kept, and the ones that
- * agree with the new room are the new guess at once ([PredictionSession]); more guesses top them up, and Predict Ahead
- * keeps guessing while the map stays, on Prediction Threads threads, for the next room.
+ * A trained net ([RoomNet], in four sizes) predicts the whole map in one pass whenever it changes.
  *
  * Like the other ADM additions, the settings are registered into ADM's module and saved with it.
  * `MapPathHintsMixin` draws this instead of ADM's "?" tiles while it is on. With LCM Style on, LcmStyle
@@ -68,17 +63,11 @@ object MapPrediction {
     private val on: Boolean get() = mode.value == Mode.ADM
     private val off: Boolean get() = mode.value == Mode.OFF
 
-    private enum class Engine { BEST, BALANCED, FAST, FASTEST, SAMPLER }
+    private val engine = SelectorSetting("Prediction Engine", RoomNet.Size.BEST,
+        desc = "Best is the most exact; Balanced, Fast and Fastest take less time per room.").withDependency { on }
 
-    private val engine = SelectorSetting("Prediction Engine", Engine.BEST,
-        desc = "Best is the most exact; Balanced, Fast and Fastest take less time per room; Sampler is the older guesser.").withDependency { on }
-    private val sampler: Boolean get() = engine.value == Engine.SAMPLER
-    private val performance = BooleanSetting("Performance Mode", false,
-        desc = "Uses the lighter fallback prediction: one thread, a few thousand guesses per map, a little less exact.").withDependency { on && sampler }
-    private val threadsSetting = NumberSetting("Prediction Threads", 0, 0..4, 1,
-        desc = "Threads the guesses are made on, at the lowest priority (0: automatic, half your cores, at most 4).").withDependency { on && sampler && !performance.value }
-    private val aheadSetting = BooleanSetting("Predict Ahead", true,
-        desc = "Keep making guesses while you're in a room (on the threads above, at the lowest priority, until about 5 MB of them), so the next room that opens updates the map at once. Off: they stop when the map is worked out.").withDependency { on && sampler && !performance.value }
+    /** The net size Room Prediction uses; AMap uses the same so only one is loaded. */
+    @JvmStatic val netSize: RoomNet.Size get() = engine.value
     private val splitText = BooleanSetting("Split Contents", true,
         desc = "On each \"?\" behind a door: what that side of the map holds (puzzles P, trap T, yellow Y, blood B; a letter shows when it's more likely there than not) and about how many rooms.").withDependency { on }
     private val splitSecrets = BooleanSetting("Split Secrets", true,
@@ -96,7 +85,7 @@ object MapPrediction {
     private val bloodFairyChance = NumberSetting("Blood & Fairy Chance", 60, 0..100, 1, unit = "%",
         desc = "How sure the prediction has to be that a tile is blood or the fairy room before it's marked.").withDependency { on && bloodFairyDropdown.value }
     private val bigDropdown = DropdownSetting("Big Room Prediction",
-        desc = "A big room the prediction is sure of (the same size and place in most samples) drawn greyed out at its whole size.").withDependency { on }
+        desc = "A big room the prediction is sure of drawn greyed out at its whole size.").withDependency { on }
     private val bigChance = NumberSetting("Big Room Chance", 70, 0..100, 1, unit = "%",
         desc = "How sure the prediction has to be of a big room's size and place before it's drawn.").withDependency { on && bigDropdown.value }
     private val oneDropdown = DropdownSetting("1x1 Room Prediction",
@@ -154,8 +143,6 @@ object MapPrediction {
     private var lastKey = ""
     private val generation = AtomicInteger()
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-map-prediction").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
-    /** The guesses, kept from one map to the next of a dungeon (only the worker thread uses it, but for [PredictionSession.cancel]). */
-    private val session = PredictionSession()
 
     /** Doors the map has shown as wither or blood doors this run (the map stops showing that once they're open). */
     private val pathDoors = HashMap<Int, Byte>()
@@ -174,7 +161,7 @@ object MapPrediction {
     private val BIG_GREY = Color(85, 85, 85, 1f)
 
     fun install() {
-        for (s in listOf(mode, engine, performance, threadsSetting, aheadSetting, splitText, splitSecrets, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms, exactOpacity,
+        for (s in listOf(mode, engine, splitText, splitSecrets, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms, exactOpacity,
             colorsDropdown, customColors, predPuzzle, predTrap, predYellow, predRare, predBlood, predFairy, predRoom)) DungeonMap.registerSetting(s)
         on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
         on<LevelEvent.Load> { reset() }
@@ -184,14 +171,12 @@ object MapPrediction {
 
     private fun reset() {
         generation.incrementAndGet()
-        session.cancel()
-        worker.execute { session.clear() }
         shown = null; shownView = null; shownNames = null; shownKey = ""; lastKey = ""
         pathDoors.clear()
         startAt = 0L
     }
 
-    /** When the run starts ("Starting in 1 second."): before it the guesses are made quietly, on one thread, and not shown. */
+    /** When the run starts ("Starting in 1 second."): nothing is shown before it. */
     private var startAt = 0L
     private fun started(): Boolean =
         (startAt != 0L && System.currentTimeMillis() >= startAt) ||
@@ -252,56 +237,25 @@ object MapPrediction {
 
     private fun update() {
         if (!on || !DungeonMap.enabled || !supported()) {
-            // off, or out of the clear (the boss): no more guessing ahead for a map nobody opens; it starts again (from
-            // its pool) if the map comes back
-            if (lastKey.isNotEmpty()) { lastKey = ""; generation.incrementAndGet(); session.cancel() }
+            if (lastKey.isNotEmpty()) { lastKey = ""; generation.incrementAndGet() }
             return
         }
         // ADM fills rooms in from the map packets as they come; a read mid-change just waits for the next tick
         val v = try { view() } catch (_: ConcurrentModificationException) { null } ?: return
-        val live = started()
-        val light = performance.value
-        val eng = engine.value
-        val key = v.key() + (if (live) "" else "|quiet") + (if (light) "|light" else "") + "|" + eng.name
+        val size = engine.value
+        val key = v.key() + "|" + size.name
         if (key == lastKey) return
         lastKey = key
         val gen = generation.incrementAndGet()
-        session.cancel()
-        if (eng != Engine.SAMPLER) {
-            val size = RoomNet.Size.entries[eng.ordinal]
-            // one pass of the net, off the render and tick threads; a newer map drops it
-            worker.execute {
-                EngineerClient.safely("map prediction worker") {
-                    if (generation.get() != gen) return@safely
-                    val p = RoomNet.of(size).predict(v)
-                    if (generation.get() != gen) return@safely
-                    val namer = try { MapPredictor(v, gameProcess = false) } catch (_: Exception) { null }
-                    shown = p; shownView = v; shownKey = key; shownNames = namer?.certainNames(p)
-                }
-            }
-            return
-        }
-        val threads = if (!live) 1 else threadsSetting.value.let { if (it <= 0) PredictionSession.autoThreads() else it }
-        val ahead = aheadSetting.value
+        // one pass of the net, off the render and tick threads; a newer map drops it
         worker.execute {
             EngineerClient.safely("map prediction worker") {
                 if (generation.get() != gen) return@safely
-                // the guesses made for the maps before carry over to this one (what fits it is up at once), batches
-                // then top them up, publishing as it goes, and go on for the next room while the map stays;
-                // stops when the map changes again, when nothing fits even the loosest rules, or when no more fit
-                session.threads = threads; session.ahead = ahead
-                session.begin(v, game = !light)
-                // the names from the secret total once the map is known for sure, however many rooms are unnamed: a map
-                // all discovered at once, else once the prediction is sure of every room left
-                val namer = try { MapPredictor(v, gameProcess = false) } catch (_: Exception) { null }
-                shownNames = namer?.certainNames(null)
-                do {
-                    if (generation.get() != gen) return@safely
-                    session.prediction()?.let { shown = it; shownView = v; shownKey = key; shownNames = namer?.certainNames(it) }
-                } while (session.step())
-                // nothing fits this map: the one before's guesses aren't this map's (its blood can be where this one rules
-                // it out), so none stay up; ADM's own "?" tiles until the next map
-                if (generation.get() == gen && shownKey != key) { shown = null; shownView = null; shownNames = null }
+                val p = RoomNet.of(size).predict(v)
+                if (generation.get() != gen) return@safely
+                // the names from the secret total once the map is known for sure
+                val namer = try { MapPredictor(v) } catch (_: Exception) { null }
+                shown = p; shownView = v; shownKey = key; shownNames = namer?.certainNames(p)
             }
         }
     }

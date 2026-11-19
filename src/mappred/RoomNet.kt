@@ -9,7 +9,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-/** A trained network that predicts the unknown part of a map from what the map shows, in one pass. Not thread safe. */
+/** A trained network that predicts the unknown part of a map from what the map shows, in one pass. */
 class RoomNet(input: InputStream) {
     private val d: Int
     private val layers: Int
@@ -38,6 +38,7 @@ class RoomNet(input: InputStream) {
         lin("tile", d, 9); lin("big", d, 12); lin("split", d, 11); lin("ea", d, 2 * d); lin("eb", d, 2 * d); lin("eout", d, 6)
     }
 
+    @Synchronized
     fun predict(v: MapView): Prediction {
         val r = v.rules
         val onMap = BooleanArray(N) { t -> (t % W < r.w || (r.puzzleColumn && t % W == r.w)) && t / W < r.h }
@@ -82,7 +83,7 @@ class RoomNet(input: InputStream) {
             if (door >= 0.05f) doors += PredictedDoor(t, n, door, edge[e + 3], edge[e + 4], 1f / (1f + exp(-edge[e + 5])))
         }
         doors.sortByDescending { it.chance }
-        return Prediction(W, W, probs, splits, 1, 0, bigRooms, emptyList(), doors)
+        return Prediction(W, W, probs, splits, bigRooms, emptyList(), doors)
     }
 
     private fun clsOf(k: Kind, s: Shape): Int = when (k) {

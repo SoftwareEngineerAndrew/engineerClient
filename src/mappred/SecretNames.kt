@@ -14,7 +14,7 @@ class SecretNames(used: Set<String>, private val targets: IntArray, missing: Set
         Array(MapStats.POOLS) { p -> MapStats.NAMES.filter { it.pool == p && it.name !in taken && it.name !in missing } }
     }
     private val poolWeight = DoubleArray(MapStats.POOLS) { p -> avail[p].sumOf { it.seen.toDouble() } }
-    /** [solve]'s answers by pools; several threads of one session ([PredictionSession]) share them. */
+    /** [solve]'s answers by pools. */
     private class Box(val result: Result?)
     private val cache = java.util.concurrent.ConcurrentHashMap<String, Box>()
     private val maxT = targets.maxOrNull() ?: -1
