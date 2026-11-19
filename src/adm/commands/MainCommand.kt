@@ -6,6 +6,7 @@ import com.github.stivais.commodore.utils.GreedyString
 import com.github.stivais.commodore.utils.SyntaxException
 import com.adm.AdmMod.mc
 import com.adm.clickgui.HudManager
+import com.adm.config.Profiles
 import com.adm.features.ModuleManager
 import com.adm.features.impl.render.ClickGUIModule
 import com.adm.utils.*
@@ -95,6 +96,32 @@ val mainCommand = Commodore("adm") {
                 val module = ModuleManager.modules[moduleName.replace("_", " ")] ?: throw SyntaxException("Module not found.")
                 module.toggle()
                 modMessage("§aModule §f${module.name} §ahas been ${if (module.enabled) "enabled" else "disabled"}.")
+            }
+        }
+    }
+
+    literal("profile") {
+        literal("list").runs {
+            val names = Profiles.list()
+            modMessage(if (names.isEmpty()) "§7No saved profiles." else "§aProfiles: §f${names.joinToString(", ")}")
+        }
+        literal("save").runs { name: String ->
+            if (!Profiles.valid(name)) throw SyntaxException("Use letters, digits, _ or -.")
+            Profiles.save(name)
+            modMessage("§aSaved profile §f$name§a.")
+        }
+        literal("load").executable {
+            param("name") { suggests { Profiles.list() } }
+            runs { name: String ->
+                if (!Profiles.valid(name) || !Profiles.load(name)) throw SyntaxException("Profile not found.")
+                modMessage("§aLoaded profile §f$name§a.")
+            }
+        }
+        literal("delete").executable {
+            param("name") { suggests { Profiles.list() } }
+            runs { name: String ->
+                if (!Profiles.valid(name) || !Profiles.delete(name)) throw SyntaxException("Profile not found.")
+                modMessage("§aDeleted profile §f$name§a.")
             }
         }
     }

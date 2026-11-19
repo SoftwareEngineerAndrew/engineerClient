@@ -79,25 +79,33 @@ class ModuleView(val module: Module) {
     private var shownP = 1f
     private var expandP = 0f
     private val settingP = FloatArray(views.size)
-    private var settingsHeight = 0
+    private var settingsHeight = -1
+
+    private var matchQuery: String? = null
+    private var nameMatch = true
+    private var settingMatch: Set<SettingView> = emptySet()
+
+    private fun match(query: String) {
+        if (query == matchQuery) return
+        matchQuery = query
+        nameMatch = query.isEmpty() || module.name.contains(query, true)
+        settingMatch = if (nameMatch) emptySet()
+            else views.filter { it.setting !is com.adm.clickgui.settings.impl.DropdownSetting && it.setting.name.contains(query, true) }.toSet()
+    }
 
     /** Updates the animations for this frame and returns the height to lay it out at. */
-    /** The settings [query] matches, unless the module's own name does. */
-    fun settingMatches(query: String): Set<SettingView> =
-        if (query.isEmpty() || module.name.contains(query, true)) emptySet()
-        else views.filter { it.setting !is com.adm.clickgui.settings.impl.DropdownSetting && it.setting.name.contains(query, true) }.toSet()
-
-    fun matches(query: String) = query.isEmpty() || module.name.contains(query, true) || settingMatches(query).isNotEmpty()
-
     fun measure(query: String, openMatches: Boolean): Int {
-        val nameMatch = query.isEmpty() || module.name.contains(query, true)
-        val settingMatch = settingMatches(query)
+        match(query)
         shownP = shown.update(nameMatch || settingMatch.isNotEmpty())
         expandP = expand.update(views.isNotEmpty() && (expanded || (openMatches && settingMatch.isNotEmpty())))
-        settingsHeight = 0
-        views.forEachIndexed { i, v ->
-            settingP[i] = v.shown.update(if (settingMatch.isEmpty()) v.setting.isVisible else v in settingMatch)
-            settingsHeight += (v.height() * settingP[i]).roundToInt()
+        // Collapsed and settled: the settings add no height, so their animations can wait until it opens.
+        if (expandP > 0f || settingsHeight < 0) {
+            settingsHeight = 0
+            for (i in views.indices) {
+                val v = views[i]
+                settingP[i] = v.shown.update(if (settingMatch.isEmpty()) v.setting.isVisible else v in settingMatch)
+                settingsHeight += (v.height() * settingP[i]).roundToInt()
+            }
         }
         return ((Theme.MODULE + settingsHeight * expandP) * shownP).roundToInt()
     }

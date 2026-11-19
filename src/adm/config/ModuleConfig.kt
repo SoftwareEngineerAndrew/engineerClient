@@ -26,7 +26,7 @@ class ModuleConfig internal constructor(file: File) {
     // key is module name in lowercase
     internal val modules: HashMap<String, Module> = hashMapOf()
 
-    private val file: File = file.apply {
+    internal val file: File = file.apply {
         try {
             parentFile.mkdirs()
             createNewFile()
