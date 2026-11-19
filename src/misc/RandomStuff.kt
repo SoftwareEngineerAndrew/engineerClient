@@ -36,7 +36,7 @@ object RandomStuff : Module(
 
     @JvmStatic
     fun shouldHookMouse(): Boolean = enabled && noCursorReset && System.currentTimeMillis() - cursorClock < unhookTimeout
-    private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it instead of starting a new line — so a Bazaar or Auction House search is type-and-Enter.")
+    private val signEnterConfirms by BooleanSetting("Enter Confirms Sign", true, desc = "On a sign edit screen, Enter finishes it; Shift+Enter starts a new line.")
 
     private val blessOnLeave by BooleanSetting("Bless On Party Leave", true, desc = "Sends \"bless\" in party chat whenever someone leaves the party.")
 
@@ -123,6 +123,8 @@ object RandomStuff : Module(
         // again on the same connection: that is the transfer, not a new connection, so it only waits for it.
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register { handler, _, client ->
             val ip = client.currentServer?.ip?.lowercase().orEmpty()
+            val wasPending = pendingSkyblockJoin
+            val countdown = ticksUntilSkyblock
             // Any new connection drops what the last one left pending: a countdown cut short by a
             // disconnect must not carry on into the next world, Hypixel or not.
             pendingSkyblockJoin = false
@@ -130,7 +132,10 @@ object RandomStuff : Module(
             if (!enabled || !autoJoinSkyblock || !ip.contains("hypixel")) return@register
             val connection = handler.connection
             if (connection === skyblockConnection) {
-                if (pendingSkyblockJoin && attempts > 0) ticksUntilSkyblock = TRANSFER_TICKS
+                if (wasPending) {
+                    pendingSkyblockJoin = true
+                    ticksUntilSkyblock = if (attempts > 0) TRANSFER_TICKS else countdown
+                }
                 return@register
             }
             skyblockConnection = connection

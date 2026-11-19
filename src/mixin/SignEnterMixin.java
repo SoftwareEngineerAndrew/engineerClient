@@ -26,7 +26,7 @@ public class SignEnterMixin {
 
     @Inject(method = "keyPressed(Lnet/minecraft/client/input/KeyEvent;)Z", at = @At("HEAD"), cancellable = true)
     private void ec$enterFinishesSign(KeyEvent keyEvent, CallbackInfoReturnable<Boolean> cir) {
-        if (!RandomStuff.INSTANCE.signEnterFinishes(keyEvent.key())) return;
+        if (keyEvent.hasShiftDown() || !RandomStuff.INSTANCE.signEnterFinishes(keyEvent.key())) return;
         ((AbstractSignEditScreen) (Object) this).onClose();
         cir.setReturnValue(true);
     }
