@@ -9,6 +9,7 @@ import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.clickgui.settings.impl.StringSetting
 import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.features.impl.boss.ExtraStats
@@ -31,6 +32,7 @@ object ClearInfo : Module(
     }.withDependency { mapDrop && mapInfo }
     val disableInBoss by BooleanSetting("Disable in boss", true, desc = "No HUD in the boss.").withDependency { mapDrop && mapInfo }
     val scoreAlert by BooleanSetting("300 Score Alert", true, desc = "A title and the run time in chat at 300.").withDependency { mapDrop && mapInfo }
+    val scoreAlertText by StringSetting("300 Alert Text", "&c300 Score!", desc = "The 300 title; & for colours.", placeholder = "&c300 Score!").withDependency { mapDrop && mapInfo && scoreAlert }
     val highlightPortal by BooleanSetting("Highlight Portal", true, desc = "Highlights the blood portal, colored by score.").withDependency { mapDrop && mapInfo }
     val portalUnderS by ColorSetting("Portal Under S", Colors.MINECRAFT_RED.withAlpha(0.5f), true, desc = "Portal color under 270. Alpha 0 hides it.").withDependency { mapDrop && mapInfo && highlightPortal }
     val portalS by ColorSetting("Portal S", Colors.MINECRAFT_YELLOW.withAlpha(0.5f), true, desc = "Portal color from 270. Alpha 0 hides it.").withDependency { mapDrop && mapInfo && highlightPortal }
@@ -50,6 +52,7 @@ object ClearInfo : Module(
     private val scoreDrop by DropdownSetting("Score Time", false, desc = "The run time at S and at the S+ secrets.")
     val scoreTime by BooleanSetting("Enable Score Time", true, desc = "Says the run time at each.").withDependency { scoreDrop }
     val showS by BooleanSetting("S Score", true, desc = "When the score reaches 270.").withDependency { scoreDrop && scoreTime }
+    val sText by StringSetting("S Text", "&eS", desc = "What the S line says; & for colours.", placeholder = "&eS").withDependency { scoreDrop && scoreTime && showS }
     val showMinSecrets by BooleanSetting("Min Secrets", false, desc = "When the secrets needed for S+ are found.").withDependency { scoreDrop && scoreTime }
     val scoreTitle by BooleanSetting("Score Time Title", true, desc = "A title as well as the chat line.").withDependency { scoreDrop && scoreTime }
     internal val scoreSound = SoundOption(this, "minecraft:entity.experience_orb.pickup", prefix = "Score Time ") { scoreDrop && scoreTime }

@@ -28,7 +28,7 @@ object MapInfo {
         on<ScoreUpdateEvent> {
             if (shownTitle || !DungeonUtils.inDungeons || !ClearInfo.mapInfoOn || !ClearInfo.scoreAlert || score < 300) return@on
             shownTitle = true
-            alert("§c300 Score!")
+            alert(ClearInfo.scoreAlertText.replace('&', '§'))
             modMessage("§b${DungeonUtils.score} §ascore reached in §6${DungeonUtils.dungeonTime} §8|| §e${DungeonUtils.floor?.name}§8.")
         }
 

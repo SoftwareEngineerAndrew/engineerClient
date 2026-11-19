@@ -23,7 +23,7 @@ object ScoreTime {
             if (!ClearInfo.scoreTimeOn) return@on
             if (!saidS && score >= 270 && ClearInfo.showS && DungeonUtils.inDungeons) {
                 saidS = true
-                mc.execute { say("&eS") }
+                mc.execute { say(ClearInfo.sText) }
             }
             if (!saidSecrets && ClearInfo.showMinSecrets && DungeonUtils.inClear && secretsMet()) {
                 saidSecrets = true
