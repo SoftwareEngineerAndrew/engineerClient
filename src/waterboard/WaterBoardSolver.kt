@@ -105,6 +105,9 @@ object WaterBoardSolver {
     private var jobCommitted: List<Flip> = emptyList()
     private var dirty = true
     private var lastPlanMs = 0.0
+    /** Searches in a row that found nothing that solves: past two it waits for a lever or the water source to change. */
+    private var failedSearches = 0
+    private var failedSource = false
     /** Which of [PlanTable]'s boards this is (-1: none), and the objective the plan is for. */
     private var layout = -1
     private var planFor: Objective? = null
@@ -154,6 +157,7 @@ object WaterBoardSolver {
     private fun reset() {
         frame = null; room = null; geo = null; tracker = null; todo = ArrayList(); solveAt = WaterSim.NONE; windowOf = emptyMap()
         seenFlips = 0; job?.cancel(true); job = null; jobBase = null; dirty = true; inbox.clear(); leverPowered.fill(null)
+        failedSearches = 0
         clickMs.fill(Double.NaN); layout = -1; planFor = null; dinged = null; held = false; jobUntouched = false
     }
 
@@ -311,15 +315,19 @@ object WaterBoardSolver {
                 val k = todo.indexOfFirst { it.lever == lv && kotlin.math.abs(it.tick - t) <= 40 }
                 if (k >= 0) todo.removeAt(k)
             }
-            seenFlips = arr.size; dirty = true
+            seenFlips = arr.size; dirty = true; failedSearches = 0
         }
+        if (failedSearches > 0 && tr.head.sourceOn != failedSource) failedSearches = 0
         val j = job
         if (j != null && j.isDone) {
             job = null
             val p = runCatching { j.get() }.getOrNull()
             val base = jobBase
             // a lever moved while it planned: its board is out of date (and a new plan is already due)
-            if (p != null && base != null && jobArrivals == arr.size) adopt(p, base)
+            if (p != null && base != null && jobArrivals == arr.size) {
+                adopt(p, base)
+                if (solveAt == WaterSim.NONE) { failedSearches++; failedSource = base.sourceOn } else failedSearches = 0
+            }
         }
         // nothing pressed yet: the plan waits for it, its first flip on the tick a click now would land
         val untouched = untouched(tr)
@@ -332,11 +340,13 @@ object WaterBoardSolver {
         if (gone.isNotEmpty()) { todo.removeAll(gone.toSet()); dirty = true }
         // and keep at it while nothing solves
         if (solveAt == WaterSim.NONE && (todo.isNotEmpty() || tr.head.sourceOn || arr.isNotEmpty())) dirty = true
+        if (failedSearches >= 2) dirty = false
         // every gate open with nothing moving: solved, or the puzzle hasn't closed its gates yet. Open with water still moving,
         // it plans on: a gate about to close again is put right (and one staying open plans nothing)
         if (tr.head.closed == 0 && !tr.head.moving()) { todo.clear(); return }
         // (a held plan that solves has nothing to look at again: the board can't change before the press)
-        if (job == null && (dirty || (!(held && solveAt != WaterSim.NONE) && now - lastPlanMs > 3000))) {
+        if (job == null && (dirty || (failedSearches < 2 && !(held && solveAt != WaterSim.NONE) && now - lastPlanMs > 3000))) {
+            val refresh = !dirty && solveAt != WaterSim.NONE
             val leadTicks = maxOf(Tracker.AHEAD, Math.ceil(lead.value.toDouble() / 50.0 + latencyTicks()).toInt())
             // from the server's board a reaction time from now, with the plan's flips before that as good as done; before the
             // first press nothing is done or due, the plan is only offsets from it
@@ -359,7 +369,7 @@ object WaterBoardSolver {
             planFor = obj
             val kept = if (untouched) seeds[0] else rest
             job = coordinator.submit<Planned> {
-                val p = planner.plan(base, seeds, budget, Random.Default, first, objective = obj, iterations = Planner.iterations(budget, obj))
+                val p = planner.plan(base, seeds, budget, Random.Default, first, threads = if (refresh) 1 else Planner.THREADS, objective = obj, iterations = Planner.iterations(budget, obj))
                 Planned(p, kept, if (kept.isEmpty()) null else planner.score(base, kept, objective = obj))
             }
         }

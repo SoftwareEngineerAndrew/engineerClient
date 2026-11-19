@@ -454,7 +454,7 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
         const val TRIAL_RATE = 6
         /** The candidates a search of [budgetMs] is worth: a search that has tried them is done before its time is up. */
         fun iterations(budgetMs: Long, objective: Objective): Int = (budgetMs * if (objective.trials) TRIAL_RATE else RUN_RATE).toInt()
-        val THREADS = maxOf(1, minOf(4, Runtime.getRuntime().availableProcessors() - 2))
+        val THREADS = maxOf(1, minOf(2, Runtime.getRuntime().availableProcessors() - 2))
         private val pool = java.util.concurrent.Executors.newFixedThreadPool(THREADS) { r -> Thread(r, "ec-waterboard-planner").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
     }
 }
