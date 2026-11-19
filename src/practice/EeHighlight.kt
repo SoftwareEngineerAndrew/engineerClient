@@ -15,6 +15,7 @@ import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.Color
 import com.adm.utils.Colors
+import com.adm.utils.alert
 import com.adm.utils.render.text
 import com.adm.utils.render.drawText
 import com.adm.utils.render.drawWireFrameBox
@@ -38,8 +39,9 @@ import net.minecraft.world.phys.Vec3
  * on each change and four times a second, this on or not, as Term Progress does), at most 0.7 s old. Out of view with no
  * fresh frame is no highlight, never "where they were last"; party messages ("at ee3!") don't count.
  *
- * Leap Count: while you stand on one of those spots in the boss, shows how many living teammates in view are on it with you,
- * out of how many you expect there (set per spot), red until all but one have arrived, then blue.
+ * Leap Count: while you stand on one of those spots in the boss, shows how many teammates have reached it (where the server
+ * last put them, so a leap counts on arrival, and someone who stepped off again still counts), out of how many you expect
+ * there (set per spot), red until all but one have arrived, then blue; a title and sound once all have.
  *
  * Each P3's end logs a line: frames out, how many teammates TURN reached, what came in, and who was highlighted where, by
  * which sources; and each time a teammate's sources disagreed about them being on a spot.
@@ -51,6 +53,7 @@ object EeHighlight : Module(
     key = null,
     toggled = true,
 ) {
+    private val ss by BooleanSetting("SS", false, desc = "In S1: whoever's at S1's device (Simon Says).")
     private val ee2 by BooleanSetting("EE2", true, desc = "In S1: whoever's on the platform in front of S2's device (Lights).")
     private val ee3 by BooleanSetting("EE3", true, desc = "In S2: whoever's on the low walkway over the lava past S2's gate, by the S2 / S3 corner.")
     private val ee3High by BooleanSetting("EE3 High", false, desc = "In S2: whoever's on the slab ledge high on S3's east wall. A strategy some parties use, decided ahead of time: turn it on for a party that does.")
@@ -58,9 +61,11 @@ object EeHighlight : Module(
     private val all by BooleanSetting("Highlight All", true, desc = "Every teammate who's on the early enter, each where they'll be in the leap menu, not just the first one there.")
     private val hideThere by BooleanSetting("Hide Once You're There", true, desc = "Off for the rest of the section once you're through to the next one yourself.")
     private val leapCount by BooleanSetting("Leap Count", true, desc = "While you stand on an early enter spot, shows how many teammates are on it with you, out of how many you expect there.")
+    private val ssPlayers by NumberSetting("SS Players", 4, 1..4, 1, desc = "How many teammates you expect to leap to you at SS (not counting you), for Leap Count.").withDependency { leapCount && ss }
     private val ee2Players by NumberSetting("EE2 Players", 4, 1..4, 1, desc = "How many teammates you expect to leap to you on EE2 (not counting you), for Leap Count.").withDependency { leapCount }
     private val ee3Players by NumberSetting("EE3 Players", 3, 1..4, 1, desc = "How many teammates you expect to leap to you on EE3 and EE3 High (not counting you), for Leap Count.").withDependency { leapCount }
     private val ee4Players by NumberSetting("EE4 Players", 4, 1..4, 1, desc = "How many teammates you expect to leap to you on EE4 (not counting you), for Leap Count.").withDependency { leapCount }
+    private val leapAlert by BooleanSetting("All Leaped Alert", true, desc = "A title and sound once everyone you expect has leapt to your spot.").withDependency { leapCount }
     private val leapHud by HUD("Leap Count HUD", "How many teammates have leapt to the early enter you are on.", true, 400, 280, 2f) { example ->
         if (example) return@HUD drawLeap("§c2/4 Leaped")
         val max = leapMax
@@ -86,6 +91,9 @@ object EeHighlight : Module(
     /** Leap Count's numbers: the teammates expected on the spot you stand on (0 on none), and how many are there. */
     private var leapMax = 0
     private var leapNow = 0
+    /** Leap Count: who has reached each spot (by id) this P3, and the spots already alerted. */
+    private val leapt = HashMap<Int, HashSet<String>>()
+    private val leapAlerted = HashSet<Int>()
 
     private fun GuiGraphicsExtractor.drawLeap(s: String): Pair<Int, Int> {
         text(s, 0, 0, Colors.WHITE, shadow = true)
@@ -105,7 +113,7 @@ object EeHighlight : Module(
         }
         on<RenderExtractEvent> {
             if (!showSpots || !(DungeonUtils.inBoss || com.engineerclient.p3sim.P3Sim.inSim)) return@on
-            for (p in PointsOfInterest.ALL) for (b in p.boxes) {
+            for (p in PointsOfInterest.ALL) if (p !== PointsOfInterest.SS || ss) for (b in p.boxes) {
                 drawWireFrameBox(AABB(b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ), SPOT_COLOR, depth = false)
                 drawText("${p.label} ($b)", Vec3((b.minX + b.maxX) / 2, b.maxY + 0.5, (b.minZ + b.maxZ) / 2), 1f, false)
             }
@@ -116,8 +124,11 @@ object EeHighlight : Module(
 
     private fun poiAt(x: Double, y: Double, z: Double) = PointsOfInterest.at(x, y, z)?.id ?: 0
 
-    /** The section standing on [poi] puts you in (2-4), 0 for none. */
+    /** The section standing on [poi] puts you in (1-4), 0 for none. */
     private fun opensOf(poi: Int) = PointsOfInterest.byId(poi)?.opens ?: 0
+
+    /** The section [poi] is leapt to in, 0 for none. */
+    private fun duringOf(poi: Int) = PointsOfInterest.byId(poi)?.during ?: 0
 
     /** Whether [poi] is one to highlight. */
     private fun poiOn(poi: PointsOfInterest.Poi) = when (poi) {
@@ -125,6 +136,7 @@ object EeHighlight : Module(
         PointsOfInterest.EE3 -> ee3
         PointsOfInterest.EE3_HIGH -> ee3High
         PointsOfInterest.EE4 -> ee4
+        PointsOfInterest.SS -> ss
         else -> false
     }
 
@@ -186,24 +198,31 @@ object EeHighlight : Module(
                     presence.seen(key, if (dragged) 0 else poiAt(p.x, p.y, p.z), now, PoiPresence.Source.POSE)
                 }
             }
-            logIfNew(m.name, key, opens, now)
+            logIfNew(m.name, key, now)
         }
     }
 
-    /** Leap Count's numbers: the spot you stand on ([myPoi], 0 for none) and the living teammates in view on it. */
+    /** Leap Count's numbers: the spot you stand on ([myPoi], 0 for none) and the teammates who've reached it. */
     private fun countLeaps(me: net.minecraft.world.entity.Entity, level: net.minecraft.client.multiplayer.ClientLevel, myPoi: Int, on: Boolean) {
         leapMax = 0; leapNow = 0
-        val spot = PointsOfInterest.byId(myPoi)?.takeIf { on } ?: return
+        if (!on) return
+        val self = me.name.string
+        for (m in DungeonUtils.leapTeammates) {
+            if (m.name == "Empty" || m.name == self || com.engineerclient.DeadPlayers.isDead(m)) continue
+            val at = (LeapTeammates.entity(m, level) ?: continue).positionCodec.base
+            val spot = PointsOfInterest.at(at.x, at.y, at.z) ?: continue
+            if (spot === PointsOfInterest.SS && !ss) continue
+            leapt.getOrPut(spot.id) { HashSet() }.add(m.name)
+        }
+        val spot = PointsOfInterest.byId(myPoi)?.takeIf { it !== PointsOfInterest.SS || ss } ?: return
         leapMax = when (spot) {
+            PointsOfInterest.SS -> ssPlayers
             PointsOfInterest.EE2 -> ee2Players
             PointsOfInterest.EE4 -> ee4Players
             else -> ee3Players
         }
-        leapNow = DungeonUtils.leapTeammates.count { m ->
-            if (m.name == me.name.string || com.engineerclient.DeadPlayers.isDead(m)) return@count false
-            val e = LeapTeammates.entity(m, level) ?: return@count false
-            !LeapTeammates.inFlight(e) && spot.contains(e.x, e.y, e.z)
-        }
+        leapNow = leapt[spot.id]?.size ?: 0
+        if (leapNow >= leapMax && leapAlerted.add(spot.id) && leapAlert) alert("§9All Leaped!")
     }
 
     private fun sectionChanged(sec: Int) {
@@ -213,7 +232,7 @@ object EeHighlight : Module(
         sectionStartAt = System.currentTimeMillis()
         selfThere = false
         if (sec == 0) {
-            presence.clear(); lastPose.clear()
+            presence.clear(); lastPose.clear(); leapt.clear(); leapAlerted.clear()
             curPoi = 0; sentPoi = -1; sentAt = 0L
         }
     }
@@ -259,11 +278,11 @@ object EeHighlight : Module(
      * Logs a teammate the first time in a section they're surely on the next early enter (whether or not it's drawn), and the
      * first time their current sources disagree about it, which is a highlight held back.
      */
-    private fun logIfNew(name: String, key: String, opens: Int, now: Long) {
+    private fun logIfNew(name: String, key: String, now: Long) {
         val w = presence.sureAt(key, now)
         if (w != null) {
             val poi = PointsOfInterest.byId(w.poi) ?: return
-            if (poi.opens != opens || !poiOn(poi)) return
+            if (poi.during != section || !poiOn(poi)) return
             val k = "S$section $name"
             if (k in picked) return
             val label = poi.label
@@ -274,7 +293,7 @@ object EeHighlight : Module(
             return
         }
         val cur = presence.current(key, now)
-        if (cur.values.none { opensOf(it) == opens } || cur.values.toSet().size < 2) return
+        if (cur.values.none { duringOf(it) == section } || cur.values.toSet().size < 2) return
         if (!split.add("S$section $name")) return
         val says = cur.entries.joinToString(", ") { (s, poi) -> "${s.label} ${PointsOfInterest.byId(poi)?.label ?: "none"}" }
         EngineerClient.logger.info("[ee highlight] S$section: $name not highlighted, sources disagree: $says")
@@ -293,7 +312,6 @@ object EeHighlight : Module(
                 if (all) LeapHighlightLook.Target(2, "Teammate", "archer", self.skin, since, "EE2") else null,
             )
         } else {
-            val opens = section + 1
             if (section !in 1..3) return
             if (hideThere && selfThere) return
             val now = System.currentTimeMillis()
@@ -301,7 +319,7 @@ object EeHighlight : Module(
             val on = mates.withIndex().mapNotNull { (i, m) ->
                 if (i > 3 || m.name == "Empty") return@mapNotNull null
                 val w = presence.sureAt(m.name.lowercase(), now) ?: return@mapNotNull null
-                val poi = PointsOfInterest.byId(w.poi)?.takeIf { it.opens == opens && poiOn(it) } ?: return@mapNotNull null
+                val poi = PointsOfInterest.byId(w.poi)?.takeIf { it.during == section && poiOn(it) } ?: return@mapNotNull null
                 // Whoever got there first goes first; each fades in from when it's sure.
                 w.since to LeapHighlightLook.Target(i, m.name, m.clazz.name.lowercase(), m.playerSkin ?: self.skin, w.sureFrom, poi.label)
             }.sortedBy { it.first }.map { it.second }

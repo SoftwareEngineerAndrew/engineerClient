@@ -19,6 +19,7 @@ package com.engineerclient.poi
  *    decided ahead of time, so EE Highlight only counts it when its own setting is on.
  *  - EE4: the walkway from S4's corridor up to the core door (x 53-55, z 43-50), feet at 115, and the step in front of the
  *    door (z 51-53); it stops at z 54, the door, where Recore's core box starts.
+ *  - [SS]: in front of S1's device (Simon Says), feet at 120, x 106.5 up to the buttons. Leapt to during S1 itself.
  */
 object PointsOfInterest {
     /**
@@ -33,8 +34,9 @@ object PointsOfInterest {
         override fun toString() = label
     }
 
-    /** One spot: [opens] is the section standing on it puts you in (2-4). */
-    class Poi(val id: Int, val key: String, val label: String, val opens: Int, val boxes: List<Box>) {
+    /** One spot: [opens] is the section standing on it puts you in (1-4), [during] the section it's leapt to in. */
+    class Poi(val id: Int, val key: String, val label: String, val opens: Int, val during: Int, val boxes: List<Box>) {
+        constructor(id: Int, key: String, label: String, opens: Int, boxes: List<Box>) : this(id, key, label, opens, opens - 1, boxes)
         fun contains(x: Double, y: Double, z: Double) = boxes.any { it.contains(x, y, z) }
         override fun toString() = label
     }
@@ -58,10 +60,14 @@ object PointsOfInterest {
         Box(52.0, 114.5, 53.0, 57.0, 119.0, 54.0, "by the core door"),
     ))
 
-    val ALL: List<Poi> = listOf(EE2, EE3, EE3_HIGH, EE4)
+    val SS = Poi(5, "ss", "SS", 1, 1, listOf(
+        Box(106.5, 119.5, 92.0, 110.0, 123.0, 97.0, "by the device"),
+    ))
+
+    val ALL: List<Poi> = listOf(EE2, EE3, EE3_HIGH, EE4, SS)
 
     init {
-        // A number on the wire means one spot for good (5 up are free; 1-4 taken).
+        // A number on the wire means one spot for good (6 up are free; 1-5 taken).
         check(ALL.map { it.id }.toSet().size == ALL.size && ALL.none { it.id == 0 || it.id > 255 })
     }
 
