@@ -31,6 +31,15 @@ object ClearInfo : Module(
     val highlightPortal by BooleanSetting("Highlight Portal", true, desc = "Highlights the blood portal from 300.").withDependency { mapDrop && mapInfo }
     val paulScore by SelectorSetting("Paul Score", PaulScore.Mode.AUTO, desc = "Whether Paul's +10 counts: Auto goes by the mayor.").withDependency { mapDrop }
 
+    // ------------------------------------------------------------------ Skip Counter
+    private val skipDrop by DropdownSetting("Skip Counter", false, desc = "Secrets skipped against how many 300 lets you skip.")
+    private val skipHud by HUD("Skip Counter HUD", "Secrets left behind in rooms you or your team left, and how many you can skip.") { example ->
+        SkipCounter.render(this, example)
+    }.withDependency { skipDrop }
+    val skipBonusM67 by NumberSetting("Planned Bonus M6/M7", 9.0, 0.0..18.0, 1.0, desc = "Bonus score you plan to get: crypts, Mimic, Prince, bats.").withDependency { skipDrop }
+    val skipBonusOther by NumberSetting("Planned Bonus Other", 6.0, 0.0..18.0, 1.0, desc = "The same on other floors.").withDependency { skipDrop }
+    val skipHideInBoss by BooleanSetting("Hide Skip Counter In Boss", true, desc = "No skip counter in the boss.").withDependency { skipDrop }
+
     // ------------------------------------------------------------------ Score Time
     private val scoreDrop by DropdownSetting("Score Time", false, desc = "The run time at S and at the S+ secrets.")
     val scoreTime by BooleanSetting("Enable Score Time", true, desc = "Says the run time at each.").withDependency { scoreDrop }
