@@ -128,6 +128,20 @@ fun RenderExtractEvent.drawLine(points: Collection<Vec3>, rgba1: Int, rgba2: Int
     poseStack.popPose()
 }
 
+// Separate segments: coords holds x1 y1 z1 x2 y2 z2 for each, count is how many doubles are used.
+fun RenderExtractEvent.drawSegments(coords: DoubleArray, count: Int, rgba: Int, depth: Boolean, thickness: Float = 3f) {
+    if (count < 6) return
+    val poseStack = cameraRelativePose()
+    submitGeometry(poseStack, resolveLineRenderType(depth, rgba.isFullyOpaque()), depth) { pose, buffer ->
+        var i = 0
+        while (i + 5 < count) {
+            PrimitiveRenderer.renderSegment(pose, buffer, coords[i], coords[i + 1], coords[i + 2], coords[i + 3], coords[i + 4], coords[i + 5], rgba, rgba, thickness)
+            i += 6
+        }
+    }
+    poseStack.popPose()
+}
+
 fun RenderExtractEvent.drawWireFrameBox(aabb: AABB, color: Color, thickness: Float = 3f, depth: Boolean = false) {
     wireFrameBox(aabb, color.rgba, color.alphaFloat >= 0.999f, thickness, depth)
 }
