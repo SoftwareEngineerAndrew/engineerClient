@@ -10,7 +10,9 @@ import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
 import net.minecraft.core.component.DataComponentType
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
+import net.minecraft.ChatFormatting
 import net.minecraft.network.chat.FormattedText
+import net.minecraft.network.chat.Style
 import net.minecraft.util.Unit as McUnit
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
@@ -28,12 +30,14 @@ object ItemTweaks : Module(
     private val oldPlayerHead by BooleanSetting("Old Player Head Size", true, desc = "Draws player heads in slots at their smaller 1.8 size.")
     private val hideVanillaEnchants by BooleanSetting("Hide Vanilla Enchants", true, desc = "Drops the vanilla enchantment lines above SkyBlock lore.")
     private val noHotbarScroll by BooleanSetting("Disable Hotbar Scroll", true, desc = "The scroll wheel no longer changes your hotbar slot.")
+    private val oldMasterStars by BooleanSetting("Old Master Stars", false, desc = "Master stars as red stars instead of a number.")
 
     private val floors = listOf("E", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "M5", "M6", "M7")
 
     init {
         ItemTooltipCallback.EVENT.register { stack, _, _, lines ->
             if (!enabled) return@register
+            if (oldMasterStars && lines.isNotEmpty()) redStars(lines[0])?.let { lines[0] = it }
             if (removeGearScore) dropGearScore(lines)
             if (itemQuality) {
                 val data = stack.customData
@@ -42,6 +46,37 @@ object ItemTweaks : Module(
                 lines.add(Component.literal("§4Stat boost: $boost/50 req: ${floors.getOrElse(tier) { "?" }}"))
             }
         }
+    }
+
+    private const val CIRCLED = "➊➋➌➍➎"
+
+    /** "✪✪✪✪✪➋" as it looked before: the first two stars red, no number. */
+    private fun redStars(name: Component): Component? {
+        val chars = StringBuilder()
+        val styles = ArrayList<Style>()
+        name.visit(FormattedText.StyledContentConsumer<McUnit> { style, piece ->
+            for (c in piece) { chars.append(c); styles.add(style) }
+            Optional.empty()
+        }, Style.EMPTY)
+        val digit = chars.indexOfFirst { it in CIRCLED }
+        if (digit < 0) return null
+        val master = CIRCLED.indexOf(chars[digit]) + 1
+        var start = digit
+        while (start > 0 && chars[start - 1] == '✪') start--
+        if (digit - start < master) return null
+        val red = styles[start].withColor(ChatFormatting.RED)
+        for (i in start until start + master) styles[i] = red
+        chars.deleteCharAt(digit)
+        styles.removeAt(digit)
+        val out = Component.empty()
+        var i = 0
+        while (i < chars.length) {
+            var j = i
+            while (j < chars.length && styles[j] == styles[i]) j++
+            out.append(Component.literal(chars.substring(i, j)).setStyle(styles[i]))
+            i = j
+        }
+        return out
     }
 
     private fun dropGearScore(lines: MutableList<Component>) {
