@@ -136,17 +136,18 @@ fun RenderExtractEvent.drawWireFrameBox(aabb: AABB, rgba: Int, thickness: Float 
     wireFrameBox(aabb, rgba, rgba.isFullyOpaque(), thickness, depth)
 }
 
-private fun RenderExtractEvent.wireFrameBox(aabb: AABB, rgba: Int, opaque: Boolean, thickness: Float, depth: Boolean) {
-    val poseStack = cameraRelativePose()
-    submitGeometry(poseStack, resolveLineRenderType(depth, opaque), depth) { pose, buffer ->
-        PrimitiveRenderer.renderLineBox(
-            pose, buffer,
-            aabb.minX.toFloat(), aabb.minY.toFloat(), aabb.minZ.toFloat(),
-            aabb.maxX.toFloat(), aabb.maxY.toFloat(), aabb.maxZ.toFloat(),
-            rgba, thickness
-        )
-    }
-    poseStack.popPose()
+// One-off boxes from every feature, drawn together once the frame's handlers are done.
+private val frameBoxes = BoxBatch()
+
+@Suppress("UnusedReceiverParameter")
+private fun RenderExtractEvent.wireFrameBox(aabb: AABB, rgba: Int, opaque: Boolean, thickness: Float, depth: Boolean) =
+    frameBoxes.add(aabb, rgba, opaque, depth, thickness, true)
+
+/** Draws the boxes the frame's handlers left with [drawFilledBox], [drawWireFrameBox] and [drawStyledBox]. */
+fun RenderExtractEvent.flushFrameBoxes() {
+    if (frameBoxes.size == 0) return
+    drawBoxes(frameBoxes)
+    frameBoxes.clear()
 }
 
 fun RenderExtractEvent.drawFilledBox(aabb: AABB, color: Color, depth: Boolean = false) {
@@ -157,18 +158,9 @@ fun RenderExtractEvent.drawFilledBox(aabb: AABB, rgba: Int, depth: Boolean = fal
     filledBox(aabb, rgba, rgba.isFullyOpaque(), depth)
 }
 
-private fun RenderExtractEvent.filledBox(aabb: AABB, rgba: Int, opaque: Boolean, depth: Boolean) {
-    val poseStack = cameraRelativePose()
-    submitGeometry(poseStack, resolveQuadRenderType(depth, opaque), depth) { pose, buffer ->
-        PrimitiveRenderer.addChainedFilledBoxVertices(
-            pose, buffer,
-            aabb.minX.toFloat(), aabb.minY.toFloat(), aabb.minZ.toFloat(),
-            aabb.maxX.toFloat(), aabb.maxY.toFloat(), aabb.maxZ.toFloat(),
-            rgba
-        )
-    }
-    poseStack.popPose()
-}
+@Suppress("UnusedReceiverParameter")
+private fun RenderExtractEvent.filledBox(aabb: AABB, rgba: Int, opaque: Boolean, depth: Boolean) =
+    frameBoxes.add(aabb, rgba, opaque, depth, 0f, false)
 
 enum class BoxStyle { FILLED, OUTLINE, FILLED_OUTLINE }
 
@@ -208,7 +200,7 @@ class BoxBatch {
     fun outline(aabb: AABB, color: Color, thickness: Float = 3f, depth: Boolean = false) = add(aabb, color.rgba, color.alphaFloat >= 0.999f, depth, thickness, true)
     fun outline(aabb: AABB, rgba: Int, thickness: Float = 3f, depth: Boolean = false) = add(aabb, rgba, rgba.isFullyOpaque(), depth, thickness, true)
 
-    private fun add(aabb: AABB, rgba: Int, opaque: Boolean, depth: Boolean, thickness: Float, outline: Boolean) {
+    internal fun add(aabb: AABB, rgba: Int, opaque: Boolean, depth: Boolean, thickness: Float, outline: Boolean) {
         if (size == colors.size) {
             val cap = size * 2
             bounds = bounds.copyOf(cap * 6); colors = colors.copyOf(cap); widths = widths.copyOf(cap); kinds = kinds.copyOf(cap)

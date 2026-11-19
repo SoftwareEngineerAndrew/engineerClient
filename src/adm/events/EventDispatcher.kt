@@ -6,6 +6,7 @@ import com.adm.events.core.onReceive
 import com.adm.utils.containsOneOf
 import com.adm.utils.equalsOneOf
 import com.adm.utils.noControlCodes
+import com.adm.utils.render.flushFrameBoxes
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.DungeonUtils.isSecret
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents
@@ -33,7 +34,7 @@ object EventDispatcher {
 
         ClientTickEvents.END_LEVEL_TICK.register { world -> TickEvent.End(world).postAndCatch() }
 
-        LevelRenderEvents.COLLECT_SUBMITS.register { context -> RenderExtractEvent(context).postAndCatch() }
+        LevelRenderEvents.COLLECT_SUBMITS.register { context -> RenderExtractEvent(context).apply { postAndCatch(); flushFrameBoxes() } }
 
         ScreenEvents.BEFORE_INIT.register { _, screen, _, _ ->
             ScreenMouseEvents.allowMouseClick(screen).register { screen, event ->
