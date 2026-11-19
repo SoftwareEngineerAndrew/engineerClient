@@ -7,13 +7,16 @@ import com.adm.events.LevelEvent
 import com.adm.events.ParticleEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.core.on
+import com.adm.events.core.onSend
 import com.adm.features.Module
 import com.adm.utils.Color.Companion.withAlpha
 import com.adm.utils.Colors
+import com.adm.utils.ServerUtils
 import com.adm.utils.itemId
 import com.adm.utils.render.drawCylinder
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.particles.ParticleTypes
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket
 import net.minecraft.world.item.Items
 import net.minecraft.world.phys.Vec3
 
@@ -31,6 +34,7 @@ object GyroWand : Module(
     private var groupY = 0.0
     private var groupSize = 0
     private var castAt = 0L
+    private var usedAt = 0L
 
     private fun cooling(now: Long) = now - castAt < DungeonUtils.getAbilityCooldown(30_000L)
 
@@ -38,7 +42,8 @@ object GyroWand : Module(
         on<ParticleEvent> {
             if (xd != 0.0 || yd != 0.0 || zd != 0.0 || particle !== ParticleTypes.WITCH) return@on
             val now = System.currentTimeMillis()
-            if (cooling(now)) return@on
+            // Only a burst shortly after your own click: another player's gyro makes the same one.
+            if (cooling(now) || now - usedAt > 200L + ServerUtils.averagePing) return@on
             if (groupSize == 0 || now - groupStart > 120L || y - groupY > 0.02 || groupY - y > 0.02) {
                 groupStart = now
                 groupY = y
@@ -49,6 +54,10 @@ object GyroWand : Module(
             }
         }
 
+        onSend<ServerboundUseItemPacket> {
+            if (mc.player?.mainHandItem?.itemId == "GYROKINETIC_WAND") usedAt = System.currentTimeMillis()
+        }
+
         on<RenderExtractEvent> {
             val player = mc.player ?: return@on
             val held = player.mainHandItem
@@ -56,12 +65,16 @@ object GyroWand : Module(
             val hit = Etherwarp.getEtherPos(player.position(), 25.0)
             val block = hit.pos ?: return@on
             if (hit.state?.isAir != false) return@on
+            val level = mc.level ?: return@on
+            val above = block.above()
+            if (!level.getBlockState(above).getCollisionShape(level, above).isEmpty) return@on
             val tint = if (showCooldown && cooling(System.currentTimeMillis())) cooldownColor else color
             drawCylinder(Vec3(block.x + 0.5, block.y + 1.0, block.z + 0.5), 10f, 0.3f, tint, 64, depth = depthCheck)
         }
 
         on<LevelEvent.Load> {
             castAt = 0L
+            usedAt = 0L
             groupSize = 0
         }
     }
