@@ -5,6 +5,7 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.clickgui.settings.impl.StringSetting
 import com.adm.events.*
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
@@ -16,9 +17,13 @@ import com.adm.utils.render.BoxBatch
 import com.adm.utils.render.drawBoxes
 import com.adm.utils.render.textDim
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.DungeonClass
 import com.adm.utils.skyblock.dungeon.M7Phases
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket
+import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.item.BowItem
 
 object WitherDragons : Module(
     name = "Wither Dragons",
@@ -47,12 +52,15 @@ object WitherDragons : Module(
 
     private val dragonBoxes by BooleanSetting("Dragon Boxes", true, desc = "Displays boxes for where M7 dragons spawn.")
     private val dragonTracers by BooleanSetting("Target Tracer", true, desc = "Draws a line to priority spawning dragon.")
+    val split by BooleanSetting("Split", false, desc = "With two dragons spawning, the later one is yours if your class is listed.")
+    private val splitClasses by StringSetting("Later Dragon Classes", "Healer", 64, desc = "Classes that take the later of two dragons, comma separated.", placeholder = "Healer").withDependency { split }
 
     private val dragonAlerts by DropdownSetting("Dragon Alerts Dropdown", desc = "Shows chat alert settings for dragon deaths and spawns.")
     val dragonTitle by BooleanSetting("Dragon Title", true, desc = "Displays a title for spawning dragons.").withDependency { dragonAlerts }
     val sendTime by BooleanSetting("Send Dragon Time Alive", true, desc = "Sends a message when a dragon dies with the time it was alive.").withDependency { dragonAlerts }
     val sendSpawned by BooleanSetting("Send Dragon Spawned", true, desc = "Sends a message when a dragon has spawned.").withDependency { dragonAlerts }
     val sendSpray by BooleanSetting("Send Ice Sprayed", true, desc = "Sends a message when a dragon has been ice sprayed.").withDependency { dragonAlerts }
+    val arrowHits by BooleanSetting("Arrow Hits", false, desc = "Counts your bow hits on the priority dragon for its death message.").withDependency { dragonAlerts }
 
     private val dragonHealth by BooleanSetting("Dragon Health", true, desc = "Displays the health of M7 dragons.")
 
@@ -78,6 +86,11 @@ object WitherDragons : Module(
     init {
         onReceive<ClientboundLevelParticlesPacket> {
             if (DungeonUtils.getF7Phase() == M7Phases.P5) handleSpawnPacket(this)
+        }
+
+        // Hypixel's hit ding goes only to the shooter.
+        onReceive<ClientboundSoundPacket> {
+            if (arrowHits && sound.value() == SoundEvents.ARROW_HIT_PLAYER && DungeonUtils.getF7Phase() == M7Phases.P5) mc.execute(countHit)
         }
 
         on<EntityEvent.SetItemSlot> {
@@ -142,8 +155,34 @@ object WitherDragons : Module(
         drawBoxes(boxes)
 
         if (!dragonTracers || mc.player == null) return
-        val target = spawnOrder.firstOrNull { it.state == WitherDragonState.SPAWNING } ?: return
+        val target = myDragon() ?: return
         drawTracer(spawnCenters[target.ordinal], target.color, true)
+    }
+
+    private val countHit = Runnable {
+        if (mc.player?.mainHandItem?.item !is BowItem) return@Runnable
+        for (i in spawnOrder.indices) {
+            val d = spawnOrder.getOrNull(i) ?: return@Runnable
+            if (d.state == WitherDragonState.ALIVE) { d.arrowHits++; return@Runnable }
+        }
+    }
+
+    /** With [split] on, whether your class takes the later of two dragons spawning together. */
+    private fun takesLater(): Boolean {
+        if (!split) return false
+        val clazz = DungeonUtils.currentDungeonPlayer.clazz
+        return clazz != DungeonClass.EMPTY && splitClasses.contains(clazz.name, ignoreCase = true)
+    }
+
+    /** The spawning dragon that's yours: the first, or with [split] the second of two when your class takes it. */
+    fun myDragon(): WitherDragonsEnum? {
+        var first: WitherDragonsEnum? = null
+        for (i in spawnOrder.indices) {
+            val d = spawnOrder.getOrNull(i) ?: break
+            if (d.state != WitherDragonState.SPAWNING) continue
+            if (first == null) first = d else return if (takesLater()) d else first
+        }
+        return first
     }
 
     private fun timerLabel(dragon: WitherDragonsEnum): String {

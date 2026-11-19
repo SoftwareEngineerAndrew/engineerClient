@@ -15,6 +15,8 @@ object DragonCheck {
     fun dragonUpdate(event: EntityEvent.SetData) {
         val entity = event.entity as? EnderDragon ?: return
         val dragonHealth = (event.synchedDataValues.find { it.id == 9 }?.value as? Float) ?: return
+        // Hypixel's placeholder while the dragon is alive, not its health.
+        if (dragonHealth == 1024f) return
         dragonHealthMap[entity.uuid] = Pair(entity, dragonHealth)
 
         WitherDragonsEnum.entries.firstOrNull { it.entityUUID == entity.uuid }?.let {
