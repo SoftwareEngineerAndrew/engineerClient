@@ -4,32 +4,42 @@ import com.engineerclient.EngineerClient
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
 import com.mojang.brigadier.arguments.DoubleArgumentType
+import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.ArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
 import com.adm.events.BlockInteractEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.core.on
+import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
 import com.adm.utils.Color
 import com.adm.utils.render.drawFilledBox
+import com.adm.utils.render.drawText
+import com.adm.utils.skyblock.dungeon.M7Phases
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
 import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
 import java.nio.file.Files
 import java.util.concurrent.CopyOnWriteArrayList
 
 // Subscribed while Waypoints is on.
 object BossWaypoints {
     private var editMode = false
-    private val nextColor = Color(0, 247, 247)
 
-    private class Waypoint(val x: Double, val y: Double, val z: Double, val dx: Double, val dy: Double, val dz: Double, val color: String, val throughWall: Boolean) {
+    private class Waypoint(
+        val x: Double, val y: Double, val z: Double, val dx: Double, val dy: Double, val dz: Double,
+        val color: String, val throughWall: Boolean, val floor: Int? = null, val phase: String? = null, var label: String? = null,
+    ) {
         @Transient private var box: AABB? = null
         @Transient private var parsed: Color? = null
+        @Transient private var top: Vec3? = null
         fun box() = box ?: AABB(x, y, z, x + dx, y + dy, z + dz).also { box = it }
         fun color() = parsed ?: Color(color).also { parsed = it }
+        fun top() = top ?: Vec3(x + dx / 2, y + dy + 0.5, z + dz / 2).also { top = it }
+        fun showsIn(f: Int?, p: String?) = (floor == null || floor == f) && (phase == null || phase == p)
         fun at(px: Double, py: Double, pz: Double) = x == px && y == py && z == pz
         fun near(px: Double, py: Double, pz: Double, r: Double) = (x - px) * (x - px) + (y - py) * (y - py) + (z - pz) * (z - pz) < r * r
     }
@@ -41,12 +51,21 @@ object BossWaypoints {
 
     private fun shown() = DungeonUtils.inDungeons && DungeonUtils.inBoss
 
+    private fun floorNow() = DungeonUtils.floor?.floorNumber
+
+    private fun phaseNow() = DungeonUtils.getF7Phase().takeIf { it != M7Phases.Unknown }?.name
+
     init {
         load()
 
         on<RenderExtractEvent> {
-            if (!shown()) return@on
-            for (w in waypoints) drawFilledBox(w.box(), w.color(), depth = !w.throughWall)
+            if (!shown() || waypoints.isEmpty()) return@on
+            val f = floorNow(); val p = phaseNow()
+            for (w in waypoints) {
+                if (!w.showsIn(f, p)) continue
+                drawFilledBox(w.box(), w.color(), depth = !w.throughWall)
+                w.label?.let { drawText(it, w.top(), DungeonWaypoints.titleScale, !w.throughWall) }
+            }
         }
 
         on<BlockInteractEvent> {
@@ -70,10 +89,15 @@ object BossWaypoints {
                     { (x, y, z) -> remove(x, y, z, 0.5) },
                     num("radius").executes { ctx -> val (x, y, z) = coords(ctx); remove(x, y, z, d(ctx, "radius")); 1 }
                 )))
+                .then(literal("label").then(num("x").then(num("y").then(num("z")
+                    .executes { ctx -> val (x, y, z) = coords(ctx); label(x, y, z, null); 1 }
+                    .then(argument("text", StringArgumentType.greedyString()).executes { ctx ->
+                        val (x, y, z) = coords(ctx); label(x, y, z, StringArgumentType.getString(ctx, "text")); 1
+                    })))))
                 .then(literal("edit").executes { toggleEdit(); 1 })
                 .then(literal("clear").executes { waypoints.clear(); save(); EngineerClient.msg("§7Boss waypoints cleared."); 1 })))
         }
-        EngineerClient.HELP += "§f /adm waypoint§7 add|remove <x y z> [dx dy dz | radius], edit, clear — boss waypoints (Waypoints)"
+        EngineerClient.HELP += "§f /adm waypoint§7 add|remove <x y z> [dx dy dz | radius], label <x y z> [text], edit, clear — boss waypoints (Waypoints)"
     }
 
     private fun d(ctx: CommandContext<FabricClientCommandSource>, name: String) = DoubleArgumentType.getDouble(ctx, name)
@@ -91,7 +115,14 @@ object BossWaypoints {
 
     private fun add(x: Double, y: Double, z: Double, dx: Double, dy: Double, dz: Double) {
         if (waypoints.any { it.at(x, y, z) }) return
-        waypoints += Waypoint(x, y, z, dx, dy, dz, nextColor.hex(true), false)
+        waypoints += Waypoint(x, y, z, dx, dy, dz, DungeonWaypoints.color.hex(true), !DungeonWaypoints.depthCheck, floorNow(), phaseNow())
+    }
+
+    private fun label(x: Double, y: Double, z: Double, text: String?) {
+        val w = waypoints.minByOrNull { (it.x - x) * (it.x - x) + (it.y - y) * (it.y - y) + (it.z - z) * (it.z - z) }
+            ?.takeIf { it.near(x, y, z, 1.5) } ?: return EngineerClient.msg("§cNo waypoint there.")
+        w.label = text
+        save()
     }
 
     private fun remove(x: Double, y: Double, z: Double, radius: Double) {
