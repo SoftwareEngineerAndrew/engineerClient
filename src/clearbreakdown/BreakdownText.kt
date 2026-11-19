@@ -27,4 +27,10 @@ object BreakdownText {
         }
         return LineParts("§$colour$name§7: ", rooms, roomsHover, "§f${total ?: "?"} §7secrets", secretsHover)
     }
+
+    /** The deaths part and its hover, one cause a line; null for none. */
+    fun deaths(causes: List<String>): Pair<String, String>? {
+        if (causes.isEmpty()) return null
+        return "§c${causes.size} §7death${if (causes.size == 1) "" else "s"}" to causes.withIndex().joinToString("\n") { (i, c) -> "§7${i + 1}. §f$c" }
+    }
 }

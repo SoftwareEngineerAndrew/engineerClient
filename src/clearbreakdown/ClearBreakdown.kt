@@ -38,6 +38,8 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.network.protocol.game.ClientboundTakeItemEntityPacket
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.level.block.Blocks
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.floor
 
@@ -77,7 +79,7 @@ object ClearBreakdown {
     var clears = ClearCredit(); private set
     var secrets = SecretCredit(); private set
     /** A run is being tracked: from Mort until it posts or the world changes. */
-    var active = false; private set
+    @Volatile var active = false; private set
     private val gate = RunGate()
     @Volatile private var syncOpen = false
     /** Everyone in the run, in party order: name -> class colour. */
@@ -96,7 +98,17 @@ object ClearBreakdown {
 
     val me: String get() = mc.user.name
 
-    fun roomKey(room: DungeonRoom): String = room.tiles.map { it.data }.sorted().joinToString(",")
+    private class Key(val tiles: Int, val text: String)
+    private val keys: MutableMap<DungeonRoom, Key> = Collections.synchronizedMap(IdentityHashMap())
+
+    // A room only changes key when the map adds a tile to it.
+    fun roomKey(room: DungeonRoom): String {
+        val size = room.tiles.size
+        keys[room]?.let { if (it.tiles == size) return it.text }
+        val text = room.tiles.map { it.data }.sorted().joinToString(",")
+        keys[room] = Key(size, text)
+        return text
+    }
 
     fun roomName(room: DungeonRoom): String = room.name ?: room.type.name
 
@@ -116,7 +128,7 @@ object ClearBreakdown {
 
         // Chat straight off the network, as Splits takes it: a chat cleaner can't hide the run's lines.
         onReceive<ClientboundSystemChatPacket>(priority = 1000, ignoreCancelled = true) {
-            if (overlay) return@onReceive
+            if (overlay || !ClearInfo.clearBreakdownOn || !DungeonUtils.inDungeons) return@onReceive
             val text = it.chatText
             mc.execute { EngineerClient.safely("clear breakdown chat") { onChat(text) } }
         }
@@ -125,15 +137,17 @@ object ClearBreakdown {
 
         // Secrets seen happening (Sightings), off the same packets ADR records them from.
         onReceive<ClientboundTakeItemEntityPacket> {
+            if (!active) return@onReceive
             val item = itemId; val by = playerId
             mc.execute { EngineerClient.safely("clear breakdown pickup") { Sightings.onPickup(item, by) } }
         }
         onReceive<ClientboundBlockEventPacket> {
-            if (b0 != 1 || b1 <= 0 || (block != Blocks.CHEST && block != Blocks.TRAPPED_CHEST)) return@onReceive
+            if (!active || b0 != 1 || b1 <= 0 || (block != Blocks.CHEST && block != Blocks.TRAPPED_CHEST)) return@onReceive
             val at = pos.immutable()
             mc.execute { EngineerClient.safely("clear breakdown chest") { Sightings.onChestOpen(at) } }
         }
         onReceive<ClientboundSoundPacket> {
+            if (!active) return@onReceive
             val sound = sound.value()
             if ((sound != SoundEvents.BAT_HURT && sound != SoundEvents.BAT_DEATH) || volume != 0.1f) return@onReceive
             val x = x; val y = y; val z = z
@@ -143,6 +157,7 @@ object ClearBreakdown {
         on<BlockUpdateEvent> { EngineerClient.safely("clear breakdown block") { Sightings.onBlockChange(pos, updated) } }
 
         on<CheckmarkUpdateEvent> {
+            if (!active) return@on
             val key = roomKey(room); val name = roomName(room); val counts = room.type !in NOT_CLEARS
             val mark = when (checkmark) {
                 MapCheckmark.WHITE -> Mark.WHITE
@@ -187,6 +202,7 @@ object ClearBreakdown {
         clears = ClearCredit(); secrets = SecretCredit()
         active = false; gate.reset()
         roster.clear(); before = ConcurrentHashMap(); latest = ConcurrentHashMap(); nextPollMs = 0L; relayed.clear(); toldSeen.clear()
+        deaths = HashMap(); keys.clear()
         Sightings.reset()
     }
 
@@ -200,7 +216,16 @@ object ClearBreakdown {
         if (P3Sim.inSim && Practice.active) return
         if (text == SplitTracker.MORT) start()
         else if (active && gate.line(text)) finish()
+        else if (active && text.endsWith(" and became a ghost.")) deathLine.find(text)?.let { m ->
+            val name = if (m.groupValues[1] == "You") me else m.groupValues[1]
+            val cause = m.groupValues[2]
+            deaths.getOrPut(name) { ArrayList() } += if (cause.startsWith("were ")) "was " + cause.substring(5) else cause
+        }
     }
+
+    private val deathLine = Regex("☠ (\\w{1,16}) (.+) and became a ghost\\.$")
+    /** Each player's deaths this run, the line's cause for each. */
+    private var deaths = HashMap<String, ArrayList<String>>()
 
     private fun start() {
         reset()
@@ -270,15 +295,20 @@ object ClearBreakdown {
 
     /** Which room each player is in this tick (null: none, dead or gone). */
     private fun presence(): Map<String, String?> {
-        val team = DungeonUtils.dungeonTeammates.associateBy { it.name }
+        val team = DungeonUtils.dungeonTeammates
         val now = System.currentTimeMillis()
-        val out = HashMap<String, String?>()
+        val out = where
+        out.clear()
         for (name in roster.keys) {
-            val p = team[name]
+            var p: DungeonPlayer? = null
+            for (i in team.indices) if (team[i].name == name) { p = team[i]; break }
             out[name] = if (p == null || p.isDead) null else roomOf(p, now)
         }
         return out
     }
+
+    // Reused each tick: the credits keep only the latest presence.
+    private val where = HashMap<String, String?>()
 
     private fun roomOf(p: DungeonPlayer, now: Long): String? {
         val entity = if (p.name == me) mc.player else p.entity
@@ -313,8 +343,8 @@ object ClearBreakdown {
         active = false
         val names = roster.toMap()
         val start = before; val now = latest
-        val runClears = clears; val runSecrets = secrets
-        fun postNow() = post(names, runClears.clears(), runSecrets.resolve(names.keys.associateWith { n ->
+        val runClears = clears; val runSecrets = secrets; val runDeaths = deaths
+        fun postNow() = post(names, runDeaths, runClears.clears(), runSecrets.resolve(names.keys.associateWith { n ->
             val after = now[n]; val was = start[n]
             if (after != null && was != null) (after - was).coerceAtLeast(0L).toInt() else null
         }))
@@ -328,14 +358,16 @@ object ClearBreakdown {
         }
     }
 
-    private fun post(names: Map<String, Char>, rooms: Map<String, List<Clear>>, found: Map<String, PlayerSecrets>) {
+    private fun post(names: Map<String, Char>, deaths: Map<String, List<String>>, rooms: Map<String, List<Clear>>, found: Map<String, PlayerSecrets>) {
         EngineerClient.msg("§6Clear Breakdown")
         for ((name, colour) in names) {
             val p = BreakdownText.line(name, colour, rooms[name].orEmpty(), found[name])
-            EngineerClient.msg(Component.literal(p.name)
+            val line = Component.literal(p.name)
                 .append(hover(p.rooms, p.roomsHover))
                 .append(Component.literal(" "))
-                .append(hover(p.secrets, p.secretsHover)))
+                .append(hover(p.secrets, p.secretsHover))
+            BreakdownText.deaths(deaths[name].orEmpty())?.let { (text, causes) -> line.append(Component.literal(" ")).append(hover(text, causes)) }
+            EngineerClient.msg(line)
         }
     }
 
