@@ -26,6 +26,7 @@ public abstract class EntityRendererMixin<T extends Entity> {
 
         return !(shouldHideDeadEntity(entity) ||
                 PuzzleSolvers.shouldHideBlaze(entity) ||
+                com.adm.features.impl.boss.LividSolver.hidesWrong(entity) ||
                 Highlight.hidesTag(entity) ||
                 com.engineerclient.render.ScoreboardNametags.hidesMobDialogue(entity) ||
                 com.engineerclient.render.Visibility.hidesDamageNumber(entity) ||
