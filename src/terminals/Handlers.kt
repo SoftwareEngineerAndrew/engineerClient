@@ -36,30 +36,28 @@ class NumbersHandler : TerminalHandler(TerminalTypes.NUMBERS) {
     override fun next(key: Int, button: Int) = if (key > 0) 0 else key
     override fun canClickShown(slot: Int, button: Int) = order.firstOrNull() == slot
 
+    private val slotOf = IntArray(MAX_COUNT)
+    private val clicked = BooleanArray(MAX_COUNT)
+
+    /** Still filling, the order runs from 1 only as far as each number has arrived, red or already lime. */
     override fun buildSolution(out: ArrayList<Int>) {
         order.clear()
         val forced = orderOverride?.invoke()
-        if (forced != null) order += forced.filter { (shown.getOrNull(it) ?: 0) > 0 }
-        else if (ready) (0 until area).filter { shown[it] > 0 }.sortedBy { shown[it] }.let(order::addAll)
-        else knownRun()
+        if (forced != null) {
+            for (s in forced) if ((shown.getOrNull(s) ?: 0) > 0) order += s
+        } else {
+            slotOf.fill(-1)
+            clicked.fill(false)
+            for (i in 0 until area) when {
+                shown[i] in 1 until MAX_COUNT -> slotOf[shown[i]] = i
+                keys[i] >= 0 && items[i].count < MAX_COUNT -> clicked[items[i].count] = true
+            }
+            for (n in 1 until MAX_COUNT) {
+                val at = slotOf[n]
+                if (at >= 0) order += at else if (!ready && !clicked[n]) break
+            }
+        }
         out += order
-    }
-
-    /** Still filling: the numbers in order from 1 for as long as each one has arrived, red or already lime. */
-    private fun knownRun() {
-        val red = HashMap<Int, Int>()
-        val done = HashSet<Int>()
-        for (i in 0 until area) when {
-            shown[i] > 0 -> red[shown[i]] = i
-            keys[i] > 0 -> done += keys[i]
-            keys[i] == 0 -> done += items[i].count
-        }
-        var n = 1
-        while (true) {
-            val at = red[n]
-            if (at != null) order += at else if (n !in done) break
-            n++
-        }
     }
 
     override fun look(slot: Int): Look? {
@@ -73,6 +71,7 @@ class NumbersHandler : TerminalHandler(TerminalTypes.NUMBERS) {
     companion object {
         /** /termsim inf: its own endless order instead of the panes'. */
         @JvmStatic var orderOverride: (() -> List<Int>?)? = null
+        private const val MAX_COUNT = 100
     }
 }
 

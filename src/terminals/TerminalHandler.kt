@@ -48,8 +48,8 @@ abstract class TerminalHandler(val type: TerminalTypes) {
     var top = type.layout[0]; var left = type.layout[1]; var rows = type.layout[2]; var cols = type.layout[3]
         private set
 
-    /** Instant GUI: shown and clicked slot by slot as the items arrive (Rubix needs every pane to pick its color). */
-    val early get() = !ready && type.loadsEarly && Terminals.instantGui && Terminals.style == Terminals.Style.CUSTOM
+    /** Still filling: solved, shown and clicked slot by slot as the items arrive (Rubix needs every pane to pick its color). */
+    val early get() = !ready && type.loadsEarly
 
     protected abstract fun key(item: ItemStack): Int
     /** The key a slot has after a click on it. */
@@ -62,7 +62,7 @@ abstract class TerminalHandler(val type: TerminalTypes) {
 
     /** Server items for [only] (a single set slot) or the whole window (-1). Game thread. */
     fun update(slots: List<Slot>, only: Int) {
-        if (slots.size < area) return
+        if (slots.size < area || only >= area) return
         val range = if (only >= 0) only..only else 0 until area
         val before = pending.size
         var answeredSeq = -1
@@ -78,9 +78,9 @@ abstract class TerminalHandler(val type: TerminalTypes) {
         if (answeredSeq >= 0) pending.removeAll { it.seq < answeredSeq }
         if (!ready) {
             // Only what was sent to this terminal counts: a reused window still holds the last one's items.
-            if (only < 0) received.fill(true) else if (only in 0 until area) received[only] = true
+            if (only < 0) received.fill(true) else received[only] = true
             lastSlots = slots
-            if (received.all { it }) becomeReady() else filling = true
+            if (layoutReceived()) becomeReady() else filling = true
         }
         if (pending.size != before || ready || early) recompute()
     }
@@ -110,6 +110,13 @@ abstract class TerminalHandler(val type: TerminalTypes) {
         return -1
     }
 
+    /** Every slot the puzzle can use has arrived; the filler after it doesn't matter. */
+    private fun layoutReceived(): Boolean {
+        val l = type.layout
+        for (r in l[0] until l[0] + l[2]) for (c in l[1] until l[1] + l[3]) if (!received[r * 9 + c]) return false
+        return true
+    }
+
     private fun becomeReady() {
         ready = true
         filling = false
@@ -124,7 +131,7 @@ abstract class TerminalHandler(val type: TerminalTypes) {
 
     protected open fun isContent(item: ItemStack) = !item.isEmpty && !item.`is`(BLACK_PANE)
 
-    /** Each client tick: a window filled slot by slot is complete once a tick passes; unanswered clicks time out. */
+    /** Each client tick: a window that never sent all its slots is taken as complete; unanswered clicks time out. */
     fun tick() {
         if (filling && !ready) lastSlots?.let { update(it, -1) }
         if (pending.isEmpty()) return
