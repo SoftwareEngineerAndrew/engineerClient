@@ -58,17 +58,18 @@ object Etherwarp : Module(
     private val sounds by BooleanSetting("Custom Sounds", false, desc = "Plays the selected custom sound when you etherwarp.").withDependency { dropdown }
     private val soundSettings = createSoundSettings("Etherwarp Sound", "entity.experience_orb.pickup") { sounds && dropdown }
 
-    val legitZpew by BooleanSetting("Legit Zpew", false, desc = "Zero ping camera: your view jumps to where a teleport lands as you click.")
-    val zpewEtherwarp by BooleanSetting("Etherwarp", true, desc = "Sneaking etherwarps.").withDependency { legitZpew }
-    val zpewSound by BooleanSetting("0 Ping Etherwarp Sound", true, desc = "The etherwarp sound plays as your camera warps, not when the server's arrives.").withDependency { legitZpew && zpewEtherwarp }
-    val zpewAotv by BooleanSetting("AOTE / AOTV", true, desc = "Aspect of the End and Aspect of the Void teleports (unsneaked).").withDependency { legitZpew }
-    val zpewAotvSound by BooleanSetting("0 Ping AOTV Sound", true, desc = "The teleport sound plays as your camera teleports, not when the server's arrives.").withDependency { legitZpew && zpewAotv }
-    val zpewHyperion by BooleanSetting("Hyperion", true, desc = "Wither Impact teleports: Hyperion, Valkyrie, Astraea, Scylla, Necron's Blade with all three scrolls.").withDependency { legitZpew }
-    val zpewHypeSound by BooleanSetting("0 Ping Hyperion Sound", true, desc = "The teleport and Implosion sounds play as your camera teleports, not when the server's arrive.").withDependency { legitZpew && zpewHyperion }
-    val zpewPuzzles by BooleanSetting("In Puzzles", false, desc = "Also in puzzle rooms, except ones you can't teleport in.").withDependency { legitZpew }
-    val zpewDebug by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera jump to config/engineerclient/zpew-debug.log, for checking the predictions.").withDependency { legitZpew }
-    val zpewCapture by BooleanSetting("Capture Misses", false, desc = "When a prediction is wrong (warps where the server refuses, lands elsewhere, or refuses where the server warps), saves the click and the blocks around it to config/engineerclient/zpew-misses.txt, to fix the law from.").withDependency { legitZpew }
-    val zpewCaptureHits by BooleanSetting("Capture Hits", false, desc = "Also saves every right prediction to zpew-misses.txt.").withDependency { legitZpew && zpewCapture }
+    private val zpewDropdown by DropdownSetting("Legit Zpew Dropdown", desc = "Shows the zero ping camera settings.")
+    val legitZpew by BooleanSetting("Legit Zpew", false, desc = "Zero ping camera: your view jumps to where a teleport lands as you click.").withDependency { zpewDropdown }
+    val zpewEtherwarp by BooleanSetting("Etherwarp", true, desc = "Sneaking etherwarps.").withDependency { zpewDropdown && legitZpew }
+    val zpewSound by BooleanSetting("0 Ping Etherwarp Sound", true, desc = "The etherwarp sound plays as your camera warps, not when the server's arrives.").withDependency { zpewDropdown && legitZpew && zpewEtherwarp }
+    val zpewAotv by BooleanSetting("AOTE / AOTV", true, desc = "Aspect of the End and Aspect of the Void teleports (unsneaked).").withDependency { zpewDropdown && legitZpew }
+    val zpewAotvSound by BooleanSetting("0 Ping AOTV Sound", true, desc = "The teleport sound plays as your camera teleports, not when the server's arrives.").withDependency { zpewDropdown && legitZpew && zpewAotv }
+    val zpewHyperion by BooleanSetting("Hyperion", true, desc = "Wither Impact teleports: Hyperion, Valkyrie, Astraea, Scylla, Necron's Blade with all three scrolls.").withDependency { zpewDropdown && legitZpew }
+    val zpewHypeSound by BooleanSetting("0 Ping Hyperion Sound", true, desc = "The teleport and Implosion sounds play as your camera teleports, not when the server's arrive.").withDependency { zpewDropdown && legitZpew && zpewHyperion }
+    val zpewPuzzles by BooleanSetting("In Puzzles", false, desc = "Also in puzzle rooms, except ones you can't teleport in.").withDependency { zpewDropdown && legitZpew }
+    val zpewDebug by BooleanSetting("Debug Log", false, desc = "Writes every click, teleport and camera jump to config/engineerclient/zpew-debug.log, for checking the predictions.").withDependency { zpewDropdown && legitZpew }
+    val zpewCapture by BooleanSetting("Capture Misses", false, desc = "When a prediction is wrong (warps where the server refuses, lands elsewhere, or refuses where the server warps), saves the click and the blocks around it to config/engineerclient/zpew-misses.txt, to fix the law from.").withDependency { zpewDropdown && legitZpew }
+    val zpewCaptureHits by BooleanSetting("Capture Hits", false, desc = "Also saves every right prediction to zpew-misses.txt.").withDependency { zpewDropdown && legitZpew && zpewCapture }
 
     private var etherPos: EtherPos? = null
 
