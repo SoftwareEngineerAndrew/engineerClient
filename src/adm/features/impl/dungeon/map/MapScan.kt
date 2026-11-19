@@ -83,8 +83,10 @@ object MapScan {
     }
 
     private fun placeTeammates(marks: List<MapDecoration>) {
-        val mates = DungeonUtils.dungeonTeammatesNoSelf.iterator()
         val frame = MapDecorationTypes.FRAME.value()
+        // Markers come in teammate order, so a count that doesn't match would put names on the wrong heads.
+        if (marks.count { it.type.value() != frame } != DungeonUtils.dungeonTeammatesNoSelf.count { !it.isDead }) return
+        val mates = DungeonUtils.dungeonTeammatesNoSelf.iterator()
         for (mark in marks) {
             if (mark.type.value() == frame) continue
             while (mates.hasNext()) {

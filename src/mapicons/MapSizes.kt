@@ -74,7 +74,9 @@ object MapSizes {
                 if (!DungeonUtils.inBoss) g.renderPlayers()
             }
         } catch (t: Throwable) {
-            if (t !is ConcurrentModificationException && !failed) {
+            // A map packet changed the rooms mid-draw: the next frame draws them whole, so ADM must not draw it a second time.
+            if (t is ConcurrentModificationException) return width to height
+            if (!failed) {
                 failed = true
                 EngineerClient.logger.error("[ec] Custom Map Padding failed, ADM draws the map", t)
             }
