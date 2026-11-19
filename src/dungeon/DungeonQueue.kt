@@ -80,7 +80,7 @@ object DungeonQueue : Module(
     private const val KICKED_INSTANCE = "You are no longer allowed to access this instance!"
     private const val KICKED_JOINING = "You were kicked while joining that server!"
     private val extraStatsRegex = Regex(" {29}> EXTRA STATS <")
-    private val instanceRegex = Regex("\\[[^]]+] \\w+ entered (?:MM )?\\w+ Catacombs, Floor \\w+!")
+    private val instanceRegex = Regex("(?:\\[[^]]+] )?\\w+ entered (?:MM )?\\w+ Catacombs, (?:Floor \\w+|Entrance)!")
     private val warpRegex = Regex("^Sending to server .+")
 
     private val cooldownLine = TimerLine("§bWarp Cooldown: §f", 10)
