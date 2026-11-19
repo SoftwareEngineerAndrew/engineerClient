@@ -11,25 +11,39 @@ import com.adm.features.ModuleManager
  */
 object OnScreen {
 
+    private var moved = IntArray(48)
+
     /** Runs [draw] (ADM drawing the HUDs in play) with each HUD inside the screen, then puts the saved places back. */
     @JvmStatic
     fun hudsOnScreen(draw: Runnable) {
-        val huds = ModuleManager.hudSettingsCache.filter { it.isEnabled }.map { it.hud }
-        val saved = IntArray(huds.size * 2)
         val width = mc.window.guiScaledWidth
         val height = mc.window.guiScaledHeight
-        huds.forEachIndexed { i, hud ->
-            saved[2 * i] = hud.x; saved[2 * i + 1] = hud.y
-            // A minimised window has no size: leave every HUD where it is.
-            if (width > 0 && height > 0) {
-                hud.x = hud.x.coerceIn(0, (width - hud.scaledWidth).coerceAtLeast(0))
-                hud.y = hud.y.coerceIn(0, (height - hud.scaledHeight).coerceAtLeast(0))
-            }
+        // A minimised window has no size: leave every HUD where it is.
+        if (width <= 0 || height <= 0) return draw.run()
+        val settings = ModuleManager.hudSettingsCache
+        // Only the HUDs that had to move are kept, as (index, x, y).
+        var n = 0
+        for (i in settings.indices) {
+            val setting = settings[i]
+            if (!setting.isEnabled) continue
+            val hud = setting.hud
+            val x = hud.x.coerceIn(0, (width - hud.scaledWidth).coerceAtLeast(0))
+            val y = hud.y.coerceIn(0, (height - hud.scaledHeight).coerceAtLeast(0))
+            if (x == hud.x && y == hud.y) continue
+            if (n + 3 > moved.size) moved = moved.copyOf(moved.size * 2)
+            moved[n] = i; moved[n + 1] = hud.x; moved[n + 2] = hud.y
+            n += 3
+            hud.x = x; hud.y = y
         }
         try {
             draw.run()
         } finally {
-            huds.forEachIndexed { i, hud -> hud.x = saved[2 * i]; hud.y = saved[2 * i + 1] }
+            var k = 0
+            while (k < n) {
+                val hud = settings[moved[k]].hud
+                hud.x = moved[k + 1]; hud.y = moved[k + 2]
+                k += 3
+            }
         }
     }
 }
