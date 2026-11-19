@@ -78,9 +78,11 @@ fun Any?.equalsOneOf(vararg options: Any?): Boolean =
 fun String.matchesOneOf(vararg options: Regex): Boolean =
     options.any { this.matches(it) }
 
-fun logError(throwable: Throwable, context: Any) {
+fun logError(throwable: Throwable, context: Any) = logError(throwable, "${context::class.simpleName}")
+
+fun logError(throwable: Throwable, where: String) {
     val message =
-        "${AdmMod.version} Caught an ${throwable::class.simpleName ?: "error"} at ${context::class.simpleName}."
+        "${AdmMod.version} Caught an ${throwable::class.simpleName ?: "error"} at $where."
     AdmMod.logger.error(message, throwable)
 
     modMessage(Component.literal("$message §cClick to copy it.").withStyle {

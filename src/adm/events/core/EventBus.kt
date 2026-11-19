@@ -1,6 +1,7 @@
 package com.adm.events.core
 
 import com.adm.events.PacketEvent
+import com.adm.utils.logError
 import net.minecraft.network.protocol.Packet
 import net.minecraft.util.profiling.Profiler
 import java.util.concurrent.ConcurrentHashMap
@@ -152,6 +153,8 @@ object EventBus {
                             profiler.push(listener.subscriberName)
                             try {
                                 listener.invoke(event)
+                            } catch (t: Throwable) {
+                                logError(t, "${listener.subscriberName} (${event.javaClass.simpleName})")
                             } finally {
                                 profiler.pop()
                             }
