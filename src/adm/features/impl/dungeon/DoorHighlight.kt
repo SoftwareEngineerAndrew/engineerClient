@@ -22,12 +22,15 @@ import com.adm.utils.NameMemo
 import com.adm.utils.alert
 import com.adm.utils.render.BoxStyle
 import com.adm.utils.render.drawStyledBox
+import com.adm.utils.render.drawText
+import com.adm.utils.render.drawTracer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.engineerclient.mappred.MapPrediction
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
 import java.util.Collections
 import java.util.IdentityHashMap
 
@@ -44,6 +47,10 @@ object DoorHighlight : Module(
     private val normalDoors by BooleanSetting("Highlight Normal Doors", false, desc = "Also boxes the normal doors of the room you're in.")
     private val hideDone by BooleanSetting("Hide Done Doors", true, desc = "No box on a door when every room past it is green.").withDependency { normalDoors }
     private val normalColor by ColorSetting("Normal Door Color", Color(0, 128, 128, 0.8f), true, desc = "Color for normal doors.").withDependency { normalDoors }
+    private val doorLabels by BooleanSetting("Normal Door Labels", false, desc = "Names the room past each exit and its found/total secrets.").withDependency { normalDoors }
+    private val doorTracer by BooleanSetting("Door Tracer", false, desc = "A line to the nearest door the party's key opens.")
+    private val keyTracer by BooleanSetting("Key Tracer", false, desc = "A line to the key while you're in its room.")
+    private val keyPickupTitle by BooleanSetting("Key Pickup Title", false, desc = "A title naming who picked up a key.")
 
     private const val WITHER_KEY = "Wither Key"
     private const val BLOOD_KEY = "Blood Key"
@@ -62,6 +69,9 @@ object DoorHighlight : Module(
     private val bloodKeyObtainRegex = Regex("^(\\[[^]]*?])? ?(\\w{1,16}) has obtained Blood Key!$")
 
     private val doorBoxes = Long2ObjectOpenHashMap<AABB>()
+    private val doorCenters = Long2ObjectOpenHashMap<Vec3>()
+    private class Label(val found: Int?, val text: String)
+    private val labels = IdentityHashMap<DungeonRoom, Label>()
     private val scannedDoors = LongOpenHashSet()
 
     private val links = HashMap<DungeonRoom, ArrayList<DungeonRoom>>()
@@ -98,6 +108,7 @@ object DoorHighlight : Module(
             }
 
             if (normalDoors) drawNormalDoors()
+            if (doorTracer && (witherKeys > 0 || bloodKey)) traceDoor()
 
             val stand = keyStand ?: return@on
             if (!stand.isAlive) {
@@ -108,7 +119,10 @@ object DoorHighlight : Module(
             val x = stand.x + -0.5
             val y = stand.y + 1.0
             val z = stand.z + -0.5
-            drawStyledBox(AABB(x, y, z, x + 1.0, y + 1.0, z + 1.0), if (keyName == WITHER_KEY) witherColor else bloodColor, BoxStyle.FILLED_OUTLINE, true)
+            val color = if (keyName == WITHER_KEY) witherColor else bloodColor
+            drawStyledBox(AABB(x, y, z, x + 1.0, y + 1.0, z + 1.0), color, BoxStyle.FILLED_OUTLINE, true)
+            if (keyTracer && roomAt(stand.blockX, stand.blockZ).let { it != null && it === DungeonUtils.currentRoom })
+                drawTracer(Vec3(stand.x, y + 0.5, stand.z), color, false)
         }
 
         on<LevelEvent.Load> {
@@ -118,6 +132,8 @@ object DoorHighlight : Module(
             bloodKey = false
             bloodOpened = false
             doorBoxes.clear()
+            doorCenters.clear()
+            labels.clear()
             links.clear()
         }
     }
@@ -125,15 +141,73 @@ object DoorHighlight : Module(
     private fun onChat(message: String) {
         when {
             message == "A Wither Key was picked up!" -> witherKeys++
-            (message.endsWith(" has obtained Wither Key!") || message.endsWith(" has obtained Wither Key")) && witherKeyObtainRegex.matches(message) -> witherKeys++
+            (message.endsWith(" has obtained Wither Key!") || message.endsWith(" has obtained Wither Key")) && witherKeyObtainRegex.matches(message) -> {
+                witherKeys++
+                pickedUp(witherKeyObtainRegex, message, "§8$WITHER_KEY")
+            }
             message.endsWith(" opened a WITHER door!") && witherDoorOpenRegex.matches(message) -> witherKeys = (witherKeys - 1).coerceAtLeast(0)
             message == "A Blood Key was picked up!" -> bloodKey = true
-            message.endsWith(" has obtained Blood Key!") && bloodKeyObtainRegex.matches(message) -> bloodKey = true
+            message.endsWith(" has obtained Blood Key!") && bloodKeyObtainRegex.matches(message) -> {
+                bloodKey = true
+                pickedUp(bloodKeyObtainRegex, message, "§c$BLOOD_KEY")
+            }
             message == "The BLOOD DOOR has been opened!" -> {
                 bloodKey = false
                 bloodOpened = true
             }
         }
+    }
+
+    private fun pickedUp(regex: Regex, message: String, key: String) {
+        if (!keyPickupTitle) return
+        val name = regex.find(message)?.groupValues?.get(2) ?: return
+        alert("§a$name §7has the $key")
+    }
+
+    private fun roomAt(x: Int, z: Int): DungeonRoom? {
+        val col = (x + 201) shr 5
+        val row = (z + 201) shr 5
+        if (col !in 0..5 || row !in 0..5) return null
+        return roomAt(row * 6 + col)
+    }
+
+    private fun openable(door: DungeonDoor): Boolean =
+        locked(door) && (if (door.type == DoorType.Wither) witherKeys > 0 else bloodKey)
+
+    private fun RenderExtractEvent.traceDoor() {
+        val player = mc.player ?: return
+        var best: DungeonDoor? = null
+        var bestDist = Double.MAX_VALUE
+        for (door in DungeonScan.doors.values) {
+            if (!openable(door)) continue
+            val d = player.distanceToSqr(door.worldX + 0.5, 70.0, door.worldZ + 0.5)
+            if (d < bestDist) { bestDist = d; best = door }
+        }
+        if (predictedDoors) for (door in MapPrediction.certainDoors()) {
+            if (scannedDoors.contains(spot(door)) || !openable(door)) continue
+            val d = player.distanceToSqr(door.worldX + 0.5, 70.0, door.worldZ + 0.5)
+            if (d < bestDist) { bestDist = d; best = door }
+        }
+        val door = best ?: return
+        drawTracer(centerOf(door), openableColor, false)
+    }
+
+    private fun centerOf(door: DungeonDoor): Vec3 {
+        val key = spot(door)
+        doorCenters.get(key)?.let { return it }
+        val center = Vec3(door.worldX + 0.5, 71.0, door.worldZ + 0.5)
+        doorCenters.put(key, center)
+        return center
+    }
+
+    private fun labelOf(room: DungeonRoom): String? {
+        val data = room.data ?: return null
+        val found = room.foundSecrets
+        labels[room]?.let { if (it.found == found) return it.text }
+        val secrets = if (data.maxSecrets > 0) " §7(§b${found ?: "?"}§7/§b${data.maxSecrets}§7)" else ""
+        val text = "§f${data.name}$secrets"
+        labels[room] = Label(found, text)
+        return text
     }
 
     private fun locked(door: DungeonDoor): Boolean =
@@ -181,6 +255,7 @@ object DoorHighlight : Module(
                 if (!leadsSomewhere(pastExits[i])) continue
             }
             drawStyledBox(boxOf(exits[i]), normalColor, BoxStyle.OUTLINE, false)
+            if (doorLabels) labelOf(pastExits[i])?.let { drawText(it, centerOf(exits[i]).add(0.0, 2.5, 0.0), 1.5f, false) }
         }
     }
 

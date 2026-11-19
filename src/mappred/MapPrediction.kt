@@ -184,6 +184,7 @@ object MapPrediction {
     private fun reset() {
         generation.incrementAndGet()
         shown = null; shownView = null; shownNames = null; shownKey = ""; lastKey = ""
+        doorsFor = null; doorsCache = emptyList()
         pathDoors.clear()
         startAt = 0L
     }
@@ -274,12 +275,13 @@ object MapPrediction {
 
     /** True while ADM's prediction replaces ADM's "?" tiles (MapPathHintsMixin). */
     @JvmStatic
-    /** Wither and blood doors the prediction is sure of between tiles the map hasn't shown; none while it's catching up. */
+    /** Wither and blood doors the prediction is sure of between tiles the map hasn't shown; the last pass's while it's catching up. */
     fun certainDoors(): List<com.adm.features.impl.dungeon.map.tile.DungeonDoor> {
         if (!started()) return emptyList()
         val p = shown ?: return emptyList()
-        if (shownKey != lastKey) return emptyList()
-        return p.doors.filter { it.wither >= SURE || it.blood >= SURE }.map {
+        if (shownKey != lastKey || p === doorsFor) return doorsCache
+        doorsFor = p
+        doorsCache = p.doors.filter { it.wither >= SURE || it.blood >= SURE }.map {
             com.adm.features.impl.dungeon.map.tile.DungeonDoor(
                 com.adm.utils.IVec2(it.a % W, it.a / W),
                 if (it.b == it.a + 1) com.adm.features.impl.dungeon.map.tile.DoorRotation.Horizontal else com.adm.features.impl.dungeon.map.tile.DoorRotation.Vertical,
@@ -287,7 +289,11 @@ object MapPrediction {
                 com.adm.utils.Colors.WHITE,
             )
         }
+        return doorsCache
     }
+
+    private var doorsFor: Prediction? = null
+    private var doorsCache: List<com.adm.features.impl.dungeon.map.tile.DungeonDoor> = emptyList()
 
     fun replacesCore(): Boolean = on && DungeonMap.enabled && supported() && shown != null
 
