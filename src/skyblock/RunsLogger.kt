@@ -29,6 +29,8 @@ object RunsLogger {
         val secrets: Int = 0,
         val pb: Boolean = false,
         val party: List<String> = emptyList(),
+        val classes: List<String>? = null,
+        val milestone: Int = 0,
     )
 
     private val file get() = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("runs-log.json")
@@ -38,12 +40,20 @@ object RunsLogger {
     private val scoreRegex = Regex("^\\s*Team Score: (\\d+) \\((.{1,2})\\)")
     private val defeatedRegex = Regex("^\\s*☠ Defeated .+ in (?:(\\d+)h )?(?:(\\d+)m )?(\\d+)s( \\(NEW RECORD!\\))?$")
 
+    private val colorCode = Regex("§.")
+    private val milestoneRegex = Regex("^\\w+ Milestone ([❶❷❸❹❺❻❼❽❾]):")
+
     private var pending: Run? = null
+    private var milestone = 0
 
     fun install() {
         on<MessageEvent.Chat> {
             if (!com.engineerclient.adr.ADR.runsLogger || !DungeonUtils.inDungeons) return@on
-            val text = message.replace(Regex("§."), "")
+            val text = message.replace(colorCode, "")
+            milestoneRegex.find(text)?.let { m ->
+                milestone = m.groupValues[1][0] - '❶' + 1
+                return@on
+            }
             scoreRegex.find(text)?.let { m ->
                 if (pending != null) return@on
                 pending = Run(
@@ -55,6 +65,8 @@ object RunsLogger {
                     deaths = DungeonUtils.deathCount,
                     secrets = DungeonUtils.secretCount,
                     party = DungeonUtils.dungeonTeammates.map { it.name },
+                    classes = DungeonUtils.dungeonTeammates.map { it.clazz.name },
+                    milestone = milestone,
                 )
                 return@on
             }
@@ -67,6 +79,7 @@ object RunsLogger {
         on<LevelEvent.Unload> {
             pending?.let { save(it) }
             pending = null
+            milestone = 0
         }
 
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
@@ -75,7 +88,17 @@ object RunsLogger {
                 .then(literal("today").executes { show(DungeonUtils.floor?.name ?: runs.lastOrNull()?.floor ?: "F7", true); 1 })
                 .then(argument("floor", StringArgumentType.word())
                     .executes { show(StringArgumentType.getString(it, "floor").uppercase(), false); 1 }
-                    .then(literal("today").executes { show(StringArgumentType.getString(it, "floor").uppercase(), true); 1 })))
+                    .then(literal("today").executes { show(StringArgumentType.getString(it, "floor").uppercase(), true); 1 })
+                    .then(literal("player").then(argument("name", StringArgumentType.word()).executes {
+                        val floor = StringArgumentType.getString(it, "floor").uppercase()
+                        val name = StringArgumentType.getString(it, "name")
+                        summarize("$floor with $name", false, runs.filter { r -> r.floor == floor && r.party.any { p -> p.equals(name, true) } })
+                        1
+                    }))
+                    .then(literal("from").then(argument("start", StringArgumentType.word())
+                        .executes { between(it.floor(), StringArgumentType.getString(it, "start"), null); 1 }
+                        .then(argument("end", StringArgumentType.word())
+                            .executes { between(it.floor(), StringArgumentType.getString(it, "start"), StringArgumentType.getString(it, "end")); 1 })))))
         }
         EventBus.subscribe(this)
     }
@@ -101,6 +124,17 @@ object RunsLogger {
     } catch (t: Throwable) {
         EngineerClient.logger.warn("[ec] runs log read failed", t)
         mutableListOf()
+    }
+
+    private fun com.mojang.brigadier.context.CommandContext<*>.floor() = StringArgumentType.getString(this, "floor").uppercase()
+
+    /** Dates are yyyy-mm-dd, both ends included; the saved date strings sort the same way. */
+    private fun between(floor: String, start: String, end: String?) {
+        val from = runCatching { LocalDate.parse(start) }.getOrNull()
+        val to = if (end == null) LocalDate.now() else runCatching { LocalDate.parse(end) }.getOrNull()
+        if (from == null || to == null) return EngineerClient.msg("§cdates are yyyy-mm-dd.")
+        val a = from.toString(); val b = to.toString()
+        summarize("$floor $a to $b", false, runs.filter { it.floor == floor && it.date >= a && it.date <= b })
     }
 
     /** All time from the log; today from ADR's recordings, read off the game thread. */
