@@ -24,6 +24,8 @@ import java.util.concurrent.Executors
 object BoulderSolver {
     enum class Mode(private val label: String) { CLICKS("Least Clicks"), MOVEMENT("Least Blocks Traveled"), BALANCED("Balanced"); override fun toString() = label }
 
+    enum class Target(private val label: String) { BOULDER("Boulder"), BUTTON("Button"); override fun toString() = label }
+
     data class Step(val cell: Int, val dc: Int, val dr: Int, val after: Long)
 
     private const val NORTH = 42
@@ -91,12 +93,13 @@ object BoulderSolver {
         if (ready.isEmpty() && !solved(read)) modMessage("§cBoulder: no solve found from here.")
     }
 
-    fun onRenderWorld(event: RenderExtractEvent, showAllBoulderClicks: Boolean, boulderStyle: BoxStyle, boulderColor: Color) {
+    fun onRenderWorld(event: RenderExtractEvent, showAllBoulderClicks: Boolean, target: Target, boulderStyle: BoxStyle, boulderColor: Color) {
         val room = room ?: return
         if (plan.isEmpty() || DungeonUtils.currentRoomName != "Boulder") return
-        if (facesFor !== plan || !sameFrame(facesFrame, room)) {
-            faces = Array(plan.size) { AABB(room.getRealCoords(facePos(plan[it]))) }
+        if (facesFor !== plan || facesTarget != target || !sameFrame(facesFrame, room)) {
+            faces = Array(plan.size) { faceBox(room.getRealCoords(facePos(plan[it], if (target == Target.BUTTON) 2 else 1))) }
             facesFor = plan
+            facesTarget = target
             facesFrame = Frame(room, room.clayPos, room.rotation)
         }
         val count = if (showAllBoulderClicks) faces.size else 1
@@ -117,11 +120,16 @@ object BoulderSolver {
         cellsFrame = null
     }
 
-    // The boulder block the button sits on, one in from the button.
-    private fun facePos(step: Step): BlockPos {
+    // [out] 1: the boulder block the button sits on; 2: the button or sign itself.
+    private fun facePos(step: Step, out: Int): BlockPos {
         val x = 6 + 3 * (step.cell % 7)
         val z = 9 + 3 * (step.cell / 7)
-        return BlockPos(x - step.dc, 65, z - step.dr)
+        return BlockPos(x - out * step.dc, 65, z - out * step.dr)
+    }
+
+    private fun faceBox(pos: BlockPos): AABB {
+        val shape = mc.level?.getBlockState(pos)?.getShape(mc.level!!, pos)
+        return if (shape == null || shape.isEmpty) AABB(pos) else shape.bounds().move(pos)
     }
 
     /** The board after pushing [cell] by ([dc], [dr]), or null when that click doesn't push. */
@@ -215,6 +223,7 @@ object BoulderSolver {
     private val probe = BlockPos.MutableBlockPos()
     private var faces = emptyArray<AABB>()
     private var facesFor: List<Step>? = null
+    private var facesTarget: Target? = null
     private var facesFrame: Frame? = null
 
     private fun playerNode(room: DungeonRoom, b: Long): Int {
