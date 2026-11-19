@@ -7,7 +7,7 @@ import net.minecraft.world.item.Item
 import net.minecraft.world.item.Items
 import kotlin.random.Random
 
-object RubixSim : TermSimGUI(TerminalTypes.RUBIX.termName, TerminalTypes.RUBIX.windowSize) {
+class RubixSim : TermSimGUI(TerminalTypes.RUBIX.termName, TerminalTypes.RUBIX.windowSize) {
     // A left click moves a pane one color along this cycle, a right click one back.
     private val cycle: Array<Item> = Items.STAINED_GLASS_PANE.let { arrayOf(it.orange(), it.yellow(), it.green(), it.blue(), it.red()) }
     private val grid = intArrayOf(12, 13, 14, 21, 22, 23, 30, 31, 32)

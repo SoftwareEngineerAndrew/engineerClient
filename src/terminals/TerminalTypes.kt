@@ -14,12 +14,12 @@ enum class TerminalTypes(val termName: String, val regex: Regex, val windowSize:
     MELODY("Click the button on time!", Regex("^Click the button on time!$"), 54, intArrayOf(0, 1, 5, 7));
 
     fun simulator(): TermSimGUI = when (this) {
-        PANES -> PanesSim
-        RUBIX -> RubixSim
-        NUMBERS -> NumbersSim
+        PANES -> PanesSim()
+        RUBIX -> RubixSim()
+        NUMBERS -> NumbersSim()
         STARTS_WITH -> StartsWithSim()
         SELECT -> SelectAllSim()
-        MELODY -> MelodySim
+        MELODY -> MelodySim()
     }
 
     companion object {

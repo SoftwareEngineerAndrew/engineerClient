@@ -20,30 +20,14 @@ import java.util.Locale
  * It's titled as a numbers terminal so the solver takes it; the order comes from [queue]
  * (NumbersHandler.orderOverride), not from stack sizes.
  */
-object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.NUMBERS.windowSize) {
-    /** The 10 cells: rows 1-2, columns 2-6, as in a numbers since the update cut its sides. */
-    private val CELLS = (1..2).flatMap { r -> (2..6).map { c -> r * 9 + c } }
-    /** How many cells are lit: the solver colours the next 4. */
-    private const val SHOWN = 4
-    private const val FRESH = 6
-
+class InfNumbersSim private constructor() : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.NUMBERS.windowSize) {
     private val rng = java.util.Random()
-    /** The highlighted cells, next first. */
-    @JvmStatic val queue = ArrayList<Int>()
     /** What's left of the bag, next first. */
     private val bag = ArrayDeque<Int>()
     private var openedMs = 0L
     private var lastMs = 0L
     private var firstMs = 0L
     private val gaps = ArrayList<Long>()
-
-    init {
-        com.engineerclient.terminals.NumbersHandler.orderOverride = { if (active()) queue else null }
-    }
-
-    /** This simulator is on screen (the numbers solver orders it by [queue], no numbers). */
-    @JvmStatic
-    fun active(): Boolean = EngineerClient.mc.gui.screen() === this
 
     override fun create() {
         queue.clear(); bag.clear(); gaps.clear()
@@ -92,4 +76,25 @@ object InfNumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.
     }
 
     private fun fmt(v: Double) = String.format(Locale.ROOT, "%.3f", v).let { if (v >= 1) String.format(Locale.ROOT, "%.2f", v) else it }
+
+    companion object {
+        /** The 10 cells: rows 1-2, columns 2-6, as in a numbers since the update cut its sides. */
+        private val CELLS = (1..2).flatMap { r -> (2..6).map { c -> r * 9 + c } }
+        /** How many cells are lit: the solver colours the next 4. */
+        private const val SHOWN = 4
+        private const val FRESH = 6
+
+        /** The highlighted cells, next first. */
+        @JvmStatic val queue = ArrayList<Int>()
+
+        init {
+            com.engineerclient.terminals.NumbersHandler.orderOverride = { if (active()) queue else null }
+        }
+
+        /** This simulator is on screen (the numbers solver orders it by [queue], no numbers). */
+        @JvmStatic
+        fun active(): Boolean = EngineerClient.mc.gui.screen() is InfNumbersSim
+
+        fun open(ping: Long) = InfNumbersSim().open(ping)
+    }
 }

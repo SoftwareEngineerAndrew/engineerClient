@@ -8,7 +8,7 @@ import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 
-object NumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.NUMBERS.windowSize) {
+class NumbersSim : TermSimGUI(TerminalTypes.NUMBERS.termName, TerminalTypes.NUMBERS.windowSize) {
     private val waiting = Items.STAINED_GLASS_PANE.red()
     private val done = Items.STAINED_GLASS_PANE.lime()
     private var next = 1

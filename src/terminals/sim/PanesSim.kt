@@ -5,7 +5,7 @@ import com.engineerclient.terminals.TerminalUtils
 import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.Items
 
-object PanesSim : TermSimGUI(TerminalTypes.PANES.termName, TerminalTypes.PANES.windowSize) {
+class PanesSim : TermSimGUI(TerminalTypes.PANES.termName, TerminalTypes.PANES.windowSize) {
     private val off = Items.STAINED_GLASS_PANE.red()
     private val on = Items.STAINED_GLASS_PANE.lime()
 

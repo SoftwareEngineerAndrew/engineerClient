@@ -8,11 +8,7 @@ import net.minecraft.world.item.Items
 import kotlin.random.Random
 
 /** Rows 1-3 are lanes (columns 1-5) with a button in column 7; the column to hit is marked in rows 0 and 4. */
-object MelodySim : TermSimGUI(TerminalTypes.MELODY.termName, TerminalTypes.MELODY.windowSize) {
-    private const val BUTTON_COLUMN = 7
-    private const val LANES = 3
-    private const val TICKS_PER_STEP = 10
-
+class MelodySim : TermSimGUI(TerminalTypes.MELODY.termName, TerminalTypes.MELODY.windowSize) {
     private val marker = unnamed(Items.STAINED_GLASS_PANE.magenta())
     private val pointer = unnamed(Items.STAINED_GLASS_PANE.lime())
     private val activeLane = unnamed(Items.STAINED_GLASS_PANE.red())
@@ -74,5 +70,11 @@ object MelodySim : TermSimGUI(TerminalTypes.MELODY.termName, TerminalTypes.MELOD
             col == at -> pointer
             else -> activeLane
         }
+    }
+
+    private companion object {
+        const val BUTTON_COLUMN = 7
+        const val LANES = 3
+        const val TICKS_PER_STEP = 10
     }
 }

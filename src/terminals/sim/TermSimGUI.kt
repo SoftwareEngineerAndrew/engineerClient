@@ -76,7 +76,7 @@ open class TermSimGUI private constructor(val name: String, val size: Int, playe
     }
 
     private fun answerLater(slot: Slot, button: Int) {
-        if (mc.gui.screen() === StartGUI) return slotClick(slot, button)
+        if (mc.gui.screen() is StartGUI) return slotClick(slot, button)
         if (slot.container !== menu.container || slot.item.`is`(blackPane.item)) return
         if (ping <= 0L) return slotClick(slot, button)
         schedule((ping / 50).toInt()) { if (mc.gui.screen() === this) slotClick(slot, button) }
