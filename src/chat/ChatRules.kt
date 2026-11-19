@@ -68,11 +68,9 @@ class ChatRules(val custom: List<Custom>, val block: List<Block>) {
         }
 
         /** The rules shipped in the jar. */
-        fun bundled(): ChatRules {
-            val text = ChatRules::class.java.getResourceAsStream("/chat/hidden.json")?.bufferedReader()?.use { it.readText() }
-                ?: return ChatRules(emptyList(), emptyList())
-            return parse(text)
-        }
+        fun bundled(): ChatRules = bundledText()?.let(::parse) ?: ChatRules(emptyList(), emptyList())
+
+        fun bundledText(): String? = ChatRules::class.java.getResourceAsStream("/chat/hidden.json")?.bufferedReader()?.use { it.readText() }
     }
 
     private class RulesFile(

@@ -54,6 +54,10 @@ val mainCommand = Commodore("adm") {
         fillItemFromSack(amount?: 64, "TWILIGHT_ARROW_POISON", "twilight_arrow_poison", true)
     }
 
+    literal("chathide").runs { regex: GreedyString ->
+        com.engineerclient.chat.ChatHider.addRule(regex.string)
+    }
+
     literal("sendcoords").runs { message: GreedyString? ->
         sendChatMessage(getPositionString() + if (message == null) "" else " ${message.string}")
     }

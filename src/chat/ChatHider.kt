@@ -4,6 +4,10 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.rotation.EcLog
 import net.minecraft.client.multiplayer.chat.GuiMessage
 import net.minecraft.network.chat.Component
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import java.nio.file.Files
 
 /**
@@ -22,6 +26,26 @@ import java.nio.file.Files
 object ChatHider {
     /** Clean Chat's Reload Rules. */
     fun reload() = load(announce = true)
+
+    /** /adm chathide: a block rule at the end of the override file's custom rules, started from the built-in rules when there is no file yet. */
+    fun addRule(regex: String) {
+        try { java.util.regex.Pattern.compile(regex) } catch (e: java.util.regex.PatternSyntaxException) {
+            return EngineerClient.msg("§cInvalid regex: ${e.description}")
+        }
+        try {
+            val text = if (Files.exists(overrideFile)) Files.readString(overrideFile) else ChatRules.bundledText() ?: "{}"
+            val root = JsonParser.parseString(text).asJsonObject
+            val custom = root.getAsJsonArray("custom") ?: JsonArray().also { root.add("custom", it) }
+            custom.add(JsonObject().apply { addProperty("regex", regex); addProperty("action", "block") })
+            Files.createDirectories(overrideFile.parent)
+            Files.writeString(overrideFile, GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(root))
+        } catch (t: Throwable) {
+            EngineerClient.logger.warn("[ec] chat hider rule not saved", t)
+            return EngineerClient.msg("§cCould not save the rule to ${overrideFile.fileName}.")
+        }
+        EngineerClient.msg("§7clean chat: added §f$regex")
+        reload()
+    }
 
     @Volatile
     private var rules: ChatRules = ChatRules(emptyList(), emptyList())
