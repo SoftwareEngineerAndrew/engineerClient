@@ -1,16 +1,22 @@
 package com.adm.features.impl.skyblock
 
+import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.ColorSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.events.RenderExtractEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
+import com.adm.events.core.onSend
 import com.adm.features.Module
 import com.adm.utils.Colors
 import com.adm.utils.isItem
-import com.adm.utils.render.drawWireFrameBox
+import com.adm.utils.render.BoxStyle
+import com.adm.utils.render.drawStyledBox
 import com.adm.utils.render.text
 import com.adm.utils.skyblock.LocationUtils
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.phys.AABB
@@ -32,6 +38,10 @@ object SpringBoots : Module(
         text(label, labelX, 1, Colors.WHITE, true)
         labelSize
     }
+
+    private val boxColor by ColorSetting("Box Color", Colors.MINECRAFT_RED, true, desc = "Color of the landing box.")
+    private val boxStyle by SelectorSetting("Box Style", BoxStyle.OUTLINE, desc = "Style of the landing box.")
+    private val throughWalls by BooleanSetting("Through Walls", true, desc = "Draws the box through blocks.")
 
     private const val PREFIX = "Height: "
     private var label = ""
@@ -68,29 +78,48 @@ object SpringBoots : Module(
         else -> "§b"
     }
 
+    // The sneak the server last heard: the charge is its, so a client-only crouch must not keep it.
+    private var serverSneak = false
+
+    private fun reset() {
+        lowSteps = 0
+        highSteps = 0
+        height = 0f
+    }
+
+    private fun pling(pitch: Float) {
+        val player = mc.player ?: return
+        if (!serverSneak || !player.onGround() || !EquipmentSlot.FEET.isItem("SPRING_BOOTS")) return
+        if (pitch == LOW_PITCH) {
+            if (lowSteps < 2) lowSteps++
+        } else highSteps++
+        height = HEIGHTS[(lowSteps + highSteps).coerceIn(0, HEIGHTS.size - 1)]
+    }
+
+    private val onLaunch = Runnable { reset() }
+
     init {
         onReceive<ClientboundSoundPacket> {
             if (!LocationUtils.isInSkyblock) return@onReceive
             val id = sound.value().location()
             if (SoundEvents.NOTE_BLOCK_PLING.`is`(id)) {
-                if (mc.player?.isCrouching == true && EquipmentSlot.FEET.isItem("SPRING_BOOTS")) {
-                    if (pitch == LOW_PITCH) {
-                        if (lowSteps < 2) lowSteps++
-                    } else if (isHighPitch(pitch)) highSteps++
-                }
+                if (pitch != LOW_PITCH && !isHighPitch(pitch)) return@onReceive
+                val p = pitch
+                mc.execute { pling(p) }
             } else if (id == SoundEvents.FIREWORK_ROCKET_LAUNCH.location() && (pitch == 0.0952381f || pitch == 1.6984127f)) {
-                lowSteps = 0
-                highSteps = 0
+                mc.execute(onLaunch)
             }
-            height = HEIGHTS[(lowSteps + highSteps).coerceIn(0, HEIGHTS.size - 1)]
+        }
+
+        onSend<ServerboundPlayerInputPacket> {
+            serverSneak = input().shift()
+            if (!serverSneak && (lowSteps != 0 || highSteps != 0)) reset()
         }
 
         on<TickEvent.End> {
             if (lowSteps == 0 && highSteps == 0 && height == 0f) return@on
-            if (!LocationUtils.isInSkyblock || mc.player?.isCrouching == true || !EquipmentSlot.FEET.isItem("SPRING_BOOTS")) return@on
-            lowSteps = 0
-            highSteps = 0
-            height = 0f
+            if (!LocationUtils.isInSkyblock || EquipmentSlot.FEET.isItem("SPRING_BOOTS")) return@on
+            reset()
         }
 
         on<RenderExtractEvent> {
@@ -98,7 +127,7 @@ object SpringBoots : Module(
             if (blocks == 0f || !LocationUtils.isInSkyblock) return@on
             val player = mc.player ?: return@on
             val y = player.y + blocks
-            drawWireFrameBox(AABB(player.x, y, player.z, player.x + 1.0, y + 1.0, player.z + 1.0), Colors.MINECRAFT_RED)
+            drawStyledBox(AABB(player.x, y, player.z, player.x + 1.0, y + 1.0, player.z + 1.0), boxColor, boxStyle, !throughWalls)
         }
     }
 }
