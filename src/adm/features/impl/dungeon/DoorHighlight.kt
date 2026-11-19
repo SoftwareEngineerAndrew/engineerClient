@@ -26,6 +26,7 @@ import com.adm.utils.render.drawText
 import com.adm.utils.render.drawTracer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.engineerclient.mappred.MapPrediction
+import com.engineerclient.misc.DoorOutline
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet
 import net.minecraft.world.entity.decoration.ArmorStand
@@ -94,17 +95,17 @@ object DoorHighlight : Module(
             if (announceKeySpawn) alert("§${if (name == WITHER_KEY) '8' else 'c'}$name§7 spawned!")
         }
 
-        // Every box in here goes through drawStyledBox right in this handler: DoorHighlightOutlineMixin restyles them.
         on<RenderExtractEvent> {
             if (!DungeonUtils.inClear) return@on
+            val style = DoorOutline.style(BoxStyle.FILLED_OUTLINE)
 
             scannedDoors.clear()
             for (door in DungeonScan.doors.values) {
                 scannedDoors.add(spot(door))
-                if (locked(door)) drawStyledBox(boxOf(door), lockedColor(door), BoxStyle.FILLED_OUTLINE, false)
+                if (locked(door)) drawStyledBox(boxOf(door), lockedColor(door), style, false)
             }
             if (predictedDoors) for (door in MapPrediction.certainDoors()) {
-                if (!scannedDoors.contains(spot(door)) && locked(door)) drawStyledBox(boxOf(door), lockedColor(door), BoxStyle.FILLED_OUTLINE, false)
+                if (!scannedDoors.contains(spot(door)) && locked(door)) drawStyledBox(boxOf(door), lockedColor(door), style, false)
             }
 
             if (normalDoors) drawNormalDoors()
@@ -120,7 +121,7 @@ object DoorHighlight : Module(
             val y = stand.y + 1.0
             val z = stand.z + -0.5
             val color = if (keyName == WITHER_KEY) witherColor else bloodColor
-            drawStyledBox(AABB(x, y, z, x + 1.0, y + 1.0, z + 1.0), color, BoxStyle.FILLED_OUTLINE, true)
+            drawStyledBox(AABB(x, y, z, x + 1.0, y + 1.0, z + 1.0), color, style, true)
             if (keyTracer && roomAt(stand.blockX, stand.blockZ).let { it != null && it === DungeonUtils.currentRoom })
                 drawTracer(Vec3(stand.x, y + 0.5, stand.z), color, false)
         }
