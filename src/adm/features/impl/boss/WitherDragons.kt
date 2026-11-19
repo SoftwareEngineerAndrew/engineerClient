@@ -24,11 +24,11 @@ object WitherDragons : Module(
     description = "Tools for managing M7 dragons timers, boxes, priority, health and alerts."
 ) {
     private val dragonTimerDropDown by DropdownSetting("Dragon Timer Dropdown", desc = "Shows settings for the M7 dragon spawn timer.")
-    private val dragonTimer by BooleanSetting("Dragon Timer", true, desc = "Displays a timer for when M7 dragons spawn.").withDependency { dragonTimerDropDown }
-    private val displayStyle by SelectorSetting("Display Style", DisplayStyle.DEFAULT, desc = "Blade shows each spawning dragon's seconds in its colour.").withDependency { dragonTimer && dragonTimerDropDown }
-    private val dragonTimerStyle by SelectorSetting("Timer Style", TimerStyle.MILLISECONDS, desc = "The style of the dragon timer.").withDependency { dragonTimer && dragonTimerDropDown && displayStyle == DisplayStyle.DEFAULT }
-    private val showSymbol by BooleanSetting("Timer Symbol", true, desc = "Displays a symbol for the timer.").withDependency { dragonTimer && dragonTimerDropDown && displayStyle == DisplayStyle.DEFAULT }
-    private val hud by HUD("Dragon Timer HUD", "Displays the dragon timer in the HUD.") { example ->
+    private val dragonTimer by BooleanSetting("Dragon Timer", true, desc = "A spawn timer under each statue, separate from the HUD timer.").withDependency { dragonTimerDropDown }
+    private val displayStyle by SelectorSetting("Display Style", DisplayStyle.DEFAULT, desc = "Blade shows each spawning dragon's seconds in its colour.").withDependency { (dragonTimer || hud.enabled) && dragonTimerDropDown }
+    private val dragonTimerStyle by SelectorSetting("Timer Style", TimerStyle.MILLISECONDS, desc = "The style of the dragon timer.").withDependency { (dragonTimer || hud.enabled) && dragonTimerDropDown && displayStyle == DisplayStyle.DEFAULT }
+    private val showSymbol by BooleanSetting("Timer Symbol", true, desc = "Displays a symbol for the timer.").withDependency { (dragonTimer || hud.enabled) && dragonTimerDropDown && displayStyle == DisplayStyle.DEFAULT }
+    private val hud: com.adm.clickgui.settings.impl.HudElement by HUD("Dragon Timer HUD", "An on-screen spawn timer, separate from the statue timer.") { example ->
         if (example) {
             val blade = displayStyle == DisplayStyle.BLADE
             val a = textDim(if (blade) "§c3.25s" else "§cR: §a3250ms", 0, 0, Colors.WHITE)
