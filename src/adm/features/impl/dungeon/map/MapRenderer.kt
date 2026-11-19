@@ -271,7 +271,7 @@ fun GuiGraphicsExtractor.renderPlayers() {
     pose().pushMatrix()
     val (selfX, selfZ) = playerRenderPosition(self, IVec2(0, 0))
     pose().translate(selfX, selfZ)
-    pose().rotate(Math.toRadians(180.0 + (self?.yRot ?: 0f)).toFloat())
+    pose().rotate(Math.toRadians(180.0 + (self?.yRot ?: 0f).let { if (DungeonMap.playerHead) it else pointerYaw(it) }).toFloat())
 
     if (DungeonMap.playerHead) {
         val skin = self?.skin
@@ -349,6 +349,10 @@ private fun GuiGraphicsExtractor.pixelMarker(rows: Array<String>, color: Int) {
         fill(x - 4, y - 4, x - 3, y - 3, c)
     }
 }
+
+/** The vanilla markers turn in 16 steps, as on a map item. */
+fun pointerYaw(yaw: Float): Float =
+    if (DungeonMap.pointerStyle == DungeonMap.PointerStyle.ADM) yaw else Math.round(yaw / 22.5f) * 22.5f
 
 /** Your own map marker in the chosen style, centred on the pose's origin. */
 fun GuiGraphicsExtractor.selfArrow(color: Int) {
