@@ -31,6 +31,7 @@ object InvincibilityTimer : Module(
 ) {
     private val invincibilityAlert by BooleanSetting("Invincibility Alert", true, desc = "Plays a sound when you get invincibility.")
     private val invincibilityAnnounce by BooleanSetting("Announce Invincibility", true, desc = "Announces when you get invincibility.")
+    private val readyAlert by BooleanSetting("Ready Alert", true, desc = "Shows a title when an item's cooldown ends.")
     private val onlyInDungeons by BooleanSetting("Only In Dungeons", true, "Only proc invincibility timers while in a dungeon")
 
     private val maskCat by DropdownSetting("Displayed Items", desc = "Which invincibility items are shown in the HUD.")
@@ -143,7 +144,7 @@ object InvincibilityTimer : Module(
     init {
         on<TickEvent.Server> {
             for (item in items) {
-                if (item.cooldownLeft > 0) item.cooldownLeft--
+                if (item.cooldownLeft > 0 && --item.cooldownLeft == 0 && readyAlert) mc.execute { alert("§a${item.label} Ready!") }
                 if (item.savedLeft > 0) item.savedLeft--
             }
         }
@@ -151,6 +152,7 @@ object InvincibilityTimer : Module(
         on<MessageEvent.Chat> {
             if (onlyInDungeons && !DungeonUtils.inDungeons) return@on
             val item = savedBy(message) ?: return@on
+            MasksUsed.markUsed(items.indexOf(item))
             val seconds = if (item === bonzo) helmetCooldownSeconds() else null
             item.savedLeft = item.savedTicks
             item.cooldownLeft = (seconds ?: item.cooldownSeconds) * 20
@@ -158,7 +160,7 @@ object InvincibilityTimer : Module(
             if (invincibilityAlert) alert(item.label)
         }
 
-        on<LevelEvent.Load> { resetTimers() }
+        on<LevelEvent.Load> { resetTimers(); MasksUsed.clearUsed() }
 
         on<GuiEvent.RenderSlot> {
             if (!showOnItem || (spirit.cooldownLeft <= 0 && bonzo.cooldownLeft <= 0)) return@on
