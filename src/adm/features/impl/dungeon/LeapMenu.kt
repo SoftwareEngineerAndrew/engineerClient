@@ -48,9 +48,12 @@ object LeapMenu : Module(
     key = null
 ) {
     val type by SelectorSetting("Sorting", Sorting.DEFAULT, desc = "How to sort the leap menu. /adm leaporder to configure custom sorting.")
+    private val fixedCorners by BooleanSetting("Fixed Class Corners", false, desc = "Each class keeps its corner; a missing class leaves its corner empty.").withDependency { type == Sorting.DEFAULT }
     private val onlyClass by BooleanSetting("Only Classes", false, desc = "Renders classes instead of names.")
     private val colorStyle by BooleanSetting("Color Style", false, desc = "Which color style to use.")
     private val backgroundColor by ColorSetting("Background Color", Colors.gray38.withAlpha(0.75f), true, desc = "Color of the background of the leap menu.").withDependency { !colorStyle }
+    private val openerTint by BooleanSetting("Door Opener Tint", false, desc = "Tints the last wither door opener's box.")
+    private val openerColor by ColorSetting("Door Opener Color", Color(170, 0, 0, 0.75f), true, desc = "Colour of the last door opener's box.").withDependency { openerTint }
     private val scale by NumberSetting("Render Scale", 1f, 0.1..2.0, 0.1f, desc = "Scale of the leap menu.", unit = "x")
     private val onRelease by BooleanSetting("On Key Release", false, desc = "Whether to trigger the leap on key release instead of key press.")
     private val instant by BooleanSetting("Instant Leap", true, desc = "Opens as you use the leap and takes your pick before the server's menu is there.")
@@ -328,6 +331,7 @@ object LeapMenu : Module(
 
         val halfW = mc.window.guiScaledWidth / 2
         val halfH = mc.window.guiScaledHeight / 2
+        val opener = if (openerTint && !com.engineerclient.pov.PosePov.enabled) DungeonUtils.doorOpener else null
 
         repeat(4) { i ->
             val player = leapTeammates.getOrNull(i) ?: return@repeat
@@ -348,7 +352,8 @@ object LeapMenu : Module(
             g.pose().translate(nearX.toFloat(), nearY.toFloat())
             g.pose().scale(scale * (BOX_WIDTH + grow * 2f) / BOX_WIDTH, scale * (BOX_HEIGHT + grow * 2f) / BOX_HEIGHT)
 
-            g.roundedRect(localX, localY, localX + BOX_WIDTH, localY + BOX_HEIGHT, (if (colorStyle) player.clazz.color else backgroundColor).rgba, 9f)
+            val fill = if (opener == player.name) openerColor else if (colorStyle) player.clazz.color else backgroundColor
+            g.roundedRect(localX, localY, localX + BOX_WIDTH, localY + BOX_HEIGHT, fill.rgba, 9f)
 
             val face = (BOX_HEIGHT * 0.76).toInt()
             (player.playerSkin ?: mc.player?.skin)?.let { PlayerFaceExtractor.extractRenderState(g, it, localX + 9, localY + 9, face) }
@@ -402,6 +407,15 @@ object LeapMenu : Module(
         }
 
         if (secondRound.isEmpty()) return result
+
+        if (fixedCorners) {
+            // your own class's corner is the only one no teammate's class needs
+            val own = DungeonUtils.currentDungeonPlayer.clazz
+            if (own != DungeonClass.EMPTY && result[own.defaultQuadrant] == EMPTY) {
+                result[own.defaultQuadrant] = secondRound.removeAt(0)
+                if (secondRound.isEmpty()) return result
+            }
+        }
 
         result.forEachIndexed { index, _ ->
             when {
