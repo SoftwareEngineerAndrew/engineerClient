@@ -74,6 +74,7 @@ object DungeonListener {
         }
 
         onReceive<ClientboundPlayerInfoUpdatePacket> {
+            if (!DungeonUtils.inDungeons) return@onReceive
             val tabListEntries = entries().mapNotNull { it.displayName?.string }.ifEmpty { return@onReceive }
             updateDungeonTeammates(tabListEntries)
             updateDungeonStats(tabListEntries)
@@ -84,14 +85,13 @@ object DungeonListener {
         onReceive<ClientboundSetPlayerTeamPacket> {
             val text = parameters.getOrNull()?.let { it.playerPrefix.string.plus(it.playerSuffix.string).noControlCodes } ?: return@onReceive
 
-            floorRegex.find(text)?.groupValues?.get(1)?.let {
-                if (floor == null) {
-                    scope.launch(Dispatchers.IO) { paul = hasBonusPaulScore() }
-                    val detectedFloor = Floor.valueOf(it)
-                    floor = detectedFloor
-                    FloorEnterEvent(detectedFloor).postAndCatch()
-                }
+            if (floor == null) floorRegex.find(text)?.groupValues?.get(1)?.let {
+                scope.launch(Dispatchers.IO) { paul = hasBonusPaulScore() }
+                val detectedFloor = Floor.valueOf(it)
+                floor = detectedFloor
+                FloorEnterEvent(detectedFloor).postAndCatch()
             }
+            if (!DungeonUtils.inDungeons) return@onReceive
 
             clearedRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
                 if (dungeonStats.percentCleared != it && expectingBloodUpdate) dungeonStats.bloodDone = true
