@@ -2,6 +2,7 @@ package com.engineerclient.chat
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.rotation.EcLog
+import net.minecraft.client.multiplayer.chat.GuiMessage
 import net.minecraft.network.chat.Component
 import java.nio.file.Files
 
@@ -42,8 +43,27 @@ object ChatHider {
         if (announce) EngineerClient.msg("§7clean chat: §f${set.size}§7 rules from §f$from" + if (set.invalid.isNotEmpty()) " §c(${set.invalid.size} invalid regex)" else "")
     }
 
-    /** Called from the chat GUI's single add-message funnel. True = do not display. */
-    fun shouldHide(message: Component): Boolean {
+    private var afterHidden = false
+    private val BLANK = Regex("§.|[\\s\u00A0\u200B-\u200D\u2800\uFEFF]")
+    private fun blank(c: Component) = BLANK.replace(c.string, "").isEmpty()
+
+    /** True = do not display. Hypixel frames messages with blank lines: those around a hidden one go with it. */
+    fun hides(message: Component, all: MutableList<GuiMessage>, lines: MutableList<GuiMessage.Line>): Boolean {
+        if (shouldHide(message)) {
+            val last = all.firstOrNull()
+            if (last != null && last.addedTime() == EngineerClient.mc.gui.hud.guiTicks && blank(last.content())) {
+                all.removeAt(0)
+                lines.removeIf { it.parent() === last }
+            }
+            afterHidden = true
+            return true
+        }
+        if (afterHidden && blank(message)) return true
+        afterHidden = false
+        return false
+    }
+
+    private fun shouldHide(message: Component): Boolean {
         if (!com.engineerclient.render.Visibility.cleansChat()) return false
         if (!loaded) load(announce = false)
         val text = ChatRules.strip(message.string)

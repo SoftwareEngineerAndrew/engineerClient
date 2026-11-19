@@ -2,14 +2,19 @@ package com.engineerclient.mixin;
 
 import com.engineerclient.chat.ChatHider;
 import net.minecraft.client.gui.components.ChatComponent;
+import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
 import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MessageSignature;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.List;
 
 /**
  * The chat hider's one hook: the private funnel every visible chat line passes through on its
@@ -19,6 +24,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(ChatComponent.class)
 public class ChatComponentMixin {
+    @Shadow @Final private List<GuiMessage> allMessages;
+    @Shadow @Final private List<GuiMessage.Line> trimmedMessages;
 
     @Inject(
         method = "addMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/MessageSignature;Lnet/minecraft/client/multiplayer/chat/GuiMessageSource;Lnet/minecraft/client/multiplayer/chat/GuiMessageTag;)V",
@@ -27,7 +34,7 @@ public class ChatComponentMixin {
     )
     private void ec$hide(Component contents, MessageSignature signature, GuiMessageSource source, GuiMessageTag tag, CallbackInfo ci) {
         try {
-            if (ChatHider.INSTANCE.shouldHide(contents)) ci.cancel();
+            if (ChatHider.INSTANCE.hides(contents, allMessages, trimmedMessages)) ci.cancel();
         } catch (Throwable t) {
             // a broken rule must never eat the chat
         }
