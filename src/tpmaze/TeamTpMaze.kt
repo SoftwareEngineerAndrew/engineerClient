@@ -97,8 +97,28 @@ object TeamTpMaze {
     /** Teammates whose client has said something on the channel: only they are given pads (anyone else won't see theirs). */
     private val heard = HashSet<String>()
     /** Teammates' names, and each one's last server position, while we're in the maze. */
-    private var mates: Set<String> = emptySet()
+    private val mates = HashSet<String>()
     private val last = HashMap<Int, Vec3>()
+    /** The map changed or we left the maze since the plan was made. */
+    private var stale = true
+    private val seenNow = HashMap<String, Int>()
+
+    // Pad boxes for the room's frame, and what each pad shows, made again only when the plan or the map changes.
+    private var padsFrame: RoomFrame? = null
+    private var padsRoom: DungeonRoom? = null
+    private val padBoxes = arrayOfNulls<AABB>(30)
+    private val padTops = arrayOfNulls<Vec3>(30)
+    private val padAims = arrayOfNulls<Vec3>(30)
+    private const val NONE = 0
+    private const val FINAL = 1
+    private const val NEXT = 2
+    private const val MATE = 3
+    private const val USED = 4
+    private val padKind = IntArray(30)
+    private val padOutlined = BooleanArray(30)
+    private val padLabel = arrayOfNulls<String>(30)
+    private val padLabelIsName = BooleanArray(30)
+    private var minePad = -1
 
     internal val socket = webSocket {
         onMessage { text -> mc.execute { EngineerClient.safely("team tp maze message") { this@TeamTpMaze.receive(text) } } }
@@ -163,7 +183,8 @@ object TeamTpMaze {
 
     private fun reset() {
         map = MazeMap(); frame = null; mazeRoom = null; plan = emptyMap(); where = emptyMap()
-        dirty = false; cooldown = 0; heard.clear(); mates = emptySet(); last.clear()
+        dirty = false; cooldown = 0; heard.clear(); mates.clear(); last.clear(); stale = true
+        padsFrame = null; padsRoom = null; minePad = -1; padKind.fill(NONE); padOutlined.fill(false); padLabel.fill(null)
         disconnect()
     }
 
@@ -207,7 +228,7 @@ object TeamTpMaze {
         val changed = map.teleport(ox, oz, land, f.yawToRoom(yaw), exact, REACH)
         log("${if (exact) "own" else "mate"} %s -> %s yaw %.1f from %.2f %.2f: %s".format(
             MazePads.padUnder(ox, oz, REACH).let { if (it >= 0) MazePads.label(it) else "?" }, MazePads.label(land), f.yawToRoom(yaw), ox, oz, if (changed) "recorded" else "nothing new"))
-        if (changed) dirty = true
+        if (changed) { dirty = true; stale = true }
     }
 
     private fun log(s: String) = com.engineerclient.rotation.EcLog.log("TPMAZE", s)
@@ -217,19 +238,70 @@ object TeamTpMaze {
         val room = mazeRoom ?: return
         if (frame == null) frame = frameOf(room) ?: return
         val f = frame!!
-        if (DungeonUtils.currentRoomName != ROOM) { plan = emptyMap(); where = emptyMap(); last.clear(); send(); return }
-        mates = DungeonUtils.dungeonTeammatesNoSelf.mapTo(HashSet()) { it.name }
+        if (DungeonUtils.currentRoomName != ROOM) {
+            if (where.isNotEmpty() || plan.isNotEmpty()) { plan = emptyMap(); where = emptyMap() }
+            last.clear(); stale = true; send(); return
+        }
+        mates.clear()
+        for (t in DungeonUtils.dungeonTeammatesNoSelf) mates.add(t.name)
         // Everyone in the maze who plays by the plan, and where: us, and the teammates whose client we've heard from.
-        val w = HashMap<String, Int>()
+        val w = seenNow
+        w.clear()
         mc.player?.let { p -> f.toRoom(p.x, p.z).let { r -> MazePads.regionAt(r[0], r[1]).takeIf { it >= 0 }?.let { w[self] = it } } }
         for (t in DungeonUtils.dungeonTeammatesNoSelf) {
             val e = t.entity ?: continue
             if (t.isDead || t.name !in heard) continue
             f.toRoom(e.x, e.z).let { r -> MazePads.regionAt(r[0], r[1]).takeIf { it >= 0 }?.let { w[t.name] = it } }
         }
-        where = w
-        plan = MazePlan.plan(map, w)
+        if (stale || w != where) {
+            stale = false
+            where = HashMap(w)
+            plan = MazePlan.plan(map, where)
+            buildView()
+        }
         send()
+    }
+
+    private fun buildView() {
+        val mine = plan[self]
+        val myCell = where[self]
+        val fin = map.final
+        val maybe = map.candidates()
+        val outline = fin == null && maybe.size <= 4
+        minePad = mine?.pad ?: -1
+        padKind.fill(NONE)
+        padOutlined.fill(false)
+        padLabel.fill(null)
+        for ((name, a) in plan.entries.sortedBy { it.key }) {
+            if (name == self || where[name] != myCell || a.pad == minePad) continue
+            padLabel[a.pad] = padLabel[a.pad]?.let { "$it, $name" } ?: name
+        }
+        for (p in 0 until 30) {
+            padLabelIsName[p] = padLabel[p] != null
+            padKind[p] = when {
+                p == fin -> FINAL
+                p == minePad -> NEXT
+                padLabelIsName[p] -> MATE
+                map.known(p) && p < 28 -> USED
+                else -> NONE
+            }
+            if (outline && p in maybe) padOutlined[p] = true
+            if (!padLabelIsName[p] && p < 28 && p != minePad)
+                padLabel[p] = map.partnerOf(p)?.let { q -> "→ ${if (q == MazePads.START) "start" else MazePads.label(q)}" }
+        }
+    }
+
+    private fun placePads(room: DungeonRoom) {
+        val f = frame
+        if (padsRoom === room && padsFrame === f) return
+        for (p in 0 until 30) {
+            val b = room.getRealCoords(BlockPos(MazePads.FRAMES[p][0], 69, MazePads.FRAMES[p][1]))
+            padBoxes[p] = AABB(b.x.toDouble(), b.y.toDouble(), b.z.toDouble(), b.x + 1.0, b.y + FRAME_TOP, b.z + 1.0)
+            padTops[p] = Vec3(b.x + 0.5, b.y + FRAME_TOP + 0.6, b.z + 0.5)
+            padAims[p] = Vec3(b.x + 0.5, b.y + FRAME_TOP, b.z + 0.5)
+        }
+        padsRoom = room
+        padsFrame = f
     }
 
     private fun send() {
@@ -277,7 +349,7 @@ object TeamTpMaze {
         val links = o.getAsJsonArray("links")?.mapNotNull { e -> e.asJsonArray.takeIf { it.size() == 2 }?.let { intArrayOf(it[0].asInt, it[1].asInt) } }.orEmpty()
         val exit = o.get("exit")?.asInt
         val looks = o.getAsJsonArray("looks")?.mapNotNull { e -> e.asJsonArray.takeIf { it.size() == 2 }?.let { it[0].asInt to it[1].asDouble } }?.toMap().orEmpty()
-        if (map.merge(links, exit, looks)) dirty = true
+        if (map.merge(links, exit, looks)) { dirty = true; stale = true }
         // Someone just came in: everyone sends their map (ours goes out on the next tick).
         if (o.get("hello")?.asBoolean == true) dirty = true
     }
@@ -287,33 +359,21 @@ object TeamTpMaze {
     private fun render(event: RenderExtractEvent) {
         if (!active() || DungeonUtils.currentRoomName != ROOM) return
         val room = mazeRoom ?: return
-        val mine = plan[self]
-        val myCell = where[self]
-        val fin = map.final
-        val maybe = map.candidates().toSet()
-        val mates = plan.filter { (name, a) -> name != self && where[name] == myCell && a.pad != mine?.pad }
+        placePads(room)
+        val showLabels = labels.value
         for (p in 0 until 30) {
-            val b = room.getRealCoords(BlockPos(MazePads.FRAMES[p][0], 69, MazePads.FRAMES[p][1]))
-            val box = AABB(b.x.toDouble(), b.y.toDouble(), b.z.toDouble(), b.x + 1.0, b.y + FRAME_TOP, b.z + 1.0)
-            val top = Vec3(b.x + 0.5, b.y + FRAME_TOP + 0.6, b.z + 0.5)
-            when {
-                p == fin -> event.drawFilledBox(box, finalColor.value, false)
-                p == mine?.pad -> event.drawFilledBox(box, nextColor.value, false)
-                mates.values.any { it.pad == p } -> event.drawFilledBox(box, mateColor.value, false)
-                map.known(p) && p < 28 -> event.drawFilledBox(box, usedColor.value, true)
+            val box = padBoxes[p] ?: continue
+            when (padKind[p]) {
+                FINAL -> event.drawFilledBox(box, finalColor.value, false)
+                NEXT -> event.drawFilledBox(box, nextColor.value, false)
+                MATE -> event.drawFilledBox(box, mateColor.value, false)
+                USED -> event.drawFilledBox(box, usedColor.value, true)
             }
-            if (fin == null && p in maybe && maybe.size <= 4) event.drawWireFrameBox(box, nextColor.value, 2f, false)
-            if (labels.value) {
-                val who = mates.filter { it.value.pad == p }.keys.sorted()
-                when {
-                    who.isNotEmpty() -> event.drawText(who.joinToString(", "), top, 1f, false)
-                    p < 28 && p != mine?.pad -> map.partnerOf(p)?.let { q -> event.drawText("→ ${if (q == MazePads.START) "start" else MazePads.label(q)}", top, 0.8f, true) }
-                }
+            if (padOutlined[p]) event.drawWireFrameBox(box, nextColor.value, 2f, false)
+            if (showLabels) padLabel[p]?.let { text ->
+                if (padLabelIsName[p]) event.drawText(text, padTops[p]!!, 1f, false) else event.drawText(text, padTops[p]!!, 0.8f, true)
             }
         }
-        if (tracer.value && mine != null) {
-            val b = room.getRealCoords(BlockPos(MazePads.FRAMES[mine.pad][0], 69, MazePads.FRAMES[mine.pad][1]))
-            event.drawTracer(Vec3(b.x + 0.5, b.y + FRAME_TOP, b.z + 0.5), if (mine.pad == fin) finalColor.value else nextColor.value, false)
-        }
+        if (tracer.value && minePad >= 0) padAims[minePad]?.let { event.drawTracer(it, if (padKind[minePad] == FINAL) finalColor.value else nextColor.value, false) }
     }
 }
