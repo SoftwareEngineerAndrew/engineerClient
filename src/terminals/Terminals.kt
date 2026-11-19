@@ -121,8 +121,11 @@ object Terminals : Module(
     val replaceTerminal by BooleanSetting("Replace Terminal", true, desc = "Terminal titles.").withDependency { titlesDrop }
     val replaceLever by BooleanSetting("Replace Lever", true, desc = "Lever titles.").withDependency { titlesDrop }
     val replaceDevice by BooleanSetting("Replace Device", true, desc = "Device titles.").withDependency { titlesDrop }
+    val replaceGate by BooleanSetting("Replace Gate", false, desc = "The gate's destroyed and opening titles.").withDependency { titlesDrop }
+    val phaseDone by BooleanSetting("Phase Done", false, desc = "The title that finishes a section reads Phase Done.").withDependency { titlesDrop }
+    val progressColor by BooleanSetting("Progress Color", false, desc = "{current} goes red, yellow, green as the section fills.").withDependency { titlesDrop }
     val customTitle by StringSetting("Custom Title", "&6{name} &8[&c{current}&8/&a{total}&8]", 128,
-        "{name}, {action}, {type}, {current}, {total}; & color codes.", placeholder = "&6{name} &8[&c{current}&8/&a{total}&8]").withDependency { titlesDrop }
+        "{name}, {class}, {action}, {type}, {current}, {total}; & color codes.", placeholder = "&6{name} &8[&c{current}&8/&a{total}&8]").withDependency { titlesDrop }
 
     // ------------------------------------------------------------------ Hitboxes
     private val hitboxesDrop by DropdownSetting("Hitboxes", false, desc = "Each terminal's clickable box.")
