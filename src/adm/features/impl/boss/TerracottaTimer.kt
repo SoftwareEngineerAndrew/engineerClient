@@ -2,6 +2,7 @@ package com.adm.features.impl.boss
 
 import com.adm.events.BlockUpdateEvent
 import com.adm.events.LevelEvent
+import com.adm.events.MessageEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.on
@@ -23,10 +24,11 @@ object TerracottaTimer : Module(
     // Written by block updates on the client thread and counted down on the network thread, so it is only ever swapped whole.
     @Volatile
     private var pots = emptyArray<Pot>()
+    private var giants = false
 
     init {
         on<BlockUpdateEvent> {
-            if (updated.block !is FlowerPotBlock || !DungeonUtils.inBoss) return@on
+            if (giants || updated.block !is FlowerPotBlock || !DungeonUtils.inBoss) return@on
             val floor = DungeonUtils.floor ?: return@on
             if (floor.floorNumber != 6) return@on
             val key = pos.asLong()
@@ -58,8 +60,15 @@ object TerracottaTimer : Module(
             }
         }
 
+        on<MessageEvent.Chat> {
+            if (message != "[BOSS] Sadan: ENOUGH!" || DungeonUtils.floor?.floorNumber != 6) return@on
+            giants = true
+            pots = emptyArray()
+        }
+
         on<LevelEvent.Load> {
             pots = emptyArray()
+            giants = false
         }
     }
 }
