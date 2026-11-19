@@ -68,7 +68,7 @@ object TermSounds {
         }
 
         on<MessageEvent.Chat> {
-            if (!DungeonUtils.inDungeons || !replacing) return@on
+            if (!replacing || !DungeonUtils.inDungeons) return@on
             if (gateRegex.matches(message) || coreRegex.matches(message)) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value())
         }
         EventBus.subscribe(this)
