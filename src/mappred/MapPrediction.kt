@@ -9,7 +9,9 @@ import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.events.CheckmarkUpdateEvent
 import com.adm.events.LevelEvent
+import com.adm.events.MapUpdateEvent
 import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.EventBus
@@ -141,6 +143,7 @@ object MapPrediction {
     /** The key of the view [shown] was made for: while it isn't the map's ([lastKey]), the prediction up is the one before. */
     @Volatile private var shownKey = ""
     private var lastKey = ""
+    @Volatile private var mapChanged = false
     private val generation = AtomicInteger()
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "engineerclient-map-prediction").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
 
@@ -163,7 +166,16 @@ object MapPrediction {
     fun install() {
         for (s in listOf(mode, engine, splitText, splitSecrets, chances, minChance, deadEndDropdown, deadEndChance, bloodFairyDropdown, bloodFairyChance, bigDropdown, bigChance, oneDropdown, oneChance, doorDropdown, doorChance, exactRooms, exactOpacity,
             colorsDropdown, customColors, predPuzzle, predTrap, predYellow, predRare, predBlood, predFairy, predRoom)) DungeonMap.registerSetting(s)
-        on<TickEvent.End> { if (mc.player != null && (mc.level?.gameTime ?: 0L) % 5L == 0L) EngineerClient.safely("map prediction") { update() } }
+        // map packets are read off the game thread: they only mark the map changed and the next tick updates once;
+        // the slow poll is for the tab list's puzzles and secrets, which change without the map
+        on<MapUpdateEvent> { mapChanged = true }
+        on<CheckmarkUpdateEvent> { mapChanged = true }
+        on<TickEvent.End> {
+            if (mc.player == null) return@on
+            if (!mapChanged && (mc.level?.gameTime ?: 0L) % 20L != 0L) return@on
+            mapChanged = false
+            EngineerClient.safely("map prediction") { update() }
+        }
         on<LevelEvent.Load> { reset() }
         on<MessageEvent.Chat> { if (message == "Starting in 1 second.") startAt = System.currentTimeMillis() + 1000L }
         EventBus.subscribe(this)

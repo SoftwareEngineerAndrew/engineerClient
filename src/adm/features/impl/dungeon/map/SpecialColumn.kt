@@ -37,6 +37,11 @@ object SpecialColumn {
 
     private val gridWidth: Int get() = if (DungeonScan.startX == 5) 6 else 5
 
+    // trap rooms only come on F3 and above
+    private val hasTrap: Boolean get() = (DungeonUtils.floor?.floorNumber ?: 7) >= 3
+
+    private fun specialCount(puzzles: Int) = puzzles + if (hasTrap) 2 else 1
+
     fun update() {
         val width = gridWidth
         val grid = DungeonScan.tiles
@@ -66,7 +71,7 @@ object SpecialColumn {
         }
 
         discoveredFullSpecialColumn = when {
-            discovered1x1s == DungeonUtils.puzzleCount + 2 -> width
+            discovered1x1s == specialCount(DungeonUtils.puzzleCount) -> width
             column != -1 -> unseenInColumn(width)
             else -> 0
         }
@@ -159,8 +164,11 @@ object SpecialColumn {
         }
         val puzzleTotal = DungeonUtils.puzzleCount
         val allowed = (if (champions == 0) 1 shl CHAMPION else 0) or
-            (if (traps == 0) 1 shl TRAP else 0) or
+            (if (traps == 0 && hasTrap) 1 shl TRAP else 0) or
             (if (puzzles < puzzleTotal) 1 shl PUZZLE else 0)
+
+        // one special room left unopened: it is whichever kind is still missing
+        if (puzzleTotal > 0 && champions + traps + puzzles == specialCount(puzzleTotal) - 1) return narrow(allowed, CHAMPION, TRAP, PUZZLE)
 
         val inSpecial = if (column != -1 && columnRoomCount == 0) 1 else columnRoomCount
 
