@@ -52,6 +52,9 @@ import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.client.multiplayer.chat.GuiMessage
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.Style
+import net.minecraft.client.gui.font.glyphs.BakedGlyph
+import com.mojang.blaze3d.font.GlyphInfo
 import net.minecraft.network.chat.contents.TranslatableContents
 import net.minecraft.resources.Identifier
 import net.minecraft.util.FormattedCharSequence
@@ -84,6 +87,7 @@ object Visibility : Module(
     private val noFog by BooleanSetting("No Fog", false, desc = "No world fog; lava, water, blindness and darkness fog stay.").withDependency { screenDropdown }
     private val fullbright by BooleanSetting("Fullbright", false, desc = "Everything fully lit.").withDependency { screenDropdown }
     private val noTextShadow by BooleanSetting("No Text Shadow", false, desc = "Text is drawn without its shadow.").withDependency { screenDropdown }
+    private val fixObfuscated by BooleanSetting("Fix Obfuscated Text", false, desc = "Scrambled text keeps its width instead of jittering.").withDependency { screenDropdown }
     private val noPaneHighlight by BooleanSetting("No Glass Pane Highlight", false, desc = "No hover highlight on unnamed glass panes in menus.").withDependency { screenDropdown }
     private val hideOffhandBackground by BooleanSetting("Hide Offhand Slot Background", false, desc = "No shield outline in the empty offhand slot.").withDependency { screenDropdown }
     private val darkMode by BooleanSetting("Dark Mode", false, desc = "Darkens the screen.").withDependency { screenDropdown }
@@ -105,6 +109,8 @@ object Visibility : Module(
     private val noDropAnimation by BooleanSetting("No Drop Animation", false, desc = "In dungeons, a rejected drop leaves the held item raised.").withDependency { screenDropdown }
     private val lavaAsWater by BooleanSetting("Lava As Water", false, desc = "Lava looks like water.").withDependency { screenDropdown }
     private val hidePortalOverlay by BooleanSetting("Hide Portal Overlay", false, desc = "No purple overlay inside a nether portal.").withDependency { screenDropdown }
+    private val noBlindness by BooleanSetting("Disable Blindness", false, desc = "No blindness fog or blacked out sky.").withDependency { screenDropdown }
+    private val noNausea by BooleanSetting("Disable Nausea", false, desc = "No nausea screen warp or overlay.").withDependency { screenDropdown }
 
     private val cleanupDropdown by DropdownSetting("Cleanup", desc = "Particles, entities and players that clutter the screen.")
     private val hideAllParticles by BooleanSetting("Hide All Particles", false, desc = "No particles at all.").withDependency { cleanupDropdown }
@@ -170,7 +176,7 @@ object Visibility : Module(
 
     private val chatDropdown by DropdownSetting("Chat", desc = "Chat history, stacking, copying and hiding.")
     private val removeLimit by BooleanSetting("Remove Chat Limit", false, desc = "Keeps more than vanilla's 100 chat lines.").withDependency { chatDropdown }
-    private val maxMessages by NumberSetting("Max Messages", 10000, 100..100000, 100, desc = "How many lines the chat keeps.").withDependency { chatDropdown && removeLimit }
+    private val maxMessages by NumberSetting("Max Messages", 10000, 100..10000, 100, desc = "How many lines the chat keeps; high values slow chat resizing.").withDependency { chatDropdown && removeLimit }
     private val compactChat by BooleanSetting("Compact Chat", false, desc = "A message repeated within the last 100 replaces its older copy, with a count.").withDependency { chatDropdown }
     private val hideEmpty by BooleanSetting("Hide Empty Messages", false, desc = "Drops chat lines with nothing but spaces.").withDependency { chatDropdown }
     private val compactHoppity by BooleanSetting("Compact Hoppity Messages", true, desc = "Joins the two lines of a Hoppity rabbit find into one.").withDependency { chatDropdown }
@@ -271,7 +277,7 @@ object Visibility : Module(
         }
 
         on<EntityEvent.SetItemSlot> {
-            if (hideBoneShield && stack.item == Items.BONE && entity is net.minecraft.world.entity.decoration.ArmorStand) {
+            if (hideBoneShield && stack.item == Items.BONE && entity is net.minecraft.world.entity.decoration.ArmorStand && DungeonUtils.inDungeons) {
                 entity.remove(Entity.RemovalReason.DISCARDED)
                 return@on
             }
@@ -312,10 +318,29 @@ object Visibility : Module(
         if (!enabled || !noFog) return false
         val player = mc.player ?: return true
         return mc.gameRenderer.mainCamera().fluidInCamera == FogType.NONE &&
-            !player.hasEffect(MobEffects.BLINDNESS) && !player.hasEffect(MobEffects.DARKNESS)
+            (noBlindness || !player.hasEffect(MobEffects.BLINDNESS)) && !player.hasEffect(MobEffects.DARKNESS)
     }
+    @JvmStatic fun hidesBlindness() = enabled && noBlindness
+    @JvmStatic fun hidesNausea() = enabled && noNausea
     fun fullbright() = enabled && fullbright
     fun noTextShadow() = enabled && noTextShadow
+
+    private class KeptAdvance(val glyph: BakedGlyph, val width: GlyphInfo) : BakedGlyph {
+        override fun info() = width
+        override fun createGlyph(x: Float, y: Float, color: Int, shadowColor: Int, style: Style, boldOffset: Float, shadowOffset: Float) =
+            glyph.createGlyph(x, y, color, shadowColor, style, boldOffset, shadowOffset)
+    }
+    private val keptAdvance = java.util.concurrent.ConcurrentHashMap<BakedGlyph, java.util.concurrent.ConcurrentHashMap<GlyphInfo, BakedGlyph>>()
+
+    // Vanilla picks a glyph of the same rounded width, so a fractional or missing width makes the line jump around.
+    @JvmStatic fun obfuscatedGlyph(random: BakedGlyph, original: BakedGlyph): BakedGlyph {
+        if (!enabled || !fixObfuscated) return random
+        val info = original.info()
+        if (random.info().getAdvance(false) == info.getAdvance(false)) return random
+        if (keptAdvance.size > 4096) keptAdvance.clear()
+        val byInfo = keptAdvance[random] ?: java.util.concurrent.ConcurrentHashMap<GlyphInfo, BakedGlyph>().also { keptAdvance[random] = it }
+        return byInfo[info] ?: KeptAdvance(random, info).also { byInfo[info] = it }
+    }
 
     @JvmStatic fun highlightsSlot(slot: Slot): Boolean = !enabled || !noPaneHighlight || !isFillerPane(slot.item)
 
