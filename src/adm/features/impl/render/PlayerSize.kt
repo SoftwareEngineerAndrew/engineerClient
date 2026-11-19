@@ -40,6 +40,7 @@ object PlayerSize : Module(
             x = sizeX; y = sizeY; z = sizeZ
         } else {
             if (!customSizes) return
+            refreshCustomSizes()
             val custom = customSizeById[id] ?: return
             x = custom.sizeX; y = custom.sizeY; z = custom.sizeZ
         }
@@ -61,10 +62,15 @@ object PlayerSize : Module(
         }.toMap()
     }
 
-    init {
-        AdmMod.scope.launch {
-            loadCustomSizes()
-        }
+    private const val REFRESH_MS = 30 * 60_000L
+    private var fetchedAt = 0L
+
+    // Fetched only once another player is drawn with Show Custom Sizes on, then every half hour.
+    private fun refreshCustomSizes() {
+        val now = System.currentTimeMillis()
+        if (fetchedAt != 0L && now - fetchedAt < REFRESH_MS) return
+        fetchedAt = now
+        AdmMod.scope.launch { loadCustomSizes() }
     }
 
     @JvmStatic
