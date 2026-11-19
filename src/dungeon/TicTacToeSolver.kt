@@ -152,10 +152,14 @@ object TicTacToeSolver {
         lastBoard = now
 
         if (frames.size == 8) {
-            if (!won(now, 'X')) done()
+            if (!won(now, 'X')) {
+                done()
+                PuzzleSolvers.onPuzzleComplete("Tic Tac Toe")
+            }
             clear()
             return
         }
+        if (won(now, 'O')) PuzzleSolvers.onPuzzleComplete("Tic Tac Toe")
         val origin = corner
         if (origin == null || frames.isEmpty() || won(now, 'X') || won(now, 'O')) { clear(); return }
 

@@ -211,7 +211,9 @@ object PuzzleSolvers : Module(
         on<MessageEvent.Chat> {
             if (!DungeonUtils.inClear) return@on
             if (draft && isInPuzzle) failRegex.find(message)?.let {
-                if (draftMode == DraftMode.AUTO) sendCommand(DRAFT_COMMAND)
+                val failer = it.groupValues[1].ifEmpty { it.groupValues[2] }
+                // Only your own fail pulls a draft from your sacks; a teammate's still gets the prompt.
+                if (draftMode == DraftMode.AUTO && failer == mc.player?.gameProfile?.name) sendCommand(DRAFT_COMMAND)
                 else modMessage("§7Click §ehere §7to fetch architect's draft", chatStyle = Style.EMPTY
                     .withClickEvent(ClickEvent.RunCommand(DRAFT_COMMAND))
                     .withHoverEvent(HoverEvent.ShowText(Component.literal("Click to fetch the architect's draft"))))
@@ -230,6 +232,7 @@ object PuzzleSolvers : Module(
                 "Teleport Maze" -> pos == room.getRealCoords(BlockPos(15, 70, 20))
                 "Water Board"   -> pos == room.getRealCoords(BlockPos(15, 56, 22))
                 "Boulder"       -> pos == room.getRealCoords(BlockPos(15, 66, 29))
+                "Ice Path"      -> pos == room.getRealCoords(BlockPos(15, 67, 28))
                 else            -> false
             }.takeIf { !it } ?: onPuzzleComplete(room.data?.name ?: return@onReceive)
         }
