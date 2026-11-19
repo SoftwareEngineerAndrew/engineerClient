@@ -67,6 +67,8 @@ object TermStatus {
     private var gate = false
     private var section = 1
     private var levers = 0
+    private var wasOn = false
+    private var namesHidden = false
 
     private val completedRegex = Regex("^(.{1,16}) (activated|completed) a (terminal|lever|device)! \\((\\d)/(\\d)\\)$")
     private val goldorRegex = Regex("^\\[BOSS] Goldor: Who dares trespass into my domain\\?$")
@@ -107,9 +109,9 @@ object TermStatus {
 
     fun install() {
         on<EntityEvent.SetData> {
-            if (DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            if (!Terminals.statusOn) return@on
             val stand = entity as? ArmorStand ?: return@on
-            Kind.of(stand.name.string)?.let { inactive[stand] = it } ?: inactive.remove(stand)
+            if (DungeonUtils.getF7Phase() == M7Phases.P3) track(stand)
         }
         on<EntityEvent.Remove> { (entity as? ArmorStand)?.let { inactive.remove(it) } }
 
@@ -139,12 +141,20 @@ object TermStatus {
         on<LevelEvent.Load> { inactive.clear(); shouldRender = false; resetState() }
 
         on<RenderExtractEvent> {
-            if (inactive.isEmpty() || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
-            // Set back every frame, so turning Status or Hide Default Names off shows Hypixel's names again at once.
-            val hide = Terminals.statusOn && Terminals.hideDefaultNames
+            val on = Terminals.statusOn
+            if (on != wasOn) {
+                wasOn = on
+                // Stands named while Status was off were never tracked.
+                if (on && DungeonUtils.getF7Phase() == M7Phases.P3) mc.level?.entitiesForRendering()?.forEach { (it as? ArmorStand)?.let(::track) }
+            }
+            if (inactive.isEmpty()) return@on
+            val hide = on && Terminals.hideDefaultNames
+            if (hide != namesHidden) {
+                namesHidden = hide
+                for (stand in inactive.keys) stand.isCustomNameVisible = !hide
+            }
+            if (!on || !Terminals.waypoints || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             inactive.forEach { (stand, kind) ->
-                stand.isCustomNameVisible = !hide
-                if (!Terminals.statusOn || !Terminals.waypoints) return@forEach
                 val label = kind.label?.takeIf { kind.shown } ?: return@forEach
                 val look = Terminals.waypointStyle
                 if (look.box) {
@@ -156,6 +166,12 @@ object TermStatus {
             }
         }
         EventBus.subscribe(this)
+    }
+
+    private fun track(stand: ArmorStand) {
+        val kind = Kind.of(stand.name.string) ?: return run { inactive.remove(stand) }
+        inactive[stand] = kind
+        if (Terminals.hideDefaultNames) stand.isCustomNameVisible = false
     }
 
     private fun resetState() {
