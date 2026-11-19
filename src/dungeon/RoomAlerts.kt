@@ -41,7 +41,7 @@ object RoomAlerts {
         on<CheckmarkUpdateEvent> {
             val room = room; val mark = checkmark
             val before = marks.put(room, mark)
-            mc.execute { onMark(room, before, mark) }
+            if (ClearInfo.roomAlertsOn) mc.execute { onMark(room, before, mark) }
         }
         on<LevelEvent.Load> { marks.clear() }
         EventBus.subscribe(this)
@@ -73,6 +73,7 @@ object RoomAlerts {
 
     /** The screen's edges in the alert's color, fading out over the display time. */
     private fun drawVignette(gfx: GuiGraphicsExtractor) {
+        if (vignetteMs == 0L) return
         val left = vignetteMs - (System.currentTimeMillis() - vignetteStart)
         if (left <= 0) return
         com.engineerclient.render.Vignette.draw(gfx, vignetteColor, (140f * left / vignetteMs).toInt())
