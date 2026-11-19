@@ -29,9 +29,10 @@ object Highlight : Module(
     private val teammateBox by BooleanSetting("Teammate Highlight", false, desc = "Outlines dungeon teammates in their class colour, through walls.")
     private val teammateName by BooleanSetting("Teammate Class Name", false, desc = "Shows each teammate's name and class letter above them, through walls.")
 
+    // Minibosses stay: an unstarred one is still a fight worth seeing. Blood mob names share none of these words.
     private val clearMobNames = arrayOf(
         "Lurker", "Dreadlord", "Souleater", "Zombie", "Skeleton", "Skeletor", "Sniper", "Super Archer", "Spider", "Fels",
-        "Withermancer", "Lost Adventurer", "Angry Archaeologist", "Frozen Adventurer",
+        "Withermancer",
     )
     private val starredTag = Regex("^.*✯ .*\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?.?❤$")
     private val plainMobTag = NameMemo { name ->
