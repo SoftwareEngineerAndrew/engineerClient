@@ -45,13 +45,23 @@ object Refill : Module(
     private var sent: Pending? = null
     private var wait = 0
     private val movedRegex = Regex("Moved \\d+.+ from your Sacks to your inventory")
+    private val emptyRegex = Regex("^You have no (.+) in your Sacks!$")
 
     init {
         for (i in items) { registerSetting(i.enabled); registerSetting(i.amount) }
 
         ClientTickEvents.END_CLIENT_TICK.register { tick() }
         ClientReceiveMessageEvents.GAME.register { message, overlay ->
-            if (!overlay && sent != null && movedRegex.containsMatchIn(ChatFormatting.stripFormatting(message.string) ?: "")) { sent = null; wait = GAP }
+            val p = sent
+            if (overlay || p == null) return@register
+            val text = ChatFormatting.stripFormatting(message.string) ?: ""
+            if (movedRegex.containsMatchIn(text)) { sent = null; wait = GAP; return@register }
+            val none = emptyRegex.matchEntire(text)?.groupValues?.get(1) ?: return@register
+            if (!p.item.name.startsWith(none)) return@register
+            sent = null
+            wait = GAP
+            queue.removeAll { it.item === p.item }
+            EngineerClient.msg("§cNo ${p.item.name} left in your sacks.")
         }
 
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
