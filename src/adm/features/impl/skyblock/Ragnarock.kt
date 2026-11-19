@@ -13,6 +13,7 @@ import com.adm.features.impl.boss.WitherDragons
 import com.adm.utils.Colors
 import com.adm.utils.alert
 import com.adm.utils.itemId
+import com.adm.utils.loreString
 import com.adm.utils.modMessage
 import com.adm.utils.sendCommand
 import com.adm.utils.render.textDim
@@ -45,6 +46,7 @@ object Ragnarock : Module(
     private var tick = 0L
     private var castStart = -1L
     private var buffStart = -1L
+    private var readyAt = 0L
 
     private fun hudText(): String? {
         if (castStart >= 0) return "§eRag: §fcasting ${((CHANNEL_TICKS - (tick - castStart)).coerceAtLeast(0) / 20f).toFixed(2)}s"
@@ -56,7 +58,8 @@ object Ragnarock : Module(
         return if (lead > 0) "§6Rag in §f${(lead / 20f).toFixed(2)}s" else "§aRag now!"
     }
 
-    private val cooldownLine = Regex("^This ability is on cooldown for \\d+s\\.$")
+    private val cooldownLine = Regex("^This ability is on cooldown for (\\d+)s\\.$")
+    private val cooldownLore = Regex("Cooldown: (\\d+)s")
 
     private const val CAST_PITCH = 1.4920635f
 
@@ -73,12 +76,19 @@ object Ragnarock : Module(
                 castStart = -1
                 if (cancelAlert) alert("§cRagnarock Cancelled!")
             }
-            // On cooldown the use is refused: no channel started
-            if (castStart >= 0 && cooldownLine.matches(message)) castStart = -1
+            cooldownLine.matchEntire(message)?.let {
+                castStart = -1
+                readyAt = tick + it.groupValues[1].toLong() * 20
+            }
         }
 
         onSend<ServerboundUseItemPacket> {
-            if (castStart < 0 && buffStart < 0 && mc.player?.mainHandItem?.itemId == "RAGNAROCK_AXE") castStart = tick
+            val held = mc.player?.mainHandItem ?: return@onSend
+            if (castStart >= 0 || buffStart >= 0 || tick < readyAt || held.itemId != "RAGNAROCK_AXE") return@onSend
+            castStart = tick
+            // a second short, so a cooldown reduction never hides a real cast
+            val cooldown = held.loreString.firstNotNullOfOrNull { cooldownLore.find(it)?.groupValues?.get(1)?.toLongOrNull() } ?: 0L
+            readyAt = tick + (cooldown - 1).coerceAtLeast(0) * 20
         }
 
         on<TickEvent.Server> {
