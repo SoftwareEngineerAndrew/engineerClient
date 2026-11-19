@@ -32,6 +32,7 @@ import com.adm.features.impl.dungeon.SecretClicked
 import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.features.impl.dungeon.map.WorldScan
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.features.impl.dungeon.map.tile.MapCheckmark
 import com.adm.features.impl.dungeon.map.tile.RoomShape
 import com.adm.features.impl.dungeon.map.tile.RoomType
 import com.adm.utils.Color
@@ -46,6 +47,7 @@ import net.minecraft.world.level.chunk.LevelChunk
 import net.minecraft.world.level.chunk.status.ChunkStatus
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
+import java.util.IdentityHashMap
 import java.util.concurrent.CompletableFuture
 import kotlin.math.abs
 
@@ -66,6 +68,7 @@ object SecretWaypoints {
     private val hideCollected = BooleanSetting("Hide Collected", true, desc = "Removes a secret once it is taken.").withDependency { dropdown.value && show.value }
     private val throughWalls = BooleanSetting("Secret Through Walls", true, desc = "Draws them through walls.").withDependency { dropdown.value && show.value }
     private val currentRoomOnly = BooleanSetting("Current Room Only", true, desc = "Only the secrets of the room you're in.").withDependency { dropdown.value && show.value }
+    private val hideGreen = BooleanSetting("Hide Green Rooms", true, desc = "No waypoints in a room whose checkmark is green.").withDependency { dropdown.value && show.value }
 
     enum class Style(private val label: String) { CELL("Devonian"), OUTLINE("Outline"), FILLED_OUTLINE("Filled Outline"), FULL_BLOCK("Full Block"); override fun toString() = label }
 
@@ -78,7 +81,13 @@ object SecretWaypoints {
     private var loading = false
     private val roomsPack: RoomPack? get() = KnownWorld.roomPack ?: Packs.current?.rooms ?: ownPack
 
+    // A room's spots stay until its rotation, clay, tiles, core or the pack change.
+    private class RoomSpots(val room: DungeonRoom, val rotation: Any?, val clay: Boolean, val tiles: Int, val core: Int?, val pack: RoomPack, val spots: List<Spot>)
+
+    private const val CULL = 64.0
     private val placed = HashMap<String, List<Spot>>()
+    private val byRoom = IdentityHashMap<DungeonRoom, RoomSpots>()
+    private val shown = ArrayList<RoomSpots>()
     private var spots: List<Spot> = emptyList()
     private val collected = HashSet<BlockPos>()
     private val cores = HashMap<Pair<Int, Int>, Int>()
@@ -88,10 +97,10 @@ object SecretWaypoints {
     private var lastRoom: DungeonRoom? = null
 
     fun install() {
-        for (s in listOf(dropdown, show, style, lineWidth, fillOpacity, smallBoxes, chestColor, itemColor, essenceColor, batColor, keyColor, leverColor, text, hideCollected, throughWalls, currentRoomOnly))
+        for (s in listOf(dropdown, show, style, lineWidth, fillOpacity, smallBoxes, chestColor, itemColor, essenceColor, batColor, keyColor, leverColor, text, hideCollected, throughWalls, currentRoomOnly, hideGreen))
             SecretClicked.registerSetting(s)
 
-        on<LevelEvent.Load> { placed.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null; lastRoom = null }
+        on<LevelEvent.Load> { placed.clear(); byRoom.clear(); shown.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null; lastRoom = null }
 
         on<TickEvent.End> {
             if (!active()) return@on
@@ -100,8 +109,7 @@ object SecretWaypoints {
             if (++ticks % 10 != 0 && room === lastRoom) return@on
             lastRoom = room
             val pack = roomsPack ?: return@on load()
-            val rooms = if (currentRoomOnly.value) listOfNotNull(room) else DungeonScan.rooms.distinct()
-            EngineerClient.safely("secret waypoints") { spots = rooms.flatMap { spotsOf(it, pack) } }
+            EngineerClient.safely("secret waypoints") { refresh(room, pack) }
         }
 
         on<SecretPickupEvent.Interact> {
@@ -126,33 +134,62 @@ object SecretWaypoints {
             val width = lineWidth.value.toFloat()
             val fill = fillOpacity.value / 255f
             val cam = EngineerClient.mc.gameRenderer.mainCamera().position()
-            for (s in spots) {
-                if (hideCollected.value && s.pos in collected) continue
-                val c = colorOf(s.kind)
-                val box = if (smallBoxes.value) s.box else AABB(s.pos)
-                when (st) {
-                    Style.CELL, Style.OUTLINE -> drawWireFrameBox(box, c, width, depth)
-                    Style.FILLED_OUTLINE -> {
-                        drawFilledBox(box, c.multiplyAlpha(fill), depth)
-                        drawWireFrameBox(box, c, width, depth)
+            val cull = !currentRoomOnly.value
+            for (i in shown.indices) {
+                val r = shown[i]
+                if (hideGreen.value && r.room.checkmark == MapCheckmark.GREEN) continue
+                for (s in r.spots) {
+                    if (hideCollected.value && s.pos in collected) continue
+                    if (cull) {
+                        val dx = s.pos.x + 0.5 - cam.x; val dz = s.pos.z + 0.5 - cam.z
+                        if (dx * dx + dz * dz > CULL * CULL) continue
                     }
-                    Style.FULL_BLOCK -> {
-                        drawFilledBox(box, c.multiplyAlpha(0.3f), depth)
-                        drawWireFrameBox(box, c, 2f, depth)
+                    val c = colorOf(s.kind)
+                    val box = if (smallBoxes.value) s.box else AABB(s.pos)
+                    when (st) {
+                        Style.CELL, Style.OUTLINE -> drawWireFrameBox(box, c, width, depth)
+                        Style.FILLED_OUTLINE -> {
+                            drawFilledBox(box, c.multiplyAlpha(fill), depth)
+                            drawWireFrameBox(box, c, width, depth)
+                        }
+                        Style.FULL_BLOCK -> {
+                            drawFilledBox(box, c.multiplyAlpha(0.3f), depth)
+                            drawWireFrameBox(box, c, 2f, depth)
+                        }
                     }
+                    if (!text.value) continue
+                    if (st == Style.CELL) {
+                        // Past 20 blocks the label grows with distance so it keeps its size on screen.
+                        val at = Vec3(s.pos.x + 0.5, s.pos.y + 1.0, s.pos.z + 0.5)
+                        drawText(s.kind.tag, at, 2f * maxOf(1.0, at.distanceTo(cam) / 20.0).toFloat(), depth)
+                    } else drawText(s.kind.label, Vec3(box.center.x, box.maxY + 0.3, box.center.z), 1f, depth)
                 }
-                if (!text.value) continue
-                if (st == Style.CELL) {
-                    // Past 20 blocks the label grows with distance so it keeps its size on screen.
-                    val at = Vec3(s.pos.x + 0.5, s.pos.y + 1.0, s.pos.z + 0.5)
-                    drawText(s.kind.tag, at, 2f * maxOf(1.0, at.distanceTo(cam) / 20.0).toFloat(), depth)
-                } else drawText(s.kind.label, Vec3(box.center.x, box.maxY + 0.3, box.center.z), 1f, depth)
             }
         }
         EventBus.subscribe(this)
     }
 
     private fun active() = SecretClicked.enabled && show.value && DungeonUtils.inClear
+
+    private fun refresh(here: DungeonRoom?, pack: RoomPack) {
+        var changed = false
+        var n = 0
+        fun add(room: DungeonRoom) {
+            for (i in 0 until n) if (shown[i].room === room) return
+            var e = byRoom[room]
+            val clay = room.clayPos != null
+            if (e == null || e.rotation !== room.rotation || e.clay != clay || e.tiles != room.tiles.size || e.pack !== pack || (e.core == null && core(room) != null)) {
+                e = RoomSpots(room, room.rotation, clay, room.tiles.size, core(room), pack, spotsOf(room, pack))
+                byRoom[room] = e
+                changed = true
+            }
+            if (n < shown.size) { if (shown[n] !== e) { shown[n] = e; changed = true } } else { shown.add(e); changed = true }
+            n++
+        }
+        if (currentRoomOnly.value) here?.let(::add) else for (room in DungeonScan.rooms) add(room)
+        while (shown.size > n) { shown.removeAt(shown.size - 1); changed = true }
+        if (changed) spots = shown.flatMap { it.spots }
+    }
 
     /** Where [room]'s secret chests are (empty until the rooms pack is in). */
     fun chestSpots(room: DungeonRoom): List<BlockPos> {
