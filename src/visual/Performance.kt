@@ -19,6 +19,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.chat.Component
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 object Performance : Module(
     name = "Performance",
@@ -39,8 +40,10 @@ object Performance : Module(
     private val showFPS by BooleanSetting("Show FPS", true, desc = "Shows the FPS in the HUD.")
     private val showTPS by BooleanSetting("Show TPS", true, desc = "Shows the TPS in the HUD.")
     private val showPing by BooleanSetting("Show Ping", true, desc = "Shows the ping in the HUD.")
+    private val colorPing by BooleanSetting("Color Ping", false, desc = "Colors the ping green, yellow or red by how high it is.")
 
     private val seconds by BooleanSetting("Show Seconds", false, desc = "Adds seconds to the clock.")
+    private val twelveHour by BooleanSetting("12 Hour Clock", false, desc = "Shows the clock as 12-hour time with AM/PM.")
     private val clockColor by ColorSetting("Clock Color", Color(255, 134, 0, 1f), false, desc = "Colour of the clock.")
     private val cpsLabelPosition by SelectorSetting("CPS Label Position", LabelPosition.RIGHT, desc = "Where the CPS label goes.")
     private val cpsNumberColor by ColorSetting("CPS Number Color", Color(255, 255, 255, 1f), false, desc = "Colour of the click counts.")
@@ -62,6 +65,8 @@ object Performance : Module(
 
     private val clockFormat = DateTimeFormatter.ofPattern("HH:mm")
     private val clockFormatSeconds = DateTimeFormatter.ofPattern("HH:mm:ss")
+    private val clockFormat12 = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
+    private val clockFormat12Seconds = DateTimeFormatter.ofPattern("h:mm:ss a", Locale.ENGLISH)
 
     private val leftClicks = ClickWindow()
     private val rightClicks = ClickWindow()
@@ -79,7 +84,7 @@ object Performance : Module(
                 1 -> if (showFPS) fpsText(mc.fps.toDouble()) else continue
                 else -> if (showPing) pingText(ServerUtils.averagePing.toDouble()) else continue
             }
-            val w = metric(metricLabels[i], value, x, y)
+            val w = metric(metricLabels[i], value, x, y, if (i == 2 && colorPing) pingColor(ServerUtils.averagePing) else valueColor)
             if (vertical) {
                 if (w > widest) widest = w
                 y += lineHeight
@@ -111,11 +116,17 @@ object Performance : Module(
 
     private val metricLabels = arrayOf("TPS: ", "FPS: ", "Ping: ")
 
-    private fun GuiGraphicsExtractor.metric(name: String, value: String, x: Int, y: Int): Int {
+    private fun pingColor(ping: Int): Color = when {
+        ping < 100 -> Colors.MINECRAFT_GREEN
+        ping < 200 -> Colors.MINECRAFT_YELLOW
+        else -> Colors.MINECRAFT_RED
+    }
+
+    private fun GuiGraphicsExtractor.metric(name: String, value: String, x: Int, y: Int, color: Color): Int {
         val font = mc.font
         text(name, x, y, nameColor, true)
         val nameWidth = font.width(name)
-        text(value, x + nameWidth, y, valueColor, true)
+        text(value, x + nameWidth, y, color, true)
         return nameWidth + font.width(value)
     }
 
@@ -133,16 +144,20 @@ object Performance : Module(
 
     private var clockSecond = Long.MIN_VALUE
     private var clockWithSeconds = false
+    private var clockTwelveHour = false
     private var clockLine = ""
     private var clockSize = 0 to 9
 
     private fun refreshClock() {
         val second = Math.floorDiv(System.currentTimeMillis(), 1000L)
         val withSeconds = seconds
-        if (second == clockSecond && withSeconds == clockWithSeconds) return
+        val twelve = twelveHour
+        if (second == clockSecond && withSeconds == clockWithSeconds && twelve == clockTwelveHour) return
         clockSecond = second
         clockWithSeconds = withSeconds
-        val line = LocalTime.now().format(if (withSeconds) clockFormatSeconds else clockFormat)
+        clockTwelveHour = twelve
+        val format = if (twelve) (if (withSeconds) clockFormat12Seconds else clockFormat12) else if (withSeconds) clockFormatSeconds else clockFormat
+        val line = LocalTime.now().format(format)
         if (line == clockLine) return
         clockLine = line
         clockSize = mc.font.width(line) to 9
