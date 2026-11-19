@@ -10,6 +10,7 @@ import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.SecretClicked
 import com.adm.utils.playSoundSettings
+import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.world.entity.item.ItemEntity
 
 object InstantChime {
@@ -37,7 +38,7 @@ object InstantChime {
         SecretClicked.registerSetting(instant)
         on<LevelEvent.Load> { chimed.clear() }
         on<TickEvent.End> {
-            if (!instant.value || !chimeOn()) return@on
+            if (!instant.value || !DungeonUtils.inClear || !chimeOn()) return@on
             val player = EngineerClient.mc.player ?: return@on
             val level = EngineerClient.mc.level ?: return@on
             val reach = player.boundingBox.inflate(1.0, 0.5, 1.0)

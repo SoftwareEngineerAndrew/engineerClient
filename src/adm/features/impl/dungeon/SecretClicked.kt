@@ -39,6 +39,8 @@ object SecretClicked : Module(
     private val chime by BooleanSetting("Secret Chime", true, desc = "Whether or not to play a sound when a secret is clicked.").withDependency { clickedDropdown }
     private val soundSettings = createSoundSettings("Chime Sound", "entity.blaze.hurt") { clickedDropdown && chime }
     private val chimeInBoss by BooleanSetting("Chime In Boss", false, desc = "Prevent playing the sound if in boss room.").withDependency { clickedDropdown && chime }
+    private val lockedSound by BooleanSetting("Locked Sound", false, desc = "Plays a sound when a chest is locked.").withDependency { clickedDropdown }
+    private val lockedSoundSettings = createSoundSettings("Locked Chest Sound", "entity.villager.no") { clickedDropdown && lockedSound }
 
     // Not a data class: each box removes itself, not an equal one from a later run.
     private class Secret(val aabb: AABB, var locked: Boolean = false)
@@ -68,7 +70,10 @@ object SecretClicked : Module(
         }
 
         on<MessageEvent.Chat> {
-            if (message == "That chest is locked!") clickedSecretsList.lastOrNull()?.locked = true
+            if (message != "That chest is locked!") return@on
+            val pos = lastInteract
+            (pos?.let { p -> clickedSecretsList.lastOrNull { it.aabb.intersects(p) } } ?: clickedSecretsList.lastOrNull())?.locked = true
+            if (lockedSound && DungeonUtils.inDungeons) playSoundSettings(lockedSoundSettings())
         }
 
         on<RenderExtractEvent> {
