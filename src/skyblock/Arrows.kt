@@ -4,10 +4,14 @@ import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.SetSlotEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.on
+import com.adm.events.core.onReceive
+import com.adm.utils.alert
 import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.Colors
@@ -21,6 +25,7 @@ import net.minecraft.client.resources.sounds.SoundInstance
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.Style
 import net.minecraft.network.chat.TextColor
+import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket
 import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.util.FormattedCharSequence
@@ -48,6 +53,7 @@ object Arrows : Module(
         text(text, 0, 0)
         quiverSize
     }.withDependency { quiverDropdown && quiverDisplay }
+    private val lowArrows by NumberSetting("Low Arrow Alert", 0, 0..2880, 32, desc = "A title when the quiver drops below this; 0 is off.").withDependency { quiverDropdown }
     private val swapHud by HUD("Arrow Swap Title", "Shows your new arrow type when you swap arrows.", true, 400, 110, 2f) { example ->
         if (example) {
             text(mc.font, exampleSwap, 0, 0, -1)
@@ -75,6 +81,7 @@ object Arrows : Module(
     private var ticks = 0
     private var quiverName: Component? = null
     private var quiverCount = ""
+    private var lowAlerted = false
 
     private val exampleName = Component.literal("Flint Arrow")
     private val exampleSwap = Component.literal("§aToxic Arrow Poison")
@@ -114,15 +121,43 @@ object Arrows : Module(
         }
 
         on<SetSlotEvent> {
-            if (slotIndex != (if (DungeonUtils.inClear) 9 else 44) || (itemStack.item != Items.FEATHER && itemStack.item != Items.ARROW)) return@on
-
-            for (lore in itemStack.lore) {
-                val count = arrowRegex.matchEntire(lore.string)?.groupValues?.get(1) ?: continue
-                quiverName = itemStack.hoverName
-                quiverCount = count
-                return@on
-            }
+            if (slotIndex == quiverSlot()) readQuiver(itemStack)
         }
+
+        // A warp or join sends the whole inventory at once, not slot by slot.
+        onReceive<ClientboundContainerSetContentPacket> {
+            if (containerId() != 0 || (!quiverDisplay && lowArrows <= 0)) return@onReceive
+            val stack = items().getOrNull(quiverSlot()) ?: return@onReceive
+            mc.execute { readQuiver(stack) }
+        }
+
+        on<LevelEvent.Load> {
+            quiverName = null
+            quiverCount = ""
+        }
+    }
+
+    private fun quiverSlot() = if (DungeonUtils.inClear) 9 else 44
+
+    private fun readQuiver(stack: ItemStack) {
+        if (stack.item != Items.FEATHER && stack.item != Items.ARROW) return
+        for (lore in stack.lore) {
+            val count = arrowRegex.matchEntire(lore.string)?.groupValues?.get(1) ?: continue
+            quiverName = stack.hoverName
+            if (count != quiverCount) {
+                quiverCount = count
+                checkLow(count.replace(",", "").toIntOrNull() ?: return)
+            }
+            return
+        }
+    }
+
+    private fun checkLow(count: Int) {
+        val threshold = lowArrows
+        if (threshold <= 0 || count >= threshold) { lowAlerted = false; return }
+        if (lowAlerted) return
+        lowAlerted = true
+        alert("§cLow Arrows! §f$count left")
     }
 
     fun clears(item: ItemStack?): Boolean {
