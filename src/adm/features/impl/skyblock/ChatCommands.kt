@@ -4,6 +4,8 @@ import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.clickgui.settings.impl.StringSetting
 import com.adm.events.MessageEvent
 import com.adm.events.MessageSentEvent
 import com.adm.events.core.on
@@ -57,6 +59,22 @@ object ChatCommands : Module(
     private val kickOffline by BooleanSetting("Kick Offline", desc = "Allows you to kick offline players.").withDependency { showSettings && kick }
     private val location by BooleanSetting("Location", true, desc = "Sends your current location.").withDependency { showSettings }
     private val holding by BooleanSetting("Holding", true, desc = "Sends the item you are holding.").withDependency { showSettings }
+
+    private val playerFilter by SelectorSetting("Party Action Filter", PlayerFilter.OFF, desc = "Who may run warp, transfer, kick, invite and other party actions.")
+    private val filterNames by StringSetting("Filter Names", "", 256, desc = "Names for the filter, separated by commas or spaces.", placeholder = "name1, name2").withDependency { playerFilter != PlayerFilter.OFF }
+
+    private enum class PlayerFilter { OFF, BLACKLIST, WHITELIST }
+
+    private val partyActions = setOf(
+        "warp", "w", "allinvite", "allinv", "pt", "ptme", "transfer", "promote", "demote", "kick", "k", "kickoffline", "ko", "reinv", "reinvite", "invite", "inv",
+        "f1", "f2", "f3", "f4", "f5", "f6", "f7", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "t1", "t2", "t3", "t4", "t5",
+    )
+
+    private fun mayRunPartyAction(name: String): Boolean {
+        if (playerFilter == PlayerFilter.OFF) return true
+        val listed = filterNames.split(',', ' ').any { it.isNotBlank() && it.trim().equals(name, ignoreCase = true) }
+        return if (playerFilter == PlayerFilter.WHITELIST) listed else !listed
+    }
 
     // https://regex101.com/r/joY7dm/1
     private val messageRegex = Regex("^(?:Party > (\\[[^]]*?])? ?(\\w{1,16})(?: [ቾ⚒])?: ?(.+)$|Guild > (\\[[^]]*?])? ?(\\w{1,16})(?: \\[([^]]*?)])?: ?(.+)$|From (\\[[^]]*?])? ?(\\w{1,16}): ?(.+)$|Co-op > (\\[[^]]*?])? ?(\\w{1,16})(?: [ቾ⚒])?: ?(.+)$)")
@@ -130,6 +148,7 @@ object ChatCommands : Module(
 
         val words = message.drop(1).split(" ").map { it.lowercase() }
         val arg = words.getOrNull(1)?.takeIf { it.length <= 16 }
+        if (words[0] in partyActions && !mayRunPartyAction(name)) return
         when (words[0]) {
             "help", "h" -> channelMessage("Commands: ${commandsMap.filterValues { it }.keys.joinToString(", ")}", name, channel)
             "coords", "co" -> if (coords) channelMessage(getPositionString(), name, channel)
