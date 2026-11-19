@@ -15,7 +15,7 @@ import com.adm.utils.skyblock.dungeon.M7Phases
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Melody progress from the party chat ("Melody 33%", "Melody terminal is at 67%"): the furthest percent heard per teammate
+ * Melody progress from the party chat ("Melody 33%", "Melody terminal is at 67%", "Melody 2/3"): the furthest percent heard per teammate
  * in P3 ([heard], read by Term Progress too), and Melody Message's row for teammates neither the link nor Odin's socket covers.
  */
 object MelodyChat {
@@ -27,6 +27,7 @@ object MelodyChat {
 
     private val PARTY = Regex("""^Party > (?:\[[^]]*] )?(\w{1,16}): (.*)$""")
     private val PERCENT = Regex("""(\d+)%""")
+    private val ROWS = Regex("""(?i)melody.*?\b([0-3])/3\b""")
     private val TERMINAL = Regex("""^(\w{1,16}) activated a terminal! \(\d+/\d+\)$""")
 
     private val chat = ConcurrentHashMap<String, Heard>()
@@ -52,7 +53,9 @@ object MelodyChat {
         val party = PARTY.matchEntire(message) ?: return
         val sender = party.groupValues[1]
         if (sender.equals(mc.user.name, ignoreCase = true)) return
-        val percent = PERCENT.find(party.groupValues[2])?.groupValues?.get(1)?.toIntOrNull() ?: return
+        val said = party.groupValues[2]
+        val percent = PERCENT.find(said)?.groupValues?.get(1)?.toIntOrNull()
+            ?: ROWS.find(said)?.groupValues?.get(1)?.toIntOrNull()?.let { (it * 100 + 1) / 3 } ?: return
         // The furthest progress wins, so a stray number doesn't move it back; the time is of the latest message.
         val heard = Heard(maxOf(percent, chat[sender]?.percent ?: 0), System.nanoTime())
         chat[sender] = heard
