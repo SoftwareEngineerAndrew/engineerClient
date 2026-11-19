@@ -11,23 +11,30 @@ import com.adm.events.RenderExtractEvent
 import com.adm.events.SetSlotEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.on
+import com.adm.events.core.onReceive
 import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.Color
 import com.adm.utils.Colors
+import com.adm.utils.FormatCache
 import com.adm.utils.PersonalBest
 import com.adm.utils.equalsOneOf
 import com.adm.utils.itemId
 import com.adm.utils.Color.Companion.withAlpha
 import com.adm.utils.render.drawCustomBeacon
 import com.adm.utils.render.drawFilledBox
+import com.adm.utils.render.drawTracer
+import com.adm.utils.render.textDim
 import com.adm.utils.render.drawWireFrameBox
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.skyblock.dungeon.Floor
 import com.adm.utils.skyblock.dungeon.M7Phases
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.core.BlockPos
+import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.sounds.SoundEvents
 import net.minecraft.resources.Identifier
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.decoration.ArmorStand
@@ -44,6 +51,12 @@ object Relics : Module(
 ) {
     private val relicBeacon by BooleanSetting("Relic Beacon", true, desc = "Draws a beacon at your relic's cauldron.")
     private val cauldronHighlight by BooleanSetting("Cauldron Highlight", true, desc = "Boxes your relic's cauldron, seen through walls.")
+    private val cauldronTracer by BooleanSetting("Cauldron Tracer", false, desc = "Draws a line to your relic's cauldron.")
+    private val spawnHud by HUD("Relic Spawn HUD", "Time until the relics appear, from Necron's death throes.") { example ->
+        if (example) return@HUD textDim("§dRelics: §a2.95s", 0, 0, Colors.WHITE)
+        val t = spawnIn
+        if (!enabled || t <= 0) 0 to 0 else textDim(spawnTexts(t.toDouble()), 0, 0, Colors.WHITE)
+    }
     private val blockWrong by BooleanSetting("Block Wrong Cauldron", true, desc = "Right clicks on a cauldron that isn't your relic's do nothing.")
     private val allTimes by BooleanSetting("All Relic Times", true, desc = "Once all five relics are in, says in chat when each was placed.")
     private val leapHighlight by BooleanSetting("Relic Leap Highlight", true, desc = "Before P5, where the teammate below Necron's platform is in the leap menu.")
@@ -73,10 +86,14 @@ object Relics : Module(
     private val placed = HashMap<Relic, Int>()
     private var sent = false
     private val inBoxSince = LinkedHashMap<String, Long>()
+    /** Server ticks until the relics appear: 0 with none coming, -1 once they're due this run. */
+    @Volatile private var spawnIn = 0
+    private val spawnTexts = FormatCache(4) { "§dRelics: §a${String.format(Locale.ROOT, "%.2f", it / 20.0)}s" }
 
     private fun relicAt(pos: BlockPos) = Relic.entries.firstOrNull { pos.x == it.cauldron.x && pos.z == it.cauldron.z && (pos.y == 7 || pos.y == 6) }
 
     private val RELICS = Relic.values()
+    private const val THROES_TO_RELICS = 59
 
     private fun nearOpenCauldron(x: Double, z: Double): Boolean {
         for (r in RELICS) if (r !in placed && hypot(x - r.cauldron.x - 0.5, z - r.cauldron.z - 0.5) < 1.5) return true
@@ -84,7 +101,7 @@ object Relics : Module(
     }
 
     private fun reset() {
-        currentRelic = null; relicPlaceTick = -1; p5Ticks = -1; placed.clear(); sent = false; inBoxSince.clear()
+        currentRelic = null; relicPlaceTick = -1; p5Ticks = -1; placed.clear(); sent = false; inBoxSince.clear(); spawnIn = 0
     }
 
     private fun beforeP5() = DungeonUtils.isFloor(7) && DungeonUtils.inBoss && DungeonUtils.getF7Phase() != M7Phases.P5
@@ -150,13 +167,21 @@ object Relics : Module(
             if (DungeonUtils.getF7Phase() != M7Phases.P5) return@on
             val relic = currentRelic ?: return@on
             if (relicBeacon) drawCustomBeacon("", relic.cauldron, relic.color, distance = false)
+            if (cauldronTracer) drawTracer(relic.box.center, relic.color, depth = false)
             if (cauldronHighlight) {
                 drawFilledBox(relic.box, relic.fill, depth = false)
                 drawWireFrameBox(relic.box, relic.color, depth = false)
             }
         }
 
+        // His death throes open with this sound; the relics appear on his death, 59 ticks after it.
+        onReceive<ClientboundSoundPacket> {
+            if (spawnIn != 0 || volume != 15f || pitch != 1f || sound.value() != SoundEvents.WITHER_HURT) return@onReceive
+            if (DungeonUtils.floor == Floor.M7 && DungeonUtils.getF7Phase() == M7Phases.P4) spawnIn = THROES_TO_RELICS
+        }
+
         on<TickEvent.Server> {
+            if (spawnIn > 0) { spawnIn--; if (spawnIn == 0) spawnIn = -1 }
             if (DungeonUtils.getF7Phase() == M7Phases.P5 && relicPlaceTick >= 0) relicPlaceTick++
             if (p5Ticks < 0 && DungeonUtils.inBoss && DungeonUtils.getF7Phase() == M7Phases.P5) p5Ticks = 0
             else if (p5Ticks >= 0) p5Ticks++
