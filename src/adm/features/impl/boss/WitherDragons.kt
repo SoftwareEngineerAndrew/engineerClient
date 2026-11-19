@@ -25,14 +25,14 @@ object WitherDragons : Module(
 ) {
     private val dragonTimerDropDown by DropdownSetting("Dragon Timer Dropdown", desc = "Shows settings for the M7 dragon spawn timer.")
     private val dragonTimer by BooleanSetting("Dragon Timer", true, desc = "Displays a timer for when M7 dragons spawn.").withDependency { dragonTimerDropDown }
-    private val dragonTimerStyle by SelectorSetting("Timer Style", TimerStyle.MILLISECONDS, desc = "The style of the dragon timer.").withDependency { dragonTimer && dragonTimerDropDown }
-    private val showSymbol by BooleanSetting("Timer Symbol", true, desc = "Displays a symbol for the timer.").withDependency { dragonTimer && dragonTimerDropDown }
-    private val displayStyle by SelectorSetting("Display Style", DisplayStyle.DEFAULT, desc = "Blade lists every spawning dragon by name with seconds.").withDependency { dragonTimer && dragonTimerDropDown }
+    private val displayStyle by SelectorSetting("Display Style", DisplayStyle.DEFAULT, desc = "Blade shows each spawning dragon's seconds in its colour.").withDependency { dragonTimer && dragonTimerDropDown }
+    private val dragonTimerStyle by SelectorSetting("Timer Style", TimerStyle.MILLISECONDS, desc = "The style of the dragon timer.").withDependency { dragonTimer && dragonTimerDropDown && displayStyle == DisplayStyle.DEFAULT }
+    private val showSymbol by BooleanSetting("Timer Symbol", true, desc = "Displays a symbol for the timer.").withDependency { dragonTimer && dragonTimerDropDown && displayStyle == DisplayStyle.DEFAULT }
     private val hud by HUD("Dragon Timer HUD", "Displays the dragon timer in the HUD.") { example ->
         if (example) {
             val blade = displayStyle == DisplayStyle.BLADE
-            val a = textDim(if (blade) "§cRed: 3.25s" else "§cR: §a3250ms", 0, 0, Colors.WHITE)
-            val b = textDim(if (blade) "§5Purple: 4.50s" else "§5P: §a4500ms", 0, 10, Colors.WHITE)
+            val a = textDim(if (blade) "§c3.25s" else "§cR: §a3250ms", 0, 0, Colors.WHITE)
+            val b = textDim(if (blade) "§54.50s" else "§5P: §a4500ms", 0, 10, Colors.WHITE)
             return@HUD maxOf(a.first, b.first) to 19
         }
         val count = collectSpawning()
@@ -137,7 +137,7 @@ object WitherDragons : Module(
         if (labelKeys[i] != key || labels[i] == null) {
             labelKeys[i] = key
             labels[i] =
-                if (displayStyle == DisplayStyle.BLADE) "§${dragon.colorCode}${dragon.name}: ${(ticks / 20f).toFixed(2)}s"
+                if (displayStyle == DisplayStyle.BLADE) "§${dragon.colorCode}${(ticks / 20f).toFixed(2)}s"
                 else "§${dragon.colorCode}${dragon.name.first()}: ${timerText(ticks)}"
         }
         return labels[i]!!
