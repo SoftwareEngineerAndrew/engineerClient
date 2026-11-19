@@ -2,15 +2,21 @@ package com.adm.features.impl.nether
 
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
+import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
+import com.adm.events.RenderExtractEvent
 import com.adm.events.core.on
 import com.adm.features.Module
+import com.adm.utils.Colors
 import com.adm.utils.alert
+import com.adm.utils.render.drawTracer
+import com.adm.utils.render.drawWireFrameBox
 import com.adm.utils.modMessage
 import com.adm.utils.sendCommand
 import com.adm.utils.skyblock.KuudraUtils
 import com.adm.utils.skyblock.Supply
+import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 
 object NoPre : Module(
@@ -19,12 +25,17 @@ object NoPre : Module(
 ) {
     private val showCratePriority by BooleanSetting("Show Crate Priority", false, desc = "Shows the crate priority.")
     private val advanced by BooleanSetting("Advanced Mode", false, desc = "Provides harder crate priority in certain situations.").withDependency { showCratePriority }
+    private val showTarget by BooleanSetting("Show Crate Target", false, desc = "Draws a box and tracer at the pick-up spot the priority sends you to.").withDependency { showCratePriority }
+    private val targetColor by ColorSetting("Target Color", Colors.MINECRAFT_GREEN, true, desc = "Color of the target box and tracer.").withDependency { showCratePriority && showTarget }
 
     private val partyCall = Regex("^Party > (\\[[^]]*?])? ?(\\w{1,16}): No ?(Triangle|X|Equals|Slash|xCannon|Square|Shop)!$")
 
     private var preSpot = Supply.None
     var missing = Supply.None
         private set
+
+    private var targetBox: AABB? = null
+    private var targetAt: Vec3? = null
 
     init {
         on<MessageEvent.Chat> {
@@ -38,14 +49,24 @@ object NoPre : Module(
                     if (showCratePriority) advice(missing)?.let {
                         alert(it)
                         modMessage("Crate Priority: $it")
+                        setTarget(it)
                     }
                 }
             }
         }
 
+        on<RenderExtractEvent> {
+            val box = targetBox ?: return@on
+            if (!showCratePriority || !showTarget || KuudraUtils.phase != 1 || !KuudraUtils.inKuudra) return@on
+            drawWireFrameBox(box, targetColor, depth = false)
+            drawTracer(targetAt ?: return@on, targetColor, false)
+        }
+
         on<LevelEvent.Load> {
             preSpot = Supply.None
             missing = Supply.None
+            targetBox = null
+            targetAt = null
         }
     }
 
@@ -81,6 +102,17 @@ object NoPre : Module(
             else -> return
         }
         sendCommand("pc No ${missingSpot.name}!")
+    }
+
+    private fun setTarget(advice: String) {
+        val supply = when {
+            advice.startsWith("Go X Cannon") -> Supply.xCannon
+            advice.startsWith("Go Shop") -> Supply.Shop
+            advice.startsWith("Go Square") || advice.startsWith("Pull Square") -> Supply.Square
+            else -> return
+        }
+        targetBox = AABB(supply.pickUpSpot)
+        targetAt = Vec3.atCenterOf(supply.pickUpSpot)
     }
 
     private fun advice(missing: Supply): String? {
