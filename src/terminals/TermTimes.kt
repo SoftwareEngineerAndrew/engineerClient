@@ -9,7 +9,9 @@ import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.utils.modMessage
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.Style
 import java.util.Locale
+import java.util.Optional
 
 /** Each terminal's time and PB, and P3's section splits. */
 object TermTimes {
@@ -18,6 +20,7 @@ object TermTimes {
     private val goldorRegex = Regex("^\\[BOSS] Goldor: Who dares trespass into my domain\\?$")
     private val coreRegex = Regex("^The Core entrance is opening!$")
     private val decimal = Regex("\\d+\\.\\d+")
+    private val legacyPrefix = Regex("^(§.)+")
 
     private var completed = 0 to 7
     private val times = mutableListOf<Float>()
@@ -46,7 +49,10 @@ object TermTimes {
         on<MessageEvent.Chat> {
             if (!Terminals.timesOn || !Terminals.sectionSplits) return@on
             when {
-                gateRegex.matches(message) -> if (completed.first == completed.second) resetSection() else gateBlown = true
+                gateRegex.matches(message) -> {
+                    lastSplit = split()
+                    if (completed.first == completed.second) resetSection() else gateBlown = true
+                }
                 goldorRegex.matches(message) -> resetSection(true)
                 coreRegex.matches(message) -> {
                     resetSection()
@@ -54,7 +60,7 @@ object TermTimes {
                 }
             }
             completeRegex.find(message)?.destructured?.let { (_, _, _, current, total) ->
-                lastSplit = format("§8(§7${sectionTimer.seconds}s §8| §7${phaseTimer.seconds}s§8)") as String
+                lastSplit = split()
                 val cur = current.toIntOrNull() ?: return@on
                 if ((current == total && gateBlown) || cur < completed.first) resetSection()
                 else completed = cur to (total.toIntOrNull() ?: return@on)
@@ -63,14 +69,28 @@ object TermTimes {
 
         on<MessageEvent.ModifyChat> {
             if (!Terminals.timesOn || !Terminals.sectionSplits) return@on
+            if (gateRegex.matches(message)) {
+                component = component.copy().append(" $lastSplit")
+                return@on
+            }
             completeRegex.find(message)?.destructured?.let { (name, activated, type, current, total) ->
-                component = Component.literal("§6$name §a$activated a $type! (§c$current§a/$total) $lastSplit")
+                component = Component.empty().append(nameOf(component, name)).append("§a $activated a $type! (§c$current§a/$total) $lastSplit")
             }
         }
 
         on<TickEvent.Server> { if (!Terminals.realTime) currentTick += 50 }
         on<LevelEvent.Load> { resetSection(true) }
         EventBus.subscribe(this)
+    }
+
+    private fun split() = format("§8(§7${sectionTimer.seconds}s §8| §7${phaseTimer.seconds}s§8)") as String
+
+    /** The name as Hypixel styled it: its first piece's style, or the color codes it starts with. */
+    private fun nameOf(original: Component, name: String): Component {
+        val (style, text) = original.visit({ style, text -> if (text.isEmpty()) Optional.empty() else Optional.of(style to text) }, Style.EMPTY)
+            .orElse(null) ?: return Component.literal("§6$name")
+        val codes = legacyPrefix.find(text)?.value.orEmpty()
+        return Component.literal(codes + name).setStyle(style)
     }
 
     private val Long.seconds get() = ((if (Terminals.realTime) System.currentTimeMillis() else currentTick) - this) / 1000f
