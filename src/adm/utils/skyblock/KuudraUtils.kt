@@ -1,14 +1,17 @@
 package com.adm.utils.skyblock
 
 import com.adm.AdmMod.mc
+import com.adm.events.EntityEvent
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
+import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.utils.NameMemo
 import com.adm.utils.handlers.TickTask
 import com.adm.utils.noControlCodes
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket
+import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.ai.attributes.Attributes
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.monster.Giant
@@ -61,7 +64,11 @@ object KuudraUtils {
     private val carriesSupply = NameMemo { name -> name.string.endsWith("Head") }
 
     init {
-        TickTask(10) { if (inKuudra) scan() }
+        TickTask(10) {
+            if (!inKuudra) return@TickTask
+            if (!Giants.active) Giants.start()
+            scan()
+        }
 
         on<MessageEvent.Chat> {
             if (!inKuudra) return@on
@@ -85,6 +92,7 @@ object KuudraUtils {
         }
 
         on<LevelEvent.Load> {
+            Giants.stop()
             for (supply in Supply.entries) supply.isActive = true
             giantZombies.clear()
             buildingPiles.clear()
@@ -99,14 +107,43 @@ object KuudraUtils {
 
     private fun scan() {
         val level = mc.level ?: return
-        giantZombies.clear()
         buildingPiles.clear()
         for (entity in level.entitiesForRendering()) {
             when (entity) {
                 is ArmorStand -> readStand(entity)
-                is Giant -> if (carriesSupply[entity, entity.mainHandItem.hoverName]) giantZombies.add(entity)
                 is MagmaCube -> if (entity.size == 30 && entity.getAttributeBaseValue(Attributes.MAX_HEALTH) == 100000.0) kuudraEntity = entity
             }
+        }
+    }
+
+    // Supplies appear and vanish with their giant, so they follow entity events instead of the scan.
+    private object Giants {
+        var active = false
+            private set
+
+        init {
+            on<EntityEvent.Add> { (entity as? Giant)?.let(::update) }
+            on<EntityEvent.SetItemSlot> { if (slot == EquipmentSlot.MAINHAND) (entity as? Giant)?.let(::update) }
+            on<EntityEvent.Remove> { if (entity is Giant) giantZombies.remove(entity) }
+        }
+
+        fun start() {
+            giantZombies.clear()
+            mc.level?.entitiesForRendering()?.forEach { if (it is Giant) update(it) }
+            EventBus.subscribe(this)
+            active = true
+        }
+
+        fun stop() {
+            if (!active) return
+            EventBus.unsubscribe(this)
+            active = false
+        }
+
+        private fun update(giant: Giant) {
+            if (carriesSupply[giant, giant.mainHandItem.hoverName]) {
+                if (giant !in giantZombies) giantZombies.add(giant)
+            } else giantZombies.remove(giant)
         }
     }
 
