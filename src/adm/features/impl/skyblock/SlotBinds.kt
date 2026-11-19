@@ -12,8 +12,11 @@ import com.adm.utils.Colors
 import com.adm.utils.clickSlot
 import com.adm.utils.modMessage
 import com.adm.utils.render.drawLine
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.client.gui.screens.inventory.InventoryScreen
+import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.inventory.ContainerInput
+import net.minecraft.world.inventory.Slot
 
 object SlotBinds : Module(
     name = "Slot Binds",
@@ -44,34 +47,65 @@ object SlotBinds : Module(
 
     private fun binds(): MutableMap<Int, Int> = profileData.getOrPut(currentProfile.label) { mutableMapOf() }
 
-    private fun peekBind(slot: Int): Int = profileData[currentProfile.label]?.get(slot) ?: NO_SLOT
+    // A bind is stored one way only, so a slot can be either end of it.
+    private fun peekBind(slot: Int): Int {
+        val map = profileData[currentProfile.label] ?: return NO_SLOT
+        map[slot]?.let { return it }
+        for ((from, to) in map) if (to == slot) return from
+        return NO_SLOT
+    }
+
+    private fun removeBind(slot: Int): Int? {
+        val map = binds()
+        map.remove(slot)?.let { return it }
+        val from = map.entries.firstOrNull { it.value == slot }?.key ?: return null
+        map.remove(from)
+        return from
+    }
 
     private fun isHotbar(slot: Int) = slot in 36..44
 
-    private fun hovered(screen: InventoryScreen): Int {
-        val index = screen.hoveredSlot?.index ?: return NO_SLOT
-        return if (index in 5..44) index else NO_SLOT
+    // Binds keep the player inventory screen's slot numbers; any other menu reaches the same item through its containerSlot.
+    private fun bindIndex(slot: Slot): Int {
+        if (slot.container !is Inventory) return NO_SLOT
+        return when (val c = slot.containerSlot) {
+            in 0..8 -> c + 36
+            in 9..35 -> c
+            in 36..39 -> 44 - c
+            else -> NO_SLOT
+        }
     }
 
-    private fun slotX(screen: InventoryScreen, slot: Int) = (screen.menu.getSlot(slot).x + screen.leftPos + 8).toFloat()
-    private fun slotY(screen: InventoryScreen, slot: Int) = (screen.menu.getSlot(slot).y + screen.topPos + 8).toFloat()
+    private fun menuSlot(screen: AbstractContainerScreen<*>, index: Int): Slot? {
+        if (screen is InventoryScreen) return screen.menu.slots.getOrNull(index)
+        for (slot in screen.menu.slots) if (bindIndex(slot) == index) return slot
+        return null
+    }
+
+    private fun hovered(screen: AbstractContainerScreen<*>): Int {
+        val slot = screen.hoveredSlot ?: return NO_SLOT
+        return if (screen is InventoryScreen) slot.index.takeIf { it in 5..44 } ?: NO_SLOT else bindIndex(slot)
+    }
+
+    private fun slotX(screen: AbstractContainerScreen<*>, slot: Slot) = (slot.x + screen.leftPos + 8).toFloat()
+    private fun slotY(screen: AbstractContainerScreen<*>, slot: Slot) = (slot.y + screen.topPos + 8).toFloat()
 
     init {
         on<GuiEvent.SlotClick> {
-            val screen = screen as? InventoryScreen ?: return@on
+            val screen = screen as? AbstractContainerScreen<*> ?: return@on
             if (!mc.hasShiftDown()) return@on
             val clicked = hovered(screen)
             if (clicked == NO_SLOT) return@on
             val bound = peekBind(clicked)
             if (bound == NO_SLOT) return@on
             val hotbar = if (isHotbar(clicked)) clicked else if (isHotbar(bound)) bound else return@on
-            val other = if (hotbar == clicked) bound else clicked
-            mc.player?.clickSlot(other, hotbar % 36, ContainerInput.SWAP)
+            val other = menuSlot(screen, if (hotbar == clicked) bound else clicked) ?: return@on
+            mc.player?.clickSlot(other.index, hotbar % 36, ContainerInput.SWAP)
             cancel()
         }
 
         on<ScreenEvent.KeyPress> {
-            val screen = screen as? InventoryScreen ?: return@on
+            val screen = screen as? AbstractContainerScreen<*> ?: return@on
             if (input.key != setNewSlotbind.value) return@on
             val slot = hovered(screen)
             if (slot == NO_SLOT) return@on
@@ -79,7 +113,7 @@ object SlotBinds : Module(
             val profile = currentProfile.label
             val first = pending
             if (first == NO_SLOT) {
-                val removed = binds().remove(slot)
+                val removed = removeBind(slot)
                 if (removed == null) {
                     pending = slot
                     return@on
@@ -93,6 +127,8 @@ object SlotBinds : Module(
                 !isHotbar(first) && !isHotbar(slot) -> modMessage("§cOne of the slots must be in the hotbar (36–44).")
                 else -> {
                     modMessage("§aAdded bind from slot §b$first §ato §d$slot §7($profile).")
+                    removeBind(first)
+                    removeBind(slot)
                     binds()[first] = slot
                     ModuleManager.saveConfigurations()
                     pending = NO_SLOT
@@ -101,7 +137,7 @@ object SlotBinds : Module(
         }
 
         on<GuiEvent.DrawTooltip> {
-            val screen = screen as? InventoryScreen ?: return@on
+            val screen = screen as? AbstractContainerScreen<*> ?: return@on
             val slot = hovered(screen)
             if (slot == NO_SLOT) return@on
             val from = pending
@@ -113,9 +149,12 @@ object SlotBinds : Module(
                     LineDisplay.ON_HOVER_SHIFT -> if (!mc.hasShiftDown()) return@on
                     LineDisplay.NONE -> return@on
                 }
-                guiGraphics.drawLine(slotX(screen, slot), slotY(screen, slot), slotX(screen, bound), slotY(screen, bound), lineColor, lineWidth)
+                val a = screen.hoveredSlot ?: return@on
+                val b = menuSlot(screen, bound) ?: return@on
+                guiGraphics.drawLine(slotX(screen, a), slotY(screen, a), slotX(screen, b), slotY(screen, b), lineColor, lineWidth)
             } else {
-                guiGraphics.drawLine(slotX(screen, from), slotY(screen, from), mouseX.toFloat(), mouseY.toFloat(), lineColor, lineWidth)
+                val a = menuSlot(screen, from) ?: return@on
+                guiGraphics.drawLine(slotX(screen, a), slotY(screen, a), mouseX.toFloat(), mouseY.toFloat(), lineColor, lineWidth)
             }
         }
 
