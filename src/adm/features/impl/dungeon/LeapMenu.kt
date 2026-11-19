@@ -77,6 +77,7 @@ object LeapMenu : Module(
     private val tankKeybind by KeybindSetting("Tank", InputConstants.KEY_5, "Used to leap to the Tank in the leap menu.").withDependency { keybindType == KeybindMode.CLASS && keybindDropdown }
 
     private val leapAnnounce by BooleanSetting("Leap Announce", false, desc = "Announces when you leap to a player.")
+    private val announceText by StringSetting("Announce Message", "Leaped to {name}!", 64, desc = "Party message; {name} is the player.", placeholder = "Leaped to {name}!").withDependency { leapAnnounce }
     private val hoverProgress = List(4) { Animatable(0f) }
 
     private val EMPTY = DungeonPlayer("Empty", DungeonClass.EMPTY, 0, null)
@@ -262,7 +263,7 @@ object LeapMenu : Module(
         on<MessageEvent.Chat> {
             val leaped = leapedRegex.find(message)?.groupValues?.get(1) ?: return@on
             leapedAt = System.currentTimeMillis()
-            if (leapAnnounce && DungeonUtils.inDungeons) sendCommand("pc Leaped to ${leaped}!")
+            if (leapAnnounce && DungeonUtils.inDungeons) sendCommand("pc " + announceText.replace("{name}", leaped))
         }
 
         on<LevelEvent.Load> { clear(); usedAt = 0L; leapedAt = 0L; dismissed = false }
