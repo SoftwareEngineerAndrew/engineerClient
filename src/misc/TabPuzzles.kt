@@ -62,12 +62,12 @@ object TabPuzzles {
      * Puzzle Overlay's lines: "Puzzles(N):" (null: white), then the tab's lines in order (true: completed, green; false:
      * red), then "???" up to the header's count.
      */
-    fun overlayLines(s: Section): List<Pair<String, Boolean?>> {
+    fun overlayLines(s: Section): List<Pair<String, Status?>> {
         val count = maxOf(s.count ?: s.slots.size, s.slots.size)
-        val out = ArrayList<Pair<String, Boolean?>>()
+        val out = ArrayList<Pair<String, Status?>>()
         out += "Puzzles($count):" to null
-        for (slot in s.slots) out += (slot.name ?: "???") to (slot.status == Status.COMPLETED)
-        repeat(count - s.slots.size) { out += "???" to false }
+        for (slot in s.slots) out += (if (slot.status == Status.FAILED) "${slot.name ?: "???"} ✖" else slot.name ?: "???") to slot.status
+        repeat(count - s.slots.size) { out += "???" to Status.INCOMPLETE }
         return out
     }
 

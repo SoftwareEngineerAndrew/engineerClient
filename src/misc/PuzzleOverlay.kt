@@ -18,19 +18,19 @@ import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 
 /**
- * Puzzle Overlay: "Puzzles(N):" then a line per puzzle, green once completed and red otherwise, "???" for one not found
+ * Puzzle Overlay: "Puzzles(N):" then a line per puzzle, green once completed, orange with a cross once failed, red otherwise, "???" for one not found
  * yet. Always in the tab list's order: each line stays where the tab list has it, so a puzzle found later fills its own
  * "???" instead of moving to the bottom. The Classic style draws it the way ADM's Puzzle HUD did, in the same order.
  */
 object PuzzleOverlay {
     private val mc: Minecraft get() = Minecraft.getInstance()
     private val dropdown = DropdownSetting("Overlay", desc = "Shows settings for the puzzle overlay.")
-    private val hud = PuzzleSolvers.HUD("Puzzle Overlay", "The dungeon's puzzles in the tab list's order: green done, red not, ??? not found yet.", true, 10, 60, 1f) { example ->
+    private val hud = PuzzleSolvers.HUD("Puzzle Overlay", "The dungeon's puzzles in the tab list's order: green done, orange failed, red not, ??? not found yet.", true, 10, 60, 1f) { example ->
         val s = if (example) EXAMPLE else section?.takeIf { shown() } ?: return@HUD 0 to 0
         if (styleSetting.value == Style.CLASSIC) drawClassic(s) else draw(s)
     }.withDependency { dropdown.value }
     private val beforeStartSetting = BooleanSetting("Before Start", true, desc = "Shows before the run starts (dtmap's default).").withDependency { dropdown.value }
-    private val duringClearSetting = BooleanSetting("During Clear", false, desc = "Shows during the clear too, until the boss.").withDependency { dropdown.value }
+    private val duringClearSetting = BooleanSetting("During Clear", true, desc = "Shows during the clear too, until the boss.").withDependency { dropdown.value }
     private val styleSetting = SelectorSetting("Overlay Style", Style.ADM, desc = "ADM: dtmap's list. Classic: the Puzzle HUD.").withDependency { dropdown.value }
     private val playerNamesSetting = BooleanSetting("Overlay Player Names", true, desc = "Shows who solved or failed each puzzle.").withDependency { dropdown.value && styleSetting.value == Style.CLASSIC }
     private val beforeStart get() = beforeStartSetting.value
@@ -52,6 +52,7 @@ object PuzzleOverlay {
 
     private val GREEN = Color(0, 255, 0)
     private val RED = Color(255, 0, 0)
+    private val ORANGE = Color(255, 150, 0)
 
     // shown() before the run starts, and also when the run starting would show it.
     private fun mayShow(): Boolean {
@@ -91,7 +92,14 @@ object PuzzleOverlay {
         } else {
             val rows = TabPuzzles.overlayLines(s)
             lines = Array(rows.size) { rows[it].first }
-            lineColors = Array(rows.size) { when (rows[it].second) { null -> Colors.WHITE; true -> GREEN; false -> RED } }
+            lineColors = Array(rows.size) {
+                when (rows[it].second) {
+                    null -> Colors.WHITE
+                    TabPuzzles.Status.COMPLETED -> GREEN
+                    TabPuzzles.Status.FAILED -> ORANGE
+                    TabPuzzles.Status.INCOMPLETE -> RED
+                }
+            }
         }
         return lines
     }
