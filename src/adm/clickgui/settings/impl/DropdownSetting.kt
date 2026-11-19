@@ -14,10 +14,13 @@ import kotlin.math.PI
 class DropdownSetting(
     name: String,
     override val default: Boolean = false,
-    desc: String,
-    private val label: String = name
+    desc: String
 ) : RenderableSetting<Boolean>(name, desc) {
+    private var label = name
     override val shownName: String get() = label
+
+    // A second constructor so the first keeps the signature other mods were built against
+    constructor(name: String, default: Boolean = false, desc: String, label: String) : this(name, default, desc) { this.label = label }
 
     override var value: Boolean by SettingState(default)
     private var enabled: Boolean by this::value
