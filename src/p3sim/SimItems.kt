@@ -2464,10 +2464,13 @@ object SimItems {
         }
 
         /** Main's tail: container_close(N), player_position, the sound, the chat line, then container_close(0). */
+        private var leapt = false
+
         private fun leap(sp: ServerPlayer, bot: LeapRow) {
-            // A second click (a double click, or another head) arrives after the first leap closed this window: nothing.
-            if (sp.isRemoved || sp.containerMenu !== this) return
-            sp.closeContainer()
+            // A second click (a double click, or another head): nothing. A window the client closed right after its click still leaps, as on Hypixel.
+            if (sp.isRemoved || leapt) return
+            leapt = true
+            if (sp.containerMenu === this) sp.closeContainer()
             val e = bot.pos
             // The cooldown is the item's own (2 s for the InfiniLeap, 5 s for the floor item); the floor item is used up by the leap.
             val cooldownEnd = Fight.serverTick + ClearItems.leapCooldownTicks(item, mage = false, doubled = false)
