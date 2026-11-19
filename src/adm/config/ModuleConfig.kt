@@ -82,16 +82,48 @@ class ModuleConfig internal constructor(file: File) {
                 })
             }
             for ((key, obj) in oldByName) if (key != null && key !in modules) jsonArray.add(obj)
-            val text = gson.toJson(jsonArray)
-            val tmp = File(file.parentFile, file.name + ".tmp")
-            tmp.writeText(text, Charsets.UTF_8)
-            try {
-                Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-            } catch (e: Exception) {
-                Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
-            }
+            writeFile(jsonArray)
         } catch (e: Exception) {
             logger.error("Error saving module config.", e)
+        }
+    }
+
+    /** Saves only [module]: its settings are read here, the file is written off the game thread. */
+    fun saveModule(module: Module) {
+        val settings = JsonObject()
+        for ((name, setting) in module.settings) {
+            if (setting !is Saving) continue
+            try { settings.add(name, setting.write(gson)) } catch (e: Exception) { logger.error("Error saving setting $name of ${module.name}", e) }
+        }
+        val enabled = module.enabled
+        val key = module.name.lowercase()
+        com.engineerclient.misc.DiskWrites.write {
+            synchronized(lock) {
+                try {
+                    val jsonArray = readFile() ?: JsonArray()
+                    val entry = jsonArray.filterIsInstance<JsonObject>().firstOrNull { it.get("name")?.takeIf { n -> n.isJsonPrimitive }?.asString?.lowercase() == key }
+                        ?: JsonObject().also { jsonArray.add(it) }
+                    val merged = entry.get("settings")?.takeIf { it.isJsonObject }?.asJsonObject ?: JsonObject()
+                    for ((name, value) in settings.entrySet()) merged.add(name, value)
+                    entry.add("name", JsonPrimitive(module.name))
+                    entry.add("enabled", JsonPrimitive(enabled))
+                    entry.add("settings", merged)
+                    writeFile(jsonArray)
+                } catch (e: Exception) {
+                    logger.error("Error saving module config.", e)
+                }
+            }
+        }
+    }
+
+    private fun writeFile(jsonArray: JsonArray) {
+        val text = gson.toJson(jsonArray)
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        tmp.writeText(text, Charsets.UTF_8)
+        try {
+            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } catch (e: Exception) {
+            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
     }
 

@@ -177,6 +177,7 @@ object DungeonSplits : Module(
 
     /** Forgets the run (world load, or a P3 Sim restart). */
     private fun resetRun() {
+        saveTimes()
         bestsChecked.clear(); realRun = true
         synchronized(lagSamples) { lagShown = false; lagSamples.clear() }
         tracker.reset(); subs.reset(); blood.reset(); moments.reset()
@@ -278,6 +279,7 @@ object DungeonSplits : Module(
                     if (!DungeonUtils.inDungeons) return@safely
                     // A P3 Sim practice: no splits (its own timer counts); its boss and terminal lines would start them again.
                     if (com.engineerclient.p3sim.P3Sim.inSim && com.engineerclient.p3sim.Practice.active) return@safely
+                    if (text.endsWith(RUN_END)) saveTimes()
                     tracker.onChat(text, at)
                     moments.onChat(text, at)
                     subs.onChat(text, at)
@@ -601,6 +603,7 @@ object DungeonSplits : Module(
     /** Blocks a tick: faster is Goldor setting off for the core (he creeps at ~0.05, goes at ~0.65). */
     private const val GOLDOR_GO = 0.25
     private const val CORE_OPEN = "The Core entrance is opening!"
+    private const val RUN_END = "> EXTRA STATS <"
     private const val NECRON_LINE = "[BOSS] Necron: "
     private val KEY = Regex("""(?:Wither|Blood) Key""")
 
@@ -818,7 +821,7 @@ object DungeonSplits : Module(
         while (list.size > RECENT) list.removeAt(0)
         val text = all.entries.sortedBy { it.key }.joinToString(",") { (k, v) -> k + "=" + v.joinToString("|") { "${it.ms}:${it.ticks}" } }
         when (floor) { "F7" -> recentF7 = text; "M7" -> recentM7 = text; else -> return }
-        com.adm.features.ModuleManager.saveConfigurations()
+        unsaved = true
     }
 
     /**
@@ -844,7 +847,15 @@ object DungeonSplits : Module(
     private fun saveBests(floor: String?, bests: Map<String, Long>) {
         val text = SubSplitGrades.formatBests(bests)
         when (floor) { "F7" -> bestsF7 = text; "M7" -> bestsM7 = text; else -> return }
-        com.adm.features.ModuleManager.saveConfigurations()
+        unsaved = true
+    }
+
+    private var unsaved = false
+
+    private fun saveTimes() {
+        if (!unsaved) return
+        unsaved = false
+        com.adm.features.ModuleManager.configs.firstOrNull { it.modules[name.lowercase()] === this }?.saveModule(this)
     }
 
     private fun draw(gfx: GuiGraphicsExtractor, lines: List<String>): Pair<Int, Int> {
