@@ -124,17 +124,21 @@ open class HudElement(
     var contentWidth: Int = 0
         private set
     private var widest = 0
+    /** The editor example's width, saved: a HUD in the middle third stays centred on the box it was placed as. */
+    private var placedWidth = 0
+    private val anchorWidth: Int get() = if (placedWidth > 0) placedWidth else widest
 
-    // A HUD in the middle third keeps the width of its widest frame (the editor's example sets it) and centres what it draws in it.
-    // Drawn before it's measured, so it goes by the last width shown (kept while hidden) to centre a HUD's first frame back right.
-    val centerOffset: Int get() = if (inMiddle()) ((widest - contentWidth) / 2).coerceAtLeast(0) else 0
+    // A HUD in the middle third centres what it draws on its placed box, wider or narrower than it.
+    // Drawn before it's measured, so a HUD's first frame goes by the last width shown (kept while hidden).
+    val centerOffset: Int get() = if (inMiddle()) (anchorWidth - contentWidth) / 2 else 0
 
     fun onMeasured(measuredWidth: Int, measuredHeight: Int, example: Boolean = false) {
         if (measuredWidth > 0) contentWidth = measuredWidth
         widest = if (example) measuredWidth else maxOf(widest, measuredWidth)
+        if (example && measuredWidth > 0) placedWidth = measuredWidth
         width = when {
             measuredWidth == 0 -> 0
-            inMiddle() -> widest
+            inMiddle() -> anchorWidth
             else -> measuredWidth
         }
         height = measuredHeight
@@ -143,7 +147,7 @@ open class HudElement(
     fun inMiddle(): Boolean {
         val w = liveWidth()
         if (w == 0) return false
-        val middle = x + ((if (width > 0) width else widest) * scale).toInt() / 2
+        val middle = x + ((if (width > 0) width else anchorWidth) * scale).toInt() / 2
         return middle > w / 3 && middle < w * 2 / 3
     }
 
@@ -172,6 +176,7 @@ open class HudElement(
         if (!shareY.isNaN()) json.addProperty("fy", shareY)
         json.addProperty("scale", scale)
         json.addProperty("enabled", enabled)
+        if (placedWidth > 0) json.addProperty("w", placedWidth)
         val target = link
         if (target != null) {
             json.addProperty("link", target)
@@ -189,6 +194,7 @@ open class HudElement(
         element.get("fy")?.asDouble?.let { shareY = it }
         scale = element.get("scale")?.asFloat ?: scale
         enabled = !toggleable || element.get("enabled")?.asBoolean ?: enabled
+        placedWidth = element.get("w")?.asInt ?: 0
         link = element.get("link")?.asString
         linkDx = element.get("lx")?.asInt ?: 0
         linkDy = element.get("ly")?.asInt ?: 0
