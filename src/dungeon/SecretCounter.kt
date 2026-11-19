@@ -8,6 +8,7 @@ import com.adm.events.RoomEnterEvent
 import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.SecretClicked
+import com.adm.features.impl.dungeon.map.tile.MapCheckmark
 import com.adm.utils.Colors
 import com.adm.utils.render.textDim
 import com.adm.utils.noControlCodes
@@ -43,7 +44,13 @@ object SecretCounter {
         SecretClicked.registerSetting(show)
         SecretClicked.registerSetting(hud)
         on<LevelEvent.Load> { count = null }
-        on<RoomEnterEvent> { count = null }
+        // Until the action bar carries a count, the scanned room's own numbers.
+        on<RoomEnterEvent> {
+            val r = room
+            val max = r?.data?.maxSecrets ?: 0
+            count = if (r == null || max <= 0) null
+            else (if (r.checkmark == MapCheckmark.GREEN) max else r.foundSecrets ?: 0) to max
+        }
         SubscribeWhile.add(this, { count = null }) { SecretClicked.enabled && show.value }
     }
 
