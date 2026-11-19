@@ -51,6 +51,7 @@ object SplitsLook {
 
     private val showLag = toggle("Lag", "The time lost to lag so far this run (floor 7).")
     private val showPace = toggle("Pace", "The projected finish.")
+    private val show300 = BooleanSetting("Show 300", false, desc = "The run time when the score reached 300.").withDependency { shownSplits.value }
 
     /** One switch per split: the clear and floor 7 by ADM's names, F1-F6 bosses and Kuudra by ADM's. */
     private val runToggles = listOf("Open", "Blood", "Portal", "Enter", "Maxor", "Storm", "Terms", "Goldor", "Necron", "Dragons")
@@ -146,7 +147,7 @@ object SplitsLook {
         dragonsOnRelics()
         SubSplitGrades.byTime = { colourByTime.value }
         SubSplitGrades.showBest = { showPb.value }
-        val toggles = listOf(showPace, showLag) + runToggles.values + bossToggles.values + kuudraToggles.values
+        val toggles = listOf(showPace, showLag, show300) + runToggles.values + bossToggles.values + kuudraToggles.values
         for (s in listOf(colourByTime, showPb, shownSplits, separate) + separateHuds.values + toggles + listOf(enterAfterEntry, pace, paceFrom, paceFloor) + f7 + m7 + fillFromPbs) Splits.registerSetting(s)
         on<TickEvent.End> {
             val wasOff = separateHuds.values.none { it.value.enabled }
@@ -337,19 +338,40 @@ object SplitsLook {
 
     private const val LINE = 9
 
-    private class Layout(val lines: List<EngineerLook.Line>, val nameW: Int, val timeW: Int)
+    private class Layout(val lines: List<EngineerLook.Line>, val nameW: Int, val timeW: Int) {
+        val names = Array(lines.size) { strip(lines[it].label) }
+        val times = Array(lines.size) { time(lines[it]) }
+        val timeWs = IntArray(lines.size) { EngineerClient.mc.font.width(times[it]) }
+        val width = nameW + GAP + timeW
+    }
 
-    private var cached: Pair<Long, Layout?>? = null
+    private var cached: Layout? = null
+    private var cachedKey = -1L
 
     private fun time(l: EngineerLook.Line) = (if (l.graded) l.colour else "§a") + l.time + (l.ticks?.let { " §8(§7$it§8)" } ?: "")
 
-    /** The lines to draw and their column widths, worked out once a frame for every split HUD. */
+    // Times show to a tenth of a second, so a tick's worth of time is as fresh as the lines need to be.
     private fun layout(example: Boolean): Layout? {
-        val key = System.nanoTime() / 5_000_000 * 2 + if (example) 1 else 0
-        cached?.let { (k, v) -> if (k == key) return v }
-        val v = computeLayout(example)
-        cached = key to v
-        return v
+        val key = System.nanoTime() / 50_000_000 * 2 + if (example) 1 else 0
+        if (key == cachedKey) return cached
+        cached = computeLayout(example)
+        cachedKey = key
+        return cached
+    }
+
+    private const val SCORE_300 = "§c300"
+    private var at300: EngineerLook.Line? = null
+    private var at300Level: Any? = null
+
+    /** The run time when the score first reached 300, kept for the rest of the run. */
+    private fun line300(rows: List<EngineerLook.Row>, opts: EngineerLook.Options): EngineerLook.Line? {
+        val level = EngineerClient.mc.level
+        if (level !== at300Level) { at300Level = level; at300 = null }
+        if (at300 == null && DungeonUtils.inDungeons && DungeonUtils.score >= 300) {
+            val total = rows.lastOrNull()?.takeIf { it.ms > 0 } ?: return null
+            at300 = EngineerLook.Line(SCORE_300, "§c", SplitFormat.minutes(total.ms), if (opts.showTicks) SplitFormat.minutes(total.ticks * 50) else null)
+        }
+        return at300
     }
 
     private fun computeLayout(example: Boolean): Layout? {
@@ -360,7 +382,11 @@ object SplitsLook {
             if (example || place != EngineerLook.Place.FLOOR7) null else { n, ms, t, over -> grade(n, ms, t, over, master) },
             if (example || place != EngineerLook.Place.FLOOR7 || master) null else DungeonSplits.pace()?.let { it.ms to it.ticks },
             if (example || place != EngineerLook.Place.FLOOR7) null else DungeonSplits.lag())
-        val lines = all.filter { shown(it.label, place) }
+        val lines = all.filter { shown(it.label, place) }.toMutableList()
+        if (!example && show300.value && place != EngineerLook.Place.OTHER) line300(rows, opts)?.let { l ->
+            val blood = lines.indexOfFirst { strip(it.label) == "Blood" }
+            lines.add(if (blood >= 0) blood + 1 else lines.size, l)
+        }
         if (lines.isEmpty()) return null
         val font = EngineerClient.mc.font
 
@@ -373,34 +399,35 @@ object SplitsLook {
         return Layout(lines, nameW, timeW)
     }
 
-    private fun drawLine(g: GuiGraphicsExtractor, l: EngineerLook.Line, y: Int, width: Int) {
-        g.text(l.label, 0, y, Colors.WHITE)
-        val s = time(l)
-        g.text(s, width - EngineerClient.mc.font.width(s), y, Colors.WHITE)
+    private fun drawLine(g: GuiGraphicsExtractor, layout: Layout, i: Int, y: Int) {
+        g.text(layout.lines[i].label, 0, y, Colors.WHITE)
+        g.text(layout.times[i], layout.width - layout.timeWs[i], y, Colors.WHITE)
     }
 
     /** ADM's look: the name in its colour on the left, real time in green and server time in gray on the right. */
     private fun drawDisplay(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
         val layout = layout(example) ?: return 0 to 0
-        val lines = if (separate.value) layout.lines.filter { strip(it.label) !in separateHuds } else layout.lines
-        if (lines.isEmpty()) return 0 to 0
-        val width = layout.nameW + GAP + layout.timeW
-        lines.forEachIndexed { i, l -> drawLine(g, l, i * LINE, width) }
-        return width to lines.size * LINE
+        val split = separate.value
+        var n = 0
+        for (i in layout.lines.indices) {
+            if (split && layout.names[i] in separateHuds) continue
+            drawLine(g, layout, i, n++ * LINE)
+        }
+        if (n == 0) return 0 to 0
+        return layout.width to n * LINE
     }
 
     private fun drawOne(g: GuiGraphicsExtractor, name: String, example: Boolean): Pair<Int, Int> {
         if (!separate.value) return 0 to 0
         val layout = layout(example) ?: return 0 to 0
-        val l = layout.lines.firstOrNull { strip(it.label) == name }
-        val width = layout.nameW + GAP + layout.timeW
-        if (l == null) {
+        val i = layout.names.indexOf(name)
+        if (i < 0) {
             if (!example) return 0 to 0
             g.text("§7$name", 0, 0, Colors.WHITE)
-            return width to LINE
+            return layout.width to LINE
         }
-        drawLine(g, l, 0, width)
-        return width to LINE
+        drawLine(g, layout, i, 0)
+        return layout.width to LINE
     }
 
     private const val GAP = 8
