@@ -92,11 +92,25 @@ object ChatHider {
     }
 
     private var afterHidden = false
+    private var inSection = false
     private val BLANK = Regex("§.|[\\s\u00A0\u200B-\u200D\u2800\uFEFF]")
     private fun blank(c: Component) = BLANK.replace(c.string, "").isEmpty()
 
+    // A section's lines are indented; anything else ends it even without a blank line.
+    private fun indented(c: Component): Boolean {
+        val s = c.string
+        var i = 0
+        while (i + 1 < s.length && s[i] == '§') i += 2
+        return i < s.length && s[i].isWhitespace()
+    }
+
     /** True = do not display. Hypixel frames messages with blank lines: those around a hidden one go with it. */
     fun hides(message: Component, all: MutableList<GuiMessage>, lines: MutableList<GuiMessage.Line>): Boolean {
+        if (inSection && com.engineerclient.render.Visibility.cleansChat()) {
+            if (blank(message)) { inSection = false; afterHidden = true; return true }
+            if (indented(message)) return true
+            inSection = false
+        }
         if (shouldHide(message)) {
             val last = all.firstOrNull()
             if (last != null && last.addedTime() == EngineerClient.mc.gui.hud.guiTicks && blank(last.content())) {
@@ -115,8 +129,9 @@ object ChatHider {
         if (!com.engineerclient.render.Visibility.cleansChat()) return false
         if (!loaded) load(announce = false)
         val text = ChatRules.strip(message.string)
-        val rule = rules.hides(text) ?: return false
-        if (com.engineerclient.render.Visibility.logsHiddenChat()) EcLog.log("CHAT-HIDE", "$rule ⇐ ${text.replace("\n", "\\n")}")
+        val rule = rules.match(text) ?: return false
+        inSection = rule.untilBlank
+        if (com.engineerclient.render.Visibility.logsHiddenChat()) EcLog.log("CHAT-HIDE", "${rule.label} ⇐ ${text.replace("\n", "\\n")}")
         return true
     }
 }

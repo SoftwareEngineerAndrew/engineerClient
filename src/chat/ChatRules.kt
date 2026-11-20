@@ -14,10 +14,13 @@ import java.util.regex.PatternSyntaxException
  */
 class ChatRules(val custom: List<Custom>, val block: List<Block>) {
 
-    data class Custom(val regex: String = "", val action: String = "block")
+    data class Custom(val regex: String = "", val action: String = "block", val untilBlank: Boolean = false)
     data class Block(val regex: String = "", val template: String = "", val family: String = "")
 
-    private class Compiled(val pattern: Pattern, val block: Boolean, val label: String, val anchored: Boolean)
+    class Match(val label: String, val untilBlank: Boolean)
+    private class Compiled(val pattern: Pattern, val block: Boolean, label: String, val anchored: Boolean, untilBlank: Boolean = false) {
+        val match = Match(label, untilBlank)
+    }
 
     private val compiled: List<Compiled>
     val invalid: List<String>
@@ -26,7 +29,7 @@ class ChatRules(val custom: List<Custom>, val block: List<Block>) {
         val ok = ArrayList<Compiled>()
         val bad = ArrayList<String>()
         for (c in custom) {
-            try { ok += Compiled(Pattern.compile(c.regex), c.action == "block", "custom ${c.regex}", anchored = false) }
+            try { ok += Compiled(Pattern.compile(c.regex), c.action == "block", "custom ${c.regex}", anchored = false, c.untilBlank) }
             catch (e: PatternSyntaxException) { bad += c.regex }
         }
         for (b in block) {
@@ -40,11 +43,14 @@ class ChatRules(val custom: List<Custom>, val block: List<Block>) {
     val size: Int get() = compiled.size
 
     /** The label of the rule that hides [text], or null when nothing does. [text] has no § codes. */
-    fun hides(text: String): String? {
+    fun hides(text: String): String? = match(text)?.label
+
+    /** The rule that hides [text], or null when nothing does. */
+    fun match(text: String): Match? {
         for (r in compiled) {
             val m = r.pattern.matcher(text)
             val hit = if (r.anchored) m.matches() else m.find()
-            if (hit) return if (r.block) r.label else null
+            if (hit) return if (r.block) r.match else null
         }
         return null
     }

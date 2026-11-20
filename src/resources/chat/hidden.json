@@ -49,7 +49,8 @@
   },
   {
    "regex": "^RARE REWARD! |^[A-Z]+ CHEST REWARDS$",
-   "action": "block"
+   "action": "block",
+   "untilBlank": true
   },
   {
    "regex": "^\\[(?:Mage|Berserk|Archer|Healer|Tank)\\] .+ -> |^Your (?:Mage|Berserk|Archer|Healer|Tank) stats are doubled",
