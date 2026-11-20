@@ -6,6 +6,7 @@ import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.events.*
+import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.features.Module
 import com.adm.utils.*
@@ -135,46 +136,51 @@ object BloodCamp : Module(
 
     private fun msUntilSpawn(spawn: Spawn) = (if (spawn.firstWave) 2000 else 0) + (tick * 50) - (serverMs - spawn.startedMs) + offset
 
-    init {
-        on<EntityEvent.Move> {
-            val boss = watcher ?: return@on
-            val stand = entity as? ArmorStand ?: return@on
-            if (newPos == Vec3.ZERO || newPos == stand.position() || !DungeonUtils.inClear) return@on
-            if (boss.distanceTo(stand) > 20) return@on
-            val head = stand.getItemBySlot(EquipmentSlot.HEAD)
-            if (head.item != Items.PLAYER_HEAD || head.texture !in bloodMobHeads) return@on
+    // Only on the bus while the Watcher is known: every other entity move would return at once.
+    private object Spawns {
+        init {
+            on<EntityEvent.Move> {
+                val boss = watcher ?: return@on
+                val stand = entity as? ArmorStand ?: return@on
+                if (newPos == Vec3.ZERO || newPos == stand.position() || !DungeonUtils.inClear) return@on
+                if (boss.distanceTo(stand) > 20) return@on
+                val head = stand.getItemBySlot(EquipmentSlot.HEAD)
+                if (head.item != Items.PLAYER_HEAD || head.texture !in bloodMobHeads) return@on
 
-            val now = serverMs
-            val known = spawns[stand]
-            val spawn = known ?: newSpawn(stand.position(), newPos, now).also { spawns[stand] = it }
-            val dx = newPos.x - spawn.last.x
-            val dy = newPos.y - spawn.last.y
-            val dz = newPos.z - spawn.last.z
-            spawn.last = newPos
-            if (dx * dx + dy * dy + dz * dz > 0) {
-                spawn.sumX += dx
-                spawn.sumY += dy
-                spawn.sumZ += dz
-                if (known != null && spawn.samples < START_SAMPLES) {
-                    spawn.step++
-                    spawn.startSum += now - spawn.step * STEP_MS
-                    spawn.startedMs = spawn.startSum / ++spawn.samples
+                val now = serverMs
+                val known = spawns[stand]
+                val spawn = known ?: newSpawn(stand.position(), newPos, now).also { spawns[stand] = it }
+                val dx = newPos.x - spawn.last.x
+                val dy = newPos.y - spawn.last.y
+                val dz = newPos.z - spawn.last.z
+                spawn.last = newPos
+                if (dx * dx + dy * dy + dz * dz > 0) {
+                    spawn.sumX += dx
+                    spawn.sumY += dy
+                    spawn.sumZ += dz
+                    if (known != null && spawn.samples < START_SAMPLES) {
+                        spawn.step++
+                        spawn.startSum += now - spawn.step * STEP_MS
+                        spawn.startedMs = spawn.startSum / ++spawn.samples
+                    }
                 }
+
+                val heading = if (spawn.sumX * spawn.sumX + spawn.sumY * spawn.sumY + spawn.sumZ * spawn.sumZ > 0) Vec3(spawn.sumX, spawn.sumY, spawn.sumZ).normalize() else Vec3.ZERO
+                val elapsed = now - spawn.startedMs
+                val landing = spawn.start.add(heading.scale(if (spawn.firstWave) FIRST_WAVE_REACH else LATER_WAVE_REACH))
+                spawn.prevLanding = if (spawn.seen) spawn.landing else landing
+                spawn.landing = landing
+                spawn.seen = true
+                spawn.landingMs = now
+                spawn.velX = (newPos.x - spawn.start.x) / elapsed
+                spawn.velY = (newPos.y - spawn.start.y) / elapsed
+                spawn.velZ = (newPos.z - spawn.start.z) / elapsed
+                spawn.at = newPos
             }
-
-            val heading = if (spawn.sumX * spawn.sumX + spawn.sumY * spawn.sumY + spawn.sumZ * spawn.sumZ > 0) Vec3(spawn.sumX, spawn.sumY, spawn.sumZ).normalize() else Vec3.ZERO
-            val elapsed = now - spawn.startedMs
-            val landing = spawn.start.add(heading.scale(if (spawn.firstWave) FIRST_WAVE_REACH else LATER_WAVE_REACH))
-            spawn.prevLanding = if (spawn.seen) spawn.landing else landing
-            spawn.landing = landing
-            spawn.seen = true
-            spawn.landingMs = now
-            spawn.velX = (newPos.x - spawn.start.x) / elapsed
-            spawn.velY = (newPos.y - spawn.start.y) / elapsed
-            spawn.velZ = (newPos.z - spawn.start.z) / elapsed
-            spawn.at = newPos
         }
+    }
 
+    init {
         on<MessageEvent.Chat> {
             if (!message.startsWith(WATCHER) || !DungeonUtils.inClear) return@on
             if (message in openLines) {
@@ -187,12 +193,16 @@ object BloodCamp : Module(
         on<EntityEvent.SetItemSlot> {
             if (watcher != null || slot != EquipmentSlot.HEAD || !bloodAssist || stack.isEmpty || !DungeonUtils.inClear) return@on
             if (stack.texture in watcherHeads) watcher = entity as? Zombie
+            if (watcher != null) EventBus.subscribe(Spawns)
         }
 
         on<EntityEvent.Remove> {
             if (spawns.isNotEmpty() && entity is ArmorStand) spawns.remove(entity)
             val boss = watcher ?: return@on
-            if (entity.id == boss.id) watcher = null
+            if (entity.id == boss.id) {
+                watcher = null
+                EventBus.unsubscribe(Spawns)
+            }
         }
 
         on<TickEvent.End> {
@@ -206,6 +216,7 @@ object BloodCamp : Module(
 
         on<LevelEvent.Load> {
             watcher = null
+            EventBus.unsubscribe(Spawns)
             spawns.clear()
             serverMs = 0
             firstWave = true
@@ -251,6 +262,16 @@ object BloodCamp : Module(
             }
             drawBoxes(boxes)
         }
+    }
+
+    override fun onEnable() {
+        super.onEnable()
+        if (watcher != null) EventBus.subscribe(Spawns)
+    }
+
+    override fun onDisable() {
+        EventBus.unsubscribe(Spawns)
+        super.onDisable()
     }
 
     private fun cube(x: Double, y: Double, z: Double, half: Double, size: Double): AABB {
