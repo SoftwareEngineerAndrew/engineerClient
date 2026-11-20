@@ -4,7 +4,6 @@ import com.engineerclient.EngineerClient.mc
 import com.adm.events.RenderExtractEvent
 import com.adm.events.core.on
 import com.engineerclient.terminals.Terminals
-import com.adm.events.core.EventBus
 import com.adm.utils.Color.Companion.withAlpha
 import com.adm.utils.render.drawFilledBox
 import com.adm.utils.render.drawWireFrameBox
@@ -82,33 +81,56 @@ object TerminalHitboxes {
         return TERMINALS.indexOfFirst { kotlin.math.abs(e.x - it.at.x) < 0.01 && kotlin.math.abs(e.z - it.at.z) < 0.01 && e.y > it.at.y - 0.5 && e.y < it.at.y + 0.1 }
     }
 
+    private val STANDS = net.minecraft.world.level.entity.EntityTypeTest.forClass<net.minecraft.world.entity.Entity, net.minecraft.world.entity.decoration.ArmorStand>(net.minecraft.world.entity.decoration.ArmorStand::class.java)
+    private val SEARCH by lazy { TERMINALS.map { net.minecraft.world.phys.AABB(it.at.x - 0.1, it.at.y - 0.5, it.at.z - 0.1, it.at.x + 0.1, it.at.y + 0.1, it.at.z + 0.1) } }
+    /** Each terminal's stands, found once a tick; read every frame (removed ones skipped). */
+    private val stands = Array(17) { ArrayList<net.minecraft.world.entity.decoration.ArmorStand>(2) }
+    private val done = BooleanArray(17)
+    /** Whether the frames have anything to draw: in the boss or the sim, and in P3 unless the chat already says so. */
+    private var tracking = false
+
+    private fun inFight() = com.engineerclient.p3sim.P3Sim.inSim || DungeonUtils.inBoss && DungeonUtils.floor?.floorNumber == 7
+
+    private fun findStands() {
+        val level = mc.level
+        tracking = level != null && inFight() && (com.engineerclient.p3sim.P3Sim.inSim ||
+            !TermInfo.coreOpened && (TermInfo.liveSection() != 0 || DungeonUtils.getF7Phase() == com.adm.utils.skyblock.dungeon.M7Phases.P3))
+        if (!tracking) { for (s in stands) s.clear(); return }
+        for (i in TERMINALS.indices) {
+            stands[i].clear()
+            level!!.getEntities(STANDS, SEARCH[i], { terminalOf(it) == i }, stands[i])
+        }
+    }
+
     private fun RenderExtractEvent.drawTerminals() {
         // Your own sim: its state. Someone else's (a party): the world and chat, as on Hypixel.
         val sim = com.engineerclient.p3sim.P3Sim.localSim
-        if (!com.engineerclient.p3sim.P3Sim.inSim && !(DungeonUtils.inBoss && DungeonUtils.floor?.floorNumber == 7)) return
+        if (!tracking || !inFight()) return
         val level = mc.level ?: return
         val player = mc.player ?: return
         val simStations = if (sim) (com.engineerclient.p3sim.Fight.phase as? com.engineerclient.p3sim.GoldorPhase)?.stations else null
-        val stands = TERMINALS.mapIndexed { i, t ->
-            level.getEntitiesOfClass(net.minecraft.world.entity.decoration.ArmorStand::class.java,
-                net.minecraft.world.phys.AABB(t.at.x - 0.1, t.at.y - 0.5, t.at.z - 0.1, t.at.x + 0.1, t.at.y + 0.1, t.at.z + 0.1)) { terminalOf(it) == i }
-        }
-        val done = BooleanArray(TERMINALS.size) { i ->
+        var doneBound = 0
+        for (i in TERMINALS.indices) {
             val t = TERMINALS[i]
-            if (sim) simStations?.firstOrNull { it.kind == t.kind && it.section == t.section && it.label == t.label }?.done == true
+            done[i] = if (sim) simStations?.firstOrNull { it.kind == t.kind && it.section == t.section && it.label == t.label }?.done == true
             else {
                 // Hypixel's stands come and go with tracking range: a done one is remembered. Done: the top stand drops
                 // 0.375 onto the bottom one's height (at any distance, unlike the names), or reads "Terminal Active".
-                val s = stands[i]
-                if (s.size >= 2 && s.maxOf { it.y } - s.minOf { it.y } < 0.1 || s.any { it.customName?.string?.contains("Terminal Active") == true }) doneSeen[i] = true
+                var count = 0; var minY = Double.MAX_VALUE; var maxY = -Double.MAX_VALUE; var active = false
+                for (e in stands[i]) {
+                    if (e.isRemoved) continue
+                    count++; minY = minOf(minY, e.y); maxY = maxOf(maxY, e.y)
+                    if (e.customName?.string?.contains("Terminal Active") == true) active = true
+                }
+                if (count >= 2 && maxY - minY < 0.1 || active) doneSeen[i] = true
                 doneSeen[i]
             }
+            if (done[i]) doneBound = maxOf(doneBound, t.section)
         }
         // Only while terminals run (Goldor's first line to the core opening), not over P1, P2 or P4. On Hypixel the chat
         // count is backed by the world, so a missed line or a world reload mid-P3 can't hold it back.
         val live = if (sim) TermInfo.liveSection() else {
             val chat = TermInfo.liveSection()
-            val doneBound = TERMINALS.indices.filter { done[it] }.maxOfOrNull { TERMINALS[it].section } ?: 0
             if (TermInfo.coreOpened || chat == 0 && doneBound == 0) 0 else maxOf(chat, doneBound, doorSection(level))
         }
         if (live == 0) return
@@ -119,8 +141,9 @@ object TerminalHitboxes {
             // Done ones, and any of an earlier section (it only ended once all its terminals were done).
             if (done[i] || t.section < live) return@forEachIndexed
             val at = t.at
-            val box = stands[i].map { it.boundingBox }.reduceOrNull { a, b -> a.minmax(b) }
-                ?: net.minecraft.world.phys.AABB(at.x - 0.25, at.y - 0.355, at.z - 0.25, at.x + 0.25, at.y + 1.995, at.z + 0.25)
+            var box: net.minecraft.world.phys.AABB? = null
+            for (e in stands[i]) if (!e.isRemoved) box = box?.minmax(e.boundingBox) ?: e.boundingBox
+            box = box ?: net.minecraft.world.phys.AABB(at.x - 0.25, at.y - 0.355, at.z - 0.25, at.x + 0.25, at.y + 1.995, at.z + 0.25)
             // Aiming: the game's own pick (what a click goes to) is one of its stands.
             val aimed = aimedAt == i
             val near = aimed || inReach(level, player, eye, box, reach)
@@ -156,7 +179,8 @@ object TerminalHitboxes {
     }
 
     fun install() {
-        on<RenderExtractEvent> { if (Terminals.hitboxesOn) com.engineerclient.EngineerClient.safely("terminal hitboxes") { drawTerminals() } }
+        on<com.adm.events.TickEvent.End> { com.engineerclient.EngineerClient.safely("terminal hitboxes") { findStands() } }
+        on<RenderExtractEvent> { com.engineerclient.EngineerClient.safely("terminal hitboxes") { drawTerminals() } }
         // The terminal your clicks go to, so your own "activated a terminal!" marks it done at once.
         net.fabricmc.fabric.api.event.player.UseEntityCallback.EVENT.register { _, level, _, entity, _ ->
             if (level.isClientSide) terminalOf(entity).let { if (it >= 0) lastClicked = it }
@@ -166,6 +190,6 @@ object TerminalHitboxes {
             if (level.isClientSide) terminalOf(entity).let { if (it >= 0) lastClicked = it }
             net.minecraft.world.InteractionResult.PASS
         }
-        EventBus.subscribe(this)
+        com.adm.events.core.SubscribeWhile.add(this, { tracking = false; for (s in stands) s.clear() }) { Terminals.hitboxesOn }
     }
 }
