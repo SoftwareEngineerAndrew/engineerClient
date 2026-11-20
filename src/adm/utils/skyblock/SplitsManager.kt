@@ -20,6 +20,11 @@ object SplitsManager {
     private var currentSplits: SplitsGroup = SplitsGroup(emptyList(), null)
     private var tickCounter: Long = 0L
 
+    /** Goes up whenever the splits shown can change other than by time passing. */
+    @Volatile
+    var changes = 0
+        private set
+
     init {
         on<MessageEvent.Chat> {
             if (message == "Starting in 1 second.") startRun() else onSplitMessage(message)
@@ -32,6 +37,7 @@ object SplitsManager {
         on<LevelEvent.Load> {
             currentSplits = SplitsGroup(emptyList(), null)
             tickCounter = 0L
+            changes++
         }
     }
 
@@ -42,6 +48,7 @@ object SplitsManager {
             Island.Kuudra -> buildKuudraSplits() ?: return
             else -> SplitsGroup(emptyList(), null)
         }
+        changes++
     }
 
     private fun buildDungeonSplits(): SplitsGroup? {
@@ -76,6 +83,7 @@ object SplitsManager {
 
         split.time = System.currentTimeMillis()
         split.ticks = tickCounter
+        changes++
 
         val index = splits.indexOf(split)
         if (index == 0) return

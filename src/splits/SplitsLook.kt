@@ -347,15 +347,18 @@ object SplitsLook {
 
     private var cached: Layout? = null
     private var cachedKey = -1L
+    private var cachedChanges = -1
 
     private fun time(l: EngineerLook.Line) = (if (l.graded) l.colour else "§a") + l.time + (l.ticks?.let { " §8(§7$it§8)" } ?: "")
 
     // Times show to a tenth of a second, so a tick's worth of time is as fresh as the lines need to be.
     private fun layout(example: Boolean): Layout? {
         val key = System.nanoTime() / 50_000_000 * 2 + if (example) 1 else 0
-        if (key == cachedKey) return cached
+        val changes = SplitsManager.changes
+        if (key == cachedKey && changes == cachedChanges) return cached
         cached = computeLayout(example)
         cachedKey = key
+        cachedChanges = changes
         return cached
     }
 
