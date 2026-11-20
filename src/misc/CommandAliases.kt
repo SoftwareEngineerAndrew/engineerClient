@@ -22,6 +22,7 @@ object CommandAliases : Module(
     key = null,
 ) {
     private const val SLOTS = 20
+    private const val MAX_DEPTH = 5
 
     private class Slot(val alias: StringSetting, val command: StringSetting) {
         fun used() = alias.value.isNotBlank() || command.value.isNotBlank()
@@ -29,7 +30,8 @@ object CommandAliases : Module(
     }
 
     private val slots = ArrayList<Slot>()
-    private var running = false
+    // Aliases being expanded right now, so a chain that comes back to one of them stops there.
+    private val active = ArrayList<Slot>()
     private var suggesting = false
     private var lastTyped = ""
     private var lastRunAt = 0L
@@ -45,7 +47,7 @@ object CommandAliases : Module(
             slots += Slot(alias, command)
         }
 
-        ClientSendMessageEvents.ALLOW_COMMAND.register { typed -> !(enabled && !running && run(typed)) }
+        ClientSendMessageEvents.ALLOW_COMMAND.register { typed -> !(enabled && run(typed)) }
 
         // Registered as client commands only for tab completion; a changed alias completes after the next join.
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
@@ -87,15 +89,17 @@ object CommandAliases : Module(
         val word = typed.substringBefore(' ')
         val rest = typed.substringAfter(' ', "")
         val slot = slots.firstOrNull { it.name().equals(word, ignoreCase = true) && it.command.value.isNotBlank() } ?: return false
-        // The send hook and the client command can both see one typed alias.
-        val now = System.currentTimeMillis()
-        if (typed == lastTyped && now - lastRunAt < 100) return true
-        lastTyped = typed
-        lastRunAt = now
+        if (slot in active || active.size >= MAX_DEPTH) return true
+        if (active.isEmpty()) {
+            // The send hook and the client command can both see one typed alias.
+            val now = System.currentTimeMillis()
+            if (typed == lastTyped && now - lastRunAt < 100) return true
+            lastTyped = typed
+            lastRunAt = now
+        }
         val target = target(slot)
-        // An alias whose command is itself an alias would loop.
-        running = true
-        try { mc.player?.connection?.sendCommand(if (rest.isBlank()) target else "$target $rest") } finally { running = false }
+        active += slot
+        try { mc.player?.connection?.sendCommand(if (rest.isBlank()) target else "$target $rest") } finally { active.removeLast() }
         return true
     }
 }
