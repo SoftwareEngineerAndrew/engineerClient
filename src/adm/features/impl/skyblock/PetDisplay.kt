@@ -76,7 +76,7 @@ object PetDisplay : Module(
 
     init {
         on<MessageEvent.Chat> {
-            autopet.matchEntire(message)?.let { m ->
+            if (message.startsWith("Autopet equipped your [Lvl ")) autopet.matchEntire(message)?.let { m ->
                 val name = colored(component, m.groupValues[2])
                 pet = "§7[Lvl ${m.groupValues[1]}] $name"
                 if (autopetDungeons && !DungeonUtils.inDungeons) return@on
@@ -84,16 +84,16 @@ object PetDisplay : Module(
                 autopetUntil = System.currentTimeMillis() + AUTOPET_MS
                 return@on
             }
-            summoned.matchEntire(message)?.let { m ->
+            if (message.startsWith("You summoned your ")) summoned.matchEntire(message)?.let { m ->
                 pet = colored(component, m.groupValues[1])
                 return@on
             }
-            if (despawned.matches(message)) pet = null
+            if (message.startsWith("You despawned your ") && despawned.matches(message)) pet = null
         }
 
         on<SetSlotEvent> {
-            val title = mc.gui.screen()?.title?.string ?: return@on
             if (slotIndex >= menu.slots.size - 36) return@on
+            val title = mc.gui.screen()?.title?.string ?: return@on
             if (title.startsWith("Pets") && itemStack.loreString.any { "Click to despawn" in it }) pet = itemStack.hoverName.legacy()
         }
 
