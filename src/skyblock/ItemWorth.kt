@@ -22,6 +22,8 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.ItemStack
 import java.io.StringReader
+import java.util.IdentityHashMap
+
 import java.util.Locale
 
 /** Croesus' price section: lowest BIN, bazaar prices and an estimated worth for any item, in its tooltip. */
@@ -53,9 +55,9 @@ object ItemWorth {
     }
 
     // Prices are fetched only while something asks for them, at most every few minutes.
-    private fun ensureFresh() {
+    private fun ensureFresh(always: Boolean = false) {
         if (fetching || System.currentTimeMillis() - lastFetch < REFRESH_MS) return
-        if (!Croesus.enabled || !LocationUtils.isInSkyblock) return
+        if (!always && !Croesus.enabled || !LocationUtils.isInSkyblock) return
         fetching = true
         AdmMod.scope.launch {
             try {
@@ -143,6 +145,22 @@ object ItemWorth {
     fun idForName(name: String): String? {
         ensureFresh()
         return idsByName[name]
+    }
+
+    private class Estimate(val count: Int, val lbin: Map<String, Double>, val sell: Map<String, Double>, val value: Double?)
+    private val estimates = IdentityHashMap<CustomData, Estimate>()
+
+    /** [worth] of [stack], kept until the item or the prices change; prices are fetched even with Croesus off. */
+    fun estimate(stack: ItemStack): Double? {
+        val data = stack.get(DataComponents.CUSTOM_DATA) ?: return null
+        ensureFresh(true)
+        val lb = lbin
+        val sell = bazaarSell
+        estimates[data]?.let { if (it.count == stack.count && it.lbin === lb && it.sell === sell) return it.value }
+        val value = worth(stack)?.first
+        if (estimates.size >= 1024) estimates.clear()
+        estimates[data] = Estimate(stack.count, lb, sell, value)
+        return value
     }
 
     /** A pet's lowest BIN by its type and tier, e.g. SPIRIT and LEGENDARY. */

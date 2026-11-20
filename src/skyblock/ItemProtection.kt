@@ -6,6 +6,8 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.KeybindSetting
 import com.adm.clickgui.settings.impl.ListSetting
+import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.events.ScreenEvent
 import com.adm.events.core.on
 import com.adm.features.Category
@@ -45,6 +47,12 @@ object ItemProtection : Module(
     private val protectArmor by BooleanSetting("Protect Current Armor", false, desc = "Protects the armor you are wearing.")
     private val showMarker by BooleanSetting("Show Protected", true, desc = "Outlines protected items and adds a tooltip line.")
     private val markerColor by ColorSetting("Protected Color", Color(0xFF, 0x55, 0x55, 0.8f), true, desc = "Outline color of protected items.")
+    private val protectAbove by NumberSetting("Protect Above Price", 0, 0..1000, desc = "Protects items worth more than this. 0 is off.", unit = "M")
+    private val protectHotbar by BooleanSetting("Protect Hotbar Outside Dungeons", false, desc = "Outside dungeons, nothing in your hotbar can be dropped.")
+    private val slotLocking by BooleanSetting("Slot Locking", false, desc = "Locked inventory slots can't be clicked, moved or dropped.")
+    private val lockKey by KeybindSetting("Lock Slot Key", InputConstants.UNKNOWN, "Locks or unlocks the hovered inventory slot.").withDependency { slotLocking }
+    private val lockColor by ColorSetting("Locked Slot Color", Color(0x40, 0x40, 0x40, 0.5f), true, desc = "Shade over locked slots.").withDependency { slotLocking }
+    private val lockedSlots by ListSetting("Locked Slots", mutableSetOf<Int>())
 
     private val ARMOR = listOf(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET)
 
@@ -59,11 +67,36 @@ object ItemProtection : Module(
         if (protectStarred && (data.getInt("upgrade_level").orElse(0) > 0 || data.getInt("dungeon_item_level").orElse(0) > 0)) return true
         if (protectRecombed && data.getInt("rarity_upgrades").orElse(0) > 0) return true
         if (protectArmor) {
-            val uuid = stack.itemUUID.ifEmpty { return false }
-            val player = mc.player ?: return false
-            if (ARMOR.any { player.getItemBySlot(it).itemUUID == uuid }) return true
+            val uuid = stack.itemUUID
+            val player = mc.player
+            if (uuid.isNotEmpty() && player != null && ARMOR.any { player.getItemBySlot(it).itemUUID == uuid }) return true
+        }
+        if (protectAbove > 0) {
+            val worth = ItemWorth.estimate(stack)
+            if (worth != null && worth > protectAbove * 1_000_000.0) return true
         }
         return false
+    }
+
+    private fun isLocked(slot: Slot?): Boolean =
+        slot != null && slot.container is Inventory && slot.containerSlot in lockedSlots
+
+    private fun toggleLock(slot: Slot) {
+        if (slot.container !is Inventory) return
+        val index = slot.containerSlot
+        if (lockedSlots.remove(index)) EngineerClient.msg("§7Slot unlocked.")
+        else {
+            lockedSlots.add(index)
+            EngineerClient.msg("§aSlot locked.")
+        }
+        ModuleManager.saveConfigurations()
+    }
+
+    private fun lockAlert() {
+        val now = System.currentTimeMillis()
+        if (now - lastAlert < 1000) return
+        lastAlert = now
+        EngineerClient.msg("§cThat slot is locked.")
     }
 
     private fun toggleHeld() {
@@ -95,7 +128,9 @@ object ItemProtection : Module(
 
     @JvmStatic
     fun markSlot(graphics: GuiGraphicsExtractor, slot: Slot) {
-        if (!enabled || !showMarker || slot.item.isEmpty || !protectedCached(slot.item)) return
+        if (!enabled) return
+        if (slotLocking && isLocked(slot)) graphics.fill(slot.x, slot.y, slot.x + 16, slot.y + 16, lockColor.rgba)
+        if (!showMarker || slot.item.isEmpty || !protectedCached(slot.item)) return
         val x = slot.x
         val y = slot.y
         val c = markerColor.rgba
@@ -108,7 +143,13 @@ object ItemProtection : Module(
     init {
         on<ScreenEvent.KeyPress> {
             val screen = screen as? AbstractContainerScreen<*> ?: return@on
-            if (protectKey == InputConstants.UNKNOWN || InputConstants.getKey(input) != protectKey) return@on
+            val key = InputConstants.getKey(input)
+            if (slotLocking && lockKey != InputConstants.UNKNOWN && key == lockKey) {
+                toggleLock(screen.hoveredSlot ?: return@on)
+                cancel()
+                return@on
+            }
+            if (protectKey == InputConstants.UNKNOWN || key != protectKey) return@on
             toggle(screen.hoveredSlot?.item ?: return@on)
             cancel()
         }
@@ -123,8 +164,11 @@ object ItemProtection : Module(
 
     @JvmStatic
     fun blocksDrop(player: LocalPlayer): Boolean {
+        if (!enabled) return false
+        if (slotLocking && player.inventory.selectedSlot in lockedSlots) { lockAlert(); return true }
         if (dropHeldInRun && DungeonUtils.inDungeons) return false
         val stack = player.inventory.selectedItem
+        if (protectHotbar && !stack.isEmpty && !DungeonUtils.inDungeons) { dropAlert(stack); return true }
         if (!isProtected(stack)) return false
         dropAlert(stack)
         return true
@@ -146,7 +190,18 @@ object ItemProtection : Module(
     @JvmStatic
     fun blocksClick(screen: AbstractContainerScreen<*>, slot: Slot?, slotId: Int, button: Int, input: ContainerInput): Boolean {
         if (!enabled) return false
-        if (slotId == AbstractContainerMenu.SLOT_CLICKED_OUTSIDE && isProtected(screen.menu.carried)) { dropAlert(screen.menu.carried); return true }
+        if (slotLocking && (isLocked(slot) || input == ContainerInput.SWAP && button in lockedSlots)) { lockAlert(); return true }
+        // A drag starts and ends with an outside click; neither drops anything.
+        if (slotId == AbstractContainerMenu.SLOT_CLICKED_OUTSIDE && input != ContainerInput.QUICK_CRAFT && isProtected(screen.menu.carried)) { dropAlert(screen.menu.carried); return true }
+        // Dragging or placing the carried item into the menu's own slots.
+        if ((input == ContainerInput.QUICK_CRAFT || input == ContainerInput.PICKUP) && slot != null && slot.container !is Inventory) {
+            val carried = screen.menu.carried
+            if (!carried.isEmpty && isProtected(carried)) {
+                val what = blockedAction(screen) ?: return false
+                EngineerClient.msg(Component.literal("§cStopped ").append(carried.hoverName).append("§c from being $what."))
+                return true
+            }
+        }
         // A hotbar key over a menu slot moves the hotbar item into the menu.
         if (input == ContainerInput.SWAP && slot != null && slot.container !is Inventory) {
             val moved = mc.player?.inventory?.getItem(button) ?: return false
@@ -156,6 +211,10 @@ object ItemProtection : Module(
             return true
         }
         val stack = slot?.item ?: return false
+        if (protectHotbar && input == ContainerInput.THROW && !stack.isEmpty && slot.container is Inventory && slot.containerSlot in 0..8 && !DungeonUtils.inDungeons) {
+            dropAlert(stack)
+            return true
+        }
         if (!isProtected(stack)) return false
         if (input == ContainerInput.THROW) { dropAlert(stack); return true }
         // what the menu shows (a sold auction to claim, a trade's other side) is never yours to lose by clicking
