@@ -28,6 +28,7 @@ object SlotBinds : Module(
     private val lineWidth by NumberSetting("Line Width", 0.5f, 0.1..2.0, 0.1, desc = "Width of the line drawn between slots.")
     private val lineDisplayMode by SelectorSetting("Line Display", LineDisplay.HOVER, desc = "When to show lines between bound slots.")
     private val currentProfile by SelectorSetting("Profile", Profile.PROFILE_1, desc = "Select which profile to use.")
+    private val protectBound by BooleanSetting("Protect Bound Slots", false, desc = "Plain clicks can't move items out of bound slots.")
 
     enum class LineDisplay(private val label: String) {
         HOVER("Hover"),
@@ -93,47 +94,35 @@ object SlotBinds : Module(
     init {
         on<GuiEvent.SlotClick> {
             val screen = screen as? AbstractContainerScreen<*> ?: return@on
-            if (!mc.hasShiftDown()) return@on
+            val shift = mc.hasShiftDown()
+            if (!shift && !protectBound) return@on
             val clicked = hovered(screen)
             if (clicked == NO_SLOT) return@on
             val bound = peekBind(clicked)
             if (bound == NO_SLOT) return@on
-            val hotbar = if (isHotbar(clicked)) clicked else if (isHotbar(bound)) bound else return@on
-            val other = menuSlot(screen, if (hotbar == clicked) bound else clicked) ?: return@on
-            mc.player?.clickSlot(other.index, hotbar % 36, ContainerInput.SWAP)
-            cancel()
+            if (shift) {
+                val hotbar = if (isHotbar(clicked)) clicked else if (isHotbar(bound)) bound else NO_SLOT
+                val other = if (hotbar == NO_SLOT) null else menuSlot(screen, if (hotbar == clicked) bound else clicked)
+                if (other != null) {
+                    mc.player?.clickSlot(other.index, hotbar % 36, ContainerInput.SWAP)
+                    cancel()
+                    return@on
+                }
+            }
+            if (protectBound && screen.hoveredSlot?.item?.isEmpty == false) cancel()
         }
 
         on<ScreenEvent.KeyPress> {
             val screen = screen as? AbstractContainerScreen<*> ?: return@on
             if (input.key != setNewSlotbind.value) return@on
-            val slot = hovered(screen)
-            if (slot == NO_SLOT) return@on
-            cancel()
-            val profile = currentProfile.label
-            val first = pending
-            if (first == NO_SLOT) {
-                val removed = removeBind(slot)
-                if (removed == null) {
-                    pending = slot
-                    return@on
-                }
-                ModuleManager.saveConfigurations()
-                modMessage("§cRemoved bind from slot §b$slot §cto §d$removed §7($profile).")
-                return@on
-            }
-            when {
-                first == slot -> modMessage("§cYou can't bind a slot to itself.")
-                !isHotbar(first) && !isHotbar(slot) -> modMessage("§cOne of the slots must be in the hotbar (36–44).")
-                else -> {
-                    modMessage("§aAdded bind from slot §b$first §ato §d$slot §7($profile).")
-                    removeBind(first)
-                    removeBind(slot)
-                    binds()[first] = slot
-                    ModuleManager.saveConfigurations()
-                    pending = NO_SLOT
-                }
-            }
+            if (bindKey(screen)) cancel()
+        }
+
+        on<ScreenEvent.MouseClick> {
+            val screen = screen as? AbstractContainerScreen<*> ?: return@on
+            val key = setNewSlotbind
+            if (key.type != InputConstants.Type.MOUSE || click.button() != key.value) return@on
+            if (bindKey(screen)) cancel()
         }
 
         on<GuiEvent.DrawTooltip> {
@@ -160,4 +149,35 @@ object SlotBinds : Module(
 
         on<ScreenCloseEvent> { pending = NO_SLOT }
     }
+
+    private fun bindKey(screen: AbstractContainerScreen<*>): Boolean {
+        val slot = hovered(screen)
+        if (slot == NO_SLOT) return false
+        val profile = currentProfile.label
+        val first = pending
+        if (first == NO_SLOT) {
+            val removed = removeBind(slot)
+            if (removed == null) {
+                pending = slot
+                return true
+            }
+            ModuleManager.saveConfigurations()
+            modMessage("§cRemoved bind from slot §b$slot §cto §d$removed §7($profile).")
+            return true
+        }
+        when {
+            first == slot -> modMessage("§cYou can't bind a slot to itself.")
+            !isHotbar(first) && !isHotbar(slot) -> modMessage("§cOne of the slots must be in the hotbar (36–44).")
+            else -> {
+                modMessage("§aAdded bind from slot §b$first §ato §d$slot §7($profile).")
+                removeBind(first)
+                removeBind(slot)
+                binds()[first] = slot
+                ModuleManager.saveConfigurations()
+                pending = NO_SLOT
+            }
+        }
+        return true
+    }
+
 }
