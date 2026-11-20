@@ -61,7 +61,7 @@ object WitherDragons : Module(
     val sendTime by BooleanSetting("Send Dragon Time Alive", true, desc = "Sends a message when a dragon dies with the time it was alive.").withDependency { dragonAlerts }
     val sendSpawned by BooleanSetting("Send Dragon Spawned", true, desc = "Sends a message when a dragon has spawned.").withDependency { dragonAlerts }
     val sendSpray by BooleanSetting("Send Ice Sprayed", true, desc = "Sends a message when a dragon has been ice sprayed.").withDependency { dragonAlerts }
-    val arrowHits by BooleanSetting("Arrow Hits", false, desc = "Counts your bow hits on the priority dragon for its death message.").withDependency { dragonAlerts }
+    val arrowHits by BooleanSetting("Arrow Hits", false, desc = "Counts your bow hits on each dragon, the one you aim at, for its death message.").withDependency { dragonAlerts }
 
     private val dragonHealth by BooleanSetting("Dragon Health", true, desc = "Displays the health of M7 dragons.")
 
@@ -163,12 +163,24 @@ object WitherDragons : Module(
         drawTracer(spawnCenters[target.ordinal], target.color, true)
     }
 
+    // The ding plays at the shooter, not the dragon, so the hit goes to the alive dragon nearest your aim.
     private val countHit = Runnable {
-        if (mc.player?.mainHandItem?.item !is BowItem) return@Runnable
-        for (i in spawnOrder.indices) {
-            val d = spawnOrder.getOrNull(i) ?: return@Runnable
-            if (d.state == WitherDragonState.ALIVE) { d.arrowHits++; return@Runnable }
+        val player = mc.player ?: return@Runnable
+        if (player.mainHandItem.item !is BowItem) return@Runnable
+        val look = player.lookAngle
+        var best: WitherDragonsEnum? = null
+        var bestCos = -2.0
+        for (d in WitherDragonsEnum.entries) {
+            if (d.state != WitherDragonState.ALIVE) continue
+            val entity = d.entityUUID?.let { mc.level?.getEntity(it) }
+            val dx = (entity?.x ?: (d.spawnPos.x + 0.5)) - player.x
+            val dy = (entity?.y ?: d.spawnPos.y.toDouble()) - player.eyeY
+            val dz = (entity?.z ?: (d.spawnPos.z + 0.5)) - player.z
+            val len = Math.sqrt(dx * dx + dy * dy + dz * dz).takeIf { it > 0.0 } ?: continue
+            val cos = (dx * look.x + dy * look.y + dz * look.z) / len
+            if (cos > bestCos) { bestCos = cos; best = d }
         }
+        best?.let { it.arrowHits++ }
     }
 
     /** With [split] on, whether your class takes the later of two dragons spawning together. */
