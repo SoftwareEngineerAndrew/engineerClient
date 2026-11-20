@@ -55,6 +55,8 @@ object InvincibilityTimer : Module(
         }
         if (row == 0) 0 to 0 else width + 20 to row * 14
     }
+    init { hud.leftAlign = true }
+
     private val showOnlyInBoss by BooleanSetting("Show In Boss", false, desc = "Only shows invincibility timers during dungeon boss fights.")
     private val showWhen by SelectorSetting("Show", ShowWhen.ALWAYS, "Controls when invincibility items are shown.")
     private val equippedMaskColor by ColorSetting("Equipped Mask", Colors.MINECRAFT_DARK_PURPLE, desc = "Color of the equipped mask in the HUD. (Bonzo/Spirit)")

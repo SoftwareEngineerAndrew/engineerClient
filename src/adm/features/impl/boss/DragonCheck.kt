@@ -50,7 +50,7 @@ object DragonCheck {
         if (name == null) return
         val cached = standDragons.get(stand.id)
         val dragon = cached ?: standDragon(stand) ?: return
-        val hp = parseHp(name.string)
+        val hp = if (dragon.isDeadOrDying) 0f else parseHp(name.string)
         if (hp < 0f) return
         if (cached == null) standDragons.put(stand.id, dragon)
         dragonHealthMap[dragon.uuid] = Pair(dragon, hp)

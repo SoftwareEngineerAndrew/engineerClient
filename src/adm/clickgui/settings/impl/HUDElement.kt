@@ -130,7 +130,9 @@ open class HudElement(
 
     // A HUD in the middle third centres what it draws on its placed box, wider or narrower than it.
     // Drawn before it's measured, so a HUD's first frame goes by the last width shown (kept while hidden).
-    val centerOffset: Int get() = if (inMiddle()) (anchorWidth - contentWidth) / 2 else 0
+    // Lists that read down a left edge (icons then text) stay left-aligned wherever they are placed.
+    var leftAlign = false
+    val centerOffset: Int get() = if (!leftAlign && inMiddle()) (anchorWidth - contentWidth) / 2 else 0
 
     fun onMeasured(measuredWidth: Int, measuredHeight: Int, example: Boolean = false) {
         if (measuredWidth > 0) contentWidth = measuredWidth

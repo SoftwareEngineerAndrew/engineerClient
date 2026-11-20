@@ -146,7 +146,7 @@ object WitherDragons : Module(
         if (dragonHealth) for (tracked in DragonCheck.dragonHealthMap.values) {
             val hp = tracked.second
             val dragon = tracked.first
-            if (hp > 0 && !dragon.isRemoved) drawText(healthTexts(hp.toDouble()), dragon.renderPos, 5f, false)
+            if (hp > 0 && !dragon.isRemoved && !dragon.isDeadOrDying) drawText(healthTexts(hp.toDouble()), dragon.renderPos, 5f, false)
         }
 
         boxes.clear()
