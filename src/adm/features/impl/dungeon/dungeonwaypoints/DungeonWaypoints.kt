@@ -85,10 +85,12 @@ object DungeonWaypoints : Module(
         on<SecretPickupEvent.Bat> { SecretWaypoints.onPickup(BlockPos.containing(packet.x, packet.y, packet.z), 5) }
 
         on<LevelEvent.Load> {
-            WaypointStore.reloadIfChanged()
+            if (!WaypointStore.loaded) WaypointStore.reloadIfChanged()
             WaypointStore.clearClicks()
             SecretWaypoints.forgetEtherwarp()
         }
+
+        on<LocationChangeEvent> { if (DungeonUtils.inDungeons) WaypointStore.reloadIfChanged() }
 
         on<RenderExtractEvent>(EventPriority.HIGHEST) { WaypointView.render(this) }
         on<InputEvent> { WaypointEditor.onInput(this) }

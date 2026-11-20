@@ -21,6 +21,7 @@ internal object WaypointStore {
     @Volatile private var loadedStamp: List<Long>? = null
 
     val revision: Int get() = version.get()
+    val loaded: Boolean get() = loadedStamp != null
 
     fun changed() { version.incrementAndGet() }
 
