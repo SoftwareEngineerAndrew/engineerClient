@@ -1,9 +1,16 @@
 package com.adm.utils.skyblock
 
 import com.adm.AdmMod.mc
+import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.PartyEvent
 import com.adm.events.core.on
+import com.adm.utils.handlers.schedule
+import net.hypixel.modapi.HypixelModAPI
+import net.hypixel.modapi.packet.impl.clientbound.ClientboundHelloPacket
+import net.hypixel.modapi.packet.impl.clientbound.ClientboundPartyInfoPacket
+import net.hypixel.modapi.packet.impl.serverbound.ServerboundPartyInfoPacket
+import kotlin.jvm.optionals.getOrNull
 
 object PartyUtils {
 
@@ -45,93 +52,136 @@ object PartyUtils {
         private set
 
     init {
-        on<MessageEvent.Chat> {
-            joinedOther.find(message)?.let { return@on addMember(it.groupValues[2]) }
+        on<MessageEvent.Chat> { if (parseChat(message)) requestPartyInfo() }
+        on<LevelEvent.Load> { requestPartyInfo() }
 
-            joinedSelf.find(message)?.let {
-                addMember(it.groupValues[2])
-                partyLeader = it.groupValues[2]
-                addMember(mc.player?.gameProfile?.name ?: return@on)
-                return@on
-            }
+        HypixelModAPI.getInstance().createHandler(ClientboundHelloPacket::class.java) { if (mc.player != null) requestPartyInfo() }
+        HypixelModAPI.getInstance().createHandler(ClientboundPartyInfoPacket::class.java, ::onPartyInfo)
+    }
 
-            leftParty.find(message)?.let { return@on removeMember(it.groupValues[2]) }
+    private fun parseChat(message: String): Boolean {
+        joinedOther.find(message)?.let { addMember(it.groupValues[2]); return true }
 
-            kickedParty.find(message)?.let { return@on removeMember(it.groupValues[2]) }
-
-            kickedOffline.find(message)?.let { return@on removeMember(it.groupValues[2]) }
-
-            kickedDisconnected.find(message)?.let { return@on removeMember(it.groupValues[2]) }
-
-            transferBy.find(message)?.let {
-                addMember(it.groupValues[2])
-                addMember(it.groupValues[4])
-                partyLeader = it.groupValues[2]
-                return@on
-            }
-
-            transferLeave.find(message)?.let {
-                addMember(it.groupValues[2])
-                partyLeader = it.groupValues[2]
-                removeMember(it.groupValues[4])
-                return@on
-            }
-
-            leaderDisconnected.find(message)?.let {
-                partyLeader = it.groupValues[2]
-                return@on
-            }
-
-            leaderRejoined.find(message)?.let {
-                partyLeader = it.groupValues[2]
-                return@on
-            }
-
-            partyChat.find(message)?.let {
-                addMember(it.groupValues[2])
-                return@on
-            }
-
-            partyInvite.find(message)?.let {
-                addMember(it.groupValues[2])
-                if (partyLeader == null) partyLeader = it.groupValues[2]
-                return@on
-            }
-
-            queuedInFinder.find(message)?.let {
-                addMember(mc.player?.gameProfile?.name ?: return@on)
-                if (partyLeader == null) partyLeader = mc.player?.gameProfile?.name
-                return@on
-            }
-
-            for (pattern in disbandPatterns) {
-                if (pattern.containsMatchIn(message)) return@on disband()
-            }
-
-            membersList.find(message)?.let { match ->
-                val type = match.groupValues[1]
-
-                match.groupValues[2].split(" ●").forEach { segment ->
-                    val memberMatch = memberFormat.find(segment.trim()) ?: return@forEach
-                    addMember(memberMatch.groupValues[2])
-                    if (type == "Leader") partyLeader = memberMatch.groupValues[2]
-
-                    return@on
-                }
-            }
-
-            partyWith.find(message)?.let { match ->
-                match.groupValues[1].split(", ").forEach { playerName ->
-                    val memberMatch = memberFormat.find(playerName.trim()) ?: return@forEach
-                    addMember(memberMatch.groupValues[2])
-                }
-                return@on
-            }
-
-            kuudraJoin.find(message)?.let { return@on addMember(it.groupValues[2]) }
-
-            dungeonJoin.find(message)?.let { return@on addMember(it.groupValues[1]) }
+        joinedSelf.find(message)?.let {
+            addMember(it.groupValues[2])
+            partyLeader = it.groupValues[2]
+            addMember(mc.player?.gameProfile?.name ?: return true)
+            return true
         }
+
+        leftParty.find(message)?.let { removeMember(it.groupValues[2]); return true }
+
+        kickedParty.find(message)?.let { removeMember(it.groupValues[2]); return true }
+
+        kickedOffline.find(message)?.let { removeMember(it.groupValues[2]); return true }
+
+        kickedDisconnected.find(message)?.let { removeMember(it.groupValues[2]); return true }
+
+        transferBy.find(message)?.let {
+            addMember(it.groupValues[2])
+            addMember(it.groupValues[4])
+            partyLeader = it.groupValues[2]
+            return true
+        }
+
+        transferLeave.find(message)?.let {
+            addMember(it.groupValues[2])
+            partyLeader = it.groupValues[2]
+            removeMember(it.groupValues[4])
+            return true
+        }
+
+        leaderDisconnected.find(message)?.let {
+            partyLeader = it.groupValues[2]
+            return true
+        }
+
+        leaderRejoined.find(message)?.let {
+            partyLeader = it.groupValues[2]
+            return true
+        }
+
+        partyChat.find(message)?.let {
+            addMember(it.groupValues[2])
+            return false
+        }
+
+        partyInvite.find(message)?.let {
+            addMember(it.groupValues[2])
+            if (partyLeader == null) partyLeader = it.groupValues[2]
+            return false
+        }
+
+        queuedInFinder.find(message)?.let {
+            addMember(mc.player?.gameProfile?.name ?: return true)
+            if (partyLeader == null) partyLeader = mc.player?.gameProfile?.name
+            return true
+        }
+
+        for (pattern in disbandPatterns) {
+            if (pattern.containsMatchIn(message)) {
+                disband()
+                return true
+            }
+        }
+
+        membersList.find(message)?.let { match ->
+            val type = match.groupValues[1]
+
+            match.groupValues[2].split(" ●").forEach { segment ->
+                val memberMatch = memberFormat.find(segment.trim()) ?: return@forEach
+                addMember(memberMatch.groupValues[2])
+                if (type == "Leader") partyLeader = memberMatch.groupValues[2]
+
+                return true
+            }
+        }
+
+        partyWith.find(message)?.let { match ->
+            match.groupValues[1].split(", ").forEach { playerName ->
+                val memberMatch = memberFormat.find(playerName.trim()) ?: return@forEach
+                addMember(memberMatch.groupValues[2])
+            }
+            return true
+        }
+
+        kuudraJoin.find(message)?.let { addMember(it.groupValues[2]); return true }
+
+        dungeonJoin.find(message)?.let { addMember(it.groupValues[1]); return true }
+
+        return false
+    }
+
+    private var lastRequest = 0L
+    private var requestQueued = false
+
+    private fun requestPartyInfo() {
+        val wait = lastRequest + 5000 - System.currentTimeMillis()
+        if (wait > 0) {
+            if (!requestQueued) {
+                requestQueued = true
+                schedule((wait / 50).toInt() + 1) {
+                    requestQueued = false
+                    requestPartyInfo()
+                }
+            }
+            return
+        }
+        if (runCatching { HypixelModAPI.getInstance().sendPacket(ServerboundPartyInfoPacket()) }.getOrDefault(false))
+            lastRequest = System.currentTimeMillis()
+    }
+
+    private fun onPartyInfo(packet: ClientboundPartyInfoPacket) {
+        if (!packet.isInParty) {
+            if (isInParty) disband()
+            return
+        }
+        val connection = mc.connection ?: return
+        val names = packet.members.mapNotNull { connection.getPlayerInfo(it)?.profile?.name }
+        // Members in another lobby have no player info; only a fully resolved reply can drop names.
+        if (names.size == packet.members.size && members.retainAll(names)) PartyEvent.Leave(members).postAndCatch()
+        names.forEach(::addMember)
+        packet.leader.getOrNull()?.let { connection.getPlayerInfo(it)?.profile?.name }?.let { partyLeader = it }
     }
 
     private fun addMember(playerName: String) {
