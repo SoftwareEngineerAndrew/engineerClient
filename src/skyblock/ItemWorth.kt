@@ -44,6 +44,8 @@ object ItemWorth {
     @Volatile private var fetching = false
     @Volatile private var lastFetch = 0L
 
+    val fetchedAt: Long get() = lastFetch
+
     fun install() {
         for (s in listOf(dropdown, showLbin, showBazaar, showWorth, showNpc, onlyShift)) Croesus.registerSetting(s)
         ItemTooltipCallback.EVENT.register { stack, _, _, lines ->

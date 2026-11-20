@@ -24,7 +24,7 @@ import java.util.Stack
 object SearchBar : Module(
     name = "Search Bar",
     category = Category.SKYBLOCK,
-    description = "Ctrl+F in any inventory opens a search bar that dims items that don't match, and works as a calculator.",
+    description = "Ctrl+F in any inventory opens a search bar that dims items that don't match (>1m or <500k filter by worth), and works as a calculator.",
     key = null,
     toggled = true,
 ) {
@@ -35,7 +35,8 @@ object SearchBar : Module(
     private var shown = false
     private var value = ""
     private var result = Double.NaN
-    private var terms = emptyList<List<String>>()
+    private var terms = emptyList<List<Part>>()
+    private var priceTerms = false
     private var box: EditBox? = null
 
     init {
@@ -88,8 +89,20 @@ object SearchBar : Module(
         val lower = text.lowercase()
         result = MathParser.parse(lower)
         resultLine = null
-        terms = lower.split(",").map { term -> term.split("&").map { it.trim() }.filter { it.isNotEmpty() } }.filter { it.isNotEmpty() }
+        terms = lower.split(",").map { term -> term.split("&").map { it.trim() }.filter { it.isNotEmpty() }.map(::part) }.filter { it.isNotEmpty() }
+        priceTerms = terms.any { term -> term.any { it.text == null } }
         matches.clear()
+    }
+
+    private class Part(val text: String?, val above: Double, val below: Double)
+
+    // ">1m" and "<500k" filter on the item's estimated worth.
+    private fun part(text: String): Part {
+        if (text.length > 1 && (text[0] == '>' || text[0] == '<')) {
+            val bound = MathParser.parse(text.substring(1))
+            if (!bound.isNaN()) return if (text[0] == '>') Part(null, bound, Double.POSITIVE_INFINITY) else Part(null, Double.NEGATIVE_INFINITY, bound)
+        }
+        return Part(text, 0.0, 0.0)
     }
 
     private fun render(edit: EditBox, graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, delta: Float) {
@@ -109,9 +122,19 @@ object SearchBar : Module(
     private var resultX = 0
 
     private val matches = IdentityHashMap<ItemStack, Boolean>()
+    private var matchedLore = true
+    private var matchedPrices = 0L
 
     fun shadeSlot(graphics: GuiGraphicsExtractor, slot: Slot) {
         if (!active() || box == null || terms.isEmpty() || !result.isNaN()) return
+        if (matchedLore != searchLore) {
+            matchedLore = searchLore
+            matches.clear()
+        }
+        if (priceTerms && matchedPrices != ItemWorth.fetchedAt) {
+            matchedPrices = ItemWorth.fetchedAt
+            matches.clear()
+        }
         val stack = slot.item
         val hit = matches[stack] ?: matches(stack).also {
             if (matches.size >= 1024) matches.clear()
@@ -124,7 +147,14 @@ object SearchBar : Module(
         if (stack.isEmpty) return false
         val name = stack.hoverName.string.lowercase()
         val lore = if (searchLore) stack.loreString.map { it.lowercase() } else emptyList()
-        return terms.any { term -> term.all { part -> part in name || lore.any { part in it } } }
+        val worth = if (priceTerms) ItemWorth.worth(stack)?.first ?: Double.NaN else Double.NaN
+        return terms.any { term ->
+            term.all { part ->
+                val text = part.text
+                if (text == null) worth > part.above && worth < part.below
+                else text in name || lore.any { text in it }
+            }
+        }
     }
 
     private fun format(num: Double): String = when {
