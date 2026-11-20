@@ -111,9 +111,22 @@ object EventBus {
         @JvmField
         val checkCancelled = ignoreCancelled
 
+        // A listener that throws on every event would fill chat and the log; report it at most once a minute.
+        @Volatile private var lastErrorAt = 0L
+        @Volatile private var errorsSince = 0
+
         fun invoke(event: T) {
             if (!checkCancelled || event !is CancellableEvent || !event.isCancelled)
                 handler(event)
+        }
+
+        fun failed(t: Throwable, event: Event) {
+            val now = System.currentTimeMillis()
+            if (lastErrorAt != 0L && now - lastErrorAt < 60_000) { errorsSince++; return }
+            val more = if (errorsSince > 0) ", ${errorsSince} more since the last report" else ""
+            lastErrorAt = now
+            errorsSince = 0
+            logError(t, "$subscriberName (${event.javaClass.simpleName})$more")
         }
     }
 
@@ -154,7 +167,7 @@ object EventBus {
                             try {
                                 listener.invoke(event)
                             } catch (t: Throwable) {
-                                logError(t, "${listener.subscriberName} (${event.javaClass.simpleName})")
+                                listener.failed(t, event)
                             } finally {
                                 profiler.pop()
                             }
