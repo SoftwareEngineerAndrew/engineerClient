@@ -5,6 +5,7 @@ import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.*
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
+import com.adm.events.ScreenCloseEvent
 import com.adm.events.ScreenEvent
 import com.adm.events.SetSlotEvent
 import com.adm.events.TickEvent
@@ -267,6 +268,7 @@ object LeapMenu : Module(
         }
 
         on<LevelEvent.Load> { clear(); usedAt = 0L; leapedAt = 0L; dismissed = false }
+        on<ScreenCloseEvent> { titleScreen = null; titleMatches = false }
     }
 
     /** The server's menu that's open is for a leap already clicked: nothing in it to pick. */
