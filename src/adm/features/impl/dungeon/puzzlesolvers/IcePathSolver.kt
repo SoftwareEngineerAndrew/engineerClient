@@ -1,7 +1,10 @@
 package com.adm.features.impl.dungeon.puzzlesolvers
 
 import com.adm.AdmMod.mc
+import com.adm.events.RenderExtractEvent
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.utils.Color
+import com.adm.utils.render.drawSegments
 import com.adm.utils.modMessage
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
@@ -19,6 +22,15 @@ object IcePathSolver {
     private var lastAlert = 0L
     private var cached: Map<BlockPos, Int>? = null
     private var cachedAt = 0L
+
+    private var routeFish: Silverfish? = null
+    private var routeFrom: BlockPos? = null
+    private var routeKey = -1L
+    private var routeMoving = false
+    private var route = DoubleArray(0)
+    private var routeLen = 0
+    private val nextStep = DoubleArray(6)
+    private var hasNext = false
 
     private fun room(): DungeonRoom? = DungeonUtils.currentRoom?.takeIf { it.data?.name == "Ice Path" }
 
@@ -135,8 +147,71 @@ object IcePathSolver {
         return judge(room, from, tick * 50L)
     }
 
+    // The route only changes when the fish (or a sent push) moves it, so it is rebuilt then and only drawn per frame.
+    fun onTick() {
+        val room = room() ?: return clearRoute()
+        val fish = routeFish?.takeIf { it.isAlive && !it.isRemoved } ?: fish(room)?.also { routeFish = it } ?: return clearRoute()
+        val key = fish.blockPosition().asLong()
+        val moving = moving(fish)
+        val pend = pending?.takeIf { System.currentTimeMillis() < pendingUntil }
+        if (key == routeKey && moving == routeMoving && routeFrom == pend) return
+        routeKey = key
+        routeMoving = moving
+        val from = restCell(room, fish)
+        routeFrom = pend
+        buildRoute(room, from)
+    }
+
+    private fun buildRoute(room: DungeonRoom, start: BlockPos) {
+        val dist = distances(room)
+        routeLen = 0
+        hasNext = false
+        var at = start
+        var left = dist[at] ?: return
+        while (left > 0) {
+            var next: BlockPos? = null
+            for (d in DIRS) {
+                val (to, out) = slide(room, at, d)
+                if (to == at) continue
+                if (if (left == 1) out else dist[to] == left - 1) { next = to; break }
+            }
+            next ?: return
+            addSegment(room, at, next)
+            at = next
+            left--
+        }
+        if (routeLen < 6) return
+        System.arraycopy(route, 0, nextStep, 0, 6)
+        System.arraycopy(route, 6, route, 0, routeLen - 6)
+        routeLen -= 6
+        hasNext = true
+    }
+
+    private fun addSegment(room: DungeonRoom, a: BlockPos, b: BlockPos) {
+        if (routeLen + 6 > route.size) route = route.copyOf(maxOf(24, route.size * 2))
+        val ra = room.getRealCoords(a)
+        val rb = room.getRealCoords(b)
+        route[routeLen++] = ra.x + 0.5; route[routeLen++] = Y + 0.05; route[routeLen++] = ra.z + 0.5
+        route[routeLen++] = rb.x + 0.5; route[routeLen++] = Y + 0.05; route[routeLen++] = rb.z + 0.5
+    }
+
+    private fun clearRoute() {
+        routeFish = null
+        routeFrom = null
+        routeKey = -1L
+        routeLen = 0
+        hasNext = false
+    }
+
+    fun onRenderWorld(event: RenderExtractEvent, color: Color, nextColor: Color) {
+        if (!hasNext) return
+        event.drawSegments(nextStep, 6, nextColor.rgba, depth = true)
+        event.drawSegments(route, routeLen, color.rgba, depth = true)
+    }
+
     fun reset() {
         pending = null
         cached = null
+        clearRoute()
     }
 }

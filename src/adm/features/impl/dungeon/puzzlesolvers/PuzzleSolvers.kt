@@ -75,6 +75,9 @@ object PuzzleSolvers : Module(
 
     private val icePathDropDown by DropdownSetting("Ice Path", desc = "Shows settings for the Ice Path puzzle.")
     val icePathBlockWrong by BooleanSetting("Ice Path Block Wrong Hits", true, desc = "Blocks hits and shots that push the silverfish off the shortest way out.").withDependency { icePathDropDown }
+    private val icePathRoute by BooleanSetting("Ice Path Route", false, desc = "Draws the shortest way out from the silverfish.").withDependency { icePathDropDown }
+    private val icePathColor by ColorSetting("Ice Path Route Color", Colors.WHITE.withAlpha(.6f), true, desc = "Color of the rest of the route.").withDependency { icePathRoute && icePathDropDown }
+    private val icePathNextColor by ColorSetting("Ice Path Next Color", Colors.MINECRAFT_GREEN, true, desc = "Color of the next push.").withDependency { icePathRoute && icePathDropDown }
 
     private val weirdosDropDown by DropdownSetting("Three Weirdos", desc = "Shows settings for the Three Weirdos puzzle solver.")
     private val weirdosSolver by BooleanSetting("Weirdos Solver", true, desc = "Shows you the solution for the Weirdos puzzle.").withDependency { weirdosDropDown }
@@ -241,6 +244,7 @@ object PuzzleSolvers : Module(
         on<TickEvent.End> {
             if (!DungeonUtils.inClear) return@on
             if (boulderSolver || boulderBlockWrong) BoulderSolver.onTick(boulderMode, boulderSolver)
+            if (icePathRoute) IcePathSolver.onTick()
         }
 
         on<RenderExtractEvent> {
@@ -252,6 +256,7 @@ object PuzzleSolvers : Module(
             if (blazeSolver && blazeSpot) BlazeSolver.renderSpot(this, blazeSpotColor)
             if (beamsSolver)   BeamsSolver.onRenderWorld(this, beamStyle, beamsTracer, beamsAlpha)
             if (quizSolver)    QuizSolver.onRenderWorld(this, quizColor, quizDepth)
+            if (icePathRoute)  IcePathSolver.onRenderWorld(this, icePathColor, icePathNextColor)
             if (tpMaze)        TPMazeSolver.onRenderWorld(this, mazeColorOne, mazeColorMultiple, mazeColorVisited, mazeShowTracer, mazeTracerColor)
         }
     }
