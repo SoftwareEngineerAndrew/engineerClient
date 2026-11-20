@@ -3,6 +3,7 @@ package com.adm.features.impl.boss
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
+import com.adm.clickgui.settings.impl.StringSetting
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.SetSlotEvent
@@ -36,6 +37,8 @@ object MelodyMessage : Module(
 ) {
     private val melodyProgress by BooleanSetting("Melody Progress", false, desc = "Tells the party about melody terminal progress.")
     private val melodySendCoords by BooleanSetting("Melody Send Coords", false, desc = "Sends the coordinates of the melody terminal.").withDependency { melodyProgress }
+    private val melodyOpen by BooleanSetting("Melody Open", false, desc = "Tells the party when you open the melody terminal.")
+    private val melodyOpenText by StringSetting("Melody Open Text", "Melody open!", 64, desc = "The party message sent when you open melody.", placeholder = "Melody open!").withDependency { melodyOpen }
 
     private val melodyGui by HUD("Progress GUI", "Each teammate's melody: from the party link, Odin's socket, else party chat.", true) { example ->
         var rows = 0
@@ -82,7 +85,9 @@ object MelodyMessage : Module(
 
     init {
         on<TerminalEvent.Open> {
-            if (melodySendCoords && inLiveMelody(terminal.type)) sendChatMessage(getPositionString())
+            if (!inLiveMelody(terminal.type)) return@on
+            if (melodyOpen && melodyOpenText.isNotBlank()) sendCommand("pc $melodyOpenText")
+            if (melodySendCoords) sendChatMessage(getPositionString())
         }
 
         on<MessageEvent.Chat> {
