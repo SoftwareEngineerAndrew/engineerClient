@@ -37,6 +37,7 @@ import com.adm.features.impl.dungeon.map.tile.RoomShape
 import com.adm.features.impl.dungeon.map.tile.RoomType
 import com.adm.utils.Color
 import com.adm.utils.Color.Companion.multiplyAlpha
+import com.adm.utils.Color.Companion.multiplyAlphaRgba
 import com.adm.utils.IVec2
 import com.adm.utils.render.drawFilledBox
 import com.adm.utils.render.drawText
@@ -149,11 +150,11 @@ object SecretWaypoints {
                     when (st) {
                         Style.CELL, Style.OUTLINE -> drawWireFrameBox(box, c, width, depth)
                         Style.FILLED_OUTLINE -> {
-                            drawFilledBox(box, c.multiplyAlpha(fill), depth)
+                            fillBox(box, c, fill, depth)
                             drawWireFrameBox(box, c, width, depth)
                         }
                         Style.FULL_BLOCK -> {
-                            drawFilledBox(box, c.multiplyAlpha(0.3f), depth)
+                            fillBox(box, c, 0.3f, depth)
                             drawWireFrameBox(box, c, 2f, depth)
                         }
                     }
@@ -172,6 +173,12 @@ object SecretWaypoints {
     private fun reset() { placed.clear(); byRoom.clear(); shown.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null; lastRoom = null }
 
     private fun active() = DungeonUtils.inClear
+
+    // The Color overload counts 0.999 alpha as opaque and the rgba one doesn't, so only those keep making a Color.
+    private fun RenderExtractEvent.fillBox(box: AABB, c: Color, factor: Float, depth: Boolean) {
+        if (c.alphaFloat * factor >= 0.999f) drawFilledBox(box, c.multiplyAlpha(factor), depth)
+        else drawFilledBox(box, c.multiplyAlphaRgba(factor), depth)
+    }
 
     /** Something reads the secret pack: these waypoints or Mimic's chest highlight. */
     val packWanted get() = SecretClicked.enabled && show.value || com.adm.features.impl.dungeon.Mimic.chestHighlightOn
