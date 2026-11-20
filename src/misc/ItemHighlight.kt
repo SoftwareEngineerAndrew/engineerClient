@@ -64,6 +64,7 @@ object ItemHighlight {
             }
             val level = mc.level ?: return@on
             boxed.removeIf { it.isRemoved }
+            if (!DungeonUtils.inClear) return@on
             for (e in level.entitiesForRendering()) {
                 if (e !is ItemEntity || e in boxed || !wanted(e)) continue
                 boxed.add(e)
