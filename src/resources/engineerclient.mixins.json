@@ -143,7 +143,9 @@
     "HeldItemSwingMixin",
     "ItemProtectionClickMixin",
     "RecipeBookButtonMixin",
-    "RecipeBookShownMixin"
+    "RecipeBookShownMixin",
+    "ContainerBackgroundMixin",
+    "CraftingTextMixin"
   ],
   "injectors": {
     "defaultRequire": 1

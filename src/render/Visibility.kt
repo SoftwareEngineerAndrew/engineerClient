@@ -146,6 +146,8 @@ object Visibility : Module(
     private val cleanMenus by BooleanSetting("Clean Menus", true, desc = "Fewer buttons on the title and Esc screens, and a Mods button.").withDependency { menusDropdown }
     private val skipLoadingScreen by BooleanSetting("Clean Loading Screen", true, desc = "No \"Loading terrain\" screen: the world shows as it loads.").withDependency { menusDropdown }
     private val hideRecipeBook by BooleanSetting("Hide Recipe Book", false, desc = "No recipe book in the inventory and crafting screens.").withDependency { menusDropdown }
+    private val noContainerBackground by BooleanSetting("Remove Container Background", false, desc = "No dark tint behind open containers.").withDependency { menusDropdown }
+    private val hideCraftingText by BooleanSetting("Hide Crafting Text", false, desc = "No \"Crafting\" label in your inventory.").withDependency { menusDropdown }
     private val blurInGui by BooleanSetting("Blur In GUI", false, desc = "Blurs the world behind any open GUI; the HUD stays sharp.").withDependency { menusDropdown }
     private val blurStrength by NumberSetting("Blur Strength", 4, 1..10, 1, desc = "Blur radius in pixels.").withDependency { menusDropdown && blurInGui }
 
@@ -657,6 +659,10 @@ object Visibility : Module(
     }
 
     @JvmStatic fun recipeBookHidden(): Boolean = enabled && hideRecipeBook
+
+    @JvmStatic fun hidesContainerBackground(): Boolean = enabled && noContainerBackground
+
+    @JvmStatic fun hidesCraftingText(): Boolean = enabled && hideCraftingText
 
     fun hidesSheep(): Boolean = enabled && hideSheep && DungeonUtils.inDungeons
 
