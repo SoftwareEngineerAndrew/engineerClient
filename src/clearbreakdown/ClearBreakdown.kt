@@ -23,6 +23,7 @@ import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
 import com.adm.features.impl.dungeon.map.tile.MapCheckmark
 import com.adm.features.impl.dungeon.map.tile.RoomType
+import com.adm.utils.hexText
 import com.adm.utils.network.hypixelapi.RequestUtils
 import com.adm.utils.skyblock.dungeon.DungeonPlayer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
@@ -88,7 +89,7 @@ object ClearBreakdown {
     private val gate = RunGate()
     @Volatile private var syncOpen = false
     /** Everyone in the run, in party order: name -> class colour. */
-    val roster = LinkedHashMap<String, Char>()
+    val roster = LinkedHashMap<String, String>()
     /** Lifetime secrets at the start, from the API (fresh each run: a late answer lands in its own run's). */
     private var before = ConcurrentHashMap<String, Long>()
     /** Lifetime secrets as last asked in the boss, from the API. */
@@ -247,7 +248,7 @@ object ClearBreakdown {
     /** Someone in the run: a line at the end, and their lifetime secrets now. */
     private fun join(p: DungeonPlayer) {
         if (p.name in roster) return
-        roster[p.name] = p.clazz.colorCode
+        roster[p.name] = p.clazz.hexCode
         val name = p.name
         val into = before
         AdmMod.scope.launch { RequestUtils.pullSecrets(name).onSuccess { into[name] = it } }
@@ -369,11 +370,11 @@ object ClearBreakdown {
         }
     }
 
-    private fun post(names: Map<String, Char>, deaths: Map<String, List<String>>, rooms: Map<String, List<Clear>>, found: Map<String, PlayerSecrets>) {
+    private fun post(names: Map<String, String>, deaths: Map<String, List<String>>, rooms: Map<String, List<Clear>>, found: Map<String, PlayerSecrets>) {
         EngineerClient.msg("§6Clear Breakdown")
         for ((name, colour) in names) {
             val p = BreakdownText.line(name, colour, rooms[name].orEmpty(), found[name])
-            val line = Component.literal(p.name)
+            val line = hexText(p.name)
                 .append(hover(p.rooms, p.roomsHover))
                 .append(Component.literal(" "))
                 .append(hover(p.secrets, p.secretsHover))

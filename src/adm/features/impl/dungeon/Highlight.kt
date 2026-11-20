@@ -6,6 +6,7 @@ import com.adm.events.RenderExtractEvent
 import com.adm.events.core.on
 import com.adm.features.Module
 import com.adm.utils.NameMemo
+import com.adm.utils.hexText
 import com.adm.utils.render.BoxBatch
 import com.adm.utils.render.drawBoxes
 import com.adm.utils.render.drawText
@@ -14,6 +15,7 @@ import com.adm.utils.renderPos
 import com.adm.utils.skyblock.dungeon.DungeonClass
 import com.adm.utils.skyblock.dungeon.DungeonPlayer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import net.minecraft.util.FormattedCharSequence
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.decoration.ArmorStand
@@ -68,15 +70,16 @@ object Highlight : Module(
         return null
     }
 
-    private class Label(val clazz: DungeonClass, val text: String)
+    private class Label(val clazz: DungeonClass, val hex: String, val text: FormattedCharSequence)
     private val labels = IdentityHashMap<DungeonPlayer, Label>()
 
-    private fun labelOf(mate: DungeonPlayer): String {
+    private fun labelOf(mate: DungeonPlayer): FormattedCharSequence {
         val clazz = mate.clazz
-        labels[mate]?.let { if (it.clazz == clazz) return it.text }
+        val hex = clazz.hexCode
+        labels[mate]?.let { if (it.clazz == clazz && it.hex === hex) return it.text }
         if (labels.size > 32) labels.clear()
-        val text = "§${clazz.colorCode}${mate.name} §e[${clazz.name[0]}]"
-        labels[mate] = Label(clazz, text)
+        val text = hexText("$hex${mate.name} §e[${clazz.name[0]}]").visualOrderText
+        labels[mate] = Label(clazz, hex, text)
         return text
     }
 

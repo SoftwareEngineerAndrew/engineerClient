@@ -11,6 +11,7 @@ import com.adm.events.core.on
 import com.adm.features.Module
 import com.adm.features.impl.render.ClickGUIModule
 import com.adm.utils.getPositionString
+import com.adm.utils.hexText
 import com.adm.utils.network.WebUtils.gson
 import com.adm.utils.network.webSocket
 import com.adm.utils.render.getStringWidth
@@ -26,6 +27,7 @@ import com.engineerclient.terminals.TerminalTypes
 import com.engineerclient.terminals.TerminalUtils
 import com.engineerclient.terminals.sim.TermSimGUI
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.util.FormattedCharSequence
 import net.minecraft.world.item.DyeColor
 import net.minecraft.world.item.Item
 import net.minecraft.world.item.Items
@@ -182,21 +184,23 @@ object MelodyMessage : Module(
         val clay = data.clay ?: return 0
         val mode = showPlayer
         val key = clay * 4 + mode.ordinal
-        if (data.captionKey != key || data.captionName !== name) {
+        val hex = data.dungeonClass.hexCode
+        if (data.captionKey != key || data.captionName !== name || data.captionHex !== hex) {
             data.captionKey = key
             data.captionName = name
-            data.caption = "$clay ${playerTag(mode, data.dungeonClass, name)}"
-            data.captionWidth = getStringWidth(data.caption)
+            data.captionHex = hex
+            data.caption = hexText("$clay ${playerTag(mode, data.dungeonClass, hex, name)}").visualOrderText
+            data.captionWidth = mc.font.width(data.caption)
         }
         text(data.caption, cell * 5 + 2, y)
         return data.captionWidth
     }
 
-    private fun playerTag(mode: ShowPlayer, clazz: DungeonClass, name: String): String = when (mode) {
+    private fun playerTag(mode: ShowPlayer, clazz: DungeonClass, hex: String, name: String): String = when (mode) {
         ShowPlayer.NONE -> ""
-        ShowPlayer.CLASS -> "§${clazz.colorCode}${clazz.name.lowercase()}"
+        ShowPlayer.CLASS -> "$hex${clazz.name.lowercase()}"
         ShowPlayer.NAME -> "§6$name"
-        ShowPlayer.CLASS_AND_NAME -> "§6$name §8(§${clazz.colorCode}${clazz.name.lowercase()}§8)"
+        ShowPlayer.CLASS_AND_NAME -> "§6$name §8($hex${clazz.name.lowercase()}§8)"
     }
 
     private const val CLOSED = 0
@@ -219,7 +223,8 @@ object MelodyMessage : Module(
         var chat = false
         var captionKey = -1
         var captionName: String? = null
-        var caption = ""
+        var captionHex: String? = null
+        var caption: FormattedCharSequence = FormattedCharSequence.EMPTY
         var captionWidth = 0
     }
 

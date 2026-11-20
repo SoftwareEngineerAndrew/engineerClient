@@ -311,11 +311,13 @@ private fun visualOrder(text: String): FormattedCharSequence {
     return visualOrders.getOrPut(text) { language.getVisualOrder(FormattedText.of(text)) }
 }
 
-fun RenderExtractEvent.drawText(text: String, pos: Vec3, scale: Float, depth: Boolean) {
+fun RenderExtractEvent.drawText(text: String, pos: Vec3, scale: Float, depth: Boolean) =
+    drawText(visualOrder(text), pos, scale, depth)
+
+fun RenderExtractEvent.drawText(string: FormattedCharSequence, pos: Vec3, scale: Float, depth: Boolean) {
     val scaleFactor = scale * 0.025f
     val displayMode = if (depth) Font.DisplayMode.POLYGON_OFFSET else Font.DisplayMode.SEE_THROUGH
-    val string = visualOrder(text)
-    val x = -mc.font.width(text).toFloat() / 2f
+    val x = -mc.font.width(string).toFloat() / 2f
     val camera = mc.gameRenderer.mainCamera()
     val cameraPos = camera.position()
 

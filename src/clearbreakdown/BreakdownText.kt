@@ -13,7 +13,7 @@ data class LineParts(val name: String, val rooms: String, val roomsHover: String
  * estimate, then what no room explains). Legacy § colours, like the rest of the mod's chat.
  */
 object BreakdownText {
-    fun line(name: String, colour: Char, clears: List<Clear>, secrets: PlayerSecrets?): LineParts {
+    fun line(name: String, colour: String, clears: List<Clear>, secrets: PlayerSecrets?): LineParts {
         val rooms = "§f${clears.count { it.solo }}§7-§f${clears.size}"
         val roomsHover = if (clears.isEmpty()) "§7No rooms cleared"
         else clears.withIndex().joinToString("\n") { (i, c) -> "§7${i + 1}. §f${c.room}${if (c.solo) " §a(solo)" else ""}" }
@@ -25,7 +25,7 @@ object BreakdownText {
             seen.isEmpty() && secrets.unknown == 0 -> "§7No secrets"
             else -> (seen + if (secrets.unknown > 0) listOf("§f${secrets.unknown} §7in unknown rooms") else emptyList()).joinToString("\n")
         }
-        return LineParts("§$colour$name§7: ", rooms, roomsHover, "§f${total ?: "?"} §7secrets", secretsHover)
+        return LineParts("$colour$name§7: ", rooms, roomsHover, "§f${total ?: "?"} §7secrets", secretsHover)
     }
 
     /** The deaths part and its hover, one cause a line; null for none. */

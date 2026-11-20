@@ -18,6 +18,7 @@ import com.adm.utils.formatTime
 import com.adm.utils.handlers.schedule
 import com.adm.utils.lore
 import com.adm.utils.modMessage
+import com.adm.utils.hexText
 import com.adm.utils.network.hypixelapi.HypixelData
 import com.adm.utils.network.hypixelapi.RequestUtils
 import com.adm.utils.noControlCodes
@@ -29,6 +30,7 @@ import com.adm.utils.skyblock.dungeon.Floor
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import net.minecraft.util.FormattedCharSequence
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.ClickEvent
@@ -229,7 +231,7 @@ object BetterPartyFinder : Module(
     private fun classNamed(name: String) = classes.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
     private class Marks(
-        val stack: ItemStack, val levelReq: String?, val missingTop: String, val missingBottom: String, val count: String,
+        val stack: ItemStack, val levelReq: String?, val missingTop: FormattedCharSequence?, val missingBottom: FormattedCharSequence?, val count: String,
         val taken: Set<DungeonClass>, val lockedOut: Boolean, val lowCata: Boolean, val lowClass: Boolean,
     )
     private val marks = arrayOfNulls<Marks>(35)
@@ -252,12 +254,12 @@ object BetterPartyFinder : Module(
                 clean.startsWith("Requires a Class at Level") -> lowClass = true
             }
         }
-        val missing = classes.filter { it !in taken }.map { "§${it.colorCode}§l${it.name[0]}" }
+        val missing = classes.filter { it !in taken }.map { "${it.hexCode}§l${it.name[0]}" }
         return Marks(
             stack,
             if (levelRequired != 0) "§c$levelRequired" else null,
-            missing.take(2).joinToString(""),
-            missing.drop(2).take(2).joinToString(""),
+            missing.take(2).joinToString("").takeIf { it.isNotEmpty() }?.let { hexText(it).visualOrderText },
+            missing.drop(2).take(2).joinToString("").takeIf { it.isNotEmpty() }?.let { hexText(it).visualOrderText },
             members.toString(),
             taken, lockedOut, lowCata, lowClass,
         ).also { marks[index] = it }
@@ -286,8 +288,8 @@ object BetterPartyFinder : Module(
             drawScaled(graphics, m.levelReq, slot.x + 16f - mc.font.width(m.levelReq) * 0.6f, slot.y.toFloat(), 0.6f)
 
         if (showMissingOverlay) {
-            if (m.missingTop.isNotEmpty()) drawScaled(graphics, m.missingTop, slot.x.toFloat(), slot.y + 10f, 0.65f)
-            if (m.missingBottom.isNotEmpty()) drawScaled(graphics, m.missingBottom, slot.x.toFloat(), slot.y + 4f, 0.65f)
+            m.missingTop?.let { drawScaled(graphics, it, slot.x.toFloat(), slot.y + 10f, 0.65f) }
+            m.missingBottom?.let { drawScaled(graphics, it, slot.x.toFloat(), slot.y + 4f, 0.65f) }
         }
         if (showMemberCount) drawScaled(graphics, m.count, slot.x + 16f - mc.font.width(m.count) * 0.65f, slot.y + 10f, 0.65f)
     }
@@ -301,11 +303,21 @@ object BetterPartyFinder : Module(
         pose.popMatrix()
     }
 
+    private fun drawScaled(graphics: GuiGraphicsExtractor, text: FormattedCharSequence, x: Float, y: Float, scale: Float) {
+        val pose = graphics.pose()
+        pose.pushMatrix()
+        pose.translate(x, y)
+        pose.scale(scale)
+        graphics.text(mc.font, text, 0, 0, -1, true)
+        pose.popMatrix()
+    }
+
     private class Member(val name: String, val prefix: String, val floor: Int, val master: Boolean) {
         val plain: Component = Component.literal(prefix)
     }
     private class Parsed(val stack: ItemStack, val size: Int, val members: Array<Member?>, val missing: List<DungeonClass>) {
         var missingFor: DungeonClass? = null
+        var missingHex: String? = null
         var missingLine: Component? = null
         var requested = false
     }
@@ -332,11 +344,12 @@ object BetterPartyFinder : Module(
 
     private fun missingLine(p: Parsed): Component {
         val mine = ClassDetect.myClass()
-        p.missingLine?.let { if (p.missingFor == mine) return it }
-        return Component.literal("§cMissing: §7" + p.missing.joinToString(", ") { clazz ->
+        val hex = mine?.hexCode
+        p.missingLine?.let { if (p.missingFor == mine && p.missingHex === hex) return it }
+        return hexText("§cMissing: §7" + p.missing.joinToString(", ") { clazz ->
             val label = clazz.name.lowercase().replaceFirstChar(Char::titlecase)
-            if (clazz == mine) "§${clazz.colorCode}§l$label§7" else label
-        }).also { p.missingLine = it; p.missingFor = mine }
+            if (clazz == mine) "$hex§l$label§7" else label
+        }).also { p.missingLine = it; p.missingFor = mine; p.missingHex = hex }
     }
 
     /** Returns [lines] itself when there is nothing to change. */
