@@ -42,6 +42,7 @@ repositories {
     maven("https://jitpack.io") { content { includeGroup("com.github.stivais") } }
     maven("https://maven.terraformersmc.com/") { content { includeGroup("com.terraformersmc") } }
     maven("https://api.modrinth.com/maven") { content { includeGroup("maven.modrinth") } }
+    maven("https://repo.hypixel.net/repository/Hypixel/") { content { includeGroup("net.hypixel") } }
 }
 
 val bundled: Configuration by configurations.creating
@@ -57,6 +58,11 @@ dependencies {
     // the mod jar.
     implementation("org.tukaani:xz:1.10")
     "include"("org.tukaani:xz:1.10")
+
+    // Hypixel Mod API (MIT): the Fabric mod ships inside the jar and nests net.hypixel:mod-api itself.
+    implementation("net.hypixel:mod-api:1.0.2")
+    implementation("maven.modrinth:hypixel-mod-api:1.0.2+build.1+mc26.1")
+    "include"("maven.modrinth:hypixel-mod-api:1.0.2+build.1+mc26.1")
 
     // Odin's code lives in src/odin (BSD 3-Clause); these are its own dependencies.
     implementation("com.github.stivais:Commodore:1.0.1")
