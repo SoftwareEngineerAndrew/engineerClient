@@ -75,10 +75,14 @@ object BloodCamp : Module(
     private const val FIRST_WAVE_REACH = 16.1
     private const val LATER_WAVE_REACH = 11.9
     private const val STEP_MS = 150L
+    private const val START_SAMPLES = 5
     private val SPAWN_Y = doubleArrayOf(71.75, 75.75, 79.75)
 
     // Each spawning mob is a head on an armor stand that slides from its start towards where it lands.
-    private class Spawn(val start: Vec3, val startedMs: Long, val firstWave: Boolean) {
+    private class Spawn(val start: Vec3, var startedMs: Long, val firstWave: Boolean, var step: Int) {
+        // Each step's own start estimate, averaged so one late or early packet doesn't set it.
+        var samples = 1
+        var startSum = startedMs
         var last: Vec3 = start
         var sumX = 0.0
         var sumY = 0.0
@@ -141,7 +145,8 @@ object BloodCamp : Module(
             if (head.item != Items.PLAYER_HEAD || head.texture !in bloodMobHeads) return@on
 
             val now = serverMs
-            val spawn = spawns[stand] ?: newSpawn(stand.position(), newPos, now).also { spawns[stand] = it }
+            val known = spawns[stand]
+            val spawn = known ?: newSpawn(stand.position(), newPos, now).also { spawns[stand] = it }
             val dx = newPos.x - spawn.last.x
             val dy = newPos.y - spawn.last.y
             val dz = newPos.z - spawn.last.z
@@ -150,6 +155,11 @@ object BloodCamp : Module(
                 spawn.sumX += dx
                 spawn.sumY += dy
                 spawn.sumZ += dz
+                if (known != null && spawn.samples < START_SAMPLES) {
+                    spawn.step++
+                    spawn.startSum += now - spawn.step * STEP_MS
+                    spawn.startedMs = spawn.startSum / ++spawn.samples
+                }
             }
 
             val heading = if (spawn.sumX * spawn.sumX + spawn.sumY * spawn.sumY + spawn.sumZ * spawn.sumZ > 0) Vec3(spawn.sumX, spawn.sumY, spawn.sumZ).normalize() else Vec3.ZERO
@@ -256,9 +266,9 @@ object BloodCamp : Module(
         val dy = next.y - prev.y
         val dz = next.z - prev.z
         val steps = if (atSpawn(prev) || abs(dy) < 1e-4) 0 else stepsFromSpawn(prev, dx, dy, dz)
-        if (steps <= 0) return Spawn(next, now, firstWave)
+        if (steps <= 0) return Spawn(next, now, firstWave, 0)
         val back = (steps - 1).toDouble()
-        return Spawn(Vec3(prev.x - back * dx, prev.y - back * dy, prev.z - back * dz), now - steps * STEP_MS, firstWave)
+        return Spawn(Vec3(prev.x - back * dx, prev.y - back * dy, prev.z - back * dz), now - steps * STEP_MS, firstWave, steps)
     }
 
     private fun stepsFromSpawn(prev: Vec3, dx: Double, dy: Double, dz: Double): Int {
