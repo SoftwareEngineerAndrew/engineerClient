@@ -73,6 +73,7 @@ object PositionalMessages : Module(
         "RED" to 0xFF5555, "LIGHTPURPLE" to 0xFF55FF, "YELLOW" to 0xFFFF55, "WHITE" to 0xFFFFFF, "BLACK" to 0x000000,
     )
     val colorNames get() = COLORS.keys
+    private val colorCache = HashMap<String, Color>()
     private val HEX = Regex("^#?([A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$")
 
     /** ARGB, or null for a name or hex this doesn't know. */
@@ -85,7 +86,7 @@ object PositionalMessages : Module(
     }
 
     fun changed() {
-        sent.clear(); due.clear()
+        sent.clear(); due.clear(); colorCache.clear()
         com.adm.features.ModuleManager.saveConfigurations()
     }
 
@@ -227,7 +228,8 @@ object PositionalMessages : Module(
         on<RenderExtractEvent> {
             if (!customOn || !showPositions || (onlyDungeons && !DungeonUtils.inDungeons)) return@on
             for (m in messages) {
-                val color = Color(parseColor(m.color) ?: -1)
+                if (colorCache.size > 256) colorCache.clear()
+                val color = colorCache.getOrPut(m.color) { Color(parseColor(m.color) ?: -1) }
                 val top = if (m.isBox) {
                     val b = m.box()
                     drawWireFrameBox(b, color, 2f, depth = !throughWalls)
