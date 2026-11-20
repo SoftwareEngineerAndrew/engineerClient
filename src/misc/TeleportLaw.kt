@@ -1,5 +1,6 @@
 package com.engineerclient.misc
 
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
@@ -123,7 +124,7 @@ object TeleportLaw {
                     else -> if (r) box(1 - t, 0.0, 0.0, 1.0, 1.0, 1.0) else box(0.0, 0.0, 0.0, t, 1.0, 1.0)
                 })
             }
-            CHEST.containsMatchIn(id) -> listOf(box(0.0625, 0.0, 0.0625, 0.9375, 0.875, 0.9375))
+            (flags(id) and F_CHEST) != 0 -> listOf(box(0.0625, 0.0, 0.0625, 0.9375, 0.875, 0.9375))
             id == "hopper" || id == "cauldron" || id == "water_cauldron" || id == "lava_cauldron" -> listOf(
                 box(0.0, 0.0, 0.0, 1.0, if (id == "hopper") 0.625 else 0.3125, 1.0), box(0.0, 0.0, 0.0, 0.125, 1.0, 1.0),
                 box(0.0, 0.0, 0.0, 1.0, 1.0, 0.125), box(0.875, 0.0, 0.0, 1.0, 1.0, 1.0), box(0.0, 0.0, 0.875, 1.0, 1.0, 1.0),
@@ -244,7 +245,7 @@ object TeleportLaw {
             if (stops(w.id(c[0], c[1], c[2]), w.top(c[0], c[1], c[2]))) { hit = c.copyOf(); break }
         }
         val (x, y, z) = hit ?: return null
-        if (NO_FLOOR.containsMatchIn(w.id(x, y, z))) return null
+        if ((flags(w.id(x, y, z)) and F_NO_FLOOR) != 0) return null
         val f = if (w.top(x, y, z) > 1.0) y + 2 else y + 1
         for (k in 0..1) if (!free(w.id(x, f + k, z), w.top(x, f + k, z))) return null
         return doubleArrayOf(x + 0.5, f + 0.05, z + 0.5)
@@ -255,7 +256,10 @@ object TeleportLaw {
     private val NO_FLOOR = Regex("_sign$|^tripwire_hook$")
     private val CHEST = Regex("^(chest|trapped_chest|ender_chest)$")
 
-    private fun stops(id: String, top: Double) = (STOPS_ANYWAY.containsMatchIn(id) || top > 0.0) && !NEVER_STOPS.containsMatchIn(id)
+    private fun stops(id: String, top: Double): Boolean {
+        val f = flags(id)
+        return ((f and F_STOPS_ANYWAY) != 0 || top > 0.0) && (f and F_NEVER_STOPS) == 0
+    }
     private fun free(id: String, top: Double) = top <= 0.0
 
     /**
@@ -271,5 +275,22 @@ object TeleportLaw {
         Regex("^(short_grass|tall_grass|grass|fern|large_fern|dead_bush|dandelion|poppy|blue_orchid|allium|azure_bluet|.*_tulip|oxeye_daisy|sunflower|lilac|rose_bush|peony|brown_mushroom|red_mushroom|wheat|carrots|potatoes|sugar_cane|lily_pad|.*_sapling|nether_wart|melon_stem|pumpkin_stem|attached_.*_stem|cocoa)$"),
     )
 
-    fun isSolid(blockId: String): Boolean = NOT_SOLID.none { it.containsMatchIn(blockId) }
+    fun isSolid(blockId: String): Boolean = (flags(blockId) and F_SOLID) != 0
+
+    private const val F_SOLID = 1
+    private const val F_STOPS_ANYWAY = 2
+    private const val F_NEVER_STOPS = 4
+    private const val F_NO_FLOOR = 8
+    private const val F_CHEST = 16
+
+    // Block ids are a fixed set, so each one's regex answers are worked out once.
+    private val FLAGS = ConcurrentHashMap<String, Int>()
+
+    private fun flags(id: String): Int = FLAGS[id] ?: FLAGS.getOrPut(id) {
+        (if (NOT_SOLID.none { it.containsMatchIn(id) }) F_SOLID else 0) or
+            (if (STOPS_ANYWAY.containsMatchIn(id)) F_STOPS_ANYWAY else 0) or
+            (if (NEVER_STOPS.containsMatchIn(id)) F_NEVER_STOPS else 0) or
+            (if (NO_FLOOR.containsMatchIn(id)) F_NO_FLOOR else 0) or
+            (if (CHEST.containsMatchIn(id)) F_CHEST else 0)
+    }
 }
