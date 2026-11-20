@@ -1,10 +1,9 @@
 package com.engineerclient.devices
 
-import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.utils.ServerUtils
 import com.adm.utils.render.drawText
@@ -47,15 +46,16 @@ object DevStartCountdown {
             pingTicks.addLast((ServerUtils.averagePing + 49) / 50)
             if (pingTicks.size > PING_WINDOW) pingTicks.removeFirst()
         }
-        on<LevelEvent.Load> { active = false }
 
         on<RenderExtractEvent> {
-            if (!Devices.startCountdownOn || !active) return@on
+            if (!active) return@on
             // A click lands half a ping after it's sent and these ticks came half a ping late; when ping sits across a tick boundary, take the later tick.
             val ticks = ticksLeft - (pingTicks.maxOrNull() ?: 0)
             val text = if (ticks <= 0) "§a§lGO!" else "§b${String.format(Locale.ROOT, "%.2f", ticks / 20.0)}s"
             for (p in spots) drawText(text, p, 1.2f, false)
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { active = false; ticksLeft = 0; pingTicks.clear() }) {
+            Devices.startCountdownOn && DungeonUtils.inBoss && DungeonUtils.floor?.floorNumber == 7
+        }
     }
 }

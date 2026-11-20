@@ -53,6 +53,7 @@ object DungeonListener {
             if (newInBoss == inBoss) return@on
             inBoss = newInBoss
             DungeonUtils.updateScore()
+            com.adm.events.core.SubscribeWhile.changed()
         }
 
         on<LevelEvent.Load> {
@@ -67,6 +68,7 @@ object DungeonListener {
             floor = null
             paul = false
             DungeonUtils.updateScore()
+            com.adm.events.core.SubscribeWhile.changed()
         }
 
         on<RoomEnterEvent> {
