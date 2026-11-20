@@ -83,7 +83,7 @@ object ChatCommands : Module(
 
     init {
         on<MessageEvent.Chat> {
-            if (message.matches(endRunRegex)) {
+            if ((message.contains("> EXTRA STATS <") || message.startsWith("[NPC] Elle: ")) && message.matches(endRunRegex)) {
                 if (!dt || dtReason.isEmpty()) return@on
                 schedule(30) {
                     dtReason.find { it.first == mc.player?.name?.string }?.let { sendCommand("pc Downtime needed: ${it.second}") }
@@ -93,9 +93,10 @@ object ChatCommands : Module(
                 }
             }
 
+            if (!message.startsWith("Party > ") && !message.startsWith("Guild > ") && !message.startsWith("From ") && !message.startsWith("Co-op > ")) return@on
             val result = messageRegex.find(message) ?: return@on
 
-            val channelStr = result.value.split(" ")[0]
+            val channelStr = result.value.substringBefore(' ')
             val channel = when(channelStr) {
                 "From" -> if (!privateChatCommands) return@on else ChatChannel.PRIVATE
                 "Party" -> if (!partyChatCommands)  return@on else ChatChannel.PARTY
