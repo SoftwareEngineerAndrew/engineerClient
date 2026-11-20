@@ -423,45 +423,42 @@ object MapPrediction {
         drop.fill(false)
         drop[Cls.BLOOD] = stale || blood.isNotEmpty() || DungeonScan.rooms.any { it.isViewable && it.type == RoomType.BLOOD }
         drop[Cls.FAIRY] = stale || DungeonScan.rooms.any { it.isViewable && it.type == RoomType.FAIRY }
-        val min = minChance.value
         val deadEndAt = minOf(deadEndChance.value, ALWAYS_DEAD_END) / 100f
         val oneAt = oneChance.value / 100f
         val bloodFairyAt = bloodFairyChance.value / 100f
         // while a new prediction is still being worked out, the one shown is for the map before the last door:
         // every tile behind a door the map shows is drawn anyway, never left blank
         val hints = hintTiles(known)
-        val splits = p.splits.associateBy { it.tile }
-        secretsAt = if (splitSecrets.value) MapPredictor.splitSecrets(v, p.splits).let { s -> p.splits.indices.associate { p.splits[it].tile to s[it] } } else emptyMap()
+        val splits = splitsOf(p)
+        labelsFor(p, v)
+        val dropBits = (if (drop[Cls.BLOOD]) 1 else 0) or (if (drop[Cls.FAIRY]) 2 else 0)
         // the last rooms the secret total leaves only one size and place for: in full, named when only one name fits
-        val exact = BooleanArray(W * W)
+        val exact = exactNow
+        exact.fill(false)
         // (every room, discovered ones nobody has opened too, once the map is known for sure)
-        if (exactRooms.value) for ((_, names) in (shownNames ?: p.namedRooms).filter { val c = typeOfPool(it.name.pool); c < 0 || !drop[c] }.groupBy { it.tiles.joinToString(",") }) {
-            val tiles = names[0].tiles
-            if (names.sumOf { it.chance.toDouble() } < SURE) continue
-            if (tiles.all { known[it] }) { if (!namedOnMap(tiles[0])) roomText(g, tiles, names); continue }
+        if (exactRooms.value) for (r in exactGroups(p, shownNames ?: p.namedRooms, dropBits)) {
+            val tiles = r.tiles
+            if (tiles.all { known[it] }) { if (!namedOnMap(tiles[0])) roomText(g, r); continue }
             if (tiles.any { known[it] || exact[it] || it in blood }) continue
-            val byType = names.groupBy { typeOfPool(it.name.pool) }.mapValues { (_, n) -> n.sumOf { it.chance.toDouble() } }
-            val types = splitTypes(byType) ?: continue
+            val types = r.types ?: continue
             for (t in tiles) exact[t] = true
-            exactFill(g, tiles, types.ifEmpty { listOf(typeOfPool(names.maxBy { it.chance }.name.pool)) })
-            roomText(g, tiles, names)
+            exactFill(g, tiles, types, r.lcmOrder)
+            roomText(g, r)
         }
+        tilesFor(p, dropBits, minChance.value)
         // anything shown at 100% (a room's size and place), named or not: drawn in full in its type's colour (or the
         // kinds a dead end can still be), keeping the split's label on its door's tile
-        if (exactRooms.value) for (tiles in MapPredictor.certainShapes(p, SURE)) {
+        if (exactRooms.value) for (i in shapes.indices) {
+            val tiles = shapes[i]
             if (tiles.any { known[it] || exact[it] || it in blood }) continue
-            val q = (p.probs[tiles[0]] ?: p.raw[tiles[0]])?.let(::kept)
-            val types = if (tiles.size > 1 || q == null) listOf(-1) else {
-                val byType = HashMap<Int, Double>()
-                for (c in 0 until Cls.COUNT) if (q[c] > 0f) byType.merge(if (c == Cls.NORMAL || c == Cls.BIG) -1 else c, q[c].toDouble(), Double::plus)
-                splitTypes(byType) ?: continue
-            }
+            val types = shapeTypes[i] ?: continue
             for (t in tiles) exact[t] = true
-            exactFill(g, tiles, types)
-            for (t in tiles) splits[t]?.let { overlay(g, (t % W) * TILE, (t / W) * TILE, it, null, false) }
+            exactFill(g, tiles, types, shapeLcm[i])
+            for (t in tiles) splits[t]?.let { overlay(g, (t % W) * TILE, (t / W) * TILE, it, Float.NaN, false) }
         }
         // the big rooms it's sure of, greyed out at their whole size (likeliest first, never two on one tile)
-        val inBig = arrayOfNulls<BigRoom>(W * W)
+        val inBig = inBigNow
+        inBig.fill(null)
         val bigAt = bigChance.value / 100f
         for (room in p.bigRooms) {
             if (room.chance < bigAt || room.chance <= 0f || room.tiles.any { known[it] || exact[it] || it in blood || inBig[it] != null }) continue
@@ -473,7 +470,7 @@ object MapPrediction {
             // a door the guess up doesn't know yet: the plain "?" at once, the guess when it's worked out
             if (stale && t in hints && t !in splits) { plainTile(g, t); continue }
             if (exact[t]) continue
-            val probs = p.probs[t]?.let(::kept)
+            val probs = keptAt[t]
             if (probs == null || v.roomAt[t] >= 0) {
                 if (t in hints) plainTile(g, t)
                 continue
@@ -485,7 +482,7 @@ object MapPrediction {
                 if (split != null || t in hints) overlay(g, x, y, split, room.chance, true)
                 continue
             }
-            val shownCls = SPECIALS.filter { probs[it] >= min }.sortedByDescending { probs[it] }.take(3)
+            val shownCls = shownClsAt[t]!!
             val split = splits[t]
             // dead end (puzzle, trap, yellow, rare), blood or fairy, or a normal 1x1: each on its own slider, the likeliest that passes
             val deadEnd = probs[Cls.PUZZLE] + probs[Cls.TRAP] + probs[Cls.YELLOW] + probs[Cls.RARE]
@@ -501,11 +498,11 @@ object MapPrediction {
                 g.fill(x, y, x + ROOM, y + ROOM, dim(bfCls))
                 overlay(g, x, y, null, bf, true)
             } else if (isDeadEnd && deadEnd >= best) {
-                deadEndGuess(g, x, y, probs, deadEnd)
+                deadEndGuess(g, x, y, t)
                 overlay(g, x, y, null, deadEnd, true)
             } else if (isOne) {
                 // a normal 1x1, greyed out like the big rooms; a door's tile keeps the split label
-                greyRoom(g, intArrayOf(t))
+                greyRoom(g, SINGLE[t])
                 overlay(g, x, y, split, one, split != null)
             } else if (split != null || t in hints) {
                 // the "?" tile: its chances as bands across it, the rest grey (a door the prediction doesn't know
@@ -517,7 +514,7 @@ object MapPrediction {
                     g.fill(at.roundToInt(), y, (at + wdt).roundToInt().coerceAtMost(x + ROOM), y + ROOM, dim(c))
                     at += wdt
                 }
-                overlay(g, x, y, split, shownCls.firstOrNull()?.let { probs[it] }, true)
+                overlay(g, x, y, split, if (shownCls.isEmpty()) Float.NaN else probs[shownCls[0]], true)
             }
         }
         // the doors it's sure of between unknown tiles, over everything else
@@ -571,6 +568,129 @@ object MapPrediction {
     /** A tile's chances without the [drop]ped classes (the rest as they are: a tile that was mostly blood shows as little). */
     private fun kept(q: FloatArray): FloatArray = if (drop.none { it }) q else FloatArray(q.size) { if (drop[it]) 0f else q[it] }
 
+    // What draw() works out from the prediction up: made again only when the prediction, its names, the drop flags or a setting it reads changes.
+    private val exactNow = BooleanArray(W * W)
+    private val inBigNow = arrayOfNulls<BigRoom>(W * W)
+    private val SINGLE = Array(W * W) { intArrayOf(it) }
+    private val PERCENT = Array(101) { "$it%" }
+    private val guessColors = Array(5) { IntArray(it) }
+
+    private var splitsFor: Prediction? = null
+    private var splitsMap: Map<Int, Split> = emptyMap()
+
+    private fun splitsOf(p: Prediction): Map<Int, Split> {
+        if (p !== splitsFor) { splitsMap = p.splits.associateBy { it.tile }; splitsFor = p }
+        return splitsMap
+    }
+
+    /** A split's labels: what's there with blood, without it, and its rooms (and secrets). */
+    private val labels = HashMap<Split, Array<String>>()
+    private var labelsP: Prediction? = null
+    private var labelsV: MapView? = null
+    private var labelsSecrets = false
+
+    private fun labelsFor(p: Prediction, v: MapView) {
+        val withSecrets = splitSecrets.value
+        if (p === labelsP && v === labelsV && withSecrets == labelsSecrets) return
+        val secretsAt = if (withSecrets) MapPredictor.splitSecrets(v, p.splits).let { s -> p.splits.indices.associate { p.splits[it].tile to s[it] } } else emptyMap()
+        labels.clear()
+        for (s in p.splits) {
+            val sec = secretsAt[s.tile]?.let { " §b${it.roundToInt()}s" } ?: ""
+            labels[s] = arrayOf(splitTop(s, true), splitTop(s, false), "§f~${s.rooms.roundToInt()}$sec")
+        }
+        labelsP = p; labelsV = v; labelsSecrets = withSecrets
+    }
+
+    private fun splitTop(s: Split, blood: Boolean): String {
+        val parts = ArrayList<String>()
+        val pz = s.expect[Cls.PUZZLE].roundToInt()
+        if (pz > 0) parts += "§d${if (pz > 1) pz else ""}P"
+        if (s.expect[Cls.TRAP] >= 0.5f) parts += "§6T"
+        if (s.expect[Cls.YELLOW] >= 0.5f) parts += "§eY"
+        if (blood && s.expect[Cls.BLOOD] >= 0.5f) parts += "§cB"
+        return parts.joinToString(" ").ifEmpty { "§7-" }
+    }
+
+    /** An exact room's tiles, the kinds it shows (null: it can still be more than one), and its name text's lines. */
+    private class ExactRoom(val tiles: IntArray, val types: List<Int>?, val lcmOrder: IntArray?, val sure: Boolean,
+                            val sureLines: List<String>, val blankLines: List<String>, val askLines: List<String>)
+
+    private var groupsP: Prediction? = null
+    private var groupsNames: List<NamedRoom>? = null
+    private var groupsDrop = -1
+    private var groups: List<ExactRoom> = emptyList()
+
+    private fun exactGroups(p: Prediction, all: List<NamedRoom>, dropBits: Int): List<ExactRoom> {
+        if (p === groupsP && all === groupsNames && dropBits == groupsDrop) return groups
+        val out = ArrayList<ExactRoom>()
+        for ((_, names) in all.filter { val c = typeOfPool(it.name.pool); c < 0 || !drop[c] }.groupBy { it.tiles.joinToString(",") }) {
+            val tiles = names[0].tiles
+            if (names.sumOf { it.chance.toDouble() } < SURE) continue
+            val byType = names.groupBy { typeOfPool(it.name.pool) }.mapValues { (_, n) -> n.sumOf { it.chance.toDouble() } }
+            val types = splitTypes(byType)?.ifEmpty { listOf(typeOfPool(names.maxBy { it.chance }.name.pool)) }
+            // Lower and Higher Blaze are one puzzle: when it can be either, it's Blaze
+            val eitherBlaze = names.filter { it.name.name in SecretNames.BLAZES && it.chance > 0f }.map { it.name.name }.distinct().size > 1
+            val (bestName, bestChance) = names.groupBy { if (eitherBlaze && it.name.name in SecretNames.BLAZES) "Blaze" else it.name.name }
+                .mapValues { (_, n) -> n.sumOf { it.chance.toDouble() } }.maxBy { it.value }.let { it.key to it.value }
+            val secrets = names.map { it.name.secrets }.distinct().singleOrNull()
+            val suffix = if (secrets != null && secrets > 0) " 0/$secrets" else ""
+            fun lines(name: String) = (name + suffix).trim().split(" ").filter { it.isNotEmpty() }
+            out += ExactRoom(tiles, types, types?.let { lcmOrder(tiles, it) }, bestChance >= SURE,
+                if (bestChance >= SURE) lines(bestName) else emptyList(), lines(""), lines("?"))
+        }
+        groups = out
+        groupsP = p; groupsNames = all; groupsDrop = dropBits
+        return out
+    }
+
+    private val LCM_ORDER = listOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE, Cls.BLOOD)
+
+    /** A 1x1 dead end's (or blood's) kinds in LCM Style's order; null when LCM Style draws it as a plain room. */
+    private fun lcmOrder(tiles: IntArray, types: List<Int>): IntArray? =
+        if (tiles.size == 1 && types.isNotEmpty() && types.all { it in SPLITTABLE }) types.sortedBy { LCM_ORDER.indexOf(it) }.toIntArray() else null
+
+    private var tilesP: Prediction? = null
+    private var tilesDrop = -1
+    private var tilesMin = Float.NaN
+    private var shapes: List<IntArray> = emptyList()
+    private var shapeTypes: Array<List<Int>?> = emptyArray()
+    private var shapeLcm: Array<IntArray?> = emptyArray()
+    private val keptAt = arrayOfNulls<FloatArray>(W * W)
+    private val shownClsAt = arrayOfNulls<IntArray>(W * W)
+    private val deadEndAdm = arrayOfNulls<IntArray>(W * W)
+    private val deadEndLcm = arrayOfNulls<IntArray>(W * W)
+
+    private fun tilesFor(p: Prediction, dropBits: Int, min: Float) {
+        if (p === tilesP && dropBits == tilesDrop && min == tilesMin) return
+        tilesP = null
+        shapes = MapPredictor.certainShapes(p, SURE)
+        shapeTypes = Array(shapes.size) { i ->
+            val tiles = shapes[i]
+            val q = (p.probs[tiles[0]] ?: p.raw[tiles[0]])?.let(::kept)
+            if (tiles.size > 1 || q == null) listOf(-1) else {
+                val byType = HashMap<Int, Double>()
+                for (c in 0 until Cls.COUNT) if (q[c] > 0f) byType.merge(if (c == Cls.NORMAL || c == Cls.BIG) -1 else c, q[c].toDouble(), Double::plus)
+                splitTypes(byType)
+            }
+        }
+        shapeLcm = Array(shapes.size) { i -> shapeTypes[i]?.let { lcmOrder(shapes[i], it) } }
+        for (t in 0 until W * W) {
+            val probs = p.probs[t]?.let(::kept)
+            keptAt[t] = probs
+            if (probs == null) { shownClsAt[t] = null; deadEndAdm[t] = null; deadEndLcm[t] = null; continue }
+            shownClsAt[t] = SPECIALS.filter { probs[it] >= min }.sortedByDescending { probs[it] }.take(3).toIntArray()
+            // the kinds a dead end here can be: yellow, trap, puzzle in ADM's order, a rare room on 5-puzzle maps; any at least 5%
+            // of the dead end's chance, the likeliest three
+            val deadEnd = probs[Cls.PUZZLE] + probs[Cls.TRAP] + probs[Cls.YELLOW] + probs[Cls.RARE]
+            val types = intArrayOf(Cls.YELLOW, Cls.TRAP, Cls.PUZZLE, Cls.RARE).filter { probs[it] >= 0.05f * deadEnd }
+            val keep = types.sortedByDescending { probs[it] }.take(3).toSet()
+            deadEndAdm[t] = types.filter { it in keep }.toIntArray()
+            // dtMap's order: puzzle on the outside, trap, yellow in the middle
+            deadEndLcm[t] = intArrayOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE).filter { it in keep }.toIntArray()
+        }
+        tilesP = p; tilesDrop = dropBits; tilesMin = min
+    }
+
     private fun typeOfPool(pool: Int): Int = when (pool) {
         MapStats.POOL_PUZZLE -> Cls.PUZZLE
         MapStats.POOL_TRAP -> Cls.TRAP
@@ -590,43 +710,42 @@ object MapPrediction {
      * An exact room's shape in its type's colour; a 1x1 that can still be more than one kind (likeliest first) as a
      * guess tile in their colours: dtMap's in LCM Style, else side by side as ADM's.
      */
-    private fun exactFill(g: GuiGraphicsExtractor, tiles: IntArray, types: List<Int>) {
+    private fun exactFill(g: GuiGraphicsExtractor, tiles: IntArray, types: List<Int>, lcmOrder: IntArray?) {
         val x = (tiles[0] % W) * TILE; val y = (tiles[0] / W) * TILE
-        if (lcm && tiles.size == 1 && types.isNotEmpty() && types.all { it in SPLITTABLE }) {
+        if (lcm && lcmOrder != null) {
             // a dead end (or blood) as LCM Style draws ADM's guesses: dtMap's tile, puzzle outside, trap, yellow in the middle
-            val order = listOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE, Cls.BLOOD)
-            LcmStyle.guessTile(g, x, y, types.sortedBy { order.indexOf(it) }.map { LcmStyle.darker(lcmColor(it)) }.toIntArray())
+            val colors = guessColors(lcmOrder.size)
+            for (i in lcmOrder.indices) colors[i] = LcmStyle.darker(lcmColor(lcmOrder[i]))
+            LcmStyle.guessTile(g, x, y, colors)
             return
         }
         if (types.size <= 1 || tiles.size > 1) { fillTiles(g, tiles, exactColor(types.firstOrNull() ?: -1)); return }
         val part = ROOM / types.size
-        types.forEachIndexed { i, c -> g.fill(x + i * part, y, if (i == types.lastIndex) x + ROOM else x + (i + 1) * part, y + ROOM, exactColor(c)) }
+        for (i in types.indices) g.fill(x + i * part, y, if (i == types.lastIndex) x + ROOM else x + (i + 1) * part, y + ROOM, exactColor(types[i]))
     }
+
+    private fun guessColors(n: Int): IntArray = if (n < guessColors.size) guessColors[n] else IntArray(n)
 
     /** The map names the room on tile [t] itself (it's open: [LcmStyle.knownName]). */
     private fun namedOnMap(t: Int): Boolean =
         DungeonScan.rooms.any { r -> r.tiles.any { it.z * W + it.x == t } && LcmStyle.knownName(r) != null }
 
     /** ADM's name text over a room: its name when only one fits, else "?" (nothing in LCM Style), with the secrets when every name that fits has the same count. */
-    private fun roomText(g: GuiGraphicsExtractor, tiles: IntArray, names: List<NamedRoom>) {
-        // Lower and Higher Blaze are one puzzle: when it can be either, it's Blaze
-        val eitherBlaze = names.filter { it.name.name in SecretNames.BLAZES && it.chance > 0f }.map { it.name.name }.distinct().size > 1
-        val (bestName, bestChance) = names.groupBy { if (eitherBlaze && it.name.name in SecretNames.BLAZES) "Blaze" else it.name.name }
-            .mapValues { (_, n) -> n.sumOf { it.chance.toDouble() } }.maxBy { it.value }.let { it.key to it.value }
-        val cx = tiles.map { (it % W) * TILE + ROOM / 2f }.average().toFloat()
-        val cz = tiles.map { (it / W) * TILE + ROOM / 2f }.average().toFloat()
-        val secrets = names.map { it.name.secrets }.distinct().singleOrNull()
-        val name = if (bestChance >= SURE) bestName else if (lcm || tiles.all { knownTile(it) }) "" else "?"
-        val text = name + if (secrets != null && secrets > 0) " 0/$secrets" else ""
-        val lines = text.trim().split(" ").filter { it.isNotEmpty() }
+    private fun roomText(g: GuiGraphicsExtractor, r: ExactRoom) {
+        val tiles = r.tiles
+        var sx = 0.0; var sz = 0.0
+        for (t in tiles) { sx += ((t % W) * TILE + ROOM / 2f).toDouble(); sz += ((t / W) * TILE + ROOM / 2f).toDouble() }
+        val cx = (sx / tiles.size).toFloat()
+        val cz = (sz / tiles.size).toFloat()
+        val lines = if (r.sure) r.sureLines else if (lcm || tiles.all { knownTile(it) }) r.blankLines else r.askLines
         val fontH = mc.font.lineHeight
         val scale = DungeonMap.textScaling
         val totalH = (lines.size - 1) * fontH * scale
-        for ((i, line) in lines.withIndex()) {
+        for (i in lines.indices) {
             g.pose().pushMatrix()
             g.pose().translate(cx, cz - totalH / 2f + i * fontH * scale)
             g.pose().scale(scale)
-            g.centeredText(mc.font, line, 0, -fontH / 2, 0xFFB4B4B4.toInt())
+            g.centeredText(mc.font, lines[i], 0, -fontH / 2, 0xFFB4B4B4.toInt())
             g.pose().popMatrix()
         }
     }
@@ -636,14 +755,13 @@ object MapPrediction {
         fillTiles(g, tiles, if (customColors.value) predRoom.value.rgba else BIG_GREY.rgba)
 
     private fun fillTiles(g: GuiGraphicsExtractor, tiles: IntArray, c: Int) {
-        val set = tiles.toHashSet()
         for (t in tiles) {
             val x = (t % W) * TILE; val y = (t / W) * TILE
-            val right = t % W + 1 < W && t + 1 in set; val down = t + W in set
+            val right = t % W + 1 < W && t + 1 in tiles; val down = t + W in tiles
             g.fill(x, y, x + ROOM, y + ROOM, c)
             if (right) g.fill(x + ROOM, y, x + TILE, y + ROOM, c)
             if (down) g.fill(x, y + ROOM, x + ROOM, y + TILE, c)
-            if (right && down && t + W + 1 in set) g.fill(x + ROOM, y + ROOM, x + TILE, y + TILE, c)
+            if (right && down && t + W + 1 in tiles) g.fill(x + ROOM, y + ROOM, x + TILE, y + TILE, c)
         }
     }
 
@@ -653,34 +771,33 @@ object MapPrediction {
      * a dead end here can be: yellow, trap, puzzle in ADM's order, a rare room on 5-puzzle maps; any at least 5%
      * of the dead end's chance, the likeliest three.
      */
-    private fun deadEndGuess(g: GuiGraphicsExtractor, x: Int, y: Int, probs: FloatArray, deadEnd: Float) {
-        val types = intArrayOf(Cls.YELLOW, Cls.TRAP, Cls.PUZZLE, Cls.RARE).filter { probs[it] >= 0.05f * deadEnd }
-        val keep = types.sortedByDescending { probs[it] }.take(3).toSet()
+    private fun deadEndGuess(g: GuiGraphicsExtractor, x: Int, y: Int, t: Int) {
         if (lcm) {
-            // dtMap's order: puzzle on the outside, trap, yellow in the middle
-            LcmStyle.guessTile(g, x, y, intArrayOf(Cls.PUZZLE, Cls.TRAP, Cls.YELLOW, Cls.RARE).filter { it in keep }.map { dim(it) }.toIntArray())
+            val types = deadEndLcm[t]!!
+            val colors = guessColors(types.size)
+            for (i in types.indices) colors[i] = dim(types[i])
+            LcmStyle.guessTile(g, x, y, colors)
             return
         }
+        val types = deadEndAdm[t]!!
         if (customColors.value) {
             // ADM's layout in the chosen colours, as chosen (not darkened again)
-            val custom = types.filter { it in keep }.map { dim(it) }
-            val part = ROOM / custom.size.coerceAtLeast(1)
-            custom.forEachIndexed { i, c -> g.fill(x + i * part, y, if (i == custom.lastIndex) x + ROOM else x + (i + 1) * part, y + ROOM, c) }
+            val part = ROOM / types.size.coerceAtLeast(1)
+            for (i in types.indices) g.fill(x + i * part, y, if (i == types.lastIndex) x + ROOM else x + (i + 1) * part, y + ROOM, dim(types[i]))
             return
         }
-        val colors = types.filter { it in keep }.map { colorOf(it) }
-        when (colors.size) {
-            1 -> g.fill(x, y, x + ROOM, y + ROOM, colors[0].rgba)
+        when (types.size) {
+            1 -> g.fill(x, y, x + ROOM, y + ROOM, colorOf(types[0]).rgba)
             2 -> {
                 val half = ROOM / 2
-                g.fill(x, y, x + half, y + ROOM, colors[0].darker(0.5f).rgba)
-                g.fill(x + half, y, x + ROOM, y + ROOM, colors[1].darker(0.5f).rgba)
+                g.fill(x, y, x + half, y + ROOM, colorOf(types[0]).darker(0.5f).rgba)
+                g.fill(x + half, y, x + ROOM, y + ROOM, colorOf(types[1]).darker(0.5f).rgba)
             }
             else -> {
                 val third = ROOM / 3
-                g.fill(x, y, x + third, y + ROOM, colors[0].darker(0.5f).rgba)
-                g.fill(x + third, y, x + third * 2, y + ROOM, colors[1].darker(0.5f).rgba)
-                g.fill(x + third * 2, y, x + ROOM, y + ROOM, colors[2].darker(0.5f).rgba)
+                g.fill(x, y, x + third, y + ROOM, colorOf(types[0]).darker(0.5f).rgba)
+                g.fill(x + third, y, x + third * 2, y + ROOM, colorOf(types[1]).darker(0.5f).rgba)
+                g.fill(x + third * 2, y, x + ROOM, y + ROOM, colorOf(types[2]).darker(0.5f).rgba)
             }
         }
     }
@@ -690,10 +807,13 @@ object MapPrediction {
      * ADM draws one, and the [chance] under them with Show Chances. LCM Style never draws the "?" and always
      * shows the chance, in the tile's middle when no label is over it.
      */
-    private fun overlay(g: GuiGraphicsExtractor, x: Int, y: Int, split: Split?, chance: Float?, question: Boolean) {
+    private fun overlay(g: GuiGraphicsExtractor, x: Int, y: Int, split: Split?, chance: Float, question: Boolean) {
         val label = split != null && splitText.value
         if (label) splitLabel(g, x, y, split!!) else if (question && !lcm) icon(g, x, y)
-        if (chance != null && chances.value) small(g, "${(chance * 100).roundToInt()}%", x + ROOM / 2, if (label || !lcm) y + 13 else y + 8, -1)
+        if (!chance.isNaN() && chances.value) {
+            val pct = (chance * 100).roundToInt()
+            small(g, if (pct in 0..100) PERCENT[pct] else "$pct%", x + ROOM / 2, if (label || !lcm) y + 13 else y + 8, -1)
+        }
     }
 
     private fun icon(g: GuiGraphicsExtractor, x: Int, y: Int) {
@@ -702,21 +822,11 @@ object MapPrediction {
         g.blit(RenderPipelines.GUI_TEXTURED, question, x + 2, y + 2, size.toFloat(), size.toFloat(), size, size, size, size)
     }
 
-    /** Each split's secrets, by its door's tile, for the prediction being drawn (Split Secrets). */
-    private var secretsAt: Map<Int, Float> = emptyMap()
-
     /** "2P T Y B" (what's more likely there than not, puzzles by their expected count) over "~6" rooms (and "23s" secrets). */
     private fun splitLabel(g: GuiGraphicsExtractor, x: Int, y: Int, s: Split) {
-        val parts = ArrayList<String>()
-        val pz = s.expect[Cls.PUZZLE].roundToInt()
-        if (pz > 0) parts += "§d${if (pz > 1) pz else ""}P"
-        if (s.expect[Cls.TRAP] >= 0.5f) parts += "§6T"
-        if (s.expect[Cls.YELLOW] >= 0.5f) parts += "§eY"
-        if (!drop[Cls.BLOOD] && s.expect[Cls.BLOOD] >= 0.5f) parts += "§cB"
-        val top = parts.joinToString(" ").ifEmpty { "§7-" }
-        small(g, top, x + ROOM / 2, y + 3, -1)
-        val sec = secretsAt[s.tile]?.let { " §b${it.roundToInt()}s" } ?: ""
-        small(g, "§f~${s.rooms.roundToInt()}$sec", x + ROOM / 2, y + 8, -1)
+        val l = labels[s] ?: return
+        small(g, if (drop[Cls.BLOOD]) l[1] else l[0], x + ROOM / 2, y + 3, -1)
+        small(g, l[2], x + ROOM / 2, y + 8, -1)
     }
 
     private fun small(g: GuiGraphicsExtractor, text: String, cx: Int, cy: Int, color: Int) {
