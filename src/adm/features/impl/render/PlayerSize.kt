@@ -41,7 +41,9 @@ object PlayerSize : Module(
         } else {
             if (!customSizes) return
             refreshCustomSizes()
-            val custom = customSizeById[id] ?: return
+            val sizes = customSizeById
+            if (sizes.isEmpty()) return
+            val custom = sizes[id] ?: return
             x = custom.sizeX; y = custom.sizeY; z = custom.sizeZ
         }
         if (x == 1f && y == 1f && z == 1f) return

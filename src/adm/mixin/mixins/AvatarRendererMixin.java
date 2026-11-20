@@ -24,7 +24,7 @@ public class AvatarRendererMixin {
             at = @At("HEAD")
     )
     private void extractRenderState(Avatar entity, AvatarRenderState state, float partialTicks, CallbackInfo ci) {
-        if (!(entity instanceof AbstractClientPlayer clientAvatarEntity)) return;
+        if (!PlayerSize.INSTANCE.getEnabled() || !(entity instanceof AbstractClientPlayer clientAvatarEntity)) return;
         state.setData(PlayerSize.getGAME_PROFILE_KEY(), clientAvatarEntity.getGameProfile());
     }
 }
