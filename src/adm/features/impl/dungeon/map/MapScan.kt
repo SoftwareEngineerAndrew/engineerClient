@@ -17,6 +17,7 @@ import com.adm.utils.IVec2
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket
 import net.minecraft.world.level.saveddata.maps.MapDecoration
+import net.minecraft.world.level.saveddata.maps.MapDecorationType
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes
 
 object MapScan {
@@ -24,6 +25,8 @@ object MapScan {
     private const val SIDE = 128
     private const val BLANK: Byte = 0
     private const val ENTRANCE: Byte = 30
+    // In marker units (half a map pixel): more than a walk between map updates, under half a room.
+    private const val MATCH_RANGE = 24
 
     @Volatile
     private var located = false
@@ -85,7 +88,7 @@ object MapScan {
     private fun placeTeammates(marks: List<MapDecoration>) {
         val frame = MapDecorationTypes.FRAME.value()
         // Markers come in teammate order, so a count that doesn't match would put names on the wrong heads.
-        if (marks.count { it.type.value() != frame } != DungeonUtils.dungeonTeammatesNoSelf.count { !it.isDead }) return
+        if (marks.count { it.type.value() != frame } != DungeonUtils.dungeonTeammatesNoSelf.count { !it.isDead }) return placeNearest(marks, frame)
         val mates = DungeonUtils.dungeonTeammatesNoSelf.iterator()
         for (mark in marks) {
             if (mark.type.value() == frame) continue
@@ -96,6 +99,28 @@ object MapScan {
                 mate.yaw = mark.rot() * 360 / 16f
                 break
             }
+        }
+    }
+
+    /** Each living teammate takes the marker nearest where theirs last was, closest pairs first; one with none near stays put. */
+    private fun placeNearest(marks: List<MapDecoration>, frame: MapDecorationType) {
+        val free = marks.filterTo(ArrayList()) { it.type.value() != frame }
+        val mates = DungeonUtils.dungeonTeammatesNoSelf.filterTo(ArrayList()) { !it.isDead }
+        while (free.isNotEmpty() && mates.isNotEmpty()) {
+            var best = Int.MAX_VALUE
+            var bestMate = 0
+            var bestMark = 0
+            for (i in mates.indices) for (j in free.indices) {
+                val dx = mates[i].mapPos.x - free[j].x.toInt()
+                val dz = mates[i].mapPos.z - free[j].y.toInt()
+                val d = dx * dx + dz * dz
+                if (d < best) { best = d; bestMate = i; bestMark = j }
+            }
+            if (best > MATCH_RANGE * MATCH_RANGE) return
+            val mark = free.removeAt(bestMark)
+            val mate = mates.removeAt(bestMate)
+            mate.mapPos = IVec2(mark.x.toInt(), mark.y.toInt())
+            mate.yaw = mark.rot() * 360 / 16f
         }
     }
 
