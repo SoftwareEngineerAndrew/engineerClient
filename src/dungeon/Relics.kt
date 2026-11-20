@@ -142,6 +142,7 @@ object Relics : Module(
         }
 
         on<MessageEvent.Chat> {
+            if (!message.contains(" picked the Corrupted ")) return@on
             val m = PICKED.matchEntire(message) ?: return@on
             if (m.groupValues[1] == mc.user.name) currentRelic = Relic.entries.find { it.name == m.groupValues[2] }
         }

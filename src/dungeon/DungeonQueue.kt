@@ -129,8 +129,8 @@ object DungeonQueue : Module(
             val kicked = message == KICKED_JOINING || message == KICKED_INSTANCE
             if (kicked && System.currentTimeMillis() - kickedAt > 60_000) kickedAt = System.currentTimeMillis()
             // entering a run restarts the 30s even inside a warp's 4s
-            if (instanceRegex.containsMatchIn(message)) endTime = System.currentTimeMillis() + 30_000L
-            else if (endTime <= System.currentTimeMillis() && warpRegex.containsMatchIn(message)) endTime = System.currentTimeMillis() + 4_000L
+            if (message.contains(" Catacombs, ") && instanceRegex.containsMatchIn(message)) endTime = System.currentTimeMillis() + 30_000L
+            else if (endTime <= System.currentTimeMillis() && message.startsWith("Sending to server ") && warpRegex.containsMatchIn(message)) endTime = System.currentTimeMillis() + 4_000L
             when {
                 announceKick && (kicked || message.matches(timeoutExeceptionRegex)) -> sendCommand("pc I was kicked!")
                 autoRequeue && message.matches(extraStatsRegex) -> {
