@@ -2,6 +2,7 @@ package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
+import com.engineerclient.mixin.ChatCopyAccessor
 import com.engineerclient.practice.TermInfo
 import com.engineerclient.terminals.Terminals
 import com.adm.clickgui.settings.impl.BooleanSetting
@@ -13,6 +14,7 @@ import com.adm.events.core.on
 import com.adm.features.impl.boss.MelodyMessage
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.M7Phases
+import net.minecraft.ChatFormatting
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -22,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 object MelodyChat {
 
     private val chatRows = BooleanSetting("Chat Melody", true, desc = "Teammates who only post melody in party chat get a row too.")
+    private val compactChat = BooleanSetting("Compact Melody Chat", false, desc = "Keeps only each teammate's latest melody line in chat.")
 
     /** A teammate's furthest percent heard, and when ([at], System.nanoTime) the last percent message came. */
     class Heard(val percent: Int, val at: Long)
@@ -32,6 +35,7 @@ object MelodyChat {
     private val TERMINAL = Regex("""^(\w{1,16}) activated a terminal! \(\d+/\d+\)$""")
 
     private val chat = ConcurrentHashMap<String, Heard>()
+    private val lastLine = HashMap<String, String>()
     private var section = 0
     private var p3 = false
 
@@ -61,10 +65,28 @@ object MelodyChat {
         val heard = Heard(maxOf(percent, chat[sender]?.percent ?: 0), System.nanoTime())
         chat[sender] = heard
         if (chatRows.value) MelodyMessage.chatProgress(sender, heard.percent)
+        if (compactChat.value && MelodyMessage.enabled) {
+            lastLine.put(sender, message)?.let { removeLine(it) }
+        }
     }
+
+    private fun removeLine(text: String) {
+        val chat = mc.gui.hud.chat as ChatCopyAccessor
+        val all = chat.`ec$messages`()
+        for (i in 0 until minOf(COMPACT_RANGE, all.size)) {
+            val old = all[i]
+            if (ChatFormatting.stripFormatting(old.content().string) != text) continue
+            all.removeAt(i)
+            chat.`ec$lines`().removeIf { it.parent() === old }
+            return
+        }
+    }
+
+    private const val COMPACT_RANGE = 100
 
     fun install() {
         MelodyMessage.registerSetting(chatRows)
+        MelodyMessage.registerSetting(compactChat)
         on<MessageEvent.Chat> { EngineerClient.safely("chat melody") { onChat(message) } }
         on<TickEvent.End> {
             EngineerClient.safely("chat melody section") {
@@ -73,9 +95,9 @@ object MelodyChat {
                 if (sec != section) { section = sec; clear() }
             }
         }
-        on<LevelEvent.Load> { chat.clear(); section = 0; p3 = false }
-        SubscribeWhile.add(this, { clear(); section = 0; p3 = false }) {
-            MelodyMessage.enabled && chatRows.value || Terminals.progressOn && Terminals.progressChatMelody
+        on<LevelEvent.Load> { chat.clear(); lastLine.clear(); section = 0; p3 = false }
+        SubscribeWhile.add(this, { clear(); lastLine.clear(); section = 0; p3 = false }) {
+            MelodyMessage.enabled && (chatRows.value || compactChat.value) || Terminals.progressOn && Terminals.progressChatMelody
         }
     }
 }

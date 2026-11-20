@@ -13,6 +13,9 @@ public interface ChatCopyAccessor {
     @Accessor("trimmedMessages")
     List<GuiMessage.Line> ec$lines();
 
+    @Accessor("allMessages")
+    List<GuiMessage> ec$messages();
+
     @Accessor("chatScrollbarPos")
     int ec$scroll();
 
