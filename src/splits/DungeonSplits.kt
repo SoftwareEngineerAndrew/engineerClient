@@ -19,6 +19,7 @@ import com.adm.events.core.onReceive
 import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.Color
+import com.adm.utils.NameMemo
 import com.engineerclient.storm.StormCrush
 import com.engineerclient.storm.StormCrushView
 import com.adm.features.impl.dungeon.map.DungeonScan
@@ -185,6 +186,7 @@ object DungeonSplits : Module(
         storm.reset(); crushView.reset()
         goldorAt = null; goldorMoved = false; necronId = null; necronDiedAt = null; watcherAt = null
         barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear(); necronTnt.clear()
+        stormTag.clear(); necronTag.clear(); goldorTag.clear(); keyName.clear()
     }
 
     /**
@@ -343,8 +345,8 @@ object DungeonSplits : Module(
             // The key is an armor stand named "Wither Key"; it appears where the last mob died.
             if (blood.active) for (e in level.entitiesForRendering()) {
                 if (e !is ArmorStand || e.id in keysSeen) continue
-                val name = e.customName?.string ?: continue
-                if (KEY.containsMatchIn(name)) {
+                val name = e.customName ?: continue
+                if (keyName[e, name]) {
                     keysSeen += e.id
                     blood.onKeySpawned(now(), distanceTo(e))
                 }
@@ -535,11 +537,28 @@ object DungeonSplits : Module(
 
     /** A boss's wither: the one nearest the name tag carrying [name], or nearest you without one. */
     private fun bossWither(level: net.minecraft.client.multiplayer.ClientLevel, name: String): WitherBoss? {
-        val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>().filter { Witherborn.isBoss(it) }
-        val tag = level.entitiesForRendering().firstOrNull { it is ArmorStand && it.customName?.string?.contains(name) == true }
+        val memo = when (name) { "Storm" -> stormTag; "Necron" -> necronTag; else -> goldorTag }
+        var tag: net.minecraft.world.entity.Entity? = null
+        for (e in level.entitiesForRendering()) {
+            if (e !is ArmorStand) continue
+            val n = e.customName ?: continue
+            if (memo[e, n]) { tag = e; break }
+        }
         val anchor = tag ?: mc.player ?: return null
-        return withers.minByOrNull { it.distanceToSqr(anchor) }
+        var best: WitherBoss? = null
+        var bestD = 0.0
+        for (e in level.entitiesForRendering()) {
+            if (e !is WitherBoss || !Witherborn.isBoss(e)) continue
+            val d = e.distanceToSqr(anchor)
+            if (best == null || d < bestD) { best = e; bestD = d }
+        }
+        return best
     }
+
+    private val stormTag = NameMemo({ it.string.contains("Storm") })
+    private val necronTag = NameMemo({ it.string.contains("Necron") })
+    private val goldorTag = NameMemo({ it.string.contains("Goldor") })
+    private val keyName = NameMemo({ it.string.contains("Wither Key") || it.string.contains("Blood Key") })
 
     /** Goldor and where he waits once the core opens. */
     private var goldorAt: Pair<Int, net.minecraft.world.phys.Vec3>? = null
@@ -605,7 +624,6 @@ object DungeonSplits : Module(
     private const val CORE_OPEN = "The Core entrance is opening!"
     private const val RUN_END = "> EXTRA STATS <"
     private const val NECRON_LINE = "[BOSS] Necron: "
-    private val KEY = Regex("""(?:Wither|Blood) Key""")
 
     /** The Watcher: his id and where he was last tick. */
     private var watcherAt: Pair<Int, net.minecraft.world.phys.Vec3>? = null
