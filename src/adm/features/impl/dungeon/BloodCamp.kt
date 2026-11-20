@@ -166,7 +166,7 @@ object BloodCamp : Module(
         }
 
         on<MessageEvent.Chat> {
-            if (!DungeonUtils.inClear) return@on
+            if (!message.startsWith(WATCHER) || !DungeonUtils.inClear) return@on
             if (message in openLines) {
                 moveTicks = MOVE_TICKS
                 moveForMe = isMoveForMe()
