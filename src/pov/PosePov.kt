@@ -362,7 +362,7 @@ object PosePov : Module(
         heldFor.fill(-1L)
         for (i in 0 until FEEDS) {
             val slot = DungeonUtils.leapTeammates.getOrNull(i)?.takeIf { it.name != "Empty" } ?: continue
-            val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == slot.name }
+            val p = slot.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.gameProfile.name() == slot.name }
             // Out of your range: where they (or a teammate who can see them) say they are, else the map's guess.
             // In clear the map says roughly where they are: a shared pose far from their icon is someone lying, and isn't used.
             // Peer-to-peer, they're drawn from their own frames even in range (smoother than the game's 20 a second), while
@@ -692,7 +692,7 @@ object PosePov : Module(
         val names = DungeonUtils.leapTeammates.mapTo(HashSet()) { it.name }
         looks.keys.retainAll(names)
         for (p in level.players()) {
-            val name = p.name.string
+            val name = p.gameProfile.name()
             if (name !in names) continue
             val l = looks[name]
             // A gap (they were out of range) starts over rather than turning across it.
@@ -1285,7 +1285,7 @@ object PosePov : Module(
         val now = System.nanoTime()
         for (slot in DungeonUtils.leapTeammates) {
             if (slot.name == "Empty" || slot.isDead) continue
-            val pos = slot.entity?.takeIf { !it.isRemoved }?.position() ?: level.players().firstOrNull { it.name.string == slot.name }?.position()
+            val pos = slot.entity?.takeIf { !it.isRemoved }?.position() ?: level.players().firstOrNull { it.gameProfile.name() == slot.name }?.position()
                 ?: PoseShare.pose(slot.name, now)?.pos ?: continue
             val eye = pos.add(0.0, 1.62, 0.0)
             val res = PovCull.compute(cullInput(eye, Matrix4f(), 64, wide = true))

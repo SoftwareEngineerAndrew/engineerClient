@@ -10,7 +10,7 @@ internal object LeapTeammates {
 
     /** [m]'s player as this game has it: their entity, else a player by their name, else (P3 sim) their bot; null out of view. */
     fun entity(m: DungeonPlayer, level: ClientLevel): Entity? =
-        m.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.name.string == m.name } ?: simBot(level, m.name)
+        m.entity?.takeIf { !it.isRemoved } ?: level.players().firstOrNull { it.gameProfile.name() == m.name } ?: simBot(level, m.name)
 
     /** In the P3 sim, a bot teammate: its Mannequin, by the name over it. */
     private fun simBot(level: ClientLevel, name: String): Entity? {

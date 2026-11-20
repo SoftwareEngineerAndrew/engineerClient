@@ -178,7 +178,7 @@ object PoseShare {
     fun tick() {
         val lobby = LocationUtils.lobbyId?.takeIf { DungeonUtils.inDungeons && LOBBY.matches(it) }
         val me = mc.player
-        teammates = DungeonUtils.dungeonTeammates.mapTo(HashSet()) { it.name.lowercase() }
+        teammates = if (DungeonUtils.dungeonTeammates.isEmpty()) emptySet() else DungeonUtils.dungeonTeammates.mapTo(HashSet()) { it.name.lowercase() }
         ids = idsNow()
         if (lobby == null || me == null) { if (room != null || socket != null) close(); return }
         if (lobby != room) { close(); room = lobby }
@@ -260,7 +260,7 @@ object PoseShare {
         val level = mc.level
         if (level != null) for ((i, name) in sentParty.withIndex()) {
             if (name in sharers) continue
-            val p = level.players().firstOrNull { it.name.string.equals(name, ignoreCase = true) } ?: continue
+            val p = level.players().firstOrNull { it.gameProfile.name().equals(name, ignoreCase = true) } ?: continue
             val f = if (PosePov.swungSince(p.id, now - TICK_NS)) 1 else 0
             sendBinary(pose(2, i, 0, p.x, p.y, p.z, p.yHeadRot, p.xRot, f, p.mainHandItem))
         }
@@ -460,9 +460,10 @@ object PoseShare {
 
     private fun idsNow(): Map<String, String> {
         val level = mc.level ?: return emptyMap()
+        if (DungeonUtils.dungeonTeammates.isEmpty()) { eids.clear(); return emptyMap() }
         val names = DungeonUtils.dungeonTeammates.mapTo(HashSet()) { it.name.lowercase() }
         eids.keys.retainAll(names)
-        for (p in level.players()) { val n = p.name.string.lowercase(); if (n in names) eids[n] = p.id }
+        for (p in level.players()) { val n = p.gameProfile.name().lowercase(); if (n in names) eids[n] = p.id }
         return eids.entries.associate { (n, id) -> "$n:$id" to n }
     }
 

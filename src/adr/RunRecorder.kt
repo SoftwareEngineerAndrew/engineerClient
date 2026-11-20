@@ -540,7 +540,7 @@ class RunRecorder(
             // so each is keyed by its entity id too ("Crypt Souleater#1234"): otherwise they would
             // overwrite each other here, every one would look changed every tick, and the viewer
             // would draw them as one mob jumping about. Real players keep their names.
-            val name = if (p.uuid.version() == 2) "${p.name.string}#${p.id}" else p.name.string
+            val name = if (p.uuid.version() == 2) "${p.gameProfile.name()}#${p.id}" else p.gameProfile.name()
             seen += name
             if (skinsWritten.add(name)) texturesOf(p.gameProfile.properties())?.let { emit("""{"k":"skin","t":$tick,"name":${str(name)},"tex":${str(it)}}""") }
             recordEquipment(p, "\"name\":${str(name)}", name)
@@ -580,7 +580,7 @@ class RunRecorder(
         val sb = StringBuilder()
         var count = 0
         for (p in level.players()) {
-            val name = p.name.string
+            val name = p.gameProfile.name()
             val swing = p.currentSwing
             val prev = lastSwing.put(name, swing)
             if (swing == null || swing === prev) continue

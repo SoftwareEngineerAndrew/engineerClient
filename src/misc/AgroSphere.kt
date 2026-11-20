@@ -109,7 +109,7 @@ object AgroSphere : Module(
 
             players = DungeonUtils.dungeonTeammates.mapNotNull { teammate ->
                 if (teammate.isDead) return@mapNotNull null
-                teammate.entity?.takeIf { it.isAlive } ?: level.players().firstOrNull { it.name.string == teammate.name }
+                teammate.entity?.takeIf { it.isAlive } ?: level.players().firstOrNull { it.gameProfile.name() == teammate.name }
             }
         }
 

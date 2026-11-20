@@ -83,7 +83,7 @@ object BlockInstaclear : Module(
             EngineerClient.safely("block instaclear tiles") {
                 val names = DungeonUtils.dungeonTeammates.mapTo(HashSet()) { it.name }
                 for (p in level.players()) {
-                    if (p !== mc.player && p.name.string !in names) continue
+                    if (p !== mc.player && p.gameProfile.name() !in names) continue
                     val t = tileAt(p.x, p.z) ?: continue
                     if (firstIn[t] < 0) firstIn[t] = ticks
                 }
