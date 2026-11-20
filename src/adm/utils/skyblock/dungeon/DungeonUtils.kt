@@ -175,7 +175,7 @@ object DungeonUtils {
      * @return The current phase of floor 7 boss, or `null` if the player is not in the boss room.
      */
     fun getF7Phase(): M7Phases {
-        if ((!isFloor(7) || !inBoss) && !LocationUtils.isCurrentArea(Island.SinglePlayer)) return M7Phases.Unknown
+        if ((floor?.floorNumber != 7 || !inBoss) && !LocationUtils.isCurrentArea(Island.SinglePlayer)) return M7Phases.Unknown
 
         with(mc.player ?: return M7Phases.Unknown) {
             return when {
