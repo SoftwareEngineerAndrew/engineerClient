@@ -23,6 +23,7 @@ import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.item.BowItem
 
 object WitherDragons : Module(
@@ -102,7 +103,10 @@ object WitherDragons : Module(
         }
 
         on<EntityEvent.SetData> {
-            if (DungeonUtils.getF7Phase() == M7Phases.P5) DragonCheck.dragonUpdate(this)
+            if (DungeonUtils.getF7Phase() != M7Phases.P5) return@on
+            val stand = entity as? ArmorStand
+            if (stand != null) { if (dragonHealth) DragonCheck.standUpdate(stand, synchedDataValues) }
+            else DragonCheck.dragonUpdate(this)
         }
 
         on<BlockUpdateEvent> {
@@ -127,7 +131,7 @@ object WitherDragons : Module(
         }
 
         on<LevelEvent.Load> {
-            DragonCheck.dragonHealthMap.clear()
+            DragonCheck.clear()
             WitherDragonsEnum.reset()
         }
     }
