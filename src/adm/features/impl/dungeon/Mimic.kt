@@ -9,9 +9,12 @@ import com.adm.events.RenderExtractEvent
 import com.adm.events.TickEvent
 import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
+import com.adm.features.impl.dungeon.map.tile.RoomRotation
+import com.adm.features.impl.dungeon.map.tile.RoomShape
 import com.adm.utils.Color
 import com.adm.utils.render.drawFilledBox
 import net.minecraft.core.BlockPos
+import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.AABB
 import com.adm.events.MessageEvent
@@ -20,7 +23,6 @@ import com.adm.features.Module
 import com.adm.utils.sendCommand
 import com.adm.utils.skyblock.dungeon.DungeonListener
 import com.adm.utils.skyblock.dungeon.DungeonUtils
-import java.util.Collections
 import java.util.IdentityHashMap
 
 object Mimic : Module(
@@ -40,17 +42,24 @@ object Mimic : Module(
     private val chests = HashMap<BlockPos, AABB>()
     /** Boxed the moment their block entity arrived, before their room's chest spots could say whether they are secret chests. */
     private val unconfirmed = HashSet<BlockPos>()
-    private val roomsSeen: MutableSet<DungeonRoom> = Collections.newSetFromMap(IdentityHashMap())
+    private class RoomSpots(val tiles: Int, val rotation: RoomRotation?, val clay: BlockPos?, val spots: List<BlockPos>)
+    private val roomSpots: MutableMap<DungeonRoom, RoomSpots> = IdentityHashMap()
+    /** Chest spots already looked at while loaded; a trapped chest arriving there later comes through the block entity hook. */
+    private val checked = HashSet<BlockPos>()
+    /** Every room's chest spots have been looked at, so only hook arrivals are left to confirm. */
+    private var settled = false
     private var ticks = 0
 
     init {
         on<LevelEvent.Load> {
             chests.clear()
             unconfirmed.clear()
+            unsettle()
         }
 
         on<TickEvent.End> {
-            if (!chestHighlight || !DungeonUtils.inClear || DungeonUtils.mimicKilled || ++ticks % 10 != 0) return@on
+            if (!chestHighlight) { if (settled || roomSpots.isNotEmpty()) unsettle(); return@on }
+            if (!DungeonUtils.inClear || DungeonUtils.mimicKilled || ++ticks % 10 != 0) return@on
             findChests()
         }
 
@@ -85,28 +94,70 @@ object Mimic : Module(
         unconfirmed += p
     }
 
+    override fun onEnable() {
+        super.onEnable()
+        unsettle()
+    }
+
+    private fun unsettle() {
+        settled = false
+        roomSpots.clear()
+        checked.clear()
+    }
+
     private fun findChests() {
         val level = mc.level ?: return
-        chests.keys.removeIf { !level.getBlockState(it).`is`(Blocks.TRAPPED_CHEST) }
-        unconfirmed.retainAll(chests.keys)
-        roomsSeen.clear()
-        for (room in DungeonScan.rooms) {
-            if (!roomsSeen.add(room)) continue
-            for (pos in SecretWaypoints.chestSpots(room)) {
-                unconfirmed.remove(pos)
-                if (pos in chests || !level.isLoaded(pos) || !level.getBlockState(pos).`is`(Blocks.TRAPPED_CHEST)) continue
-                chests[pos] = boxOf(pos)
-            }
+        if (chests.isNotEmpty()) {
+            val it = chests.keys.iterator()
+            while (it.hasNext()) if (!level.getBlockState(it.next()).`is`(Blocks.TRAPPED_CHEST)) it.remove()
+            unconfirmed.retainAll(chests.keys)
         }
+        if (!settled) scanSpots(level)
         if (unconfirmed.isEmpty()) return
         val it = unconfirmed.iterator()
         while (it.hasNext()) {
             val pos = it.next()
             val room = roomAt(pos) ?: continue
-            if (room.data == null || SecretWaypoints.chestSpots(room).isEmpty()) continue
+            if (room.data == null) continue
+            val spots = spotsOf(room)
+            if (spots.isEmpty()) continue
             it.remove()
-            chests.remove(pos)
+            if (pos !in spots) chests.remove(pos)
         }
+    }
+
+    private fun scanSpots(level: Level) {
+        var done = true
+        var packKnown = false
+        for (room in DungeonScan.rooms) {
+            val spots = spotsOf(room)
+            if (spots.isNotEmpty()) packKnown = true
+            for (pos in spots) {
+                unconfirmed.remove(pos)
+                if (pos in checked) continue
+                if (!level.isLoaded(pos)) { done = false; continue }
+                checked += pos
+                if (pos !in chests && level.getBlockState(pos).`is`(Blocks.TRAPPED_CHEST)) chests[pos] = boxOf(pos)
+            }
+            if (spots.isEmpty() && !identified(room)) done = false
+        }
+        if (done && packKnown && DungeonScan.rooms.isNotEmpty()) {
+            settled = true
+            roomSpots.clear()
+            checked.clear()
+        }
+    }
+
+    // An empty spot list only means "no secret chests" once the room and its rotation are known.
+    private fun identified(room: DungeonRoom): Boolean =
+        room.data != null && room.rotation != null && (room.shape != RoomShape.OneByOne || room.clayPos != null || room.data?.name == "Fairy")
+
+    private fun spotsOf(room: DungeonRoom): List<BlockPos> {
+        val cached = roomSpots[room]
+        if (cached != null && cached.spots.isNotEmpty() && cached.tiles == room.tiles.size && cached.rotation == room.rotation && cached.clay == room.clayPos) return cached.spots
+        val spots = SecretWaypoints.chestSpots(room)
+        if (!settled) roomSpots[room] = RoomSpots(room.tiles.size, room.rotation, room.clayPos, spots)
+        return spots
     }
 
     private fun roomAt(pos: BlockPos): DungeonRoom? {
