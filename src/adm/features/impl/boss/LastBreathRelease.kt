@@ -43,10 +43,14 @@ object LastBreathRelease {
     private var flown = 0
 
     fun tick(ding: Boolean, bunch: Boolean) {
+        if (DungeonUtils.getF7Phase() != M7Phases.P5) {
+            releaseIn = null; aimPitch = null; target = null
+            return
+        }
         val player = mc.player
         val dragon = WitherDragons.spawnOrder.firstOrNull { it.state == WitherDragonState.SPAWNING && it.timeToSpawn > 0 }
             ?: WitherDragonsEnum.entries.filter { it.state == WitherDragonState.SPAWNING && it.timeToSpawn > 0 }.minByOrNull { it.timeToSpawn }
-        if (player == null || dragon == null || DungeonUtils.getF7Phase() != M7Phases.P5 || player.mainHandItem.itemId != "LAST_BREATH") {
+        if (player == null || dragon == null || player.mainHandItem.itemId != "LAST_BREATH") {
             releaseIn = null; aimPitch = null; target = null
             return
         }

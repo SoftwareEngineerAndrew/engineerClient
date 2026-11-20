@@ -17,11 +17,14 @@ import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.engineerclient.misc.DiskWrites
 import com.google.gson.JsonParser
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
+import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.network.chat.FormattedText
 import net.minecraft.network.chat.Style
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.component.CustomData
+import java.util.IdentityHashMap
 import java.util.Optional
 
 object PetDisplay : Module(
@@ -68,6 +71,9 @@ object PetDisplay : Module(
 
     private val candyCache = HashMap<String, Int>()
 
+    private class CandyMemo(val name: Component, val candy: Int)
+    private val candyMemo = IdentityHashMap<CustomData, CandyMemo>()
+
     init {
         on<MessageEvent.Chat> {
             autopet.matchEntire(message)?.let { m ->
@@ -102,7 +108,7 @@ object PetDisplay : Module(
             }
         }
 
-        on<LevelEvent.Load> { candyCache.clear() }
+        on<LevelEvent.Load> { candyCache.clear(); candyMemo.clear() }
 
         ItemTooltipCallback.EVENT.register { stack, _, _, lines ->
             if (!enabled || !candyTooltip || !LocationUtils.isInSkyblock) return@register
@@ -127,8 +133,18 @@ object PetDisplay : Module(
 
     /** The candy used on a pet; null if it isn't one. */
     private fun candyUsed(stack: ItemStack): Int? {
+        val data = stack.get(DataComponents.CUSTOM_DATA) ?: return null
+        val name = stack.hoverName
+        candyMemo[data]?.let { if (it.name === name) return it.candy }
+        val candy = candyUsed(stack, name) ?: return null
+        if (candyMemo.size >= 512) candyMemo.clear()
+        candyMemo[data] = CandyMemo(name, candy)
+        return candy
+    }
+
+    private fun candyUsed(stack: ItemStack, name: Component): Int? {
         val info = stack.customData.getString("petInfo").orElse(null) ?: return null
-        val key = stack.hoverName.string + info
+        val key = name.string + info
         candyCache[key]?.let { return it }
         val json = runCatching { JsonParser.parseString(info).asJsonObject }.getOrNull()
         val candy = json?.get("candyUsed")?.asInt

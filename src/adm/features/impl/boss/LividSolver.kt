@@ -114,7 +114,7 @@ object LividSolver : Module(
 
         on<EntityEvent.SetData> {
             val player = entity as? Player ?: return@on
-            if (player.plainTextName == bodyNames[livid] && inF5Boss()) bodies[livid] = player
+            if (inF5Boss() && player.plainTextName == bodyNames[livid]) bodies[livid] = player
         }
 
         on<RenderExtractEvent> {

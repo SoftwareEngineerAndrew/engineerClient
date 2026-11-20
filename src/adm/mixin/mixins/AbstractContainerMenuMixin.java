@@ -1,6 +1,7 @@
 package com.adm.mixin.mixins;
 
 import com.adm.events.SetSlotEvent;
+import com.adm.events.core.EventBus;
 import net.minecraft.core.NonNullList;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -21,6 +22,6 @@ public class AbstractContainerMenuMixin {
 
     @Inject(method = "setItem", at = @At("TAIL"))
     private void postSetSlot(int slot, int stateId, ItemStack itemStack, CallbackInfo ci) {
-        new SetSlotEvent(slot, itemStack, slots, (AbstractContainerMenu) (Object) this).postAndCatch();
+        if (EventBus.hasListeners(SetSlotEvent.class)) new SetSlotEvent(slot, itemStack, slots, (AbstractContainerMenu) (Object) this).postAndCatch();
     }
 }

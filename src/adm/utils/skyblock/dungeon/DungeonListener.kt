@@ -87,7 +87,7 @@ object DungeonListener {
         onReceive<ClientboundSetPlayerTeamPacket> {
             val text = parameters.getOrNull()?.let { it.playerPrefix.string.plus(it.playerSuffix.string).noControlCodes } ?: return@onReceive
 
-            if (floor == null) floorRegex.find(text)?.groupValues?.get(1)?.let {
+            if (floor == null && text.contains("The Catacombs (")) floorRegex.find(text)?.groupValues?.get(1)?.let {
                 scope.launch(Dispatchers.IO) { paul = hasBonusPaulScore() }
                 val detectedFloor = Floor.valueOf(it)
                 floor = detectedFloor
@@ -95,13 +95,13 @@ object DungeonListener {
             }
             if (!DungeonUtils.inDungeons) return@onReceive
 
-            clearedRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
+            if (text.startsWith("Cleared: ")) clearedRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
                 if (dungeonStats.percentCleared != it && expectingBloodUpdate) dungeonStats.bloodDone = true
                 dungeonStats.percentCleared = it
                 DungeonUtils.updateScore()
             }
 
-            dungeonStats.elapsedTime = timeRegex.find(text)?.groupValues?.get(1) ?: dungeonStats.elapsedTime
+            if (text.startsWith(" Time: ")) dungeonStats.elapsedTime = timeRegex.find(text)?.groupValues?.get(1) ?: dungeonStats.elapsedTime
         }
 
         onReceive<ClientboundTabListPacket> {
@@ -201,7 +201,8 @@ object DungeonListener {
 
     private fun updateDungeonTeammates(tabList: List<String>) = mc.execute {
         dungeonTeammates = DungeonUtils.getDungeonTeammates(dungeonTeammates, tabList)
-        dungeonTeammatesNoSelf = dungeonTeammates.filter { it.name != mc.player?.name?.string }
+        val me = mc.player?.name?.string
+        dungeonTeammatesNoSelf = dungeonTeammates.filter { it.name != me }
 
         leapTeammates =
             when (LeapMenu.type) {

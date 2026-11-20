@@ -60,6 +60,8 @@ object PartyUtils {
     }
 
     private fun parseChat(message: String): Boolean {
+        if (!message.contains("arty") && !message.startsWith("Kicked ")) return false
+
         joinedOther.find(message)?.let { addMember(it.groupValues[2]); return true }
 
         joinedSelf.find(message)?.let {

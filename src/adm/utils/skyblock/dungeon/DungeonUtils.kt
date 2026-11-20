@@ -83,8 +83,10 @@ object DungeonUtils {
         get() = DungeonListener.leapTeammates
 
     inline val currentDungeonPlayer: DungeonPlayer
-        get() = dungeonTeammates.find { it.name == mc.player?.name?.string } ?:
-            DungeonPlayer(mc.player?.name?.string ?: "Unknown", DungeonClass.EMPTY, 0, null)
+        get() {
+            val me = mc.player?.name?.string
+            return dungeonTeammates.find { it.name == me } ?: DungeonPlayer(me ?: "Unknown", DungeonClass.EMPTY, 0, null)
+        }
 
     inline val doorOpener: String
         get() = DungeonListener.dungeonStats.doorOpener
