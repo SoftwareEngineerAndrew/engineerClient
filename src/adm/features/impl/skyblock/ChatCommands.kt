@@ -142,7 +142,7 @@ object ChatCommands : Module(
                 "demote" to partyDemote, "promote" to partyPromote, "reinvite" to reinvite, "kickoffline" to kickOffline
             )
             ChatChannel.GUILD -> mapOf("coords" to coords, "boop" to boop, "cf" to coinFlip, "8ball" to eightBall, "dice" to dice, "racism" to racism, "ping" to ping, "tps" to tps, "time" to time)
-            ChatChannel.PRIVATE -> mapOf("coords" to coords, "boop" to boop, "cf" to coinFlip, "8ball" to eightBall, "dice" to dice, "racism" to racism, "ping" to ping, "tps" to tps, "invite" to invite, "time" to time)
+            ChatChannel.PRIVATE -> mapOf("coords" to coords, "boop" to boop, "cf" to coinFlip, "8ball" to eightBall, "dice" to dice, "racism" to racism, "ping" to ping, "tps" to tps, "invite" to invite, "reinvite" to reinvite, "time" to time)
             ChatChannel.COOP -> mapOf("coords" to coords, "boop" to boop, "cf" to coinFlip, "8ball" to eightBall, "dice" to dice, "racism" to racism, "ping" to ping, "tps" to tps, "time" to time)
         }
 
@@ -214,7 +214,8 @@ object ChatCommands : Module(
             }
 
             "reinv", "reinvite" -> {
-                if (!reinvite || channel != ChatChannel.PARTY && PartyUtils.isLeader()) return
+                // From a DM only as leader: it's how someone who left asks to be invited back.
+                if (!reinvite || !(channel == ChatChannel.PARTY || channel == ChatChannel.PRIVATE && PartyUtils.isLeader())) return
                 modMessage("§aReinviting §6$name §ain 5 seconds...")
                 schedule(100) {
                     sendCommand("p invite $name")
