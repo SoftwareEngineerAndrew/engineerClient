@@ -228,6 +228,9 @@ object Croesus : Module(
         }
 
         onReceive<ClientboundPlayerInfoUpdatePacket> {
+            // Unknown: the tab list can come before the location on joining.
+            val area = LocationUtils.currentArea
+            if (area !== Island.Dungeon && area !== Island.DungeonHub && area !== Island.Unknown && area !== Island.SinglePlayer) return@onReceive
             val actions = actions()
             if (!actions.contains(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME) && !actions.contains(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER)) return@onReceive
             for (entry in entries()) {
