@@ -3,7 +3,7 @@ package com.engineerclient.misc
 import com.engineerclient.EngineerClient.mc
 import com.adm.events.LevelEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.utils.alert
@@ -42,8 +42,7 @@ object I4Complete {
     private var shown = false
     private var ssShown = false
 
-    /** Its handlers are on ADM's bus from here on; they do nothing while Random Stuff is off. */
-    fun register() = EventBus.subscribe(this)
+    fun register() = SubscribeWhile.add(this, { tagWasActive = null }) { RandomStuff.enabled }
 
     private fun reset() { tagWasActive = null; shown = false; ssShown = false }
 
