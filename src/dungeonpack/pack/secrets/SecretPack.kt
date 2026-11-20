@@ -62,8 +62,12 @@ class SecretPack(
         const val VERSION = 2
         private const val PATH = "/assets/engineerclient/dungeonpack/packs/secrets.json.gz"
 
-        /** The copy in the jar. */
-        val bundled: SecretPack by lazy { SecretPack::class.java.getResourceAsStream(PATH)!!.use { parse(it) } }
+        @Volatile private var loaded: SecretPack? = null
+
+        /** The copy in the jar, read on first use and kept until [release]. */
+        val bundled: SecretPack get() = loaded ?: synchronized(this) { loaded ?: SecretPack::class.java.getResourceAsStream(PATH)!!.use { parse(it) }.also { loaded = it } }
+
+        fun release() { loaded = null }
 
         fun parse(stream: InputStream): SecretPack = parse(readGzipJson(stream))
 

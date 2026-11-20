@@ -26,7 +26,7 @@ import com.adm.events.MessageEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.SecretPickupEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.SecretClicked
 import com.adm.features.impl.dungeon.map.DungeonScan
@@ -76,7 +76,7 @@ object SecretWaypoints {
 
     private class Spot(val kind: Kind, val pos: BlockPos, val box: AABB)
 
-    private val secrets by lazy { SecretPack.bundled }
+    private val secrets get() = SecretPack.bundled
     @Volatile private var ownPack: RoomPack? = null
     private var loading = false
     private val roomsPack: RoomPack? get() = KnownWorld.roomPack ?: Packs.current?.rooms ?: ownPack
@@ -100,7 +100,7 @@ object SecretWaypoints {
         for (s in listOf(dropdown, show, style, lineWidth, fillOpacity, smallBoxes, chestColor, itemColor, essenceColor, batColor, keyColor, leverColor, text, hideCollected, throughWalls, currentRoomOnly, hideGreen))
             SecretClicked.registerSetting(s)
 
-        on<LevelEvent.Load> { placed.clear(); byRoom.clear(); shown.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null; lastRoom = null }
+        on<LevelEvent.Load> { reset() }
 
         on<TickEvent.End> {
             if (!active()) return@on
@@ -166,10 +166,15 @@ object SecretWaypoints {
                 }
             }
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, ::reset) { SecretClicked.enabled && show.value }
     }
 
-    private fun active() = SecretClicked.enabled && show.value && DungeonUtils.inClear
+    private fun reset() { placed.clear(); byRoom.clear(); shown.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null; lastRoom = null }
+
+    private fun active() = DungeonUtils.inClear
+
+    /** Something reads the secret pack: these waypoints or Mimic's chest highlight. */
+    val packWanted get() = SecretClicked.enabled && show.value || com.adm.features.impl.dungeon.Mimic.chestHighlightOn
 
     private fun refresh(here: DungeonRoom?, pack: RoomPack) {
         var changed = false

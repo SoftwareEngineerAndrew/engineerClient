@@ -2,9 +2,15 @@ package com.engineerclient.dungeonpack.pack.rooms
 
 import com.engineerclient.dungeonpack.pack.*
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import java.io.InputStream
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.GZIPInputStream
 
 /*
  * The "Room library" data pack, version 1 (FORMAT-rooms.md): every room design's blocks and features in the canonical
@@ -230,9 +236,10 @@ class RoomPack internal constructor(
         fun load(source: PackSource, report: PackReport = PackReport()): RoomPack? {
             val indexPath = source.file(PackFiles.ROOMS_INDEX)
             if (indexPath == null) { report.error("The room library ${PackFiles.ROOMS_INDEX} is missing from ${source.missingFrom}."); return null }
-            val root = try {
-                Files.newInputStream(indexPath).use { readGzipJson(it) }
+            val index = try {
+                Files.newInputStream(indexPath).use { readIndex(it) }
             } catch (e: Exception) { report.error("The room library ${PackFiles.ROOMS_INDEX} is unreadable${source.note(PackFiles.ROOMS_INDEX)}: ${e.message}"); return null }
+            val root = index.head
             if (!checkHeader(root, FORMAT, SUPPORTED_VERSION, PackFiles.ROOMS_INDEX, report)) return null
 
             val blocksName = root.str("blocksFile") ?: PackFiles.ROOMS_BLOCKS
@@ -247,21 +254,48 @@ class RoomPack internal constructor(
                 if (got != want.lowercase()) { report.error("$blocksName does not match its index (checksum $got, expected $want). An override folder must hold both room files, from the same build."); return null }
             }
             val blobSource = try { FileBlobSource(blocksPath) } catch (e: Exception) { report.error("$blocksName cannot be opened${source.note(blocksName)}: ${e.message}"); return null }
-            val pack = fromIndex(root, blobSource, report)
-            if (pack == null) blobSource.close()
-            return pack
+            for (w in index.skipped) report.warn(w)
+            return build(root, index.designs, blobSource, report)
+        }
+
+        private class Index(val head: JsonObject, val designs: List<RoomDesign>, val skipped: List<String>)
+
+        // The designs are read one at a time off the stream, so the whole index is never one tree.
+        private fun readIndex(stream: InputStream): Index = GZIPInputStream(stream.buffered(), 1 shl 16).use { gz ->
+            val r = JsonReader(gz.reader(StandardCharsets.UTF_8))
+            val head = JsonObject()
+            val designs = ArrayList<RoomDesign>()
+            val skipped = ArrayList<String>()
+            if (r.peek() != JsonToken.BEGIN_OBJECT) error("the top level is not a JSON object")
+            r.beginObject()
+            while (r.hasNext()) {
+                val name = r.nextName()
+                if (name != "designs" || r.peek() != JsonToken.BEGIN_ARRAY) { head.add(name, JsonParser.parseReader(r)); continue }
+                r.beginArray()
+                while (r.hasNext()) {
+                    val o = JsonParser.parseReader(r).asObj() ?: continue
+                    try { designs += parseDesign(o) } catch (e: Exception) { skipped += "A room design was skipped (${o.str("id") ?: "no id"}): ${e.message}" }
+                }
+                r.endArray()
+            }
+            r.endObject()
+            Index(head, designs, skipped)
         }
 
         /** Builds the pack from an already parsed index and a blob source (tests, tools). Null when the header is wrong. */
         fun fromIndex(root: JsonObject, blobs: BlobSource?, report: PackReport = PackReport()): RoomPack? {
             if (!checkHeader(root, FORMAT, SUPPORTED_VERSION, PackFiles.ROOMS_INDEX, report)) return null
-            val textures = root.arr("textures").objects().mapNotNull { t ->
-                val id = t.str("id") ?: return@mapNotNull null
-                SkullTexture(id, t.str("value"), t.str("profileId"), t.str("role") ?: "unknown")
-            }
             val designs = ArrayList<RoomDesign>()
             for (o in root.arr("designs").objects()) {
                 try { designs += parseDesign(o) } catch (e: Exception) { report.warn("A room design was skipped (${o.str("id") ?: "no id"}): ${e.message}") }
+            }
+            return build(root, designs, blobs, report)
+        }
+
+        private fun build(root: JsonObject, designs: List<RoomDesign>, blobs: BlobSource?, report: PackReport): RoomPack {
+            val textures = root.arr("textures").objects().mapNotNull { t ->
+                val id = t.str("id") ?: return@mapNotNull null
+                SkullTexture(id, t.str("value"), t.str("profileId"), t.str("role") ?: "unknown")
             }
             val cores = root.arr("cores").objects().mapNotNull { c ->
                 CoreEntry(c.int("core") ?: return@mapNotNull null, c.str("design") ?: return@mapNotNull null, c.str("variant"))

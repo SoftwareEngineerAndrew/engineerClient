@@ -52,8 +52,12 @@ class DoorPack(
     companion object {
         private const val PATH = "/assets/engineerclient/dungeonpack/packs/doors.json.gz"
 
-        /** The pack bundled in the jar, read once. */
-        val bundled: DoorPack by lazy { DoorPack::class.java.getResourceAsStream(PATH)!!.use { parse(it) } }
+        @Volatile private var loaded: DoorPack? = null
+
+        /** The pack bundled in the jar, read on first use and kept until [release]. */
+        val bundled: DoorPack get() = loaded ?: synchronized(this) { loaded ?: DoorPack::class.java.getResourceAsStream(PATH)!!.use { parse(it) }.also { loaded = it } }
+
+        fun release() { loaded = null }
 
         fun parse(stream: InputStream): DoorPack = parse(readGzipJson(stream))
 

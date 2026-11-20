@@ -33,6 +33,7 @@ object Mimic : Module(
     private val princeMessageToggle by BooleanSetting("Send Prince Message", true, desc = "Toggles the prince killed message.")
     private val batMessageToggle by BooleanSetting("Send Bat Message", true, desc = "Toggles the bat killed message.")
     private val chestHighlight by BooleanSetting("Mimic Chest Highlight", true, desc = "Colors a trapped chest standing where a secret chest belongs.")
+    val chestHighlightOn get() = enabled && chestHighlight
     private val chestColor by ColorSetting("Mimic Chest Color", Color(255, 0, 0, 0.75f), true, desc = "Color of the mimic chest.").withDependency { chestHighlight }
 
     private const val PRINCE_LINE = "A Prince falls. +1 Bonus Score"

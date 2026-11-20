@@ -2,7 +2,7 @@ package com.adm.events.core
 
 /** Keeps add-on listeners on the bus only while they can act; checked again whenever a module or a switch changes. */
 object SubscribeWhile {
-    private class Gate(val subscriber: Any, val off: (() -> Unit)?, val want: () -> Boolean)
+    private class Gate(val subscriber: Any, val off: (() -> Unit)?, val want: () -> Boolean, val on: (() -> Unit)? = null)
 
     private val gates = ArrayList<Gate>()
     private val watchers = ArrayList<() -> Unit>()
@@ -20,6 +20,13 @@ object SubscribeWhile {
         action()
     }
 
+    /** [on] runs when [subscriber] joins the bus, [off] when it leaves. */
+    fun add(subscriber: Any, on: () -> Unit, off: () -> Unit, want: () -> Boolean) {
+        val gate = Gate(subscriber, off, want, on)
+        gates += gate
+        update(gate)
+    }
+
     @JvmStatic
     fun changed() {
         for (i in watchers.indices) watchers[i]()
@@ -29,7 +36,10 @@ object SubscribeWhile {
     private fun update(gate: Gate) {
         val want = gate.want()
         val on = gate.subscriber in EventBus.activeSubscribers
-        if (want && !on) EventBus.subscribe(gate.subscriber)
+        if (want && !on) {
+            EventBus.subscribe(gate.subscriber)
+            gate.on?.invoke()
+        }
         else if (!want && on) {
             EventBus.unsubscribe(gate.subscriber)
             gate.off?.invoke()

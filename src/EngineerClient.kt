@@ -33,6 +33,15 @@ object EngineerClient : ClientModInitializer {
 
     private var tickCounter = 0
     @Volatile private var packsWarmed = false
+    private object PackWarm
+
+    private fun warmPacks() {
+        if (packsWarmed || !com.adm.utils.skyblock.dungeon.DungeonUtils.inDungeons) return
+        packsWarmed = true
+        Thread({ safely("warm packs") { com.engineerclient.dungeonpack.pack.doors.DoorPack.bundled; com.engineerclient.dungeonpack.pack.secrets.SecretPack.bundled } }, "ec warm packs")
+            .apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
+    }
+
     /** [keepWindowUp] has run (once is enough: the attribute sticks). */
     private var windowKept = false
 
@@ -174,13 +183,13 @@ object EngineerClient : ClientModInitializer {
 
         // ADM's event bus: world load resets class detection.
         on<LevelEvent.Load> { safely("levelLoad") { ClassDetect.reset() } }
-        // The door and secret packs are only read in dungeons: off the render thread, on the first one.
-        on<com.adm.events.LocationChangeEvent> {
-            if (packsWarmed || !com.adm.utils.skyblock.dungeon.DungeonUtils.inDungeons) return@on
-            packsWarmed = true
-            Thread({ safely("warm packs") { com.engineerclient.dungeonpack.pack.doors.DoorPack.bundled; com.engineerclient.dungeonpack.pack.secrets.SecretPack.bundled } }, "ec warm packs")
-                .apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
-        }
+        // The door and secret packs are only read in dungeons, and only while something uses them: off the render thread, on the first one.
+        PackWarm.on<com.adm.events.LocationChangeEvent> { warmPacks() }
+        com.adm.events.core.SubscribeWhile.add(PackWarm, ::warmPacks, {
+            packsWarmed = false
+            com.engineerclient.dungeonpack.pack.doors.DoorPack.release()
+            com.engineerclient.dungeonpack.pack.secrets.SecretPack.release()
+        }) { PosePov.enabled || com.engineerclient.dungeon.SecretWaypoints.packWanted }
         EventBus.subscribe(this)
 
         // Own-class poll: once a second is plenty; ADM keeps the teammate list fresh from packets.
