@@ -28,6 +28,8 @@ object PlayerDisplay : Module(
     name = "Player Display",
     description = "Allows to customize the player stat displays (health, defense and more)."
 ) {
+    private val EXTRA_STATS = ActionBarListener.Stat.entries.filter { it >= ActionBarListener.Stat.SECRETS }
+
     private val hideElements by DropdownSetting("Hide Elements", desc = "Shows toggles for hiding vanilla HUD elements.")
     private val hideArmor by BooleanSetting("Hide Armor", false, desc = "Hides the armor bar.").withDependency { hideElements }
     private val hideFood by BooleanSetting("Hide Food", false, desc = "Hides the food bar.").withDependency { hideElements }
@@ -40,6 +42,9 @@ object PlayerDisplay : Module(
     private val hideOverflow by BooleanSetting("Hide Overflow Mana", true, desc = "Hides the overflow mana bar.").withDependency { hideActionBar }
     private val hideDefense by BooleanSetting("Hide Defense", true, desc = "Hides the defense bar.").withDependency { hideActionBar }
     private val hideVitality by BooleanSetting("Hide Vitality", true, desc = "Hides the vitality bar.").withDependency { hideActionBar }
+    private val extraHides = EXTRA_STATS.map {
+        registerSetting(BooleanSetting("Hide ${it.title}", false, desc = "Hides the ${it.title.lowercase()} from the action bar.").withDependency { hideActionBar })
+    }
     private val overflow by DropdownSetting("Overflow Mana", desc = "Shows settings for the overflow mana bar.")
     private val separateOverflow by BooleanSetting("Separate Overflow Mana", true, desc = "Separates the overflow mana from the mana bar.").withDependency { overflow }
     private val hideZeroSF by BooleanSetting("Hide 0 Overflow", true, desc = "Hides the overflow mana when it's 0.").withDependency { overflow && separateOverflow }
@@ -103,6 +108,34 @@ object PlayerDisplay : Module(
     }
     private val speedColor by ColorSetting("Speed color", Colors.WHITE, true, "The color of the speed text.")
 
+    private val extraHuds = EXTRA_STATS.mapIndexed { i, stat ->
+        val readout = BarText()
+        registerSetting(HUD("${stat.title} HUD", "Displays the ${stat.title.lowercase()} from the action bar.", true, 10, 10 + i * 12) { example ->
+            val text = if (example) example(stat) else if (LocationUtils.isInSkyblock && ActionBarListener.shown(stat)) ActionBarListener.text(stat) else null
+            if (text == null) NONE else readout.draw(this, text)
+        })
+    }
+
+    private fun example(stat: ActionBarListener.Stat): String = when (stat) {
+        ActionBarListener.Stat.SECRETS -> "§72/5 Secrets"
+        ActionBarListener.Stat.TRUE_DEFENSE -> "§f69"
+        ActionBarListener.Stat.ARMOR_STACKS -> "§610⁑"
+        ActionBarListener.Stat.TERMINATOR -> "§a§lT3!"
+        ActionBarListener.Stat.SKILL_XP -> "§3+163.7 Combat (1,560,940/2,000,000)"
+        ActionBarListener.Stat.MANA_USE -> "§b-42 Mana (§6Rapid-fire§b)"
+        ActionBarListener.Stat.ESSENCE -> "§d+1 Undead Essence"
+        ActionBarListener.Stat.ABILITY -> "§lCASTING IN 3s"
+        ActionBarListener.Stat.DRILL_FUEL -> "§22,609/3k Drill Fuel"
+        ActionBarListener.Stat.RIFT_TIME -> "§a10m59sф Left"
+        ActionBarListener.Stat.WATER -> "§b2,400§7/3k Water"
+        ActionBarListener.Stat.GECKO_COMBO -> "§a[⬛⬛⬛⬛⬛ §e§lx7 §a⬛⬛⬛⬜⬜]"
+        ActionBarListener.Stat.AURORA_RUNE -> "§5§lVirtuoso"
+        ActionBarListener.Stat.INVULNERABLE -> "§9§lINVULNERABLE"
+        ActionBarListener.Stat.COOKIE_BITS -> "§b+250 Bits from Cookie Buff!"
+        ActionBarListener.Stat.ZONE -> "§7 §bVillage"
+        else -> stat.title
+    }
+
     private val NONE = 0 to 0
 
     private const val HEALTH = "❤"
@@ -161,6 +194,21 @@ object PlayerDisplay : Module(
         }
     }
 
+    // The bar's own coloured text; measured again only when the bar hands over a new string.
+    private class BarText {
+        private var text: String? = null
+        private var size = 0 to 0
+
+        fun draw(g: GuiGraphicsExtractor, text: String): Pair<Int, Int> {
+            if (text !== this.text) {
+                this.text = text
+                size = mc.font.width(text) to mc.font.lineHeight
+            }
+            g.text(text, 0, 0, Colors.WHITE, true)
+            return size
+        }
+    }
+
     private val health = Readout()
     private val mana = Readout()
     private val overflowMana = Readout()
@@ -210,14 +258,27 @@ object PlayerDisplay : Module(
         else -> hideVitality
     }
 
+    private var lastIn: String? = null
+    private var lastMask = -1
+    private var lastOut: Component? = null
+
     init {
         on<MessageEvent.ModifyOverlay> {
             val original = component.string
-            var text = original
-            for (i in MARKERS.indices) {
-                if (hides(i) && text.indexOf(MARKERS[i]) >= 0) text = HIDDEN_PARTS[i].replace(text, "")
+            var extra = 0
+            for (i in EXTRA_STATS.indices) if (extraHides[i].value) extra = extra or (1 shl EXTRA_STATS[i].ordinal)
+            var mask = extra
+            for (i in MARKERS.indices) if (hides(i)) mask = mask or (1 shl (31 - i))
+            if (original != lastIn || mask != lastMask) {
+                var text = ActionBarListener.without(original, extra)
+                for (i in MARKERS.indices) {
+                    if (hides(i) && text.indexOf(MARKERS[i]) >= 0) text = HIDDEN_PARTS[i].replace(text, "")
+                }
+                lastIn = original
+                lastMask = mask
+                lastOut = if (text != original) Component.literal(text.trim()) else null
             }
-            if (text != original) component = Component.literal(text.trim())
+            lastOut?.let { component = it }
         }
     }
 
