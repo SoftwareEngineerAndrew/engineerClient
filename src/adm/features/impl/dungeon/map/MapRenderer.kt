@@ -36,6 +36,10 @@ private val crossIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/c
 private val greenIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/green_check.png")
 private val whiteIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/white_check.png")
 private val questionIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/question.png")
+private val lcmGreen = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/green_check.png")
+private val lcmWhite = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/white_check.png")
+private val lcmCross = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/cross.png")
+private const val LCM_ICON = 10
 private val greyText = Color(100, 100, 100).rgba
 
 internal class RoomLabel(val mode: DungeonMap.RoomTextOption, val data: RoomData?, val found: Int, val lines: List<String>)
@@ -187,6 +191,13 @@ private fun GuiGraphicsExtractor.drawLabel(room: DungeonRoom, shift: Float) {
             else -> return
         }
         if (!MapIcons.showCheckmarks) return
+        if (MapIcons.lcmChecks) {
+            val center = room.center ?: return
+            val lcm = when (room.checkmark) { MapCheckmark.GREEN -> lcmGreen; MapCheckmark.WHITE -> lcmWhite; else -> lcmCross }
+            val half = Math.round(shift) - LCM_ICON / 2
+            blit(RenderPipelines.GUI_TEXTURED, lcm, center.x + half, center.z + half, 0f, 0f, LCM_ICON, LCM_ICON, LCM_ICON, LCM_ICON)
+            return
+        }
         pose().pushMatrix()
         pose().translate(shift, shift)
         if (!MapChecks.draw(this, room, GRID, GRID - 4)) icon(room.topLeft.x * GRID, room.topLeft.z * GRID, id)

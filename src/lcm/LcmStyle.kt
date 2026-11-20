@@ -50,6 +50,7 @@ object LcmStyle {
 
     private const val ROOM = 16
     private const val TILE = 20
+    private const val CHECK = 10
     /** The background around the rooms: Map Padding when Custom Map Padding is on (MapSizes), else 5. */
     private val PAD: Int get() = com.engineerclient.mapicons.MapSizes.padding() ?: 5
     private const val DOOR = 9
@@ -472,7 +473,8 @@ object LcmStyle {
                 MapCheckmark.RED -> cross
                 else -> return
             }
-            if (!com.adm.features.impl.dungeon.map.MapChecks.draw(g, room, TILE, ROOM)) g.blit(RenderPipelines.GUI_TEXTURED, icon, cx - ROOM / 2 + 2, cz - ROOM / 2 + 2, 0f, 0f, 12, 12, 12, 12, -1)
+            if (com.engineerclient.mapicons.MapIcons.lcmChecks) g.blit(RenderPipelines.GUI_TEXTURED, icon, cx - CHECK / 2, cz - CHECK / 2, 0f, 0f, CHECK, CHECK, CHECK, CHECK, -1)
+            else if (!com.adm.features.impl.dungeon.map.MapChecks.draw(g, room, TILE, ROOM)) g.blit(RenderPipelines.GUI_TEXTURED, icon, cx - ROOM / 2 + 2, cz - ROOM / 2 + 2, 0f, 0f, 12, 12, 12, 12, -1)
             return
         }
 
