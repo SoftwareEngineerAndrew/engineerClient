@@ -95,6 +95,7 @@ object ActionBarListener {
 
     /** The room's "found/total Secrets"; Secret Counter hands it over here before taking it off the action bar. */
     fun secrets(message: String) {
+        if (message.indexOf(" Secrets") < 0) return
         val (found, max) = SECRETS_REGEX.find(message)?.destructured ?: return
         val maxSecrets = max.toIntOrNull() ?: return
         val sameMax = maxSecrets == lastSecretsMax

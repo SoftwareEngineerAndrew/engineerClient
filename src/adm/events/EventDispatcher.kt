@@ -4,7 +4,6 @@ import com.adm.AdmMod.mc
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.utils.containsOneOf
-import com.adm.utils.equalsOneOf
 import com.adm.utils.noControlCodes
 import com.adm.utils.render.flushFrameBoxes
 import com.adm.utils.skyblock.dungeon.DungeonUtils
@@ -72,15 +71,17 @@ object EventDispatcher {
             if (!DungeonUtils.inClear) return@on
             val entity = entity as? ItemEntity ?: return@on
             if (
-                entity.item.hoverName.string.containsOneOf(dungeonItemDrops, true) &&
-                entity.distanceTo(mc.player ?: return@on) <= 6
+                entity.distanceTo(mc.player ?: return@on) <= 6 &&
+                entity.item.hoverName.string.containsOneOf(dungeonItemDrops, true)
             ) SecretPickupEvent.Item(entity).postAndCatch()
         }
 
         onReceive<ClientboundSoundPacket> {
             if (!DungeonUtils.inClear) return@onReceive
-            if (sound.value().equalsOneOf(SoundEvents.BAT_HURT, SoundEvents.BAT_DEATH) && volume == 0.1f)
-                SecretPickupEvent.Bat(this).postAndCatch()
+            if (volume == 0.1f) {
+                val s = sound.value()
+                if (s == SoundEvents.BAT_HURT || s == SoundEvents.BAT_DEATH) SecretPickupEvent.Bat(this).postAndCatch()
+            }
         }
 
         on<BlockInteractEvent> {

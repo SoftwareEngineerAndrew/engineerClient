@@ -106,22 +106,24 @@ object DungeonListener {
 
         onReceive<ClientboundTabListPacket> {
             if (!DungeonUtils.inDungeons) return@onReceive
+            val text = footer.string
             Blessing.entries.forEach { blessing ->
-                blessing.regex.find(footer.string)?.let { blessing.current = romanToInt(it.groupValues[1]) }
+                blessing.regex.find(text)?.let { blessing.current = romanToInt(it.groupValues[1]) }
             }
         }
 
         on<MessageEvent.Chat> {
             if (!DungeonUtils.inDungeons) return@on
-            if (expectingBloodRegex.matches(message)) expectingBloodUpdate = true
-            doorOpenRegex.find(message)?.let { dungeonStats.doorOpener = it.groupValues[1] }
-            deathRegex.find(message)?.let { match ->
+            if (message.startsWith("[BOSS] The Watcher: You have proven yourself") && expectingBloodRegex.matches(message)) expectingBloodUpdate = true
+            if (message.contains(" opened a ")) doorOpenRegex.find(message)?.let { dungeonStats.doorOpener = it.groupValues[1] }
+            if (message.contains(" and became a ghost")) deathRegex.find(message)?.let { match ->
                 dungeonTeammates.find { teammate ->
                     teammate.name == (match.groupValues[1].takeUnless { it == "You" } ?: mc.player?.name?.string)
                 }?.deaths?.inc()
             }
             if (!dungeonStats.mimicKilled && DungeonUtils.isFloor(6, 7) && message.contains(MIMIC_CHARMED)) mimicFound()
 
+            if (!message.startsWith("Party > ")) return@on
             val partyMatch = partyMessageRegex.find(message) ?: return@on
             when (partyMatch.groupValues[2].lowercase()) {
                 "mimic killed", "mimic slain", "mimic killed!", "mimic dead", "mimic dead!", ->
