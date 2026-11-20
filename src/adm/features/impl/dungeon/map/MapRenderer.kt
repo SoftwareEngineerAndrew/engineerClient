@@ -291,7 +291,7 @@ private const val ARROW_RES = 8
 
 // An arrowhead pointing up (-y), centred on the origin, as rows of 1/ARROW_RES-unit spans: drawn under the pose's rotation it
 // stays sharp at any angle and map scale, where a pixel texture turns ragged.
-private class ArrowSpans(val y: IntArray, val x0: IntArray, val x1: IntArray)
+private class ArrowSpans(val y0: IntArray, val y1: IntArray, val x0: IntArray, val x1: IntArray)
 
 private fun arrowSpans(grow: Float): ArrowSpans {
     val poly = arrayOf(floatArrayOf(0f, -4.25f), floatArrayOf(3.25f, 3.75f), floatArrayOf(0f, 1.75f), floatArrayOf(-3.25f, 3.75f))
@@ -325,7 +325,14 @@ private fun arrowSpans(grow: Float): ArrowSpans {
         }
         cur?.let { emit(it) }
     }
-    return ArrowSpans(ys.toIntArray(), x0.toIntArray(), x1.toIntArray())
+    // Rows with the same span one under another become one rectangle: fewer fills, the same cells.
+    val ry0 = ArrayList<Int>(); val ry1 = ArrayList<Int>(); val rx0 = ArrayList<Int>(); val rx1 = ArrayList<Int>()
+    for (i in ys.indices) {
+        var r = rx0.indices.firstOrNull { ry1[it] == ys[i] && rx0[it] == x0[i] && rx1[it] == x1[i] }
+        if (r == null) { r = rx0.size; ry0 += ys[i]; ry1 += ys[i]; rx0 += x0[i]; rx1 += x1[i] }
+        ry1[r] = ys[i] + 1
+    }
+    return ArrowSpans(ry0.toIntArray(), ry1.toIntArray(), rx0.toIntArray(), rx1.toIntArray())
 }
 
 private val arrowOutline by lazy { arrowSpans(0.75f) }
@@ -353,6 +360,10 @@ private fun GuiGraphicsExtractor.pixelMarker(rows: Array<String>, color: Int) {
     }
 }
 
+private fun GuiGraphicsExtractor.arrowRects(s: ArrowSpans, c: Int) {
+    for (i in s.y0.indices) fill(s.x0[i], s.y0[i], s.x1[i], s.y1[i], c)
+}
+
 /** Your own map marker in the chosen style, centred on the pose's origin. */
 fun GuiGraphicsExtractor.selfArrow(color: Int) {
     when (DungeonMap.pointerStyle) {
@@ -369,10 +380,8 @@ fun GuiGraphicsExtractor.selfArrow(color: Int) {
     }
     pose().pushMatrix()
     pose().scale(1f / ARROW_RES)
-    for (s in arrayOf(arrowOutline, arrowFill)) {
-        val c = if (s === arrowOutline) DungeonMap.pointerOutline.rgba else color
-        for (i in s.y.indices) fill(s.x0[i], s.y[i], s.x1[i], s.y[i] + 1, c)
-    }
+    arrowRects(arrowOutline, DungeonMap.pointerOutline.rgba)
+    arrowRects(arrowFill, color)
     pose().popMatrix()
 }
 
