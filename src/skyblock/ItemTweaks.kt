@@ -62,7 +62,9 @@ object ItemTweaks : Module(
 
     private const val CIRCLED = "➊➋➌➍➎"
 
-    fun shownName(name: Component): Component = if (enabled && oldMasterStars) redStars(name) ?: name else name
+    fun redStarsOn(): Boolean = enabled && oldMasterStars
+
+    fun shownName(name: Component): Component = if (redStarsOn()) redStars(name) ?: name else name
 
     /** "✪✪✪✪✪➋" as it looked before: the first two stars red, no number. */
     private fun redStars(name: Component): Component? {

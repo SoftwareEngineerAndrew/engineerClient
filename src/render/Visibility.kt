@@ -492,6 +492,22 @@ object Visibility : Module(
     fun hidesItemNames(): Boolean = enabled && (hideItemNames || itemNameHud.enabled)
 
     private const val ITEM_NAME_WIDTH = 200
+    private var nameFor: ItemStack? = null
+    private var nameStars = false
+    private var heldName: Component = Component.empty()
+    private var heldNameW = 0
+    private val EXAMPLE_NAME: Component = Component.literal("Item Name")
+
+    private fun heldName(stack: ItemStack): Component {
+        val stars = com.engineerclient.skyblock.ItemTweaks.redStarsOn()
+        if (stack === nameFor && stars == nameStars) return heldName
+        heldName = Component.empty().append(com.engineerclient.skyblock.ItemTweaks.shownName(stack.hoverName)).withStyle(stack.rarity.color())
+            .let { if (stack.has(DataComponents.CUSTOM_NAME)) it.withStyle(ChatFormatting.ITALIC) else it }
+        heldNameW = mc.font.width(heldName)
+        nameFor = stack
+        nameStars = stars
+        return heldName
+    }
 
     private fun drawItemName(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
         val hud = mc.gui.hud as HudItemNameAccessor
@@ -499,14 +515,13 @@ object Visibility : Module(
         val timer = hud.`ec$toolHighlightTimer`()
         val shown = !hideItemNames && timer > 0 && stack != null && !stack.isEmpty
         val name: Component = when {
-            shown -> Component.empty().append(com.engineerclient.skyblock.ItemTweaks.shownName(stack.hoverName)).withStyle(stack.rarity.color())
-                .let { if (stack.has(DataComponents.CUSTOM_NAME)) it.withStyle(ChatFormatting.ITALIC) else it }
-            example -> Component.literal("Item Name")
+            shown -> heldName(stack)
+            example -> EXAMPLE_NAME
             else -> return ITEM_NAME_WIDTH to 12
         }
         val alpha = if (shown) minOf(timer * 256 / 10, 255) else 255
         if (alpha > 0) {
-            val w = mc.font.width(name)
+            val w = if (shown) heldNameW else mc.font.width(name)
             g.textWithBackdrop(mc.font, name, (ITEM_NAME_WIDTH - w) / 2, 2, w, ARGB.white(alpha))
         }
         return ITEM_NAME_WIDTH to 12
