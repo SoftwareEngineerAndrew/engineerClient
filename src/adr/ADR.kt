@@ -314,9 +314,13 @@ object ADR : Module(
         return sb.toString()
     }
 
+    private val LEGACY = it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<String>().also { m ->
+        for (f in ChatFormatting.entries) TextColor.fromLegacyFormat(f)?.let { m.putIfAbsent(it.value, f.toString()) }
+    }
+
     private fun colorCode(color: TextColor): String {
-        val legacy = ChatFormatting.entries.firstOrNull { TextColor.fromLegacyFormat(it)?.value == color.value }
-        return if (legacy != null) legacy.toString() else "§#" + String.format(java.util.Locale.ROOT, "%06x", color.value and 0xFFFFFF)
+        val legacy = LEGACY.get(color.value)
+        return if (legacy != null) legacy else "§#" + String.format(java.util.Locale.ROOT, "%06x", color.value and 0xFFFFFF)
     }
 
     /**
