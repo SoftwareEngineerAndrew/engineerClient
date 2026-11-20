@@ -58,6 +58,8 @@ import net.minecraft.world.effect.MobEffects
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityTypes
 import net.minecraft.world.entity.EquipmentSlot
+import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.item.ItemEntity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.InventoryMenu
 import net.minecraft.world.inventory.Slot
@@ -119,6 +121,9 @@ object Visibility : Module(
     private val hideFallingBlocks by BooleanSetting("Hide Falling Blocks", true, desc = "No falling blocks.").withDependency { cleanupDropdown }
     private val hideLightning by BooleanSetting("Hide Lightning", true, desc = "No lightning bolts.").withDependency { cleanupDropdown }
     private val hideExperienceOrbs by BooleanSetting("Hide Experience Orbs", true, desc = "No experience orbs.").withDependency { cleanupDropdown }
+    private val hideTalismanCoins by BooleanSetting("Hide Talisman Coins", false, desc = "No coins from a Talisman of Coins.").withDependency { cleanupDropdown }
+    private val hideHealerOrbs by BooleanSetting("Hide Healer Orbs", false, desc = "No Healer orbs, their timers or their dust.").withDependency { cleanupDropdown }
+    private val hideZeroHpTags by BooleanSetting("Hide 0 HP Name Tags", false, desc = "No name tags of mobs at 0 health.").withDependency { cleanupDropdown }
     private val hideDeathAnimation by BooleanSetting("Hide Death Animation", true, desc = "Hides mobs that are dying.").withDependency { cleanupDropdown }
     private val hideDyingMobsArmorStand by BooleanSetting("Hide Dying Armor Stands", false, desc = "Hides armor stands of mobs that are dying.").withDependency { cleanupDropdown && hideDeathAnimation }
     private val hideArcherBoneMeal by BooleanSetting("Hide Archer Passive", true, desc = "Hides the archer passive's floating bone meal.").withDependency { cleanupDropdown }
@@ -190,6 +195,12 @@ object Visibility : Module(
 
     private const val TENTACLE_TEXTURE = "ewogICJ0aW1lc3RhbXAiIDogMTcxOTg1NzI3NzI0OSwKICAicHJvZmlsZUlkIiA6ICIxODA1Y2E2MmM0ZDI0M2NiOWQxYmY4YmM5N2E1YjgyNCIsCiAgInByb2ZpbGVOYW1lIiA6ICJSdWxsZWQiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzdkODM2NzQ5MjZiODk3MTRlNmI1YTU1NDcwNTAxYzA0YjA2NmRkODdiZjZjMzM1Y2RkYzZlNjBhMWExYTVmNSIKICAgIH0KICB9Cn0="
     private const val HEALER_FAIRY_TEXTURE = "ewogICJ0aW1lc3RhbXAiIDogMTcxOTQ2MzA5MTA0NywKICAicHJvZmlsZUlkIiA6ICIyNjRkYzBlYjVlZGI0ZmI3OTgxNWIyZGY1NGY0OTgyNCIsCiAgInByb2ZpbGVOYW1lIiA6ICJxdWludHVwbGV0IiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzJlZWRjZmZjNmExMWEzODM0YTI4ODQ5Y2MzMTZhZjdhMjc1MmEzNzZkNTM2Y2Y4NDAzOWNmNzkxMDhiMTY3YWUiCiAgICB9CiAgfQp9"
+    private val COIN_TEXTURES = setOf(
+        "ewogICJ0aW1lc3RhbXAiIDogMTcxOTYwMDMwOTQ4MywKICAicHJvZmlsZUlkIiA6ICI1OTgyOWY1ZGY3MmM0ZmFlOTBmOGVhYmM0MjFjMzJkYiIsCiAgInByb2ZpbGVOYW1lIiA6ICJQZXBwZXJEcmlua2VyIiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzE2YjkwZjRmYTNlYzEwNmJmZWYyMWYzYjc1ZjU0MWExOGU0NzU3Njc0ZjdkNTgyNTBmYTdlNzQ5NTJmMDg3ZGMiLAogICAgICAibWV0YWRhdGEiIDogewogICAgICAgICJtb2RlbCIgOiAic2xpbSIKICAgICAgfQogICAgfQogIH0KfQ==",
+        "eyJ0aW1lc3RhbXAiOjE1NjAwMzYyODI5MTcsInByb2ZpbGVJZCI6ImU3NmYwZDlhZjc4MjQyYzM5NDY2ZDY3MjE3MzBmNDUzIiwicHJvZmlsZU5hbWUiOiJLbGxscmFoIiwic2lnbmF0dXJlUmVxdWlyZWQiOnRydWUsInRleHR1cmVzIjp7IlNLSU4iOnsidXJsIjoiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS9jZGVlNjIxZWI4MmIwZGFiNDE2NjMzMGQxZGEwMjdiYTJhYzEzMjQ2YTRjMWU3ZDUxNzRmNjA1ZmRkZjEwYTEwIn19fQ==",
+        "ewogICJ0aW1lc3RhbXAiIDogMTcxOTg2ODk5MTUyNCwKICAicHJvZmlsZUlkIiA6ICIxMTM1Njg1ZTk3ZGE0ZjYyYTliNDQ3MzA0NGFiZjQ0MSIsCiAgInByb2ZpbGVOYW1lIiA6ICJNYXJpb1dsZXMiLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvY2NiY2NlMjJhZjU1OWVkNmJhNjAzODg0NWRiMzhjY2JjYTJlNjJiNzdiODdhMjZhMDY2NTcxMDljZTBlZmJhNiIsCiAgICAgICJtZXRhZGF0YSIgOiB7CiAgICAgICAgIm1vZGVsIiA6ICJzbGltIgogICAgICB9CiAgICB9CiAgfQp9",
+        "ewogICJ0aW1lc3RhbXAiIDogMTU5ODg0NzA4MjYxMywKICAicHJvZmlsZUlkIiA6ICI0MWQzYWJjMmQ3NDk0MDBjOTA5MGQ1NDM0ZDAzODMxYiIsCiAgInByb2ZpbGVOYW1lIiA6ICJNZWdha2xvb24iLAogICJzaWduYXR1cmVSZXF1aXJlZCIgOiB0cnVlLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzQwZDZlMzYyYmM3ZWVlNGY5MTFkYmQwNDQ2MzA3ZTc0NThkMTA1MGQwOWFlZTUzOGViY2IwMjczY2Y3NTc0MiIKICAgIH0KICB9Cn0=",
+    )
     private const val SOUL_WEAVER_TEXTURE = "eyJ0aW1lc3RhbXAiOjE1NTk1ODAzNjI1NTMsInByb2ZpbGVJZCI6ImU3NmYwZDlhZjc4MjQyYzM5NDY2ZDY3MjE3MzBmNDUzIiwicHJvZmlsZU5hbWUiOiJLbGxscmFoIiwic2lnbmF0dXJlUmVxdWlyZWQiOnRydWUsInRleHR1cmVzIjp7IlNLSU4iOnsidXJsIjoiaHR0cDovL3RleHR1cmVzLm1pbmVjcmFmdC5uZXQvdGV4dHVyZS8yZjI0ZWQ2ODc1MzA0ZmE0YTFmMGM3ODViMmNiNmE2YTcyNTYzZTlmM2UyNGVhNTVlMTgxNzg0NTIxMTlhYTY2In19fQ=="
 
     // Hypixel's info lines carry a real downloaded skin (plain gray), not a vanilla default, so only its texture path identifies them.
@@ -231,7 +242,8 @@ object Visibility : Module(
             if (lavaAsWater() != lavaShown) { lavaShown = lavaAsWater(); mc.level?.let { mc.levelRenderer.invalidateCompiledGeometry(it, mc.options, mc.gameRenderer.mainCamera(), mc.blockColors) } }
         }
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
-        on<LevelEvent.Load> { damageNames.clear(); ScoreboardNametags.clearMemos() }
+        on<LevelEvent.Load> { tagKinds.clear(); ScoreboardNametags.clearMemos(); clearOrbs() }
+        on<EntityEvent.Remove> { if (orbIds.remove(entity.id)) { orbs.remove(entity); orbTags.remove(entity) } }
 
         // Hidden where it's drawn: what reads the action bar (secrets, mana) still gets it
         net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.replaceElement(net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.OVERLAY_MESSAGE) { original ->
@@ -255,9 +267,21 @@ object Visibility : Module(
         }
 
         on<EntityEvent.SetData> {
-            if (hideArcherBoneMeal && DungeonUtils.inDungeons) {
-                val item = synchedDataValues.find { it.id == 8 }?.value as? ItemStack ?: return@on
-                if (!item.isEmpty && item.item == Items.BONE_MEAL) entity.remove(Entity.RemovalReason.DISCARDED)
+            val boneMeal = hideArcherBoneMeal && DungeonUtils.inDungeons
+            val coins = hideTalismanCoins && entity is ItemEntity
+            if (!boneMeal && !coins) return@on
+            val item = synchedDataValues.find { it.id == 8 }?.value as? ItemStack ?: return@on
+            if (item.isEmpty) return@on
+            if (boneMeal && item.item == Items.BONE_MEAL || coins && item.item == Items.PLAYER_HEAD && item.texture in COIN_TEXTURES)
+                entity.remove(Entity.RemovalReason.DISCARDED)
+        }
+
+        on<ParticleEvent> {
+            if (orbs.isEmpty() || !hideHealerOrbs || particle.type != ParticleTypes.DUST) return@on
+            for (i in orbs.indices) {
+                val o = orbs[i]
+                val dx = o.x - x; val dy = o.y - y; val dz = o.z - z
+                if (dx * dx + dy * dy + dz * dz < 4.0) { cancel(); return@on }
             }
         }
 
@@ -268,6 +292,8 @@ object Visibility : Module(
         }
 
         on<EntityEvent.SetItemSlot> {
+            if (orbTags.isNotEmpty() && hideHealerOrbs && slot == EquipmentSlot.HEAD && entity is ArmorStand && stack.item == Items.PLAYER_HEAD &&
+                orbTags.any { nearOrbTag(entity, it) }) addOrb(entity)
             if (hideBoneShield && stack.item == Items.BONE && entity is net.minecraft.world.entity.decoration.ArmorStand && DungeonUtils.inDungeons) {
                 entity.remove(Entity.RemovalReason.DISCARDED)
                 return@on
@@ -292,12 +318,54 @@ object Visibility : Module(
     // "1,234", "✧1,234✧" and crits like "✯1,234✯", with Hypixel's separators and icons around them.
     private val DAMAGE = Regex("""^[^\p{L}]*\d[\d,.]*[kKmMbB]?[^\p{L}]*$""")
 
-    private val damageNames = com.adm.utils.NameMemo { name -> name.string.let { '❤' !in it && DAMAGE.matches(it) } }
+    private val ZERO_HP = Regex("""\s0(?:/\S+)?❤$""")
+    private val ORB_TAG = Regex("""^(?:DAMAGE|DEFENSE|ABILITY DAMAGE) \d+s$""")
+    private const val TAG_DAMAGE = 1
+    private const val TAG_ZERO_HP = 2
+    private const val TAG_ORB = 4
+
+    private val tagKinds = com.adm.utils.NameMemo { name ->
+        val raw = name.string
+        val text = ChatFormatting.stripFormatting(raw) ?: ""
+        when {
+            '❤' !in raw && DAMAGE.matches(raw) -> TAG_DAMAGE
+            ZERO_HP.containsMatchIn(text) -> TAG_ZERO_HP
+            ORB_TAG.matches(text) -> TAG_ORB
+            else -> 0
+        }
+    }
+
+    // A Healer orb is a head on one stand with its timer on another; the timer's name is what gives it away.
+    private val orbIds = it.unimi.dsi.fastutil.ints.IntOpenHashSet()
+    private val orbs = ArrayList<Entity>()
+    private val orbTags = ArrayList<Entity>()
+
+    private fun clearOrbs() { orbIds.clear(); orbs.clear(); orbTags.clear() }
+
+    private fun addOrb(entity: Entity) { if (orbIds.add(entity.id)) orbs += entity }
+
+    private fun nearOrbTag(stand: Entity, tag: Entity): Boolean {
+        val dx = stand.x - tag.x; val dz = stand.z - tag.z
+        return dx * dx + dz * dz < 1.0 && kotlin.math.abs(stand.y - tag.y) < 3.0
+    }
+
+    private fun noteOrbTag(tag: ArmorStand) {
+        if (orbIds.contains(tag.id)) return
+        addOrb(tag)
+        orbTags += tag
+        for (stand in tag.level().getEntitiesOfClass(ArmorStand::class.java, tag.boundingBox.inflate(1.0, 3.0, 1.0)))
+            if (stand !== tag && stand.getItemBySlot(EquipmentSlot.HEAD).item == Items.PLAYER_HEAD && nearOrbTag(stand, tag)) addOrb(stand)
+    }
 
     @JvmStatic fun hidesDamageNumber(entity: Entity): Boolean {
-        if (!enabled || !hideDamageNumbers || entity !is net.minecraft.world.entity.decoration.ArmorStand || !entity.isInvisible) return false
+        if (!enabled || entity !is ArmorStand) return false
+        if (orbs.isNotEmpty() && hideHealerOrbs && orbIds.contains(entity.id)) return true
+        val mask = (if (hideDamageNumbers) TAG_DAMAGE else 0) or (if (hideZeroHpTags) TAG_ZERO_HP else 0) or (if (hideHealerOrbs) TAG_ORB else 0)
+        if (mask == 0 || !entity.isInvisible) return false
         val name = entity.customName ?: return false
-        return damageNames[entity, name]
+        val kind = tagKinds[entity, name] and mask
+        if (kind == TAG_ORB) noteOrbTag(entity)
+        return kind != 0
     }
     @JvmStatic fun lavaAsWater() = on(LAVA)
     private var lavaShown = false
