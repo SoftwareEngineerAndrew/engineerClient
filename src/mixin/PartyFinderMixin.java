@@ -14,9 +14,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
 
-/** Better Party Finder's overlay: text drawn over each listing after its head, and its tooltip lines rewritten. */
+/** Better Party Finder's overlay: a fill behind each listing, text over its head, and its tooltip lines rewritten. */
 @Mixin(AbstractContainerScreen.class)
 public class PartyFinderMixin {
+
+    @Inject(method = "extractSlot", at = @At("HEAD"))
+    private void ec$partyFinderSlotBack(GuiGraphicsExtractor graphics, Slot slot, int mouseX, int mouseY, CallbackInfo ci) {
+        try {
+            BetterPartyFinder.INSTANCE.drawSlotBack((AbstractContainerScreen<?>) (Object) this, graphics, slot);
+        } catch (Throwable ignored) {
+        }
+    }
 
     @Inject(method = "extractSlot", at = @At("RETURN"))
     private void ec$partyFinderSlot(GuiGraphicsExtractor graphics, Slot slot, int mouseX, int mouseY, CallbackInfo ci) {

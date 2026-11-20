@@ -13,6 +13,7 @@ import com.adm.events.MessageEvent
 import com.adm.events.core.on
 import com.adm.features.Module
 import com.adm.utils.formatNumber
+import com.adm.utils.alert
 import com.adm.utils.formatTime
 import com.adm.utils.handlers.schedule
 import com.adm.utils.lore
@@ -43,6 +44,11 @@ object BetterPartyFinder : Module(
 ) {
     private val showLevelReq by BooleanSetting("Show Level Req", true, desc = "Red level requirement on each party.")
     private val showMissingOverlay by BooleanSetting("Show Missing Classes", true, desc = "Missing classes on each party's head.")
+    private val showMemberCount by BooleanSetting("Show Member Count", false, desc = "Member count on each party's head.")
+    private val canJoinHighlight by BooleanSetting("Can Join Highlight", false, desc = "Fills each party green if you can join it, red if not.")
+    private val ignoreCata by BooleanSetting("Ignore Cata Level", false, desc = "Don't count a too low Catacombs level.").withDependency { canJoinHighlight }
+    private val ignoreClassLevel by BooleanSetting("Ignore Class Level", false, desc = "Don't count a too low class level.").withDependency { canJoinHighlight }
+    private val ignoreOwnClass by BooleanSetting("Ignore Own Class", false, desc = "Don't count your class being taken.").withDependency { canJoinHighlight }
     private val showMissingTooltip by BooleanSetting("Show Missing List", true, desc = "Missing classes at the bottom of the tooltip, yours in colour.")
     private val tooltipCata by BooleanSetting("Tooltip Cata Level", false, desc = "Each member's Catacombs level in the tooltip.")
     private val tooltipSecrets by BooleanSetting("Tooltip Secrets", false, desc = "Each member's total and average secrets in the tooltip.")
@@ -50,6 +56,8 @@ object BetterPartyFinder : Module(
     private val tooltipPb by BooleanSetting("Tooltip PB", false, desc = "Each member's S+ PB on the party's floor in the tooltip.")
 
     private val statsDisplay by BooleanSetting("Stats display", true, desc = "Displays stats of players who join your party")
+    private val joinTitle by BooleanSetting("Join Title", false, desc = "Title the moment someone joins through the Party Finder.")
+    private val fullTitle by BooleanSetting("Party Full Title", false, desc = "Title when your Party Finder group is full.")
     private val sendKickLine by BooleanSetting("Send Kick Line", true, desc = "Sends a line in party chat to kick a player.").withDependency { statsDisplay }
 
     private val autoKickToggle by BooleanSetting("Auto Kick", desc = "Automatically kicks players who don't meet requirements.")
@@ -72,6 +80,7 @@ object BetterPartyFinder : Module(
     private val pfRegex = Regex("^Party Finder > (?:\\[.{1,7}])? ?(.{1,16}) joined the dungeon group! \\(.*\\)$")
 
     private val kickedList = mutableSetOf<String>()
+    private var selfJoinedLast = false
 
     private val partyMemberRegex = Regex("^\\s*(\\w{1,16}):?\\s+(Archer|Tank|Berserk|Healer|Mage)\\s*\\((\\d+)\\)\\s*$")
     private val levelRequiredRegex = Regex("Dungeon Level Required:\\s*(\\d+)")
@@ -98,9 +107,16 @@ object BetterPartyFinder : Module(
 
     init {
         on<MessageEvent.Chat> {
-            if (!statsDisplay && !autoKickToggle) return@on
+            if (message == "Party Finder > Your dungeon group is full! Click here to warp to the dungeon!") {
+                if (fullTitle && !selfJoinedLast) alert("§aParty Full")
+                return@on
+            }
+            if (!statsDisplay && !autoKickToggle && !joinTitle && !fullTitle) return@on
             val (name) = pfRegex.find(message)?.destructured ?: return@on
-            if (name == mc.player?.name?.string) return@on
+            selfJoinedLast = name == mc.player?.name?.string
+            if (selfJoinedLast) return@on
+            if (joinTitle) alert("§b$name §ajoined")
+            if (!statsDisplay && !autoKickToggle) return@on
 
             scope.launch {
                 val profile = RequestUtils.getProfile(name)
@@ -210,17 +226,29 @@ object BetterPartyFinder : Module(
 
     private fun classNamed(name: String) = classes.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
-    private class Marks(val stack: ItemStack, val levelReq: String?, val missingTop: String, val missingBottom: String)
+    private class Marks(
+        val stack: ItemStack, val levelReq: String?, val missingTop: String, val missingBottom: String, val count: String,
+        val taken: Set<DungeonClass>, val lockedOut: Boolean, val lowCata: Boolean, val lowClass: Boolean,
+    )
     private val marks = arrayOfNulls<Marks>(35)
 
     private fun marksOf(index: Int, stack: ItemStack): Marks {
         marks[index]?.takeIf { it.stack === stack }?.let { return it }
         var levelRequired = 0
+        var members = 0
+        var lockedOut = false
+        var lowCata = false
+        var lowClass = false
         val taken = HashSet<DungeonClass>()
         for (line in stack.lore) {
             val clean = line.string.noControlCodes
             levelRequiredRegex.find(clean)?.let { levelRequired = it.groupValues[1].toInt() }
-            partyMemberRegex.matchEntire(clean)?.let { m -> classNamed(m.groupValues[2])?.let(taken::add) }
+            partyMemberRegex.matchEntire(clean)?.let { m -> members++; classNamed(m.groupValues[2])?.let(taken::add) }
+            when {
+                clean.startsWith("Complete previous floor first") -> lockedOut = true
+                clean.startsWith("Requires Catacombs Level") -> lowCata = true
+                clean.startsWith("Requires a Class at Level") -> lowClass = true
+            }
         }
         val missing = classes.filter { it !in taken }.map { "§${it.colorCode}§l${it.name[0]}" }
         return Marks(
@@ -228,11 +256,25 @@ object BetterPartyFinder : Module(
             if (levelRequired != 0) "§c$levelRequired" else null,
             missing.take(2).joinToString(""),
             missing.drop(2).take(2).joinToString(""),
+            members.toString(),
+            taken, lockedOut, lowCata, lowClass,
         ).also { marks[index] = it }
     }
 
+    private fun canJoin(m: Marks): Boolean =
+        !m.lockedOut && (ignoreCata || !m.lowCata) && (ignoreClassLevel || !m.lowClass) &&
+            (ignoreOwnClass || ClassDetect.myClass().let { it == null || it !in m.taken })
+
+    fun drawSlotBack(screen: AbstractContainerScreen<*>, graphics: GuiGraphicsExtractor, slot: Slot) {
+        if (!canJoinHighlight || slot.index !in listingSlots) return
+        val stack = slot.item.takeUnless { it.isEmpty || !it.`is`(Items.PLAYER_HEAD) } ?: return
+        if (!enabled || !inDungeonFinder(screen)) return
+        val color = if (canJoin(marksOf(slot.index, stack))) 0xA055FF55.toInt() else 0xA0FF5555.toInt()
+        graphics.fill(slot.x, slot.y, slot.x + 16, slot.y + 16, color)
+    }
+
     fun drawSlot(screen: AbstractContainerScreen<*>, graphics: GuiGraphicsExtractor, slot: Slot) {
-        if (!showLevelReq && !showMissingOverlay) return
+        if (!showLevelReq && !showMissingOverlay && !showMemberCount) return
         if (slot.index !in listingSlots) return
         val stack = slot.item.takeUnless { it.isEmpty || !it.`is`(Items.PLAYER_HEAD) } ?: return
         if (!enabled || !inDungeonFinder(screen)) return
@@ -245,6 +287,7 @@ object BetterPartyFinder : Module(
             if (m.missingTop.isNotEmpty()) drawScaled(graphics, m.missingTop, slot.x.toFloat(), slot.y + 10f, 0.65f)
             if (m.missingBottom.isNotEmpty()) drawScaled(graphics, m.missingBottom, slot.x.toFloat(), slot.y + 4f, 0.65f)
         }
+        if (showMemberCount) drawScaled(graphics, m.count, slot.x + 16f - mc.font.width(m.count) * 0.65f, slot.y + 10f, 0.65f)
     }
 
     private fun drawScaled(graphics: GuiGraphicsExtractor, text: String, x: Float, y: Float, scale: Float) {
@@ -262,6 +305,7 @@ object BetterPartyFinder : Module(
     private class Parsed(val stack: ItemStack, val size: Int, val members: Array<Member?>, val missing: List<DungeonClass>) {
         var missingFor: DungeonClass? = null
         var missingLine: Component? = null
+        var requested = false
     }
     private var parsed: Parsed? = null
 
@@ -299,6 +343,10 @@ object BetterPartyFinder : Module(
         val p = parse(stack, lines)
         val wantStats = tooltipCata || tooltipSecrets || tooltipMp || tooltipPb
         val missing = if (showMissingTooltip) missingLine(p) else null
+        if (wantStats && !p.requested) {
+            p.requested = true
+            requestStats(p)
+        }
 
         val out = ArrayList<Component>(lines.size + 1)
         for (i in lines.indices) {
@@ -309,17 +357,31 @@ object BetterPartyFinder : Module(
         return out
     }
 
+    private fun fresh(key: String) = profiles[key]?.takeIf { System.currentTimeMillis() - it.time < 10 * 60 * 1000L }
+
+    private fun fetchStats(name: String, key: String) = scope.launch {
+        fetchPermits.withPermit {
+            val result = RequestUtils.getProfile(name)
+            profiles[key] = Fetched(result.getOrNull()?.memberData?.let(::statsOf))
+            pending.remove(key)
+        }
+    }
+
+    // One name lookup for the whole party before its profile requests.
+    private fun requestStats(p: Parsed) {
+        val names = p.members.mapNotNull { m -> m?.name?.takeIf { fresh(it.lowercase()) == null && pending.add(it.lowercase()) } }
+        if (names.isEmpty()) return
+        scope.launch {
+            RequestUtils.prefetchUuids(names)
+            for (name in names) fetchStats(name, name.lowercase())
+        }
+    }
+
     private fun memberStats(name: String, floor: Int, master: Boolean): String {
         val key = name.lowercase()
-        val fetched = profiles[key]?.takeIf { System.currentTimeMillis() - it.time < 10 * 60 * 1000L }
+        val fetched = fresh(key)
         if (fetched == null) {
-            if (pending.add(key)) scope.launch {
-                fetchPermits.withPermit {
-                    val result = RequestUtils.getProfile(name)
-                    profiles[key] = Fetched(result.getOrNull()?.memberData?.let(::statsOf))
-                    pending.remove(key)
-                }
-            }
+            if (pending.add(key)) fetchStats(name, key)
             return "§7(Loading...)"
         }
         val stats = fetched.stats ?: return "§c(Failed)"
