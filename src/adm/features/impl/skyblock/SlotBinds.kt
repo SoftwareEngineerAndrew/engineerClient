@@ -46,6 +46,9 @@ object SlotBinds : Module(
     // First slot of a bind being made, waiting for the second key press.
     private var pending = NO_SLOT
 
+    // Set from mouse press to release, so only the click under the cursor can swap.
+    private var pressed = false
+
     private fun binds(): MutableMap<Int, Int> = profileData.getOrPut(currentProfile.label) { mutableMapOf() }
 
     // A bind is stored one way only, so a slot can be either end of it.
@@ -83,10 +86,12 @@ object SlotBinds : Module(
         return null
     }
 
-    private fun hovered(screen: AbstractContainerScreen<*>): Int {
-        val slot = screen.hoveredSlot ?: return NO_SLOT
+    private fun indexOf(screen: AbstractContainerScreen<*>, slot: Slot?): Int {
+        if (slot == null) return NO_SLOT
         return if (screen is InventoryScreen) slot.index.takeIf { it in 5..44 } ?: NO_SLOT else bindIndex(slot)
     }
+
+    private fun hovered(screen: AbstractContainerScreen<*>): Int = indexOf(screen, screen.hoveredSlot)
 
     private fun slotX(screen: AbstractContainerScreen<*>, slot: Slot) = (slot.x + screen.leftPos + 8).toFloat()
     private fun slotY(screen: AbstractContainerScreen<*>, slot: Slot) = (slot.y + screen.topPos + 8).toFloat()
@@ -96,20 +101,24 @@ object SlotBinds : Module(
             val screen = screen as? AbstractContainerScreen<*> ?: return@on
             val shift = mc.hasShiftDown()
             if (!shift && !protectBound) return@on
-            val clicked = hovered(screen)
+            val slot = screen.menu.slots.getOrNull(slotIndex) ?: return@on
+            val clicked = indexOf(screen, slot)
             if (clicked == NO_SLOT) return@on
             val bound = peekBind(clicked)
             if (bound == NO_SLOT) return@on
             if (shift) {
+                // Shift + double click sweeps every matching slot on release; those moves are not a bind press.
+                if (!pressed || slot !== screen.hoveredSlot) return@on
+                pressed = false
                 val hotbar = if (isHotbar(clicked)) clicked else if (isHotbar(bound)) bound else NO_SLOT
                 val other = if (hotbar == NO_SLOT) null else menuSlot(screen, if (hotbar == clicked) bound else clicked)
                 if (other != null) {
                     mc.player?.clickSlot(other.index, hotbar % 36, ContainerInput.SWAP)
                     cancel()
-                    return@on
                 }
+                return@on
             }
-            if (protectBound && screen.hoveredSlot?.item?.isEmpty == false) cancel()
+            if (!slot.item.isEmpty) cancel()
         }
 
         on<ScreenEvent.KeyPress> {
@@ -120,6 +129,7 @@ object SlotBinds : Module(
 
         on<ScreenEvent.MouseClick> {
             val screen = screen as? AbstractContainerScreen<*> ?: return@on
+            pressed = true
             val key = setNewSlotbind
             if (key.type != InputConstants.Type.MOUSE || click.button() != key.value) return@on
             if (bindKey(screen)) cancel()
@@ -146,6 +156,8 @@ object SlotBinds : Module(
                 guiGraphics.drawLine(slotX(screen, a), slotY(screen, a), mouseX.toFloat(), mouseY.toFloat(), lineColor, lineWidth)
             }
         }
+
+        on<ScreenEvent.MouseRelease> { pressed = false }
 
         on<ScreenCloseEvent> { pending = NO_SLOT }
     }
