@@ -20,28 +20,26 @@ import java.nio.file.Files
  * by every mod, still written to latest.log, it just never appears on screen. Cancelling a chat
  * event or the packet would have silenced the other mods too.
  *
- * Rules come from `chat/hidden.json` in the jar; drop a file of the same shape at
- * `config/engineerclient/chat-hider.json` to override without a rebuild (Reload Rules picks it up).
+ * Rules come from `chat/hidden.json` in the jar. `config/engineerclient/chat-hider.json`, of the same shape, holds only the
+ * player's own rules, which go ahead of the built-in ones (Reload Rules picks it up).
  */
 object ChatHider {
     /** Clean Chat's Reload Rules. */
     fun reload() = load(announce = true)
 
-    /** /adm chathide: a block rule at the end of the override file's custom rules, started from the built-in rules when there is no file yet. */
+    /** /adm chathide: a block rule added to the player's own rules. */
     fun addRule(regex: String) {
         try { java.util.regex.Pattern.compile(regex) } catch (e: java.util.regex.PatternSyntaxException) {
             return EngineerClient.msg("§cInvalid regex: ${e.description}")
         }
         try {
-            val text = if (Files.exists(overrideFile)) Files.readString(overrideFile) else ChatRules.bundledText() ?: "{}"
-            val root = JsonParser.parseString(text).asJsonObject
+            val root = if (Files.exists(userFile)) JsonParser.parseString(Files.readString(userFile)).asJsonObject else JsonObject()
             val custom = root.getAsJsonArray("custom") ?: JsonArray().also { root.add("custom", it) }
             custom.add(JsonObject().apply { addProperty("regex", regex); addProperty("action", "block") })
-            Files.createDirectories(overrideFile.parent)
-            Files.writeString(overrideFile, GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(root))
+            write(root)
         } catch (t: Throwable) {
             EngineerClient.logger.warn("[ec] chat hider rule not saved", t)
-            return EngineerClient.msg("§cCould not save the rule to ${overrideFile.fileName}.")
+            return EngineerClient.msg("§cCould not save the rule to ${userFile.fileName}.")
         }
         EngineerClient.msg("§7clean chat: added §f$regex")
         reload()
@@ -51,16 +49,42 @@ object ChatHider {
     private var rules: ChatRules = ChatRules(emptyList(), emptyList())
     private var loaded = false
 
-    private val overrideFile = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("chat-hider.json")
+    private val userFile = EngineerClient.mc.gameDirectory.toPath().resolve("config").resolve("engineerclient").resolve("chat-hider.json")
+
+    private fun write(root: JsonObject) {
+        Files.createDirectories(userFile.parent)
+        Files.writeString(userFile, GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(root))
+    }
+
+    // Older builds copied every built-in rule into the file; only the player's own stay, so later built-in changes reach them.
+    private fun ownRules(text: String, bundled: ChatRules): ChatRules {
+        val root = JsonParser.parseString(text).asJsonObject
+        var dropped = false
+        for ((key, builtIn) in listOf("custom" to bundled.custom.mapTo(HashSet()) { it.regex }, "block" to bundled.block.mapTo(HashSet()) { it.regex })) {
+            val entries = root.getAsJsonArray(key)?.iterator() ?: continue
+            while (entries.hasNext()) {
+                val regex = (entries.next() as? JsonObject)?.get("regex")?.takeIf { it.isJsonPrimitive }?.asString ?: continue
+                if (regex in builtIn) { entries.remove(); dropped = true }
+            }
+        }
+        if (dropped) {
+            for (key in listOf("version", "updatedAt", "source")) root.remove(key)
+            write(root)
+        }
+        return ChatRules.parse(root.toString())
+    }
 
     private fun load(announce: Boolean) {
         loaded = true
         val (set, from) = try {
-            if (Files.exists(overrideFile)) ChatRules.parse(Files.readString(overrideFile)) to overrideFile.fileName.toString()
-            else ChatRules.bundled() to "built-in"
+            val bundled = ChatRules.bundled()
+            if (Files.exists(userFile)) {
+                val own = ownRules(Files.readString(userFile), bundled)
+                ChatRules.merged(own, bundled) to "built-in + ${own.custom.size + own.block.size} of yours"
+            } else bundled to "built-in"
         } catch (t: Throwable) {
             EngineerClient.logger.warn("[ec] chat hider rules failed to load", t)
-            ChatRules(emptyList(), emptyList()) to "none (load failed)"
+            ChatRules.bundled() to "built-in (${userFile.fileName} failed to load)"
         }
         rules = set
         EngineerClient.logger.info("[ec] chat hider: ${set.size} rules from $from" + if (set.invalid.isNotEmpty()) ", ${set.invalid.size} invalid" else "")

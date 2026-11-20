@@ -67,6 +67,9 @@ class ChatRules(val custom: List<Custom>, val block: List<Block>) {
             return ChatRules(file.custom, file.block)
         }
 
+        /** [user]'s rules ahead of [base]'s, so a player's own rule wins. */
+        fun merged(user: ChatRules, base: ChatRules) = ChatRules(user.custom + base.custom, user.block + base.block)
+
         /** The rules shipped in the jar. */
         fun bundled(): ChatRules = bundledText()?.let(::parse) ?: ChatRules(emptyList(), emptyList())
 
