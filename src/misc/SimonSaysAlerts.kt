@@ -33,11 +33,12 @@ object SimonSaysAlerts {
     private var goneTicks = 0
     private var running = false
     private var wasBroken = false
+    private var lineTicks = -1
 
     private fun active() = Devices.simonSaysOn && DungeonUtils.getF7Phase() == M7Phases.P3
 
     fun reset() {
-        shown.clear(); roundLength = 0; pendingStage = 0; goneTicks = 0; running = false; wasBroken = false
+        shown.clear(); roundLength = 0; pendingStage = 0; goneTicks = 0; running = false; wasBroken = false; lineTicks = -1
     }
 
     private fun stageDone(stage: Int) {
@@ -49,6 +50,10 @@ object SimonSaysAlerts {
     private fun tick() {
         if (!active()) return
         val level = EngineerClient.mc.level ?: return
+        if (lineTicks >= 0) {
+            if (cleared()) return deviceDone()
+            lineTicks--
+        }
         var lit = false
         for (l in lamps) if (level.getBlockState(l).block == Blocks.SEA_LANTERN) { lit = true; shown.add(l) }
         if (lit) {
@@ -83,6 +88,19 @@ object SimonSaysAlerts {
         if (Devices.breakSound) playSoundAtPlayer(SoundEvents.ANVIL_LAND, 5f, 0f)
     }
 
+    // Completing takes every lamp and button in the same tick; any other device's line finds the grid in use.
+    private fun cleared(): Boolean {
+        val level = EngineerClient.mc.level ?: return false
+        return lamps.none { level.getBlockState(it).block == Blocks.SEA_LANTERN } && buttons.all { level.getBlockState(it).isAir }
+    }
+
+    // The line can come before that tick's block changes, so it is checked again on the next two ticks.
+    private fun deviceLine() {
+        if (!active() || !running) return
+        lineTicks = 2
+        if (cleared()) deviceDone()
+    }
+
     // The device's completion ends its last stage, with no next show to confirm it.
     private fun deviceDone() {
         if (!active() || !running) return
@@ -95,7 +113,7 @@ object SimonSaysAlerts {
         on<LevelEvent.Load> { EngineerClient.mc.execute { reset() } }
         on<TickEvent.Server> { if (active()) EngineerClient.mc.execute(runTick) }
         on<MessageEvent.Chat> {
-            if (deviceRegex.matches(message)) EngineerClient.mc.execute { EngineerClient.safely("ss alerts device") { deviceDone() } }
+            if (deviceRegex.matches(message)) EngineerClient.mc.execute { EngineerClient.safely("ss alerts device") { deviceLine() } }
         }
     }
 }
