@@ -149,6 +149,13 @@ abstract class TerminalHandler(val type: TerminalTypes) {
         for (p in pending) clickedSlots.add(p.slot to containerButton(p.button))
     }
 
+    /** The window closed: nothing here is read again but the type and times. */
+    open fun release() {
+        pending.clear(); clickedSlots.clear(); solution.clear()
+        items.fill(ItemStack.EMPTY)
+        lastSlots = null; filling = false
+    }
+
     fun canClick(slot: Int, button: Int) = slot in 0 until area && (ready || (early && received[slot])) && canClickShown(slot, button)
 
     /**

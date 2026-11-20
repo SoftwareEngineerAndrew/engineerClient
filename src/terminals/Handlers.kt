@@ -94,6 +94,8 @@ class RubixHandler(
     }
 
     private val route = ArrayList<Int>()
+    private var routeMask = -1L
+    private var routeFrom = -1
 
     /** Fewest clicks; then fewest right clicks; then fewest panes touched. With left clicks only no two colors ever tie (9 panes). */
     override fun onReady() {
@@ -115,29 +117,32 @@ class RubixHandler(
         val nodes = if (from >= 0 && from !in slots) listOf(from) + slots else slots
         val n = nodes.size
         fun dist(a: Int, b: Int) = Math.hypot((nodes[a] % 9 - nodes[b] % 9).toDouble(), (nodes[a] / 9 - nodes[b] / 9).toDouble())
-        val best = Array(1 shl n) { DoubleArray(n) { Double.MAX_VALUE } }
-        val prev = Array(1 shl n) { IntArray(n) { -1 } }
-        val starts = if (from >= 0) listOf(nodes.indexOf(from)) else nodes.indices.toList()
-        for (i in starts) best[1 shl i][i] = 0.0
-        for (mask in 1 until (1 shl n)) for (last in 0 until n) {
-            val d = best[mask][last]
-            if (d == Double.MAX_VALUE) continue
-            for (next in 0 until n) if (mask and (1 shl next) == 0) {
-                val m = mask or (1 shl next)
-                if (d + dist(last, next) < best[m][next]) { best[m][next] = d + dist(last, next); prev[m][next] = last }
+        synchronized(Tables) {
+            val best = if (n <= Tables.MAX) Tables.best else Array(1 shl n) { DoubleArray(n) }
+            val prev = if (n <= Tables.MAX) Tables.prev else Array(1 shl n) { IntArray(n) }
+            for (mask in 0 until (1 shl n)) { best[mask].fill(Double.MAX_VALUE, 0, n); prev[mask].fill(-1, 0, n) }
+            val starts = if (from >= 0) listOf(nodes.indexOf(from)) else nodes.indices.toList()
+            for (i in starts) best[1 shl i][i] = 0.0
+            for (mask in 1 until (1 shl n)) for (last in 0 until n) {
+                val d = best[mask][last]
+                if (d == Double.MAX_VALUE) continue
+                for (next in 0 until n) if (mask and (1 shl next) == 0) {
+                    val m = mask or (1 shl next)
+                    if (d + dist(last, next) < best[m][next]) { best[m][next] = d + dist(last, next); prev[m][next] = last }
+                }
             }
+            val full = (1 shl n) - 1
+            var last = (0 until n).minBy { best[full][it] }
+            var mask = full
+            val order = ArrayList<Int>()
+            while (last >= 0) {
+                order.add(0, nodes[last])
+                val p = prev[mask][last]
+                mask = mask and (1 shl last).inv()
+                last = p
+            }
+            return order.filter { it in slots }
         }
-        val full = (1 shl n) - 1
-        var last = (0 until n).minBy { best[full][it] }
-        var mask = full
-        val order = ArrayList<Int>()
-        while (last >= 0) {
-            order.add(0, nodes[last])
-            val p = prev[mask][last]
-            mask = mask and (1 shl last).inv()
-            last = p
-        }
-        return order.filter { it in slots }
     }
 
     private fun need(slot: Int) = if (target < 0 || shown[slot] < 0) 0 else clicks(shown[slot], target)
@@ -148,9 +153,23 @@ class RubixHandler(
     }
 
     override fun buildSolution(out: ArrayList<Int>) {
-        route.clear()
-        if (leastMovement()) route += shortestRoute((0 until area).filter { need(it) != 0 }, lastClicked)
+        if (!leastMovement()) { route.clear(); routeMask = -1L }
+        else {
+            var mask = 0L
+            for (i in 0 until area) if (need(i) != 0) mask = mask or (1L shl i)
+            // The route only depends on which panes still need clicks and where the mouse starts.
+            if (mask != routeMask || lastClicked != routeFrom) {
+                routeMask = mask; routeFrom = lastClicked
+                route.clear()
+                route += shortestRoute((0 until area).filter { need(it) != 0 }, lastClicked)
+            }
+        }
         for (i in 0 until area) repeat(abs(need(i))) { out += i }
+    }
+
+    override fun release() {
+        super.release()
+        route.clear(); routeMask = -1L
     }
 
     override fun look(slot: Int): Look? {
@@ -162,6 +181,13 @@ class RubixHandler(
 
     private companion object {
         val ORDER = listOf(DyeColor.RED, DyeColor.ORANGE, DyeColor.YELLOW, DyeColor.GREEN, DyeColor.BLUE)
+    }
+
+    /** Least Movement's tables, for up to 9 panes plus the pane last clicked. */
+    private object Tables {
+        const val MAX = 10
+        val best = Array(1 shl MAX) { DoubleArray(MAX) }
+        val prev = Array(1 shl MAX) { IntArray(MAX) }
     }
 }
 

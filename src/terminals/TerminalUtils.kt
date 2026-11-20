@@ -27,7 +27,7 @@ object TerminalUtils {
     fun install() {
         on<ScreenEvent.Open>(EventPriority.HIGHEST) {
             val handler = TerminalTypes.handlerFor(screen.title.string) ?: return@on
-            currentTerm?.let { TerminalEvent.Close(it).postAndCatch() }
+            currentTerm?.let { TerminalEvent.Close(it).postAndCatch(); it.release() }
             currentTerm = handler
             lastTermOpened = handler
             TerminalEvent.Open(handler).postAndCatch()
@@ -37,6 +37,7 @@ object TerminalUtils {
             val term = currentTerm ?: return@on
             currentTerm = null
             TerminalEvent.Close(term).postAndCatch()
+            term.release()
         }
 
         on<SetSlotEvent> {
