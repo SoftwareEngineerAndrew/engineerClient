@@ -34,6 +34,8 @@
     "ChatCopyMixin",
     "PlayerTabOverlayMixin",
     "PearlCooldownMixin",
+    "OldMasterStarMixin",
+    "ItemCooldownOverlayMixin",
     "HotbarWheelMixin",
     "SlotHeadScaleMixin",
     "OwnNametagMixin",

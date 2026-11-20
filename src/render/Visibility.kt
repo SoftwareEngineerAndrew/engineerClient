@@ -560,7 +560,7 @@ object Visibility : Module(
     private fun heldName(stack: ItemStack): Component {
         val stars = com.engineerclient.skyblock.ItemTweaks.redStarsOn()
         if (stack === nameFor && stars == nameStars) return heldName
-        heldName = Component.empty().append(com.engineerclient.skyblock.ItemTweaks.shownName(stack.hoverName)).withStyle(stack.rarity.color())
+        heldName = Component.empty().append(stack.hoverName).withStyle(stack.rarity.color())
             .let { if (stack.has(DataComponents.CUSTOM_NAME)) it.withStyle(ChatFormatting.ITALIC) else it }
         heldNameW = mc.font.width(heldName)
         nameFor = stack

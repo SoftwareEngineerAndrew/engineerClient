@@ -17,6 +17,7 @@ import net.minecraft.network.chat.Style
 import net.minecraft.util.Unit as McUnit
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
+import java.util.IdentityHashMap
 import java.util.Optional
 
 object ItemTweaks : Module(
@@ -32,12 +33,12 @@ object ItemTweaks : Module(
     private val hideVanillaEnchants by BooleanSetting("Hide Vanilla Enchants", true, desc = "Drops the vanilla enchantment lines above SkyBlock lore.")
     private val noHotbarScroll by BooleanSetting("Disable Hotbar Scroll", true, desc = "The scroll wheel no longer changes your hotbar slot.")
     private val oldMasterStars by BooleanSetting("Old Master Stars", false, desc = "Master stars as red stars instead of a number.")
+    private val hideCooldowns by BooleanSetting("Hide Item Cooldowns", false, desc = "No cooldown overlay on any item.")
     private val qualityStyle by SelectorSetting("Item Quality Style", QualityStyle.FRACTION, desc = "Stat boost out of 50, or as a percent of the best.")
 
     init {
         ItemTooltipCallback.EVENT.register { stack, _, _, lines ->
             if (!enabled) return@register
-            if (oldMasterStars && lines.isNotEmpty()) redStars(lines[0])?.let { lines[0] = it }
             if (removeGearScore) dropGearScore(lines)
             if (itemQuality) {
                 val data = stack.customData
@@ -64,7 +65,19 @@ object ItemTweaks : Module(
 
     fun redStarsOn(): Boolean = enabled && oldMasterStars
 
-    fun shownName(name: Component): Component = if (redStarsOn()) redStars(name) ?: name else name
+    private val hoverNames = IdentityHashMap<Component, Component>()
+
+    // Every item name goes through here, so each name is rewritten once, not every frame.
+    @JvmStatic
+    fun hoverName(name: Component): Component {
+        if (!enabled || !oldMasterStars) return name
+        if (!mc.isSameThread) return redStars(name) ?: name
+        hoverNames[name]?.let { return it }
+        val shown = redStars(name) ?: name
+        if (hoverNames.size >= 512) hoverNames.clear()
+        hoverNames[name] = shown
+        return shown
+    }
 
     /** "✪✪✪✪✪➋" as it looked before: the first two stars red, no number. */
     private fun redStars(name: Component): Component? {
@@ -124,6 +137,9 @@ object ItemTweaks : Module(
     }
 
     fun noPearlCooldown(): Boolean = enabled && noPearlCooldown
+
+    @JvmStatic
+    fun hidesCooldowns(): Boolean = enabled && hideCooldowns
 
     @JvmStatic
     fun smallHead(stack: ItemStack): Boolean = enabled && oldPlayerHead && stack.`is`(Items.PLAYER_HEAD)
