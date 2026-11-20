@@ -397,6 +397,7 @@ object LeapMenu : Module(
      * empty quadrants with the players from the second round list.
      */
     fun coreSorting(players: List<DungeonPlayer>): Array<DungeonPlayer> {
+        if (fixedCorners) return fixedSorting(players)
         val result = Array(4) { EMPTY }
         val secondRound = mutableListOf<DungeonPlayer>()
 
@@ -409,15 +410,6 @@ object LeapMenu : Module(
 
         if (secondRound.isEmpty()) return result
 
-        if (fixedCorners) {
-            // your own class's corner is the only one no teammate's class needs
-            val own = DungeonUtils.currentDungeonPlayer.clazz
-            if (own != DungeonClass.EMPTY && result[own.defaultQuadrant] == EMPTY) {
-                result[own.defaultQuadrant] = secondRound.removeAt(0)
-                if (secondRound.isEmpty()) return result
-            }
-        }
-
         result.forEachIndexed { index, _ ->
             when {
                 result[index] == EMPTY -> {
@@ -425,6 +417,27 @@ object LeapMenu : Module(
                     if (secondRound.isEmpty()) return result
                 }
             }
+        }
+        return result
+    }
+
+    /**
+     * Every class in its own corner, a corner with no one for it left empty. Two for one corner (a duplicate class, or
+     * Mage and Tank): class priority, then name, wins it; the others go to your own class's corner, which no teammate
+     * needs, then to the free corners in order.
+     */
+    private fun fixedSorting(players: List<DungeonPlayer>): Array<DungeonPlayer> {
+        val result = Array(4) { EMPTY }
+        val extra = ArrayList<DungeonPlayer>()
+        for (player in players.sortedWith(compareBy({ it.clazz.priority }, { it.clazz.ordinal }, { it.name }))) {
+            val corner = player.clazz.defaultQuadrant
+            if (player.clazz != DungeonClass.EMPTY && result[corner] == EMPTY) result[corner] = player else extra += player
+        }
+        val own = DungeonUtils.currentDungeonPlayer.clazz
+        if (extra.isNotEmpty() && own != DungeonClass.EMPTY && result[own.defaultQuadrant] == EMPTY) result[own.defaultQuadrant] = extra.removeAt(0)
+        for (i in result.indices) {
+            if (extra.isEmpty()) break
+            if (result[i] == EMPTY) result[i] = extra.removeAt(0)
         }
         return result
     }
