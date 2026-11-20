@@ -5,8 +5,12 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
 import com.adm.AdmMod
 import com.adm.AdmMod.logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import java.io.InputStream
+import java.io.Reader
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -46,6 +50,20 @@ object WebUtils {
         executeRequest(createGetRequest(url))
             .map { response -> response.body().byteInputStream() }
             .onFailure { logger.warn("Failed to get input stream from $url: ${it.message} ${it.cause}") }
+
+    /** Hands [read] the body as it downloads, so a large response is never held whole. */
+    suspend fun <T> fetchReader(url: String, read: (Reader) -> T): Result<T> = runCatching {
+        val request = createGetRequest(url)
+        logger.info("Making request to ${request.uri()}")
+        val response = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream()).await()
+        withContext(Dispatchers.IO) {
+            val gzipped = response.headers().firstValue("Content-Encoding").orElse("").equals("gzip", ignoreCase = true)
+            (if (gzipped) GZIPInputStream(response.body()) else response.body()).bufferedReader(Charsets.UTF_8).use { reader ->
+                if (response.statusCode() !in 200..299) throw InputStreamException(reader.readText(), url)
+                read(reader)
+            }
+        }
+    }.onFailure { logger.warn("Failed to fetch from $url: ${it.message} ${it.cause}") }
 
     suspend fun postData(url: String, body: String): Result<String> =
         executeRequest(

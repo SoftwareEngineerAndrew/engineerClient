@@ -1,10 +1,10 @@
 package com.adm.utils.network.hypixelapi
 
 import com.adm.features.impl.render.ClickGUIModule.hypixelApiUrl
+import com.adm.utils.network.WebUtils
 import com.adm.utils.network.WebUtils.fetchJson
-import com.adm.utils.network.WebUtils.fetchString
+import com.adm.utils.network.WebUtils.fetchReader
 import com.google.gson.stream.JsonReader
-import java.io.StringReader
 import java.util.concurrent.ConcurrentHashMap
 
 object RequestUtils {
@@ -40,9 +40,8 @@ object RequestUtils {
         playerCache[name]?.let { return Result.success(it) }
         val uuidData = getUuid(name).getOrElse { return Result.failure(it) }
 
-        return fetchString(getServer(EndPoint.GET, uuidData.id)).mapCatching { body ->
-            // Only the selected profile's own member is read: whole responses run to megabytes.
-            val data = HypixelData.readSelected(JsonReader(StringReader(body)), uuidData.id)
+        // Only the selected profile's own member is read, off the stream: whole responses run to megabytes.
+        return fetchReader(getServer(EndPoint.GET, uuidData.id)) { HypixelData.readSelected(JsonReader(it), uuidData.id) }.mapCatching { data ->
             data.cause?.let { throw Exception("Failed to get hypixel data: $it") }
             val member = data.member
             val kept = HypixelData.ProfilesData(profileList = member?.let { listOf(HypixelData.Profiles(mapOf(uuidData.id to it), true)) }.orEmpty())
@@ -58,6 +57,17 @@ object RequestUtils {
         return (fetchJson<UuidData>("https://mowojang.seraph.si/users/profiles/minecraft/$name").takeIf { it.isSuccess }
             ?: fetchJson<UuidData>("https://api.minecraftservices.com/minecraft/profile/lookup/name/$name"))
             .onSuccess { uuidCache[name] = it }
+    }
+
+    /** Looks up up to ten names per request; names it misses are left to [getUuid]. */
+    suspend fun prefetchUuids(names: Collection<String>) {
+        val missing = names.filter { uuidCache[it] == null }
+        for (chunk in missing.chunked(10)) {
+            val body = WebUtils.gson.toJson(chunk)
+            val found = WebUtils.postData("https://api.minecraftservices.com/minecraft/profile/lookup/bulk/byname", body)
+                .mapCatching { WebUtils.gson.fromJson(it, Array<UuidData>::class.java) }.getOrNull() ?: continue
+            for (data in found) if (!(data.id as String?).isNullOrEmpty() && (data.name as String?) != null) uuidCache[data.name] = data
+        }
     }
 
     suspend fun pullSecrets(name: String): Result<Long> {
