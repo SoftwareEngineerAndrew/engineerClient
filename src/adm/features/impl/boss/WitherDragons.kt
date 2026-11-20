@@ -52,6 +52,7 @@ object WitherDragons : Module(
     }.withDependency { dragonTimerDropDown }
 
     private val dragonBoxes by BooleanSetting("Dragon Boxes", true, desc = "Displays boxes for where M7 dragons spawn.")
+    private val dragonTint by BooleanSetting("Dragon Tint", false, desc = "Tints each dragon in its own colour.")
     private val dragonTracers by BooleanSetting("Target Tracer", true, desc = "Draws a line to priority spawning dragon.")
     val split by BooleanSetting("Split", false, desc = "With two dragons spawning, the later one is yours if your class is listed.")
     private val splitClasses by StringSetting("Later Dragon Classes", "Healer", 64, desc = "Classes that take the later of two dragons, comma separated.", placeholder = "Healer").withDependency { split }
@@ -134,6 +135,14 @@ object WitherDragons : Module(
             DragonCheck.clear()
             WitherDragonsEnum.reset()
         }
+    }
+
+    @JvmStatic
+    fun tintOf(dragon: net.minecraft.world.entity.Entity): Int {
+        if (!enabled || !dragonTint) return 0
+        val uuid = dragon.uuid
+        for (d in dragons) if (d.entityUUID == uuid) return d.color.rgba or (0xFF shl 24)
+        return 0
     }
 
     private val dragons = WitherDragonsEnum.entries
