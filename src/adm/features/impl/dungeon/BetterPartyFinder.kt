@@ -202,6 +202,7 @@ object BetterPartyFinder : Module(
     private var finderScreen: AbstractContainerScreen<*>? = null
     private var finderStar: ItemStack? = null
     private var finderOpen = false
+    private var finderClass: DungeonClass? = null
 
     private fun inDungeonFinder(screen: AbstractContainerScreen<*>): Boolean {
         val star = screen.menu.slots.getOrNull(50)?.item
@@ -209,6 +210,7 @@ object BetterPartyFinder : Module(
             finderScreen = screen
             finderStar = star
             finderOpen = isDungeonFinder(screen, star)
+            finderClass = ClassDetect.myClass()
         }
         return finderOpen
     }
@@ -263,7 +265,7 @@ object BetterPartyFinder : Module(
 
     private fun canJoin(m: Marks): Boolean =
         !m.lockedOut && (ignoreCata || !m.lowCata) && (ignoreClassLevel || !m.lowClass) &&
-            (ignoreOwnClass || ClassDetect.myClass().let { it == null || it !in m.taken })
+            (ignoreOwnClass || finderClass.let { it == null || it !in m.taken })
 
     fun drawSlotBack(screen: AbstractContainerScreen<*>, graphics: GuiGraphicsExtractor, slot: Slot) {
         if (!canJoinHighlight || slot.index !in listingSlots) return
