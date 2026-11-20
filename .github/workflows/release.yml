@@ -52,7 +52,7 @@ jobs:
           cp build/libs/*.jar "$jar"
           url="https://github.com/$GITHUB_REPOSITORY/releases/download/release-$MC/$jar"
           notes="$(printf '**[Download EngineerClient for Minecraft %s](%s)** · %s\n\nPut the jar in your `mods` folder. Needs Fabric, Fabric API and Fabric Language Kotlin. Remove Odin, it is built in.' "$MC" "$url" "$EC_VERSION")"
-          extra=; [ -f .github/update.json ] && extra=.github/update.json
+          extra=; [ -f .github/update.json ] && { jq --arg s "$(sha256sum "$jar" | cut -d' ' -f1)" '.sha256 = $s' .github/update.json > update.json; extra=update.json; }
           gh release create "release-$MC" "$jar" $extra --target "$GITHUB_SHA" \
             --title "EngineerClient" \
             --notes "$notes" $latest
