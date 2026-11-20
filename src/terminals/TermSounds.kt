@@ -4,7 +4,7 @@ import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.utils.playSoundAtPlayer
@@ -71,6 +71,6 @@ object TermSounds {
             if (!replacing || !DungeonUtils.inDungeons) return@on
             if (gateRegex.matches(message) || coreRegex.matches(message)) playSoundAtPlayer(SoundEvents.NOTE_BLOCK_PLING.value())
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { melodyTicks = 0 }) { Terminals.soundsOn || Terminals.melodyAlert }
     }
 }
