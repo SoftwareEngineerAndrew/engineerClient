@@ -4,9 +4,8 @@ import com.engineerclient.EngineerClient.mc
 import com.adm.events.PacketEvent
 import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.onReceive
+import com.adm.utils.hexText
 import com.adm.utils.noControlCodes
-import com.adm.utils.setSubtitle
-import com.adm.utils.setTitle
 import com.adm.utils.skyblock.dungeon.DungeonClass
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket
@@ -33,7 +32,10 @@ object TermTitles {
         }
         val (name, action, type, current, total) = titleRegex.find(plain)?.destructured ?: return
         if (Terminals.phaseDone && current == total) return show("§aPhase Done!")
-        if (Terminals.selfOnly && name != mc.player?.name?.string) return
+        if ((Terminals.selfOnly || Terminals.hideOthers) && name != mc.player?.name?.string) {
+            if (Terminals.hideOthers) cancel()
+            return
+        }
         val replace = when (type) {
             "terminal" -> Terminals.replaceTerminal
             "lever" -> Terminals.replaceLever
@@ -49,9 +51,9 @@ object TermTitles {
             val title = Terminals.customTitle
                 .replace("{name}", name).replace("{action}", action).replace("{type}", type)
                 .replace("{current}", cur).replace("{total}", total)
-                .replace("{class}", clazz?.let { "§${it.colorCode}${it.name.lowercase().replaceFirstChar(Char::uppercase)}" } ?: "")
+                .replace("{class}", clazz?.let { "${it.hexCode}${it.name.lowercase().replaceFirstChar(Char::uppercase)}" } ?: "")
                 .replace(colorCode, "§$1").ifEmpty { return@execute }
-            if (Terminals.useSubtitle) setSubtitle(title) else setTitle(title)
+            display(title)
         }
     }
 
@@ -63,6 +65,12 @@ object TermTitles {
 
     private fun PacketEvent.Receive.show(title: String) {
         cancel()
-        mc.execute { if (Terminals.useSubtitle) setSubtitle(title) else setTitle(title) }
+        mc.execute { display(title) }
+    }
+
+    private fun display(title: String) {
+        val hud = mc.gui.hud
+        hud.setTimes(0, Terminals.titleDuration, 5)
+        if (Terminals.useSubtitle) hud.setSubtitle(hexText(title)) else hud.setTitle(hexText(title))
     }
 }

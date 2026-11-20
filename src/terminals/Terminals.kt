@@ -116,6 +116,8 @@ object Terminals : Module(
     private val titlesDrop by DropdownSetting("Titles", false, desc = "Custom completion titles.")
     val titles by BooleanSetting("Enable Titles", false, desc = "Replaces Hypixel's terminal, lever and device titles.").withDependency { titlesDrop }
     val selfOnly by BooleanSetting("Self Only", false, desc = "Only your own.").withDependency { titlesDrop }
+    val hideOthers by BooleanSetting("Hide Others", false, desc = "Hides teammates' titles, keeps your own.").withDependency { titlesDrop }
+    val titleDuration by NumberSetting("Title Duration", 20, 5..100, 5, desc = "How long a title stays.", unit = " ticks").withDependency { titlesDrop }
     val useSubtitle by BooleanSetting("Use Subtitle", true, desc = "As a subtitle instead of a title.").withDependency { titlesDrop }
     val replaceTerminal by BooleanSetting("Replace Terminal", true, desc = "Terminal titles.").withDependency { titlesDrop }
     val replaceLever by BooleanSetting("Replace Lever", true, desc = "Lever titles.").withDependency { titlesDrop }
