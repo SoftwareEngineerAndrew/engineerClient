@@ -139,6 +139,13 @@ object Visibility : Module(
     private val hideDamageNumbers by BooleanSetting("Hide Damage Numbers", false, desc = "Hides the damage numbers that pop out of mobs.").withDependency { cleanupDropdown }
     private enum class DamageHide { ALL, CRITS, NON_CRITS }
     private val hideDamageWhich by SelectorSetting("Hide Which Damage", DamageHide.ALL, desc = "Every damage number, only crits or only non-crits.").withDependency { cleanupDropdown && hideDamageNumbers }
+    private enum class DamageWhere { EVERYWHERE, CLEAR_ONLY, BOSS_ONLY }
+    private val hideDamageWhere by SelectorSetting("Hide Damage Where", DamageWhere.EVERYWHERE, desc = "Hides damage numbers everywhere, only in the dungeon clear or only in boss.").withDependency { cleanupDropdown && hideDamageNumbers }
+    private fun hidesDamageHere() = when (hideDamageWhere) {
+        DamageWhere.EVERYWHERE -> true
+        DamageWhere.CLEAR_ONLY -> DungeonUtils.inClear
+        DamageWhere.BOSS_ONLY -> DungeonUtils.inBoss
+    }
     private val compactDamage by BooleanSetting("Compact Damage", false, desc = "Damage numbers in short form, like 1.2M.").withDependency { cleanupDropdown }
     private val hideSheep by BooleanSetting("Hide Dungeon Sheep", true, desc = "Sheep are not drawn in dungeons.").withDependency { cleanupDropdown }
 
@@ -374,7 +381,7 @@ object Visibility : Module(
     @JvmStatic fun hidesDamageNumber(entity: Entity): Boolean {
         if (!enabled || entity !is ArmorStand) return false
         if (orbs.isNotEmpty() && hideHealerOrbs && orbIds.contains(entity.id)) return true
-        val mask = (if (hideDamageNumbers) TAG_DAMAGE else 0) or (if (hideZeroHpTags) TAG_ZERO_HP else 0) or (if (hideHealerOrbs) TAG_ORB else 0)
+        val mask = (if (hideDamageNumbers && hidesDamageHere()) TAG_DAMAGE else 0) or (if (hideZeroHpTags) TAG_ZERO_HP else 0) or (if (hideHealerOrbs) TAG_ORB else 0)
         if (mask == 0 || !entity.isInvisible) return false
         val name = entity.customName ?: return false
         val kind = tagKinds[entity, name] and mask
