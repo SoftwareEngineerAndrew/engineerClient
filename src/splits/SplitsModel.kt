@@ -119,7 +119,16 @@ class SplitTracker {
     }
 
     /** The split with this label, if it has started. */
-    fun split(label: String): Split? = splits().firstOrNull { it.label == label }
+    fun split(label: String): Split? {
+        for (i in PHASES.indices) {
+            if (PHASES[i].label != label) continue
+            val from = starts[i] ?: return null
+            var next: Stamp? = null
+            for (j in i + 1 until PHASES.size) { val s = starts[j]; if (s != null) { next = s; break } }
+            return Split(PHASES[i].label, from, next ?: end)
+        }
+        return null
+    }
 
     private class Phase(val label: String, val starts: (String) -> Boolean)
 
