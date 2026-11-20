@@ -9,6 +9,9 @@ import com.adm.events.core.onReceive
 import com.adm.utils.equalsOneOf
 import com.adm.utils.noControlCodes
 import com.adm.utils.startsWithOneOf
+import net.hypixel.data.type.GameType
+import net.hypixel.modapi.HypixelModAPI
+import net.hypixel.modapi.packet.impl.clientbound.event.ClientboundLocationPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSetObjectivePacket
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket
@@ -30,7 +33,24 @@ object LocationUtils {
 
     private val lobbyRegex = Regex("\\d\\d/\\d\\d/\\d\\d (\\w{0,6}) *")
 
+    // A location sent while switching servers (no player yet) belongs to the world that is about to load.
+    private var pendingArea: Island? = null
+    private var pendingSkyblock = false
+
     init {
+        HypixelModAPI.getInstance().subscribeToEventPacket(ClientboundLocationPacket::class.java)
+        HypixelModAPI.getInstance().createHandler(ClientboundLocationPacket::class.java) { packet ->
+            val skyblock = packet.serverType.getOrNull() == GameType.SKYBLOCK
+            val area = if (skyblock) packet.map.getOrNull()?.let(::islandFromMap) ?: Island.Unknown else Island.Unknown
+            if (mc.player == null) {
+                pendingArea = area
+                pendingSkyblock = skyblock
+                return@createHandler
+            }
+            if (skyblock) isInSkyblock = true
+            if (area !== Island.Unknown && currentArea !== area) currentArea = area
+        }
+
         onReceive<ClientboundPlayerInfoUpdatePacket> {
             if (!isCurrentArea(Island.Unknown) || actions().none { it.equalsOneOf(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME) }) return@onReceive
             val area = entries().find { it.displayName?.string?.startsWithOneOf("Area: ", "Dungeon: ") == true }?.displayName?.string ?: return@onReceive
@@ -49,11 +69,17 @@ object LocationUtils {
         }
 
         on<LevelEvent.Load> {
-            currentArea = if (mc.hasSingleplayerServer()) Island.SinglePlayer else Island.Unknown
-            isInSkyblock = false
+            currentArea = if (mc.hasSingleplayerServer()) Island.SinglePlayer else pendingArea ?: Island.Unknown
+            isInSkyblock = pendingSkyblock
             lobbyId = null
+            pendingArea = null
+            pendingSkyblock = false
         }
     }
+
+    private fun islandFromMap(map: String): Island =
+        if (map == "Dungeon") Island.Dungeon
+        else Island.entries.firstOrNull { it.displayName.equals(map, true) } ?: Island.Unknown
 
     fun isCurrentArea(area: Island): Boolean =
         currentArea == Island.SinglePlayer || currentArea == area
