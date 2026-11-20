@@ -8,6 +8,7 @@ import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.decoration.ArmorStand;
@@ -32,6 +33,11 @@ public abstract class EntityRendererMixin<T extends Entity> {
                 com.engineerclient.render.Visibility.hidesDamageNumber(entity) ||
                 !Visibility.INSTANCE.shouldRenderPlayer(entity) ||
                 shouldHideDyingArmorStand(entity));
+    }
+
+    @ModifyReturnValue(method = "getNameTag", at = @At("RETURN"))
+    private Component ec$compactDamage(Component name, T entity) {
+        return Visibility.damageName(entity, name);
     }
 
     @Unique

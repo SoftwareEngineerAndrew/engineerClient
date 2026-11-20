@@ -29,6 +29,7 @@ import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.Color
 import com.adm.utils.skyblock.dungeon.DungeonUtils
+import com.adm.utils.noControlCodes
 import com.adm.utils.texture
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
 import net.fabricmc.fabric.api.client.screen.v1.Screens
@@ -136,6 +137,9 @@ object Visibility : Module(
     private val hideAllPlayers by BooleanSetting("Hide All Players", false, desc = "Hides players at any distance.").withDependency { cleanupDropdown && hidePlayers }
     private val playerDistance by NumberSetting("Hide Players Distance", 3f, 0..32, .5, "Players this close are hidden.", unit = " blocks").withDependency { cleanupDropdown && hidePlayers && !hideAllPlayers }
     private val hideDamageNumbers by BooleanSetting("Hide Damage Numbers", false, desc = "Hides the damage numbers that pop out of mobs.").withDependency { cleanupDropdown }
+    private enum class DamageHide { ALL, CRITS, NON_CRITS }
+    private val hideDamageWhich by SelectorSetting("Hide Which Damage", DamageHide.ALL, desc = "Every damage number, only crits or only non-crits.").withDependency { cleanupDropdown && hideDamageNumbers }
+    private val compactDamage by BooleanSetting("Compact Damage", false, desc = "Damage numbers in short form, like 1.2M.").withDependency { cleanupDropdown }
     private val hideSheep by BooleanSetting("Hide Dungeon Sheep", true, desc = "Sheep are not drawn in dungeons.").withDependency { cleanupDropdown }
 
     private val menusDropdown by DropdownSetting("Menus", desc = "Title, Esc, loading and container screens.")
@@ -357,6 +361,14 @@ object Visibility : Module(
             if (stand !== tag && stand.getItemBySlot(EquipmentSlot.HEAD).item == Items.PLAYER_HEAD && nearOrbTag(stand, tag)) addOrb(stand)
     }
 
+    private class DamageName(val name: Component, val plain: String, val crit: Boolean) {
+        val compact: Component by lazy(LazyThreadSafetyMode.NONE) { compactDamage(this) }
+    }
+
+    private val damageNames = com.adm.utils.NameMemo { name ->
+        name.string.takeIf { '❤' !in it && DAMAGE.matches(it) }?.let { DamageName(name, it, '✧' in it) }
+    }
+
     @JvmStatic fun hidesDamageNumber(entity: Entity): Boolean {
         if (!enabled || entity !is ArmorStand) return false
         if (orbs.isNotEmpty() && hideHealerOrbs && orbIds.contains(entity.id)) return true
@@ -365,7 +377,65 @@ object Visibility : Module(
         val name = entity.customName ?: return false
         val kind = tagKinds[entity, name] and mask
         if (kind == TAG_ORB) noteOrbTag(entity)
+        if (kind == TAG_DAMAGE) {
+            val damage = damageNames[entity, name] ?: return false
+            return when (hideDamageWhich) {
+                DamageHide.ALL -> true
+                DamageHide.CRITS -> damage.crit
+                DamageHide.NON_CRITS -> !damage.crit
+            }
+        }
         return kind != 0
+    }
+
+    @JvmStatic fun damageName(entity: Entity, shown: Component): Component {
+        if (!compactDamage || !enabled || entity !is net.minecraft.world.entity.decoration.ArmorStand || !entity.isInvisible) return shown
+        val name = entity.customName ?: return shown
+        return damageNames[entity, name]?.compact ?: shown
+    }
+
+    private val CRIT_COLORS = arrayOf(ChatFormatting.WHITE, ChatFormatting.WHITE, ChatFormatting.YELLOW, ChatFormatting.GOLD, ChatFormatting.RED, ChatFormatting.RED)
+
+    private fun compactDamage(d: DamageName): Component {
+        val raw = d.plain
+        val text = raw.noControlCodes
+        val first = text.indexOfFirst { it.isDigit() }
+        if (first < 0) return d.name
+        var last = first
+        var value = 0L
+        for (i in first until text.length) {
+            val c = text[i]
+            if (c.isDigit()) { value = value * 10 + (c - '0'); last = i; if (value > 1_000_000_000_000L) return d.name }
+            else if (c != ',') break
+        }
+        // Already short or not a plain whole number.
+        if (value < 1000 || last + 1 < text.length && text[last + 1].let { it == '.' || it.isLetter() }) return d.name
+        val (unit, suffix) = when {
+            value >= 1_000_000_000L -> 1_000_000_000L to "B"
+            value >= 1_000_000L -> 1_000_000L to "M"
+            else -> 1_000L to "k"
+        }
+        val tenths = value * 10 / unit
+        val short = buildString {
+            append(text, 0, first)
+            append(tenths / 10)
+            if (tenths % 10 != 0L) append('.').append(tenths % 10)
+            append(suffix)
+            append(text, last + 1, text.length)
+        }
+        if (d.crit) {
+            val out = Component.empty()
+            for (i in short.indices) out.append(Component.literal(short[i].toString()).withStyle(CRIT_COLORS[i % CRIT_COLORS.size]))
+            return out
+        }
+        val style = d.name.visit({ style, part -> if (part.any { it.isDigit() }) java.util.Optional.of(style) else java.util.Optional.empty() }, Style.EMPTY).orElse(Style.EMPTY)
+        // A name sent as legacy text keeps its colour code.
+        var code = ""
+        var at = 0
+        while (at < raw.length && !raw[at].isDigit()) {
+            if (raw[at] == '§' && at + 1 < raw.length) { code = raw.substring(at, at + 2); at += 2 } else at++
+        }
+        return Component.literal(code + short).setStyle(style)
     }
     @JvmStatic fun lavaAsWater() = on(LAVA)
     private var lavaShown = false
