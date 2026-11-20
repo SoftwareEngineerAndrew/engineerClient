@@ -9,9 +9,14 @@ import com.adm.features.impl.dungeon.dungeonwaypoints.DungeonWaypoints
 import com.adm.utils.Color
 import com.adm.utils.Colors
 import com.adm.utils.modMessage
-import com.adm.utils.render.drawCustomBeacon
+import com.adm.utils.render.drawBeaconBeam
+import com.adm.utils.render.drawText
+import com.adm.utils.render.drawWireFrameBox
 import net.minecraft.core.BlockPos
+import net.minecraft.world.phys.AABB
+import net.minecraft.world.phys.Vec3
 import kotlin.math.abs
+import kotlin.math.max
 
 // Subscribed while Waypoints is on.
 object TemporaryWaypoints {
@@ -40,15 +45,21 @@ object TemporaryWaypoints {
             val player = mc.player
             val now = System.currentTimeMillis()
             val arrival = DungeonWaypoints.removeOnArrival
-            temporaryWaypoints.removeAll {
-                if (now > it.timeAdded + it.duration) return@removeAll true
+            val iterator = temporaryWaypoints.iterator()
+            while (iterator.hasNext()) {
+                val w = iterator.next()
+                if (now > w.timeAdded + w.duration) { iterator.remove(); continue }
                 // Arrival only counts once you have been away from it, so one sent where you stand stays.
-                if (arrival && it.chat && player != null) {
-                    if (player.blockPosition().distSqr(it.blockPos) >= 25.0) it.away = true
-                    else if (it.away) return@removeAll true
+                if (arrival && w.chat && player != null) {
+                    if (player.blockPosition().distSqr(w.blockPos) >= 25.0) w.away = true
+                    else if (w.away) { iterator.remove(); continue }
                 }
-                drawCustomBeacon(it.name, it.blockPos, it.color)
-                false
+                if (player == null) continue
+                val dist = player.blockPosition().distManhattan(w.blockPos)
+                if (dist != w.labelDist) { w.labelDist = dist; w.label = "${w.name} §f(§3${dist}m§f)" }
+                drawWireFrameBox(w.box, w.color, depth = false)
+                drawBeaconBeam(w.blockPos, w.color)
+                drawText(w.label, w.labelPos, max(1f, dist * 0.05f), false)
             }
         }
 
@@ -87,5 +98,9 @@ object TemporaryWaypoints {
         val timeAdded: Long = System.currentTimeMillis()
     ) {
         var away = false
+        val box = AABB(blockPos)
+        val labelPos: Vec3 = Vec3.atCenterOf(blockPos).add(0.0, 1.7, 0.0)
+        var labelDist = -1
+        var label = ""
     }
 }
