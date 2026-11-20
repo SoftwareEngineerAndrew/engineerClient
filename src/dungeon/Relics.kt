@@ -94,6 +94,7 @@ object Relics : Module(
 
     private val RELICS = Relic.values()
     private const val THROES_TO_RELICS = 59
+    private const val THROES_MAX_Y = 100.0
 
     private fun nearOpenCauldron(x: Double, z: Double): Boolean {
         for (r in RELICS) if (r !in placed && hypot(x - r.cauldron.x - 0.5, z - r.cauldron.z - 0.5) < 1.5) return true
@@ -175,10 +176,11 @@ object Relics : Module(
             }
         }
 
-        // His death throes open with this sound; the relics appear on his death, 59 ticks after it.
+        // His death throes open with this sound at the arena's middle; the relics appear on his death, 59 ticks after it.
+        // Players are often already down on the relic floor by then, so the sound's height tells it from Storm's, not the player's phase.
         onReceive<ClientboundSoundPacket> {
-            if (spawnIn != 0 || volume != 15f || pitch != 1f || sound.value() != SoundEvents.WITHER_HURT) return@onReceive
-            if (DungeonUtils.floor == Floor.M7 && DungeonUtils.getF7Phase() == M7Phases.P4) spawnIn = THROES_TO_RELICS
+            if (spawnIn != 0 || volume != 15f || pitch != 1f || y > THROES_MAX_Y || sound.value() != SoundEvents.WITHER_HURT) return@onReceive
+            if (DungeonUtils.floor == Floor.M7 && DungeonUtils.inBoss) spawnIn = THROES_TO_RELICS
         }
 
         on<TickEvent.Server> {
