@@ -27,9 +27,11 @@ import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.features.impl.dungeon.map.tile.DoorType
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
 import com.adm.features.impl.dungeon.map.tile.MapCheckmark
+import com.adm.features.impl.dungeon.map.tile.RoomRotation
 import com.adm.features.impl.dungeon.map.tile.RoomType
 import com.adm.utils.Color
 import com.adm.utils.Colors
+import com.adm.utils.NameMemo
 import com.adm.utils.alert
 import com.adm.utils.itemId
 import com.adm.utils.itemUUID
@@ -56,6 +58,7 @@ import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import com.mojang.blaze3d.platform.InputConstants
 import java.io.File
+import java.util.IdentityHashMap
 
 /**
  * Boxes that group a room's starred mobs, made on undonecoffee.com/brroles and pulled from there.
@@ -174,6 +177,7 @@ object BrWaypoints2 : Module(
 
     // ADM's Highlight: which name tags are starred mobs, and how a tag finds its mob.
     private val MOB_NAMES = listOf("Lurker", "Dreadlord", "Souleater", "Zombie", "Skeleton", "Skeletor", "Sniper", "Super Archer", "Spider", "Fels", "Withermancer", "Lost Adventurer", "Angry Archaeologist", "Frozen Adventurer")
+    private val starredTag = NameMemo({ n -> val s = n.string; MOB_NAMES.any { it in s } && STARRED.matches(s) }, 4096)
     private val STARRED = Regex("^.*✯ .*\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?.?❤$")
 
     private val PURPLE = Color(170, 0, 170, 1f)
@@ -199,7 +203,7 @@ object BrWaypoints2 : Module(
             BrRoles.newRun(dungeonOver = wasInDungeon)
             wasInDungeon = false
             entryDoors.clear(); noPlanSaid.clear(); walkedIn.clear(); myTile = null
-            boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear()
+            boxes.clear(); loadedRooms.clear(); mobs.clear(); byId.clear(); starredTag.clear(); transforms.clear()
             rushing = false; rushRoom = null; rushed.clear(); startDoor = false; barriers.clear(); witherSides.clear(); path = emptyMap(); exits = emptyMap(); entrances = emptyMap(); lastRoom = null
             beforeFairy = null; witherSeen = false
         }
@@ -294,8 +298,7 @@ object BrWaypoints2 : Module(
         val level = mc.level ?: return
         for (tag in level.entitiesForRendering()) {
             if (tag !is ArmorStand || !tag.isAlive) continue
-            val name = tag.name.string
-            if (MOB_NAMES.none { it in name } || !STARRED.matches(name)) continue
+            if (!starredTag[tag, tag.name]) continue
             val mob = level.getEntities(tag, tag.boundingBox.move(0.0, -1.0, 0.0)) { isMob(it) }.firstOrNull() ?: continue
             val known = byId[mob.id]
             if (known != null) {
@@ -624,6 +627,7 @@ object BrWaypoints2 : Module(
      * roles, or with no plan for the door the rush came in by, every box purple with its number.
      */
     private fun drawn(): List<Drawn> {
+        numberAll()
         val out = ArrayList<Drawn>()
         val live = shown()
         // With Recolor Done Boxes, the rooms' done boxes too, marked done; else only the live ones.
@@ -634,17 +638,17 @@ object BrWaypoints2 : Module(
             // Dropped off the rush to clear: roles are off for you there.
             val plan = if (!BrRoles.active || BrRoles.youDropped(late)) null else planOf(room)
             if (plan == null) {
-                list.mapTo(out) { Drawn(it, PURPLE, "§d" + number(it), false, it !in liveSet) }
+                list.mapTo(out) { Drawn(it, PURPLE, "§d" + numbered(it), false, it !in liveSet) }
                 continue
             }
             if (BrRoles.playing(late) == null) continue
-            val looks = list.map { it to BrRoles.look(plan, number(it), late) }
+            val looks = list.map { it to BrRoles.look(plan, numbered(it), late) }
             val mine = looks.mapNotNull { (b, l) -> (l as? BrRoles.Look.Mine)?.let { b to it.order } }.sortedBy { it.second }
             // The next to kill: your first box still alive.
             val next = mine.firstOrNull { it.first in liveSet }?.first
             for ((b, order) in mine) out += Drawn(b, GREEN, "§a$order", b === next, b !in liveSet)
             for ((b, l) in looks) if (l is BrRoles.Look.Stack) out += Drawn(b, GOLD, "§6stack", false, b !in liveSet)
-            for ((b, l) in looks) if (l == null) out += Drawn(b, PURPLE, "§d" + number(b), false, b !in liveSet)
+            for ((b, l) in looks) if (l == null) out += Drawn(b, PURPLE, "§d" + numbered(b), false, b !in liveSet)
         }
         return out
     }
@@ -659,7 +663,7 @@ object BrWaypoints2 : Module(
         val late = late(name)
         // A miniboss room (one mob, marked on the site): everyone kills its box, from any door.
         if (BrRoles.isMini(name)) {
-            val all = boxes.filter { it.room == name }.map { number(it) }
+            val all = boxes.filter { it.room == name }.map { numbered(it) }
             val n = maxOf(1, BrRoles.planCount(late))
             return BrRoles.Plan(List(n) { all }, List(n) { emptyList() })
         }
@@ -795,7 +799,18 @@ object BrWaypoints2 : Module(
     }
 
     /** The rotation and clay block a room's boxes are placed by. */
-    private fun transform(room: DungeonRoom) = "${room.rotation}|${room.clayPos}"
+    private fun transform(room: DungeonRoom): String {
+        val m = transforms[room]
+        if (m != null && m.rotation === room.rotation && m.clay === room.clayPos) return m.text
+        val text = "${room.rotation}|${room.clayPos}"
+        transforms[room] = Transform(room.rotation, room.clayPos, text)
+        return text
+    }
+
+    private class Transform(val rotation: RoomRotation?, val clay: BlockPos?, val text: String)
+    private val transforms = IdentityHashMap<DungeonRoom, Transform>()
+    private val placedNow = HashMap<String, DungeonRoom>()
+    private val roomNames = LinkedHashSet<String>()
 
     /**
      * Puts each saved room's boxes into the world once ADM has worked the room out, and puts them
@@ -803,9 +818,16 @@ object BrWaypoints2 : Module(
      * out are kept where they are and saved now.
      */
     private fun loadRooms() {
-        val names = saved.keys + boxes.filter { !it.saved }.mapNotNull { it.room }
-        for (name in names.toSet()) {
-            val room = placed(name) ?: continue
+        placedNow.clear()
+        for (r in DungeonScan.rooms) {
+            val n = r.name ?: continue
+            if (r.rotation != null && r.clayPos != null && r.tiles.size == (r.data?.shape?.tileAmount ?: r.tiles.size)) placedNow.putIfAbsent(n, r)
+        }
+        roomNames.clear()
+        roomNames.addAll(saved.keys)
+        for (b in boxes) if (!b.saved) b.room?.let { roomNames += it }
+        for (name in roomNames) {
+            val room = placedNow[name] ?: continue
             val t = transform(room)
             if (loadedRooms[name] == t) continue
             boxes.removeAll { it.room == name && it.saved }
@@ -848,6 +870,21 @@ object BrWaypoints2 : Module(
      * in every room, with no gaps (deleting one moves the ones after it down).
      */
     private fun number(box: Box) = boxes.filter { it.room == box.room }.indexOf(box) + 1
+
+    private val numbers = IdentityHashMap<Box, Int>()
+    private val roomCounts = HashMap<String?, Int>()
+
+    /** [number] for every box at once, rebuilt each frame by [drawn]. */
+    private fun numberAll() {
+        numbers.clear(); roomCounts.clear()
+        for (b in boxes) {
+            val n = (roomCounts[b.room] ?: 0) + 1
+            roomCounts[b.room] = n
+            numbers[b] = n
+        }
+    }
+
+    private fun numbered(box: Box) = numbers[box] ?: number(box)
 
     /** The saved boxes: per room, each as x1 y1 z1 x2 y2 z2 and its number (its place in the room). */
     private fun read(): MutableMap<String, MutableList<IntArray>> = runCatching {
