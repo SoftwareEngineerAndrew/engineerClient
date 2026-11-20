@@ -37,6 +37,7 @@ import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.block.state.properties.AttachFace
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.HitResult
+import java.util.UUID
 
 object Dungeonbreaker : Module(
     name = "Dungeonbreaker",
@@ -138,7 +139,7 @@ object Dungeonbreaker : Module(
         BlockPos(94, 124, 113), BlockPos(106, 124, 113), BlockPos(23, 132, 138), BlockPos(27, 124, 127),
         BlockPos(2, 122, 55), BlockPos(14, 122, 55), BlockPos(84, 121, 34), BlockPos(86, 128, 46),
     )
-    private const val REDSTONE_KEY = "fed95410-aba1-39df-9b95-1d4f361eb66e"
+    private val REDSTONE_KEY = UUID.fromString("fed95410-aba1-39df-9b95-1d4f361eb66e")
 
     /** Blocks the Dungeon Breaker can take; anything else the server puts back, so it isn't hit at all. */
     private fun canInstantMine(level: BlockGetter, pos: BlockPos, state: BlockState): Boolean {
@@ -150,7 +151,7 @@ object Dungeonbreaker : Module(
     }
 
     private fun isRedstoneKey(level: BlockGetter, pos: BlockPos): Boolean =
-        (level.getBlockEntity(pos) as? SkullBlockEntity)?.ownerProfile?.partialProfile()?.id?.toString() == REDSTONE_KEY
+        (level.getBlockEntity(pos) as? SkullBlockEntity)?.ownerProfile?.partialProfile()?.id == REDSTONE_KEY
 
     private fun holdsLever(level: BlockGetter, pos: BlockPos): Boolean = Direction.entries.any { dir ->
         val state = level.getBlockState(pos.relative(dir))
