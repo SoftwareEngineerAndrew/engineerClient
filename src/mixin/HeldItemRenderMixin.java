@@ -1,6 +1,7 @@
 package com.engineerclient.mixin;
 
 import com.engineerclient.render.ItemAnimations;
+import com.engineerclient.skyblock.ItemTweaks;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -45,6 +46,12 @@ public class HeldItemRenderMixin {
     @ModifyArg(method = "submitArmWithItem", index = 0, at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/item/ItemStackRenderState;submit(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;III)V"))
     private PoseStack ec$sizeItem(PoseStack pose) {
         return ItemAnimations.sizeItem(pose);
+    }
+
+    @ModifyArg(method = "submitArmWithItem", index = 0, at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/item/ItemStackRenderState;submit(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/SubmitNodeCollector;III)V"))
+    private PoseStack ec$smallHead(PoseStack pose, @Local(argsOnly = true) ItemStack stack) {
+        if (ItemTweaks.smallHead(stack)) pose.scale(0.875f, 0.875f, 0.875f);
+        return pose;
     }
 
     @ModifyArg(method = "renderPlayerHand", index = 0, at = {

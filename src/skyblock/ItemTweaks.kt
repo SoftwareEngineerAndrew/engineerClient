@@ -29,7 +29,7 @@ object ItemTweaks : Module(
     private val removeGearScore by BooleanSetting("Remove Gear Score", false, desc = "Drops the Gear Score line from dungeon item tooltips.")
     private val noPearlCooldown by BooleanSetting("Disable Ender Pearl Cooldown", false, desc = "Ender pearls never show or wait on the vanilla cooldown.")
     private val itemQuality by BooleanSetting("Item Quality", true, desc = "Adds a dungeon item's stat boost and floor to its tooltip.")
-    private val oldPlayerHead by BooleanSetting("Old Player Head Size", true, desc = "Draws player heads in slots at their smaller 1.8 size.")
+    private val oldPlayerHead by BooleanSetting("Old Player Head Size", true, desc = "Draws player heads in slots and in hand at their smaller 1.8 size.")
     private val hideVanillaEnchants by BooleanSetting("Hide Vanilla Enchants", true, desc = "Drops the vanilla enchantment lines above SkyBlock lore.")
     private val noHotbarScroll by BooleanSetting("Disable Hotbar Scroll", true, desc = "The scroll wheel no longer changes your hotbar slot.")
     private val oldMasterStars by BooleanSetting("Old Master Stars", false, desc = "Master stars as red stars instead of a number.")
