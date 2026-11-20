@@ -23,6 +23,7 @@ import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.ParticleEvent
 import com.adm.events.TickEvent
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.features.Category
@@ -236,6 +237,7 @@ object Visibility : Module(
             if (lavaAsWater() != lavaShown) { lavaShown = lavaAsWater(); mc.level?.let { mc.levelRenderer.invalidateCompiledGeometry(it, mc.options, mc.gameRenderer.mainCamera(), mc.blockColors) } }
         }
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
+        on<LevelEvent.Load> { damageNames.clear(); ScoreboardNametags.clearMemos() }
         onReceive<ClientboundSetScorePacket> { ScoreboardLines.markDirty() }
         onReceive<ClientboundResetScorePacket> { ScoreboardLines.markDirty() }
         onReceive<ClientboundSetObjectivePacket> { ScoreboardLines.markDirty() }
@@ -295,8 +297,8 @@ object Visibility : Module(
         }
     }
 
-    @JvmStatic fun drawsVignette() = !enabled || !noVignette
-    @JvmStatic fun hidesPortalOverlay() = enabled && hidePortalOverlay
+    @JvmStatic fun drawsVignette() = !on(VIGNETTE)
+    @JvmStatic fun hidesPortalOverlay() = on(PORTAL)
 
     // "1,234", "✧1,234✧" and crits like "✯1,234✯", with Hypixel's separators and icons around them.
     private val DAMAGE = Regex("""^[^\p{L}]*\d[\d,.]*[kKmMbB]?[^\p{L}]*$""")
@@ -308,22 +310,22 @@ object Visibility : Module(
         val name = entity.customName ?: return false
         return damageNames[entity, name]
     }
-    @JvmStatic fun lavaAsWater() = enabled && lavaAsWater
+    @JvmStatic fun lavaAsWater() = on(LAVA)
     private var lavaShown = false
-    @JvmStatic fun drawsWaterOverlay() = !enabled || !noWaterOverlay
-    @JvmStatic fun drawsInWallOverlay() = !enabled || !noSuffocationOverlay
-    @JvmStatic fun drawsEffectHud() = !enabled || !hidePotionHud
-    fun hideInventoryEffects() = enabled && hideInventoryEffects
+    @JvmStatic fun drawsWaterOverlay() = !on(WATER)
+    @JvmStatic fun drawsInWallOverlay() = !on(IN_WALL)
+    @JvmStatic fun drawsEffectHud() = !on(EFFECT_HUD)
+    fun hideInventoryEffects() = on(INVENTORY_EFFECTS)
     fun noFog(): Boolean {
-        if (!enabled || !noFog) return false
+        if (!on(FOG)) return false
         val player = mc.player ?: return true
         return mc.gameRenderer.mainCamera().fluidInCamera == FogType.NONE &&
-            (noBlindness || !player.hasEffect(MobEffects.BLINDNESS)) && !player.hasEffect(MobEffects.DARKNESS)
+            (on(BLINDNESS) || !player.hasEffect(MobEffects.BLINDNESS)) && !player.hasEffect(MobEffects.DARKNESS)
     }
-    @JvmStatic fun hidesBlindness() = enabled && noBlindness
-    @JvmStatic fun hidesNausea() = enabled && noNausea
-    fun fullbright() = enabled && fullbright
-    fun noTextShadow() = enabled && noTextShadow
+    @JvmStatic fun hidesBlindness() = on(BLINDNESS)
+    @JvmStatic fun hidesNausea() = on(NAUSEA)
+    fun fullbright() = on(FULLBRIGHT)
+    fun noTextShadow() = on(TEXT_SHADOW)
 
     private class KeptAdvance(val glyph: BakedGlyph, val width: GlyphInfo) : BakedGlyph {
         override fun info() = width
@@ -359,7 +361,7 @@ object Visibility : Module(
 
     @JvmStatic
     fun shownTime(): Long {
-        if (!enabled || !timeChanger) return -1L
+        if (!on(TIME)) return -1L
         val mode = timeMode
         if (mode == Time.CUSTOM) return customTime.toLong()
         if (mode != Time.REAL_TIME) return mode.ticks
@@ -379,13 +381,13 @@ object Visibility : Module(
     fun hidesParticle(particle: Particle): Boolean = enabled &&
         (hideAllParticles || hideBlockBreak && particle is TerrainParticle || hideSmoke && particle is SmokeParticle)
 
-    fun hidesEntityFire() = enabled && hideEntityFire
+    fun hidesEntityFire() = on(ENTITY_FIRE)
 
-    fun disablesGlowing() = enabled && disableGlowing
+    fun disablesGlowing() = on(GLOWING)
 
-    fun hidesFireOverlay() = enabled && disableFireOverlay
+    fun hidesFireOverlay() = on(FIRE_OVERLAY)
 
-    fun hidesDeathAnimation() = enabled && hideDeathAnimation
+    fun hidesDeathAnimation() = on(DEATH_ANIMATION)
 
     fun hidesDyingArmorStands() = enabled && hideDyingMobsArmorStand
 
@@ -487,7 +489,7 @@ object Visibility : Module(
 
     fun logsHiddenChat(): Boolean = logHidden
 
-    fun blackSkyActive(): Boolean = enabled && blackSky
+    fun blackSkyActive(): Boolean = on(BLACK_SKY)
 
     fun hidesItemNames(): Boolean = enabled && (hideItemNames || itemNameHud.enabled)
 
@@ -535,9 +537,9 @@ object Visibility : Module(
 
     // In a terminal the glint is how you see what's been clicked; the solvers read the component, not the render.
     fun hidesGlint(context: ItemDisplayContext): Boolean =
-        enabled && noGlint && !(context == ItemDisplayContext.GUI && (TerminalUtils.currentTerm != null || mc.gui.screen() is TermSimGUI))
+        on(GLINT) && !(context == ItemDisplayContext.GUI && (TerminalUtils.currentTerm != null || mc.gui.screen() is TermSimGUI))
 
-    fun hidesArmorGlint(): Boolean = enabled && noGlint
+    fun hidesArmorGlint(): Boolean = on(GLINT)
 
     // Three mixins read this in the same extract pass, so they agree: the game throws if one frame blurs twice.
     fun blursGui(): Boolean = enabled && blurInGui && mc.gui.screen() != null && mc.level != null
@@ -570,5 +572,45 @@ object Visibility : Module(
         ScoreboardLines.hideLines = false
         ScoreboardLines.hideAll = false
         ScoreboardNametags.moving = false
+    }
+
+    // Read by mixins every frame, item, glyph or entity: one int instead of the module and switch delegates each time.
+    private const val VIGNETTE = 1
+    private const val PORTAL = 1 shl 1
+    private const val LAVA = 1 shl 2
+    private const val WATER = 1 shl 3
+    private const val IN_WALL = 1 shl 4
+    private const val EFFECT_HUD = 1 shl 5
+    private const val INVENTORY_EFFECTS = 1 shl 6
+    private const val FOG = 1 shl 7
+    private const val BLINDNESS = 1 shl 8
+    private const val NAUSEA = 1 shl 9
+    private const val FULLBRIGHT = 1 shl 10
+    private const val TEXT_SHADOW = 1 shl 11
+    private const val TIME = 1 shl 12
+    private const val ENTITY_FIRE = 1 shl 13
+    private const val GLOWING = 1 shl 14
+    private const val FIRE_OVERLAY = 1 shl 15
+    private const val DEATH_ANIMATION = 1 shl 16
+    private const val BLACK_SKY = 1 shl 17
+    private const val GLINT = 1 shl 18
+
+    private var flags = 0
+
+    private fun on(flag: Int) = flags and flag != 0
+
+    private fun flag(set: Boolean, flag: Int) = if (set) flag else 0
+
+    init {
+        SubscribeWhile.watch {
+            flags = if (!enabled) 0 else
+                flag(noVignette, VIGNETTE) or flag(hidePortalOverlay, PORTAL) or flag(lavaAsWater, LAVA) or
+                flag(noWaterOverlay, WATER) or flag(noSuffocationOverlay, IN_WALL) or flag(hidePotionHud, EFFECT_HUD) or
+                flag(hideInventoryEffects, INVENTORY_EFFECTS) or flag(noFog, FOG) or flag(noBlindness, BLINDNESS) or
+                flag(noNausea, NAUSEA) or flag(fullbright, FULLBRIGHT) or flag(noTextShadow, TEXT_SHADOW) or
+                flag(timeChanger, TIME) or flag(hideEntityFire, ENTITY_FIRE) or flag(disableGlowing, GLOWING) or
+                flag(disableFireOverlay, FIRE_OVERLAY) or flag(hideDeathAnimation, DEATH_ANIMATION) or
+                flag(blackSky, BLACK_SKY) or flag(noGlint, GLINT)
+        }
     }
 }

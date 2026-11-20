@@ -35,10 +35,10 @@ object Highlight : Module(
         "Withermancer",
     )
     private val starredTag = Regex("^.*✯ .*\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?.?❤$")
-    private val plainMobTag = NameMemo { name ->
+    private val plainMobTag = NameMemo({ name ->
         val s = name.string
         clearMobNames.any { it in s } && !starredTag.matches(s)
-    }
+    }, 1024)
 
     /** Only not drawn: removing the tag would also lose a ✯ it gets later, and the mob highlight finds mobs by their tags. */
     @JvmStatic
@@ -104,6 +104,6 @@ object Highlight : Module(
             }
             drawBoxes(outlines)
         }
-        on<LevelEvent.Load> { labels.clear() }
+        on<LevelEvent.Load> { labels.clear(); plainMobTag.clear() }
     }
 }

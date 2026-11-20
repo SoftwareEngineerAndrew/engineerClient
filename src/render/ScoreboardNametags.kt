@@ -46,7 +46,12 @@ object ScoreboardNametags {
         return dialogue[entity, name]
     }
 
-    private val dialogue = NameMemo(::isDialogue)
+    private val dialogue = NameMemo(::isDialogue, 1024)
+
+    fun clearMemos() {
+        dinnerbones.clear()
+        dialogue.clear()
+    }
 
     private fun isDialogue(name: Component): Boolean {
         val text = name.string
