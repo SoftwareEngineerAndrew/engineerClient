@@ -6,7 +6,7 @@ import com.engineerclient.terminals.TerminalHandler.Companion.RIGHT
 import com.mojang.blaze3d.platform.InputConstants
 import com.adm.events.GuiEvent
 import com.adm.events.ScreenEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.utils.Color
 import com.adm.utils.render.roundedRect
@@ -138,7 +138,7 @@ object TermSolver {
 
         on<GuiEvent.Render> { hoverClick(screen, mouseX, mouseY) }
 
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this) { Terminals.solverOn || Terminals.hoverTerms }
     }
 
     private fun drawCustom(g: GuiGraphicsExtractor, grid: Grid, t: TerminalHandler, mouseX: Int, mouseY: Int) {

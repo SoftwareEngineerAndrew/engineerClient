@@ -6,7 +6,6 @@ import com.adm.events.EntityEvent
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.RenderExtractEvent
-import com.adm.events.core.EventBus
 import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.utils.Colors
@@ -164,7 +163,8 @@ object TermStatus {
                 if (look.beacon) drawBeaconBeam(stand.blockPosition(), Terminals.waypointColor)
             }
         }
-        EventBus.subscribe(this)
+        // The counts are kept through F7's boss with Status off too, so switching it on mid-P3 shows them right.
+        SubscribeWhile.add(this, { shouldRender = false; resetState() }) { Terminals.statusOn || (DungeonUtils.inBoss && DungeonUtils.floor?.floorNumber == 7) }
         SubscribeWhile.add(Live, ::off) { Terminals.statusOn }
     }
 

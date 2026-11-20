@@ -4,7 +4,7 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.terminals.sim.TermSimGUI
 import com.adm.events.EventDispatcher
 import com.adm.events.LevelEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.events.core.onSend
 import net.minecraft.network.protocol.Packet
@@ -111,6 +111,6 @@ object ClickLimit {
             synchronized(this@ClickLimit) { waiting.addLast(now); while (waiting.size > 16) waiting.removeFirst() }
         }
         on<LevelEvent.Load> { reset() }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, ::reset) { Terminals.clickLimit }
     }
 }
