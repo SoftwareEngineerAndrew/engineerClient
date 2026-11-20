@@ -27,6 +27,7 @@ import net.minecraft.world.entity.monster.zombie.Zombie
 import net.minecraft.world.item.Items
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.min
@@ -61,6 +62,12 @@ object BloodCamp : Module(
     private val manualOffset by NumberSetting("Mob Box Offset", 0f, 0.0..300.0, 1, desc = "Manually offsets the mob box.").withDependency { advanced && bloodAssist && assistDropdown && !pingOffset}
     private val hitSound by BooleanSetting("Hit Sound", false, desc = "Plays a sound when a mob can be hit, early by your ping.").withDependency { bloodAssist && assistDropdown }
     private val hitLead by NumberSetting("Hit Sound Lead", 65, 0..500, desc = "Extra time the hit sound plays early.", unit = "ms").withDependency { hitSound && bloodAssist && assistDropdown }
+    private val clickCountdown by BooleanSetting("Click Countdown", true, desc = "Above the next mob, time until a click sent now lands as it can be hit.").withDependency { bloodAssist && assistDropdown }
+    private val clickHud by HUD("Click Countdown HUD", "The click countdown for the next mob, with how many are due within a second.") { example ->
+        if (example) return@HUD textDim(clickHudText(450, 2), 0, 0)
+        if (!bloodAssist || !DungeonUtils.inClear || clickMs == Long.MIN_VALUE) return@HUD 0 to 0
+        textDim(clickHudText(clickMs, clickDue), 0, 0)
+    }.withDependency { bloodAssist && assistDropdown }
     private val watcherBar by BooleanSetting("Watcher Bar", true, desc = "Shows the watcher's health.")
     private val hideOutsideBlood by BooleanSetting("Hide Outside Blood", false, desc = "Hides the Watcher's bar when you are not in the blood room.").withDependency { watcherBar }
 
@@ -132,6 +139,32 @@ object BloodCamp : Module(
             else -> 'b'
         }
         "§$color${seconds.toFloat().toFixed()}s"
+    }
+
+    private val clickText = FormatCache(8) { ms -> if (ms <= 0) "§a§lGO!" else "§b${String.format(Locale.ROOT, "%.2f", ms / 1000)}s" }
+
+    private var clickMs = Long.MIN_VALUE
+    private var clickDue = 0
+    private var hudMs = Long.MIN_VALUE
+    private var hudDue = -1
+    private var hudText = ""
+
+    private fun clickHudText(ms: Long, due: Int): String {
+        if (ms != hudMs || due != hudDue) {
+            hudMs = ms
+            hudDue = due
+            val text = clickText(ms.toDouble())
+            hudText = if (due > 1) "$text §7($due)" else text
+        }
+        return hudText
+    }
+
+    private var clickPos: Vec3 = Vec3.ZERO
+
+    private fun clickPosAt(x: Double, y: Double, z: Double): Vec3 {
+        val p = clickPos
+        if (p.x != x || p.y != y || p.z != z) clickPos = Vec3(x, y, z)
+        return clickPos
     }
 
     private fun msUntilSpawn(spawn: Spawn) = (if (spawn.firstWave) 2000 else 0) + (tick * 50) - (serverMs - spawn.startedMs) + offset
@@ -229,12 +262,19 @@ object BloodCamp : Module(
         }
 
         on<RenderExtractEvent> {
+            clickMs = Long.MIN_VALUE
             if (spawns.isEmpty() || !bloodAssist || !DungeonUtils.inClear) return@on
             val size = boxSize
             val half = size / -2.0
             val lead = if (pingOffset) ServerUtils.averagePing.toFloat() else manualOffset
             val hitAt = if (hitSound) ServerUtils.averagePing + hitLead else Int.MIN_VALUE
             val now = serverMs
+            val ping = ServerUtils.averagePing
+            var nextUntil = Long.MAX_VALUE
+            var nextX = 0.0
+            var nextY = 0.0
+            var nextZ = 0.0
+            var due = 0
             boxes.clear()
             for ((stand, spawn) in spawns) {
                 if (!stand.isAlive) continue
@@ -259,8 +299,20 @@ object BloodCamp : Module(
                 val label = Vec3(landX, landY + 2.0, landZ)
                 if (drawLine) drawLine(listOf(spawn.at.add(0.0, 2.0, 0.0), label), Colors.MINECRAFT_RED, depth = true)
                 if (drawTime) drawText(timeText(((untilSpawn.toFloat() - offset) / 1000).toDouble()), label, 2f, true)
+                if (untilSpawn > 0) {
+                    if (untilSpawn - ping <= 1000) due++
+                    if (untilSpawn < nextUntil) {
+                        nextUntil = untilSpawn
+                        nextX = landX; nextY = landY; nextZ = landZ
+                    }
+                }
             }
             drawBoxes(boxes)
+            if (nextUntil == Long.MAX_VALUE) return@on
+            clickMs = nextUntil - ping
+            clickDue = due
+            // Above the Time Left label so the two don't overlap.
+            if (clickCountdown) drawText(clickText(clickMs.toDouble()), clickPosAt(nextX, nextY + 2.7, nextZ), 1.2f, true)
         }
     }
 
