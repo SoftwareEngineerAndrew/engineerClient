@@ -1,6 +1,11 @@
 package com.adm.utils.network.hypixelapi
 
+import com.google.gson.GsonBuilder
+import com.google.gson.TypeAdapter
 import com.google.gson.annotations.SerializedName
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import com.adm.utils.calculateDungeonLevel
 import com.adm.utils.magicalPower
 import com.adm.utils.skyblock.dungeon.DungeonClass
@@ -32,6 +37,90 @@ object HypixelData {
         val members: Map<String, MemberData> = emptyMap(),
         val selected: Boolean = false,
     )
+
+    internal class Selected(val cause: String?, val anyProfiles: Boolean, val member: MemberData?)
+
+    private val gson = GsonBuilder().registerTypeAdapter(Inventory::class.java, InventoryAdapter).create()
+
+    /** The first selected profile's [uuid] member, slimmed, read straight off the stream: other profiles, members and bags are skipped. */
+    internal fun readSelected(reader: JsonReader, uuid: String): Selected {
+        var cause: String? = null
+        var any = false
+        var found = false
+        var member: MemberData? = null
+        reader.beginObject()
+        while (reader.hasNext()) when (reader.nextName()) {
+            "cause" -> cause = reader.nullOr { nextString() }
+            "profiles" -> if (reader.peek() == JsonToken.NULL) reader.nextNull() else {
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    if (reader.peek() == JsonToken.NULL) { reader.nextNull(); continue }
+                    any = true
+                    var selected = false
+                    var own: MemberData? = null
+                    reader.beginObject()
+                    while (reader.hasNext()) when (reader.nextName()) {
+                        "selected" -> selected = reader.nullOr { nextBoolean() } ?: false
+                        "members" -> if (found || reader.peek() == JsonToken.NULL) reader.skipValue() else {
+                            reader.beginObject()
+                            while (reader.hasNext()) {
+                                if (reader.nextName() == uuid) own = reader.nullOr { gson.fromJson<MemberData>(this, MemberData::class.java) }
+                                else reader.skipValue()
+                            }
+                            reader.endObject()
+                        }
+                        else -> reader.skipValue()
+                    }
+                    reader.endObject()
+                    if (selected && !found) { found = true; member = own?.slim() }
+                }
+                reader.endArray()
+            }
+            else -> reader.skipValue()
+        }
+        reader.endObject()
+        return Selected(cause, any, member)
+    }
+
+    private inline fun <T> JsonReader.nullOr(read: JsonReader.() -> T): T? =
+        if (peek() == JsonToken.NULL) { nextNull(); null } else read()
+
+    // Only the ender chest (is the inventory API on) and the talisman bag (magical power) are ever read.
+    private object InventoryAdapter : TypeAdapter<Inventory>() {
+        override fun write(out: JsonWriter, value: Inventory?) = throw UnsupportedOperationException()
+
+        override fun read(reader: JsonReader): Inventory? {
+            if (reader.peek() == JsonToken.NULL) { reader.nextNull(); return null }
+            var enderChest = InventoryContents()
+            val bags = HashMap<String, InventoryContents>(2)
+            reader.beginObject()
+            while (reader.hasNext()) when (reader.nextName()) {
+                "ender_chest_contents" -> enderChest = contents(reader)
+                "bag_contents" -> if (reader.peek() == JsonToken.NULL) reader.nextNull() else {
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        val bag = reader.nextName()
+                        if (bag == "talisman_bag") bags[bag] = contents(reader) else reader.skipValue()
+                    }
+                    reader.endObject()
+                }
+                else -> reader.skipValue()
+            }
+            reader.endObject()
+            return Inventory(enderChest, bags)
+        }
+
+        private fun contents(reader: JsonReader): InventoryContents {
+            if (reader.peek() == JsonToken.NULL) { reader.nextNull(); return InventoryContents() }
+            var data = ""
+            reader.beginObject()
+            while (reader.hasNext()) {
+                if (reader.nextName() == "data") data = reader.nullOr { nextString() } ?: "" else reader.skipValue()
+            }
+            reader.endObject()
+            return InventoryContents(data)
+        }
+    }
 
     private val mpRegex = Regex("§7§4☠ §cRequires §5.+§c.")
 

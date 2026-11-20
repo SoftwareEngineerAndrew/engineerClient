@@ -2,6 +2,9 @@ package com.adm.utils.network.hypixelapi
 
 import com.adm.features.impl.render.ClickGUIModule.hypixelApiUrl
 import com.adm.utils.network.WebUtils.fetchJson
+import com.adm.utils.network.WebUtils.fetchString
+import com.google.gson.stream.JsonReader
+import java.io.StringReader
 import java.util.concurrent.ConcurrentHashMap
 
 object RequestUtils {
@@ -37,13 +40,14 @@ object RequestUtils {
         playerCache[name]?.let { return Result.success(it) }
         val uuidData = getUuid(name).getOrElse { return Result.failure(it) }
 
-        return fetchJson<HypixelData.ProfilesData>(getServer(EndPoint.GET, uuidData.id)).mapCatching { data ->
+        return fetchString(getServer(EndPoint.GET, uuidData.id)).mapCatching { body ->
+            // Only the selected profile's own member is read: whole responses run to megabytes.
+            val data = HypixelData.readSelected(JsonReader(StringReader(body)), uuidData.id)
             data.cause?.let { throw Exception("Failed to get hypixel data: $it") }
-            // Only the selected profile's own member is kept: whole responses run to megabytes.
-            val member = data.profiles.find { it.selected }?.members?.get(uuidData.id)?.slim()
+            val member = data.member
             val kept = HypixelData.ProfilesData(profileList = member?.let { listOf(HypixelData.Profiles(mapOf(uuidData.id to it), true)) }.orEmpty())
             HypixelData.PlayerInfo(kept, uuidData.id, uuidData.name).also {
-                if (data.profiles.isNotEmpty()) playerCache[name] = it
+                if (data.anyProfiles) playerCache[name] = it
             }
         }
     }
