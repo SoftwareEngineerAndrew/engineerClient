@@ -24,7 +24,7 @@ import com.adm.events.TickEvent
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.commands.arguments.blocks.BlockStateParser
 import net.minecraft.core.BlockPos
@@ -973,6 +973,6 @@ object SimonSaysPractice {
         }
         // A new world has none of it: nothing to put back.
         on<LevelEvent.Unload> { placed = null; hit = null; gen++; jobs.clear(); device.clear(); running = false }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { Real.reset() }, { remove(); wasOn = false }) { Devices.ssPracticeOn }
     }
 }

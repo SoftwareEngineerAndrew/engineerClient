@@ -5,7 +5,7 @@ import com.adm.events.BlockUpdateEvent
 import com.adm.events.LevelEvent
 import com.adm.events.PacketEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.engineerclient.devices.DevSimonSays
 import com.engineerclient.devices.Devices
@@ -53,7 +53,7 @@ object SimonSaysTracker {
 
     fun install() {
         on<TickEvent.Server> { tick++ }
-        on<LevelEvent.Load> { solver.reset(); lampLit.clear(); buttonTick.clear() }
+        on<LevelEvent.Load> { reset() }
         // Lamps come from their block packets, re-sends included: a lamp sent lit while lit (cleared and
         // relit in one tick) is how a skip's chain starts show, and ADM's BlockUpdateEvent skips it as no
         // change. Stamped with the server tick on arrival, and what the lamp was taken from the packets before
@@ -112,8 +112,10 @@ object SimonSaysTracker {
                 sync()
             }
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, ::reset, {}) { active() }
     }
+
+    private fun reset() { solver.reset(); lampLit.clear(); buttonTick.clear() }
 
     private fun onDevice(pos: BlockPos) = (pos.x == 110 || pos.x == 111) && pos.y in 120..123 && pos.z in 92..95
 

@@ -6,7 +6,7 @@ import com.adm.events.BlockUpdateEvent
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.RenderExtractEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.utils.playSoundSettings
 import com.adm.utils.render.drawStyledBox
@@ -34,7 +34,7 @@ object DevSimonSays {
     fun deviceStopped() { stopped = true }
 
     fun install() {
-        on<LevelEvent.Load> { clickInOrder.clear(); clickNeeded = 0; startClickCounter = 0; firstPhase = true; stopped = true }
+        on<LevelEvent.Load> { reset() }
         on<MessageEvent.Chat> { if (message == "[BOSS] Goldor: Who dares trespass into my domain?") { startClickCounter = 0; firstPhase = true; stopped = true } }
         on<BlockUpdateEvent> {
             if (!Devices.simonSaysOn || !Devices.blockWrongStart) return@on
@@ -77,6 +77,8 @@ object DevSimonSays {
                 drawStyledBox(AABB(x + 0.05, y + 0.37, z + 0.3, x - 0.15, y + 0.63, z + 0.7), color, Devices.ssStyle, true)
             }
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, ::reset, {}) { Devices.simonSaysOn }
     }
+
+    private fun reset() { clickInOrder.clear(); clickNeeded = 0; startClickCounter = 0; firstPhase = true; stopped = true }
 }
