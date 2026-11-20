@@ -1,6 +1,7 @@
 package com.adm.features.impl.dungeon.puzzlesolvers
 
 import com.adm.AdmMod.mc
+import com.adm.events.BlockUpdateEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.RoomEnterEvent
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
@@ -61,7 +62,13 @@ object BoulderSolver {
     }
 
     fun onRoomEnter(event: RoomEnterEvent) {
-        if (event.room?.data?.name == "Boulder") room = event.room
+        if (event.room?.data?.name == "Boulder") { room = event.room; dirty = true }
+    }
+
+    fun onBlockChange(event: BlockUpdateEvent) {
+        val p = event.pos
+        if (dirty || p.y != 65 || cellsFrame == null) return
+        if (p.x in minX..maxX && p.z in minZ..maxZ) dirty = true
     }
 
     /** The Boulder room as soon as the map knows it and has its turn, before anyone walks in. */
@@ -72,16 +79,18 @@ object BoulderSolver {
 
     fun onTick(mode: Mode, planning: Boolean) {
         val room = findRoom() ?: return
+        val want = if (planning) mode else null
+        if (!dirty && want == settledFor && sameFrame(cellsFrame, room)) return
         val read = readBoard(room) ?: return
         if (read != seen) { seen = read; stableTicks = 0; return }
         // a push reaches the client as one packet per chunk section, so wait for the board to settle
         if (++stableTicks < 2) return
         if (stableTicks == 2) checkLater(read)
-        if (!planning || read == board && mode == planMode) return
+        if (!planning || read == board && mode == planMode) { dirty = false; settledFor = want; return }
 
         if (mode == planMode && board != -1L) {
             val done = plan.indexOfFirst { it.after == read }
-            if (done != -1) { board = read; plan = plan.drop(done + 1); return }
+            if (done != -1) { board = read; plan = plan.drop(done + 1); dirty = false; settledFor = want; return }
         }
         // Worked out off the game thread: until the plan is in, this tick comes back.
         // Where you stood when this board was first read: walking on doesn't start the solve over.
@@ -115,6 +124,8 @@ object BoulderSolver {
         board = -1L
         seen = -1L
         stableTicks = 0
+        dirty = true
+        settledFor = null
         planMode = null
         plan = emptyList()
         asked = null
@@ -221,6 +232,15 @@ object BoulderSolver {
         if (!sameFrame(cellsFrame, room)) {
             for (i in 0 until 42) cells[i] = room.getRealCoords(BlockPos(6 + 3 * (i % 7), 65, 9 + 3 * (i / 7))).asLong()
             cellsFrame = Frame(room, room.clayPos, room.rotation)
+            minX = Int.MAX_VALUE; maxX = Int.MIN_VALUE; minZ = Int.MAX_VALUE; maxZ = Int.MIN_VALUE
+            for (c in cells) {
+                val x = BlockPos.getX(c)
+                val z = BlockPos.getZ(c)
+                if (x < minX) minX = x
+                if (x > maxX) maxX = x
+                if (z < minZ) minZ = z
+                if (z > maxZ) maxZ = z
+            }
         }
         var b = 0L
         for (i in 0 until 42) {
@@ -238,6 +258,13 @@ object BoulderSolver {
 
     private val cells = LongArray(42)
     private var cellsFrame: Frame? = null
+    private var minX = 0
+    private var maxX = 0
+    private var minZ = 0
+    private var maxZ = 0
+    // Read again only after a block change on the board (or a new room, frame or mode); a settled board is skipped.
+    private var dirty = true
+    private var settledFor: Mode? = null
     private val probe = BlockPos.MutableBlockPos()
     private var faces = emptyArray<AABB>()
     private var facesFor: List<Step>? = null

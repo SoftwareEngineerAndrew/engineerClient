@@ -189,6 +189,7 @@ object PuzzleSolvers : Module(
             if (!DungeonUtils.inClear) return@on
             if (beamsSolver) BeamsSolver.onBlockChange(this)
             IceFillSolver.onBlockChange(this)
+            if (boulderSolver || boulderBlockWrong) BoulderSolver.onBlockChange(this)
         }
 
         on<ParticleEvent> {
