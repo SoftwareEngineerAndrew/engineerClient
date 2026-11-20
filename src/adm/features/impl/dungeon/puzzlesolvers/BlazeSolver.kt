@@ -136,8 +136,10 @@ object BlazeSolver {
     }
 
     // Each blaze has to be hit after every one before it: arrows already flying count, and they land first only on an earlier tick.
+    fun wantsShots() = PuzzleSolvers.enabled && PuzzleSolvers.blazeBlockWrong && DungeonUtils.inClear && blazes.isNotEmpty() && inBlazeRoom
+
     fun blocksShot(shot: List<PuzzleArrows.Flight>): Boolean {
-        if (!PuzzleSolvers.enabled || !PuzzleSolvers.blazeBlockWrong || !DungeonUtils.inClear || blazes.isEmpty() || !inBlazeRoom) return false
+        if (!wantsShots()) return false
         val level = mc.level ?: return false
         val boxes = blazes.map { (level.getEntity(it.stand.id - 1) as? Blaze)?.boundingBox?.inflate(0.3) ?: box(it.stand) }
 

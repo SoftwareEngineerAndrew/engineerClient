@@ -123,6 +123,8 @@ object BeamsSolver {
         return false
     }
 
+    fun wantsShots() = active()
+
     fun blocksShot(shot: List<PuzzleArrows.Flight>): Boolean {
         if (!active()) return false
         return wrong(ownArrows() + landings(shot, new = true))

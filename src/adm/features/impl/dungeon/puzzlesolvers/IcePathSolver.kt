@@ -136,6 +136,8 @@ object IcePathSolver {
         return true
     }
 
+    fun wantsShots() = active()
+
     fun blocksShot(shot: List<PuzzleArrows.Flight>): Boolean {
         if (!active()) return false
         val room = room() ?: return false

@@ -91,19 +91,22 @@ object PuzzleArrows {
     private inline val armed get() = PuzzleSolvers.enabled && DungeonUtils.inClear
 
     @JvmStatic
-    fun blocksUse(): Boolean = armed && shortbowShot(false)?.let(::blocksShot) ?: false
+    fun blocksUse(): Boolean = armed && anyWantsShots() && shortbowShot(false)?.let(::blocksShot) ?: false
 
     @JvmStatic
-    fun blocksAttack(): Boolean = armed && (BeamsSolver.blocksPunch() || IcePathSolver.blocksPunch() || (shortbowShot(true)?.let(::blocksShot) ?: false))
+    fun blocksAttack(): Boolean = armed && (BeamsSolver.blocksPunch() || IcePathSolver.blocksPunch() || (anyWantsShots() && shortbowShot(true)?.let(::blocksShot) ?: false))
 
     @JvmStatic
     fun blocksRelease(): Boolean {
-        if (!armed) return false
+        if (!armed || !anyWantsShots()) return false
         val shot = releaseShot() ?: return false
         if (!blocksShot(shot)) return false
         mc.player?.stopUsingItem()
         return true
     }
+
+    // The shot is only worth planning when a solver could block or record it.
+    private fun anyWantsShots() = BlazeSolver.wantsShots() || BeamsSolver.wantsShots() || IcePathSolver.wantsShots()
 
     private fun blocksShot(shot: List<Flight>): Boolean {
         val blocked = BlazeSolver.blocksShot(shot) || BeamsSolver.blocksShot(shot) || IcePathSolver.blocksShot(shot)
