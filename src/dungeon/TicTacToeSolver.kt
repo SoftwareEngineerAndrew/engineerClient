@@ -10,7 +10,7 @@ import com.adm.events.BlockInteractEvent
 import com.adm.events.LevelEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
 import com.adm.utils.Color
@@ -74,6 +74,8 @@ object TicTacToeSolver {
     private var serverTicks = 0L
     private var replyAt = 0L
     private val countdownText = FormatCache(1) { "%.1f".format(it / 20.0) }
+    /** The world it was switched off in: a world load missed since then starts over. */
+    private var offIn = java.lang.ref.WeakReference<Any?>(null)
 
     private val values = HashMap<String, Int>()
     private val chances = HashMap<String, Double>()
@@ -100,7 +102,9 @@ object TicTacToeSolver {
             val left = replyAt - serverTicks
             if (countdown && left > 0) above?.let { drawText(countdownText(left.toDouble()), it, 1.5f, false) }
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { if (offIn.get() !== mc.level) sent = false }, { reset(); offIn = java.lang.ref.WeakReference(mc.level) }) {
+            PuzzleSolvers.enabled && solver.value
+        }
     }
 
     private fun reset() { clear(); planned = emptyMap(); cells = emptyMap(); lastBoard = "" }

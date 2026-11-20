@@ -12,7 +12,7 @@ import com.adm.events.LevelEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.TickEvent
 import com.adm.events.UseItemOnPostEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
@@ -126,14 +126,20 @@ object WaterBoardSolver {
     fun install() {
         for (s in listOf(dropdown, on, lead, objective, clickSound, tracer, firstColor, secondColor, showSim)) PuzzleSolvers.registerSetting(s)
         coordinator.execute { PlanTable.load() }
-        on<LevelEvent.Load> { EngineerClient.safely("water board reset") { reset(); carried = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed; timed = false } }
+        on<LevelEvent.Load> { EngineerClient.safely("water board reset") { newWorld() } }
         onReceive<ClientboundBlockUpdatePacket> { val f = frame ?: return@onReceive; packet(f, pos, blockState) }
         onReceive<ClientboundSectionBlocksUpdatePacket> { val f = frame ?: return@onReceive; runUpdates { p, s -> packet(f, p, s) } }
         on<UseItemOnPostEvent> { EngineerClient.safely("water board click") { clicked(hitResult.blockPos) } }
         on<TickEvent.End> { EngineerClient.safely("water board tick") { tick() } }
         on<RenderExtractEvent> { EngineerClient.safely("water board render") { render(this) } }
-        EventBus.subscribe(this)
+        // Puzzle Timers' water board time comes from the tick too, so this goes by Puzzle Solvers itself.
+        SubscribeWhile.add(this, { if (offIn.get() !== mc.level) newWorld() }, { reset(); offIn = java.lang.ref.WeakReference(mc.level) }) { PuzzleSolvers.enabled }
     }
+
+    /** The world it was switched off in: a world load missed since then starts over. */
+    private var offIn = java.lang.ref.WeakReference<Any?>(null)
+
+    private fun newWorld() { reset(); carried = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed; timed = false }
 
     /**
      * ADM's Water Board solver stays quiet while this draws: once it has a plan, and from the first flip on (ADM's table no

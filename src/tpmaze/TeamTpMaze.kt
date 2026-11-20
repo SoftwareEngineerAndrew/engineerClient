@@ -16,7 +16,7 @@ import com.adm.events.LevelEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.RoomEnterEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
 import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
@@ -125,6 +125,8 @@ object TeamTpMaze {
     }
 
     private val self: String get() = mc.player?.name?.string ?: ""
+    /** The world it was switched off in: a world load missed since then starts over. */
+    private var offIn = java.lang.ref.WeakReference<Any?>(null)
 
     fun install() {
         replaceCoreSettings(listOf(dropdown, on, tracer, labels, nextColor, finalColor, usedColor, mateColor))
@@ -140,7 +142,10 @@ object TeamTpMaze {
         }
         on<TickEvent.End> { EngineerClient.safely("team tp maze tick") { tick() } }
         on<RenderExtractEvent> { EngineerClient.safely("team tp maze render") { render(this) } }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, {
+            if (offIn.get() !== mc.level) reset()
+            DungeonUtils.currentRoom?.takeIf { it.data?.name == ROOM }?.let { enter(it) }
+        }, { offIn = java.lang.ref.WeakReference(mc.level); disconnect() }) { on.value && PuzzleSolvers.enabled }
     }
 
     /** TpMazeTeleportMixin: our own teleport, on the client thread just before the game moves us, so where we stood is still known. */

@@ -7,12 +7,13 @@ import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.puzzlesolvers.PuzzleSolvers
 import com.adm.utils.Color
 import com.adm.utils.Colors
 import com.adm.utils.render.text
+import com.adm.utils.skyblock.SplitsManager
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -137,7 +138,10 @@ object PuzzleOverlay {
         on<TickEvent.End> {
             section = if (PuzzleSolvers.enabled && hud.value.enabled && mayShow()) TabPuzzles.read().takeIf { it != section } ?: section else null
         }
-        EventBus.subscribe(this)
+        // Mort's line was missed while off: ADM's splits have it.
+        SubscribeWhile.add(this, { started = DungeonUtils.inDungeons && SplitsManager.currentSplitName() != null }, { section = null }) {
+            PuzzleSolvers.enabled && (beforeStart || duringClear)
+        }
     }
 
     private const val MORT_START = "Mort: Here, I found this map when I first entered the dungeon."
