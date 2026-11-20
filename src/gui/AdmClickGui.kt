@@ -41,6 +41,8 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     private var tipY = 0
     private var tipShown: String? = null
     private var tipSince = 0L
+    private var tipLines: List<net.minecraft.util.FormattedCharSequence> = emptyList()
+    private var tipW = 0
 
     fun focus(target: Any) {
         if (focus === target) return
@@ -85,6 +87,8 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
         val one = solo
         panels = if (one == null) full
         else mutableListOf(Panel(one.name, listOf(view(one).also { it.expanded = true }), (vw - Theme.WIDTH) / 2, 20))
+        for (p in panels) p.layout()
+        tipShown = null
         focus = search
         runCatching { SplitsLook.refreshPlaceholders() }
     }
@@ -124,15 +128,17 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
         if (text != tipShown) {
             tipShown = text
             tipSince = System.currentTimeMillis()
+            tipLines = if (text == null) emptyList() else font.split(Component.literal(text), 200)
+            tipW = (tipLines.maxOfOrNull { font.width(it) } ?: 0) + 16
         }
         if (text == null || System.currentTimeMillis() - tipSince < TOOLTIP_DELAY) return
-        val lines = font.split(Component.literal(text), 200)
-        val w = (lines.maxOfOrNull { font.width(it) } ?: 0) + 16
+        val lines = tipLines
+        val w = tipW
         val h = lines.size * font.lineHeight + 16
         val x = (tipX + 10).coerceIn(0, (vw - w).coerceAtLeast(0))
         val y = tipY.coerceIn(0, (vh - h).coerceAtLeast(0))
         ui.g.nextStratum()
-        ui.g.roundedRectOutlined(x, y, x + w, y + h, Theme.surface.rgba, Theme.accent.hsbMax().rgba, 1.5f, Corners(Theme.RADIUS))
+        ui.g.roundedRectOutlined(x, y, x + w, y + h, Theme.surface.rgba, Theme.accent.hsbMax().rgba, 1.5f, TIP_CORNERS)
         lines.forEachIndexed { i, line -> ui.g.text(font, line, x + 8, y + 8 + i * font.lineHeight, Theme.WHITE, false) }
     }
 
@@ -209,4 +215,5 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     private const val SEARCH_H = 20
     private const val SEARCH_BOTTOM = 45
     private const val TOOLTIP_DELAY = 500L
+    private val TIP_CORNERS = Corners(Theme.RADIUS)
 }

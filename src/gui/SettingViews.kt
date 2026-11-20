@@ -65,13 +65,17 @@ private const val SWITCH_W = 24
 private const val SWITCH_H = 13
 private const val PILL_H = 14
 private const val ICON = 13
+private val ROUND = Corners(Theme.RADIUS)
+private val ROUND2 = Corners(2f)
+private val ROUND3 = Corners(3f)
+private val SWITCH_CORNERS = Corners(SWITCH_H / 2f)
 
 fun Ui.switch(x: Int, y: Int, on: Boolean, anim: Anim, hoverAnim: Anim, onClick: () -> Unit) {
     val w = SWITCH_W
     val h = SWITCH_H
     val hover = hoverAnim.update(hovered(x, y, x + w, y + h))
     val p = anim.update(on)
-    val corners = Corners(h / 2f)
+    val corners = SWITCH_CORNERS
     g.roundedRectOutlined(x, y, x + w, y + h, Theme.surface.hoverTint(hover), Theme.accent.rgba, 1.2f, corners)
     if (p > 0f) g.roundedRectClipped(x, y, x + w, y + h, x, y, x + (w * p).roundToInt(), y + h, Theme.accent.hoverTint(hover), corners)
     g.circle(x + h / 2 + ((w - h) * p).roundToInt(), y + h / 2, h / 2f - 2.5f, Theme.WHITE)
@@ -84,14 +88,14 @@ fun Ui.pill(text: String, right: Int, y: Int, h: Int, color: Int = Theme.WHITE, 
     val w = font.width(text) + Theme.PAD * 2
     val x0 = right - w
     val hover = hoverAnim.update(hovered(x0, y, right, y + h))
-    g.roundedRectOutlined(x0, y, right, y + h, Theme.surface.hoverTint(hover, 1.25f), Theme.accent.rgba, 1f, Corners(Theme.RADIUS))
+    g.roundedRectOutlined(x0, y, right, y + h, Theme.surface.hoverTint(hover, 1.25f), Theme.accent.rgba, 1f, ROUND)
     text(text, x0 + Theme.PAD, y + (h - 8) / 2, color)
     return Rect(x0, y, right, y + h)
 }
 
 fun Ui.button(text: String, x0: Int, y0: Int, x1: Int, y1: Int, hoverAnim: Anim, onClick: () -> Unit) {
     val hover = hoverAnim.update(hovered(x0, y0, x1, y1))
-    g.roundedRectOutlined(x0, y0, x1, y1, Theme.surface.hoverTint(hover), Theme.accent.rgba, 1f, Corners(Theme.RADIUS))
+    g.roundedRectOutlined(x0, y0, x1, y1, Theme.surface.hoverTint(hover), Theme.accent.rgba, 1f, ROUND)
     textCentered(text, x0, y0, x1, y1)
     click(x0, y0, x1, y1) { onClick() }
 }
@@ -161,7 +165,7 @@ class NumberView(override val setting: NumberSetting<*>) : SettingView(setting) 
         val hovered = ui.hovered(x0 - 2, ty - 4, x1 + 2, ty + 8)
         val p = if (dragging) fill.update(setting.percent, 1000f) else fill.update(setting.percent)
         val k = knob.update(dragging || hovered)
-        val track = Corners(3f)
+        val track = ROUND3
         ui.g.roundedRect(x0, ty, x1, ty + 6, Theme.surface.rgba, track)
         val filled = ((x1 - x0) * p).roundToInt()
         if (filled > 0) ui.g.roundedRectClipped(x0, ty, x1, ty + 6, x0, ty, x0 + filled, ty + 6, Theme.accent.rgba, track)
@@ -269,19 +273,19 @@ class ColorView(override val setting: ColorSetting) : SettingView(setting) {
             val py0 = top + GAP
             val py1 = py0 + PICKER_H
 
-            ui.g.roundedGradient(px0, py0, svx1, py1, Theme.WHITE, color.hsbMax().rgba, GradientDirection.LEFT_TO_RIGHT, Corners(2f))
-            ui.g.roundedGradient(px0, py0, svx1, py1, Colors.TRANSPARENT.rgba, Colors.BLACK.rgba, GradientDirection.TOP_TO_BOTTOM, Corners(2f))
+            ui.g.roundedGradient(px0, py0, svx1, py1, Theme.WHITE, color.hsbMax().rgba, GradientDirection.LEFT_TO_RIGHT, ROUND2)
+            ui.g.roundedGradient(px0, py0, svx1, py1, Colors.TRANSPARENT.rgba, Colors.BLACK.rgba, GradientDirection.TOP_TO_BOTTOM, ROUND2)
             ui.g.circle(px0 + (color.saturation * (svx1 - px0)).roundToInt(), py0 + ((1f - color.brightness) * PICKER_H).roundToInt(), 4f, Theme.WHITE)
             dragArea(ui, px0, py0, svx1, py1) { fx, fy -> setting.value = Color(setting.value.hue, fx, 1f - fy, setting.value.alphaFloat) }
 
             val hx0 = svx1 + GAP
-            ui.g.roundedTexture(hx0, py0, hx0 + BAR, py1, HUE, corners = Corners(2f))
+            ui.g.roundedTexture(hx0, py0, hx0 + BAR, py1, HUE, corners = ROUND2)
             marker(ui, hx0, py0, color.hue)
             dragArea(ui, hx0, py0, hx0 + BAR, py1) { _, fy -> setting.value = Color(fy, setting.value.saturation, setting.value.brightness, setting.value.alphaFloat) }
 
             if (allowAlpha) {
                 val ax0 = hx0 + BAR + GAP
-                ui.g.roundedGradient(ax0, py0, ax0 + BAR, py1, Colors.TRANSPARENT.rgba, color.withAlpha(1f).rgba, GradientDirection.TOP_TO_BOTTOM, Corners(2f))
+                ui.g.roundedGradient(ax0, py0, ax0 + BAR, py1, Colors.TRANSPARENT.rgba, color.withAlpha(1f).rgba, GradientDirection.TOP_TO_BOTTOM, ROUND2)
                 marker(ui, ax0, py0, color.alphaFloat)
                 dragArea(ui, ax0, py0, ax0 + BAR, py1) { _, fy -> setting.value = setting.value.withAlpha(fy) }
             }
@@ -291,7 +295,7 @@ class ColorView(override val setting: ColorSetting) : SettingView(setting) {
             for (slot in 0 until 4) {
                 val fx0 = x + RIGHT - (4 - slot) * FIELD - (3 - slot) * GAP
                 val saved = ClickGUIModule.favoriteColors[slot]
-                ui.g.roundedRectOutlined(fx0, fy0, fx0 + FIELD, fy0 + FIELD, saved?.rgba ?: Theme.background.withAlpha(0.4f).rgba, Theme.surface.rgba, 1f, Corners(3f))
+                ui.g.roundedRectOutlined(fx0, fy0, fx0 + FIELD, fy0 + FIELD, saved?.rgba ?: Theme.background.withAlpha(0.4f).rgba, Theme.surface.rgba, 1f, ROUND3)
                 ui.tooltip(fx0, fy0, fx0 + FIELD, fy0 + FIELD, "Left click to use, right click to save the current colour here.")
                 ui.click(fx0, fy0, fx0 + FIELD, fy0 + FIELD, right = { ClickGUIModule.favoriteColors[slot] = setting.value.copy() }) {
                     ClickGUIModule.favoriteColors[slot]?.let { setting.value = it.copy() }

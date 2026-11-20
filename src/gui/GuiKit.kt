@@ -172,21 +172,33 @@ class TextField(
         return true
     }
 
+    // What fits is measured again only when the text or the box changes.
+    private var fitFor: String? = null
+    private var fitRoom = -1
+    private var fitText = ""
+    private var fitW = 0
+    private var corners = Corners(Theme.RADIUS)
+
     fun draw(ui: Ui, x0: Int, y0: Int, x1: Int, y1: Int, placeholder: String = "", centered: Boolean = false, radius: Float = Theme.RADIUS) {
         val focused = AdmClickGui.focus === this
         val hover = ui.hovered(x0, y0, x1, y1)
-        ui.g.roundedRectOutlined(x0, y0, x1, y1, Theme.surface.hoverTint(if (hover) 0.4f else 0f), if (focused) Theme.accent.brighter(1.3f).rgba else Theme.accent.rgba, 1f, Corners(radius))
+        if (corners.topLeft != radius) corners = Corners(radius)
+        ui.g.roundedRectOutlined(x0, y0, x1, y1, Theme.surface.hoverTint(if (hover) 0.4f else 0f), if (focused) Theme.accent.brighter(1.3f).rgba else Theme.accent.rgba, 1f, corners)
         val shown = if (text.isEmpty() && !focused) placeholder else text
         val color = if (text.isEmpty() && !focused) Theme.muted else Theme.WHITE
         val room = x1 - x0 - 8
-        var visible = shown
-        while (ui.font.width(visible) > room && visible.isNotEmpty()) visible = visible.drop(1)
-        val tx = if (centered) x0 + (x1 - x0 - ui.font.width(visible)) / 2 else x0 + 4
+        if (shown != fitFor || room != fitRoom) {
+            var v = shown
+            while (ui.font.width(v) > room && v.isNotEmpty()) v = v.drop(1)
+            fitFor = shown; fitRoom = room; fitText = v; fitW = ui.font.width(v)
+        }
+        val visible = fitText
+        val tx = if (centered) x0 + (x1 - x0 - fitW) / 2 else x0 + 4
         val ty = y0 + (y1 - y0 - 8) / 2
         ui.clipped(x0 + 2, y0, x1 - 2, y1) {
             ui.text(visible, tx, ty, color)
             if (focused && (System.currentTimeMillis() / 500) % 2 == 0L) {
-                val cx = tx + ui.font.width(if (text.isEmpty()) "" else visible)
+                val cx = tx + if (text.isEmpty()) 0 else fitW
                 ui.g.fill(cx, ty - 1, cx + 1, ty + 9, Theme.WHITE)
             }
         }

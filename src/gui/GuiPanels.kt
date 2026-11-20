@@ -81,6 +81,21 @@ class ModuleView(val module: Module) {
     private val settingP = FloatArray(views.size)
     private var settingsHeight = -1
 
+    private var nameX = 0
+    private var minusX = 0
+    private var plusX = 0
+    private var headerT = -1f
+    private var headerH = -1f
+    private var headerAccent = 0
+    private var headerColor = 0
+
+    /** Text offsets, measured again only when the menu opens. */
+    fun layout() {
+        nameX = (Theme.WIDTH - mc.font.width(module.name)) / 2
+        minusX = Theme.WIDTH - Theme.PAD - mc.font.width("-")
+        plusX = Theme.WIDTH - Theme.PAD - mc.font.width("+")
+    }
+
     private var matchQuery: String? = null
     private var nameMatch = true
     private var settingMatch: Set<SettingView> = emptySet()
@@ -135,14 +150,17 @@ class ModuleView(val module: Module) {
     private fun header(ui: Ui, x: Int, y: Int) {
         val t = toggled.update(module.enabled)
         val h = hover.update(ui.hovered(x, y, x + Theme.WIDTH, y + Theme.MODULE))
-        var color = blend(Theme.background.rgba, Theme.accent.rgba, t)
-        if (h > 0f) color = blend(color, blend(Theme.background.brighter(1.4f).rgba, Theme.accent.darker(0.8f).rgba, t), h)
-        ui.g.fill(x, y, x + Theme.WIDTH, y + Theme.MODULE, color)
-        ui.textCentered(module.name, x, y, x + Theme.WIDTH, y + Theme.MODULE)
-        if (views.isNotEmpty()) {
-            val dots = if (expanded) "-" else "+"
-            ui.text(dots, x + Theme.WIDTH - Theme.PAD - ui.font.width(dots), y + (Theme.MODULE - 8) / 2, 0x80FFFFFF.toInt())
+        val accent = Theme.accent.rgba
+        // The colour only moves while an animation runs or the accent changes.
+        if (t != headerT || h != headerH || accent != headerAccent) {
+            headerT = t; headerH = h; headerAccent = accent
+            var color = blend(Theme.background.rgba, accent, t)
+            if (h > 0f) color = blend(color, blend(Theme.background.brighter(1.4f).rgba, Theme.accent.darker(0.8f).rgba, t), h)
+            headerColor = color
         }
+        ui.g.fill(x, y, x + Theme.WIDTH, y + Theme.MODULE, headerColor)
+        ui.text(module.name, x + nameX, y + (Theme.MODULE - 8) / 2)
+        if (views.isNotEmpty()) ui.text(if (expanded) "-" else "+", x + if (expanded) minusX else plusX, y + (Theme.MODULE - 8) / 2, 0x80FFFFFF.toInt())
         ui.tooltip(x, y, x + Theme.WIDTH, y + Theme.MODULE, module.description)
         ui.click(x, y, x + Theme.WIDTH, y + Theme.MODULE, right = { if (views.isNotEmpty()) expanded = !expanded }) { module.toggle() }
     }
@@ -156,6 +174,15 @@ class Panel(val name: String, val modules: List<ModuleView>, defaultX: Int, defa
     private var maxScroll = 0
     var bounds = Rect(0, 0, 0, 0)
         private set
+    private val title = "§l$name"
+    private var titleX = 0
+    private val heights = IntArray(modules.size)
+
+    /** Text offsets, measured again only when the menu opens. */
+    fun layout() {
+        titleX = (Theme.WIDTH - mc.font.width(title)) / 2
+        for (m in modules) m.layout()
+    }
 
     fun scrollBy(amount: Double) {
         if (!data.extended) return
@@ -165,8 +192,8 @@ class Panel(val name: String, val modules: List<ModuleView>, defaultX: Int, defa
     fun draw(ui: Ui, vw: Int, vh: Int, query: String, openMatches: Boolean) {
         val x = data.x.coerceIn(0, maxX(vw))
         val y = data.y.coerceIn(0, maxY(vh))
-        val heights = IntArray(modules.size) { modules[it].measure(query, openMatches) }
-        val total = heights.sum()
+        var total = 0
+        for (i in modules.indices) { heights[i] = modules[i].measure(query, openMatches); total += heights[i] }
         val ext = extend.update(data.extended)
         val room = max(MIN_LIST, vh - y - Theme.ROW - Theme.CAP - 4)
         val visible = min(total, room)
@@ -177,11 +204,11 @@ class Panel(val name: String, val modules: List<ModuleView>, defaultX: Int, defa
         val bottom = y + Theme.ROW + shown + Theme.CAP
         bounds = Rect(x, y, x + Theme.WIDTH, bottom)
 
-        ui.g.roundedShadow(x, y, x + Theme.WIDTH, bottom, Theme.shadow, 12f, Corners(Theme.RADIUS))
+        ui.g.roundedShadow(x, y, x + Theme.WIDTH, bottom, Theme.shadow, 12f, ALL)
         ui.hit(x, y, x + Theme.WIDTH, bottom) { _, _, _ -> true }
 
-        ui.g.roundedRect(x, y, x + Theme.WIDTH, y + Theme.ROW, Theme.background.rgba, Corners.top(Theme.RADIUS))
-        ui.textCentered("§l$name", x, y, x + Theme.WIDTH, y + Theme.ROW)
+        ui.g.roundedRect(x, y, x + Theme.WIDTH, y + Theme.ROW, Theme.background.rgba, TOP)
+        ui.text(title, x + titleX, y + (Theme.ROW - 8) / 2)
         ui.hit(x, y, x + Theme.WIDTH, y + Theme.ROW) { button, mx, my ->
             when (button) {
                 InputConstants.MOUSE_BUTTON_RIGHT -> {
@@ -219,7 +246,7 @@ class Panel(val name: String, val modules: List<ModuleView>, defaultX: Int, defa
         }
 
         val accented = shown > 0 && offset >= maxScroll && lastShown?.module?.enabled == true
-        ui.g.roundedRect(x, bottom - Theme.CAP, x + Theme.WIDTH, bottom, (if (accented) Theme.accent else Theme.background).rgba, Corners.bottom(Theme.RADIUS))
+        ui.g.roundedRect(x, bottom - Theme.CAP, x + Theme.WIDTH, bottom, (if (accented) Theme.accent else Theme.background).rgba, BOTTOM)
     }
 
     private fun maxX(vw: Int) = max(0, vw - Theme.WIDTH)
@@ -227,6 +254,9 @@ class Panel(val name: String, val modules: List<ModuleView>, defaultX: Int, defa
 
     companion object {
         const val MIN_LIST = 72
+        private val ALL = Corners(Theme.RADIUS)
+        private val TOP = Corners.top(Theme.RADIUS)
+        private val BOTTOM = Corners.bottom(Theme.RADIUS)
 
         fun build(views: (Module) -> ModuleView): List<Panel> {
             val grouped = LinkedHashMap<String, MutableList<Module>>()
