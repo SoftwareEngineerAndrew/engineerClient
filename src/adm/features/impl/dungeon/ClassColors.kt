@@ -42,9 +42,15 @@ object ClassColors : Module(
     /** The exact colour as a §x hex code, for chat text that goes through hexText. */
     fun hexCode(clazz: DungeonClass): String {
         val c = color(clazz)
-        val hex = "%02x%02x%02x".format(c.red, c.green, c.blue)
-        return buildString(14) { append("§x"); for (ch in hex) append('§').append(ch) }
+        val rgb = (c.red shl 16) or (c.green shl 8) or c.blue
+        hexCodes[clazz.ordinal]?.let { if (it.rgb == rgb) return it.code }
+        val code = buildString(14) { append("§x"); for (shift in 20 downTo 0 step 4) append('§').append(CODES[rgb shr shift and 15]) }
+        hexCodes[clazz.ordinal] = Hex(rgb, code)
+        return code
     }
+
+    private class Hex(val rgb: Int, val code: String)
+    private val hexCodes = arrayOfNulls<Hex>(DungeonClass.entries.size)
 
     /** The chat colour code nearest the class's colour. */
     fun code(clazz: DungeonClass): Char {
