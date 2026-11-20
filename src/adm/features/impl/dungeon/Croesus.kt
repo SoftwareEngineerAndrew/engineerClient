@@ -7,7 +7,9 @@ import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.ActionSetting
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.StringSetting
 import com.adm.clickgui.settings.impl.drawAtHud
+import com.adm.events.FloorEnterEvent
 import com.adm.events.GuiEvent
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
@@ -29,11 +31,17 @@ import kotlinx.coroutines.launch
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
+import net.minecraft.ChatFormatting
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.FormattedText
+import net.minecraft.network.chat.Style
+import net.minecraft.network.chat.TextColor
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import java.util.IdentityHashMap
+import java.util.Locale
+import java.util.Optional
 
 object Croesus : Module(
     name = "Croesus",
@@ -45,6 +53,8 @@ object Croesus : Module(
     private val includeKey by BooleanSetting("Include Key", desc = "Count Dungeon Chest Key as unclaimed.").withDependency { hideClaimed }
     private val minimized by BooleanSetting("Minimized", false, desc = "Only display profit for each chest instead of all items.")
     private val includeEssence by BooleanSetting("Include Essence", true, desc = "Counts essence in chest profit.")
+    private val slotProfit by BooleanSetting("Slot Profit", false, desc = "Shows each chest's profit under it in the run's chest menu.")
+    private val blacklist by StringSetting("Profit Blacklist", "", 256, desc = "Item names or ids counted as worth nothing, comma separated.", placeholder = "Mimic Fragment, DUNGEON_DISC_1")
     private val rerollGuard by NumberSetting("Reroll Guard", 5, 0..100, desc = "Blocks rerolling a chest worth more than this; hold Ctrl to reroll anyway. 0 is off.", unit = "M")
 
     private val openedHud by HUD("Opened Chests HUD", "The chests you opened, with their profit, after the menu closes.") { example ->
@@ -98,10 +108,20 @@ object Croesus : Module(
 
     private val ultimates = setOf("Soul Eater", "Combo", "Legion", "One For All", "Rend", "Bank", "Swarm", "Last Stand", "Wisdom", "No Pain No Gain")
 
-    private class Reward(val name: String, val price: Double)
+    private val petLine = Regex("^\\[Lvl \\d+] ([A-Za-z ]+)$")
+
+    private class Reward(val name: String, val price: Double, val blacklisted: Boolean = false)
 
     private class Chest(val title: Component, val rewards: List<Reward>, val profit: Double, val slot: Int) {
         val profitLine = "§8- §6Profit: ${if (profit >= 0) "§2" else "§c"}${"%,.0f".format(profit)}"
+        val slotLabel = when {
+            rewards.any { it.blacklisted } -> "§4"
+            profit <= 0 -> "§c"
+            profit <= 500_000 -> "§e"
+            profit <= 10_000_000 -> "§a"
+            else -> "§6"
+        } + (if (profit < 0) "-" + ItemWorth.coins(-profit) else ItemWorth.coins(profit))
+        var labelWidth = -1
         val rewardLines = Array(rewards.size) { "  §7${rewards[it].name}: §a${"%,.0f".format(rewards[it].price)}" }
     }
 
@@ -121,7 +141,7 @@ object Croesus : Module(
     private val runChests = linkedMapOf<Int, Chest>()
     private val rewardsBySlot = linkedMapOf<Int, Reward>()
     private val costsBySlot = linkedMapOf<Int, Double>()
-    private var openedLines = emptyList<String>()
+    @Volatile private var openedLines = emptyList<String>()
     private val sampleOpened = listOf("§fBedrock Chest§7: §2+12,500,000", "§fObsidian Chest§7: §c-450,000")
 
     @Volatile private var openedChests = 0
@@ -181,9 +201,10 @@ object Croesus : Module(
         scope.launch { loadPrices() }
 
         on<GuiEvent.DrawTooltip> {
-            if (!croesusHud.enabled) return@on
+            if (!croesusHud.enabled && !slotProfit) return@on
             val v = viewOf(screen)
-            if (v == View.REWARD_CHEST || v == View.RUN) guiGraphics.drawAtHud(croesusHud) { drawChests(chests) }
+            if (slotProfit && v == View.RUN) (screen as? AbstractContainerScreen<*>)?.let { drawSlotLabels(it, guiGraphics) }
+            if (croesusHud.enabled && (v == View.REWARD_CHEST || v == View.RUN)) guiGraphics.drawAtHud(croesusHud) { drawChests(chests) }
         }
 
         on<GuiEvent.RenderSlot> {
@@ -253,10 +274,9 @@ object Croesus : Module(
             }
         }
 
-        on<LevelEvent.Load> {
-            countedThisRun = false
-            openedLines = emptyList()
-        }
+        on<LevelEvent.Load> { countedThisRun = false }
+
+        on<FloorEnterEvent> { openedLines = emptyList() }
 
         on<GuiEvent.SlotClick> {
             if (viewOf(screen) != View.REWARD_CHEST) return@on
@@ -321,16 +341,25 @@ object Croesus : Module(
         for (i in end + 1 until minOf(lore.size, end + 6)) if (lore[i] == KEY) cost += priceOf(KEY_ID) ?: 0.0
         var total = 0.0
         val rewards = ArrayList<Reward>(end - first)
+        val styled = stack.lore
         for (i in first until end) {
             val line = lore[i]
-            val price = priceOfLine(line) ?: 0.0
+            if (isBlacklisted(line, null)) {
+                rewards += Reward(line, 0.0, true)
+                continue
+            }
+            val price = priceOfLine(line, styled.getOrNull(i)) ?: 0.0
             total += price
             rewards += Reward(line, price)
         }
         return Chest(stack.hoverName, rewards, total - cost, slot)
     }
 
-    private fun priceOfLine(line: String): Double? {
+    private fun priceOfLine(line: String, styled: Component?): Double? {
+        petLine.find(line)?.let { m ->
+            val tier = styled?.let(::petTier) ?: return null
+            return ItemWorth.petPrice(m.groupValues[1].trim().uppercase(Locale.ROOT).replace(' ', '_'), tier)
+        }
         bookLine.find(line)?.let { m ->
             val (name, level) = m.destructured
             val prefix = if (name in ultimates) "ULTIMATE_" else ""
@@ -342,7 +371,10 @@ object Croesus : Module(
             return priceOf("ESSENCE_${name.uppercase()}")?.let { it * amount.toDouble() }
         }
         shardLine.find(line)?.let { m -> return priceOf("SHARD_${m.groupValues[1].uppercase().replace(" ", "_")}") }
-        ItemWorth.idForName(line.removePrefix("Shiny "))?.let { id -> priceOf(id)?.let { return it } }
+        ItemWorth.idForName(line.removePrefix("Shiny "))?.let { id ->
+            if (isBlacklisted(line, id)) return 0.0
+            priceOf(id)?.let { return it }
+        }
         return cachedPrices[line.uppercase().replace("'", "").replace(" -", "").replace(" ", "_")]
     }
 
@@ -371,12 +403,15 @@ object Croesus : Module(
     }
 
     private fun bookReward(stack: ItemStack): Reward? {
+        if (isBlacklisted(stack.hoverName.string, null)) return Reward(stack.hoverName.string, 0.0, true)
         val (name, level) = bookData.find(stack.customData.get("enchantments").toString())?.destructured ?: return null
         return cachedPrices["ENCHANTED_BOOK-${name.uppercase()}-$level"]?.let { Reward(stack.hoverName.string, it) }
     }
 
     private fun stackReward(stack: ItemStack): Reward? {
         val name = stack.hoverName.string
+        if (isBlacklisted(name, stack.itemId)) return Reward(name, 0.0, true)
+        if (stack.itemId == "PET") return ItemWorth.petPrice(stack)?.let { Reward(name, it) }
         essenceLine.find(name)?.let { m ->
             if (!includeEssence) return null
             val (essence, amount) = m.destructured
@@ -389,7 +424,65 @@ object Croesus : Module(
         return priceOf(stack.itemId)?.let { Reward(name, it) }
     }
 
-    private fun GuiGraphicsExtractor.drawChests(list: List<Chest>): Pair<Int, Int> {
+    private var blacklistText = ""
+    private var blacklistSet = emptySet<String>()
+
+    private fun isBlacklisted(name: String, id: String?): Boolean {
+        val text = blacklist
+        if (text.isBlank()) return false
+        if (text != blacklistText) {
+            blacklistText = text
+            blacklistSet = text.split(',').map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotEmpty() }.toSet()
+        }
+        val set = blacklistSet
+        return name.lowercase(Locale.ROOT) in set || id != null && id.lowercase(Locale.ROOT) in set
+    }
+
+    private val TIER_COLORS = mapOf(
+        TextColor.WHITE.value to "COMMON", TextColor.GREEN.value to "UNCOMMON", TextColor.BLUE.value to "RARE",
+        TextColor.DARK_PURPLE.value to "EPIC", TextColor.GOLD.value to "LEGENDARY", TextColor.LIGHT_PURPLE.value to "MYTHIC",
+    )
+
+    // A pet's tier is only in the colour of its name.
+    private fun petTier(line: Component): String? {
+        var color: Int? = null
+        line.visit(FormattedText.StyledContentConsumer<Unit> { style, piece ->
+            var current = style.color?.value
+            var i = 0
+            while (i < piece.length) {
+                val c = piece[i]
+                if (c == '§' && i + 1 < piece.length) {
+                    ChatFormatting.getByCode(piece[i + 1])?.let { TextColor.fromLegacyFormat(it) }?.let { current = it.value }
+                    i += 2
+                    continue
+                }
+                if (c.isLetter()) color = current
+                i++
+            }
+            Optional.empty()
+        }, Style.EMPTY)
+        return TIER_COLORS[color ?: return null]
+    }
+
+    private fun drawSlotLabels(screen: AbstractContainerScreen<*>, graphics: GuiGraphicsExtractor) {
+        val slots = screen.menu.slots
+        val pose = graphics.pose()
+        val list = chests
+        for (i in list.indices) {
+            val chest = list[i]
+            val slot = slots.getOrNull(chest.slot) ?: continue
+            val label = chest.slotLabel
+            if (chest.labelWidth < 0) chest.labelWidth = mc.font.width(label)
+            pose.pushMatrix()
+            pose.translate(screen.leftPos + slot.x + 8 - chest.labelWidth / 4f, screen.topPos + slot.y + 17f)
+            pose.scale(0.5f)
+            graphics.text(mc.font, label, 0, 0, -1, true)
+            pose.popMatrix()
+        }
+    }
+
+    private fun GuiGraphicsExtractor.drawChests(
+list: List<Chest>): Pair<Int, Int> {
         val nameWidth = getStringWidth("Diamond ")
         val full = !minimized
         var y = 0

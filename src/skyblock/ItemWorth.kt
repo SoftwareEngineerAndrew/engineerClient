@@ -1,5 +1,6 @@
 package com.engineerclient.skyblock
 
+import com.google.gson.JsonParser
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.adm.AdmMod
@@ -142,6 +143,20 @@ object ItemWorth {
     fun idForName(name: String): String? {
         ensureFresh()
         return idsByName[name]
+    }
+
+    /** A pet's lowest BIN by its type and tier, e.g. SPIRIT and LEGENDARY. */
+    fun petPrice(type: String, tier: String): Double? {
+        ensureFresh()
+        return lbin["PET-$type-$tier"]
+    }
+
+    fun petPrice(stack: ItemStack): Double? {
+        val info = stack.customData.getString("petInfo").orElse(null) ?: return null
+        val json = runCatching { JsonParser.parseString(info).asJsonObject }.getOrNull() ?: return null
+        val type = json.get("type")?.asString ?: return null
+        val tier = json.get("tier")?.asString ?: return null
+        return petPrice(type, tier)
     }
 
     private class TooltipKey(val data: CustomData, val count: Int, val lbin: Map<String, Double>, val buy: Map<String, Double>, val sell: Map<String, Double>, val npc: Map<String, Double>, val flags: Int) {
