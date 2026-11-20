@@ -256,33 +256,56 @@ object BetterPartyFinder : Module(
         pose.popMatrix()
     }
 
-    /** Returns [lines] itself when there is nothing to change. */
-    fun decorateTooltip(screen: AbstractContainerScreen<*>, stack: ItemStack, lines: List<Component>): List<Component> {
-        if (!listing(screen, stack)) return lines
+    private class Member(val name: String, val prefix: String, val floor: Int, val master: Boolean) {
+        val plain: Component = Component.literal(prefix)
+    }
+    private class Parsed(val stack: ItemStack, val size: Int, val members: Array<Member?>, val missing: List<DungeonClass>) {
+        var missingFor: DungeonClass? = null
+        var missingLine: Component? = null
+    }
+    private var parsed: Parsed? = null
 
+    // The tooltip asks every frame; a listing's lines only change with its stack.
+    private fun parse(stack: ItemStack, lines: List<Component>): Parsed {
+        parsed?.let { if (it.stack === stack && it.size == lines.size) return it }
         var floor = 0
         var master = false
         val missing = classes.toMutableList()
-        val wantStats = tooltipCata || tooltipSecrets || tooltipMp || tooltipPb
-
-        val out = lines.map { line ->
-            val clean = line.string.noControlCodes
+        val members = arrayOfNulls<Member>(lines.size)
+        for (i in lines.indices) {
+            val clean = lines[i].string.noControlCodes
             if (clean.contains("Dungeon: Master Mode")) master = true
             floorRegex.find(clean)?.let { floor = romanToInt(it.groupValues[1]) }
-            val m = partyMemberRegex.matchEntire(clean) ?: return@map line
+            val m = partyMemberRegex.matchEntire(clean) ?: continue
             val (name, className, level) = m.destructured
             classNamed(className)?.let(missing::remove)
-            val stats = if (wantStats) memberStats(name, floor, master) else ""
-            Component.literal(" §b$name: §e$className ${levelColor(level.toInt())}$level $stats")
-        }.toMutableList()
-
-        if (showMissingTooltip) {
-            val mine = ClassDetect.myClass()
-            out.add(Component.literal("§cMissing: §7" + missing.joinToString(", ") { clazz ->
-                val label = clazz.name.lowercase().replaceFirstChar(Char::titlecase)
-                if (clazz == mine) "§${clazz.colorCode}§l$label§7" else label
-            }))
+            members[i] = Member(name, " §b$name: §e$className ${levelColor(level.toInt())}$level ", floor, master)
         }
+        return Parsed(stack, lines.size, members, missing).also { parsed = it }
+    }
+
+    private fun missingLine(p: Parsed): Component {
+        val mine = ClassDetect.myClass()
+        p.missingLine?.let { if (p.missingFor == mine) return it }
+        return Component.literal("§cMissing: §7" + p.missing.joinToString(", ") { clazz ->
+            val label = clazz.name.lowercase().replaceFirstChar(Char::titlecase)
+            if (clazz == mine) "§${clazz.colorCode}§l$label§7" else label
+        }).also { p.missingLine = it; p.missingFor = mine }
+    }
+
+    /** Returns [lines] itself when there is nothing to change. */
+    fun decorateTooltip(screen: AbstractContainerScreen<*>, stack: ItemStack, lines: List<Component>): List<Component> {
+        if (!listing(screen, stack)) return lines
+        val p = parse(stack, lines)
+        val wantStats = tooltipCata || tooltipSecrets || tooltipMp || tooltipPb
+        val missing = if (showMissingTooltip) missingLine(p) else null
+
+        val out = ArrayList<Component>(lines.size + 1)
+        for (i in lines.indices) {
+            val m = p.members[i]
+            out += if (m == null) lines[i] else if (wantStats) Component.literal(m.prefix + memberStats(m.name, m.floor, m.master)) else m.plain
+        }
+        if (missing != null) out += missing
         return out
     }
 
