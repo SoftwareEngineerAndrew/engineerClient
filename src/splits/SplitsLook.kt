@@ -153,6 +153,8 @@ object SplitsLook {
             val wasOff = separateHuds.values.none { it.value.enabled }
             for ((name, hud) in separateHuds) hud.value.enabled = separate.value && shownName(name)
             if (wasOff && separate.value) stackSeparate()
+            // Not drawn for a second (hidden, or nothing to show): the next draw lays it out again anyway.
+            if (cached != null && System.nanoTime() - drawnAt > 1_000_000_000L) { cached = null; cachedKey = -1L }
         }
         EventBus.subscribe(this)
         (Splits.settings.remove("Keybind") as? KeybindSetting)?.let { ModuleManager.keybindSettingsCache.remove(it) }
@@ -348,12 +350,15 @@ object SplitsLook {
     private var cached: Layout? = null
     private var cachedKey = -1L
     private var cachedChanges = -1
+    private var drawnAt = 0L
 
     private fun time(l: EngineerLook.Line) = (if (l.graded) l.colour else "§a") + l.time + (l.ticks?.let { " §8(§7$it§8)" } ?: "")
 
     // Times show to a tenth of a second, so a tick's worth of time is as fresh as the lines need to be.
     private fun layout(example: Boolean): Layout? {
-        val key = System.nanoTime() / 50_000_000 * 2 + if (example) 1 else 0
+        val now = System.nanoTime()
+        drawnAt = now
+        val key = now / 50_000_000 * 2 + if (example) 1 else 0
         val changes = SplitsManager.changes
         if (key == cachedKey && changes == cachedChanges) return cached
         cached = computeLayout(example)
