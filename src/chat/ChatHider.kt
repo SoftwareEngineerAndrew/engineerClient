@@ -45,6 +45,39 @@ object ChatHider {
         reload()
     }
 
+    /** /adm chathide list: the player's own rules, numbered for remove. */
+    fun listRules() {
+        val own = try { ownEntries() } catch (t: Throwable) { return EngineerClient.msg("§cCould not read ${userFile.fileName}.") }
+        if (own.isEmpty()) return EngineerClient.msg("§7clean chat: you have no rules of your own.")
+        EngineerClient.msg("§7clean chat: your rules")
+        own.forEachIndexed { i, (_, entry) ->
+            val action = entry.get("action")?.takeIf { it.isJsonPrimitive }?.asString ?: "block"
+            EngineerClient.msg("§7${i + 1}. §f${entry.get("regex")?.asString} §8($action)")
+        }
+    }
+
+    /** /adm chathide remove: drops the player's own rule [index] (1-based, as listed). */
+    fun removeRule(index: Int) {
+        try {
+            val root = if (Files.exists(userFile)) JsonParser.parseString(Files.readString(userFile)).asJsonObject else JsonObject()
+            val own = ownEntries(root)
+            val (array, entry) = own.getOrNull(index - 1) ?: return EngineerClient.msg("§cNo rule #$index; /adm chathide list shows them.")
+            array.remove(entry)
+            write(root)
+            EngineerClient.msg("§7clean chat: removed §f${entry.get("regex")?.asString}")
+        } catch (t: Throwable) {
+            EngineerClient.logger.warn("[ec] chat hider rule not removed", t)
+            return EngineerClient.msg("§cCould not save ${userFile.fileName}.")
+        }
+        reload()
+    }
+
+    private fun ownEntries(root: JsonObject = if (Files.exists(userFile)) JsonParser.parseString(Files.readString(userFile)).asJsonObject else JsonObject()) =
+        listOf("custom", "block").flatMap { key ->
+            val array = root.getAsJsonArray(key) ?: return@flatMap emptyList()
+            array.mapNotNull { e -> (e as? JsonObject)?.takeIf { it.get("regex")?.isJsonPrimitive == true }?.let { array to it } }
+        }
+
     @Volatile
     private var rules: ChatRules = ChatRules(emptyList(), emptyList())
     private var loaded = false
