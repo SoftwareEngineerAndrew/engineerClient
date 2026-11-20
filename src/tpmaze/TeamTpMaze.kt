@@ -16,6 +16,7 @@ import com.adm.events.LevelEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.RoomEnterEvent
 import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
 import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
@@ -131,21 +132,32 @@ object TeamTpMaze {
     fun install() {
         replaceCoreSettings(listOf(dropdown, on, tracer, labels, nextColor, finalColor, usedColor, mateColor))
         on<LevelEvent.Load> { EngineerClient.safely("team tp maze reset") { reset() } }
-        on<RoomEnterEvent> { EngineerClient.safely("team tp maze room") { room?.takeIf { it.data?.name == ROOM }?.let { enter(it) } } }
-        // A teammate's: every server position of theirs comes through here, so the last one is where they stood.
-        on<EntityEvent.Move> {
-            if (!inMaze()) return@on
-            val e = entity as? Player ?: return@on
-            if (e === mc.player || e.name.string !in mates) return@on
-            val from = last.put(e.id, newPos) ?: return@on
-            EngineerClient.safely("team tp maze teammate") { teleport(from.x, from.z, newPos.x, newPos.y, newPos.z, yRot.toDouble(), exact = false) }
-        }
+        on<RoomEnterEvent> { EngineerClient.safely("team tp maze room") { room?.takeIf { it.data?.name == ROOM }?.let { enter(it) }; watchMates() } }
         on<TickEvent.End> { EngineerClient.safely("team tp maze tick") { tick() } }
         on<RenderExtractEvent> { EngineerClient.safely("team tp maze render") { render(this) } }
         SubscribeWhile.add(this, {
             if (offIn.get() !== mc.level) reset()
             DungeonUtils.currentRoom?.takeIf { it.data?.name == ROOM }?.let { enter(it) }
-        }, { offIn = java.lang.ref.WeakReference(mc.level); disconnect() }) { on.value && PuzzleSolvers.enabled }
+            watchMates()
+        }, { offIn = java.lang.ref.WeakReference(mc.level); EventBus.unsubscribe(MateMoves); disconnect() }) { on.value && PuzzleSolvers.enabled }
+    }
+
+    // A teammate's: every server position of theirs comes through here, so the last one is where they stood.
+    private object MateMoves {
+        init {
+            on<EntityEvent.Move> {
+                if (!inMaze()) return@on
+                val e = entity as? Player ?: return@on
+                if (e === mc.player || e.name.string !in mates) return@on
+                val from = last.put(e.id, newPos) ?: return@on
+                EngineerClient.safely("team tp maze teammate") { teleport(from.x, from.z, newPos.x, newPos.y, newPos.z, yRot.toDouble(), exact = false) }
+            }
+        }
+    }
+
+    // The current room only changes with a RoomEnterEvent or a world load, so this keeps the listener on whenever inMaze() can hold.
+    private fun watchMates() {
+        if (mazeRoom != null && DungeonUtils.currentRoomName == ROOM) EventBus.subscribe(MateMoves) else EventBus.unsubscribe(MateMoves)
     }
 
     /** TpMazeTeleportMixin: our own teleport, on the client thread just before the game moves us, so where we stood is still known. */
@@ -190,6 +202,7 @@ object TeamTpMaze {
         map = MazeMap(); frame = null; mazeRoom = null; plan = emptyMap(); where = emptyMap()
         dirty = false; cooldown = 0; heard.clear(); mates.clear(); last.clear(); stale = true
         padsFrame = null; padsRoom = null; minePad = -1; padKind.fill(NONE); padOutlined.fill(false); padLabel.fill(null)
+        EventBus.unsubscribe(MateMoves)
         disconnect()
     }
 
