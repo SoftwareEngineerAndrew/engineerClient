@@ -36,23 +36,29 @@ object LocationUtils {
     // A location sent while switching servers (no player yet) belongs to the world that is about to load.
     private var pendingArea: Island? = null
     private var pendingSkyblock = false
+    private var pendingKnown = false
+    // The Mod API has told where this world is: the tab list needn't be read for it.
+    @Volatile private var apiKnown = false
 
     init {
         HypixelModAPI.getInstance().subscribeToEventPacket(ClientboundLocationPacket::class.java)
         HypixelModAPI.getInstance().createHandler(ClientboundLocationPacket::class.java) { packet ->
             val skyblock = packet.serverType.getOrNull() == GameType.SKYBLOCK
             val area = if (skyblock) packet.map.getOrNull()?.let(::islandFromMap) ?: Island.Unknown else Island.Unknown
+            val known = !skyblock || area !== Island.Unknown
             if (mc.player == null) {
                 pendingArea = area
                 pendingSkyblock = skyblock
+                pendingKnown = known
                 return@createHandler
             }
+            if (known) apiKnown = true
             if (skyblock) isInSkyblock = true
             if (area !== Island.Unknown && currentArea !== area) currentArea = area
         }
 
         onReceive<ClientboundPlayerInfoUpdatePacket> {
-            if (!isCurrentArea(Island.Unknown) || actions().none { it.equalsOneOf(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME) }) return@onReceive
+            if (apiKnown || !isCurrentArea(Island.Unknown) || actions().none { it.equalsOneOf(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME) }) return@onReceive
             val area = entries().find { it.displayName?.string?.startsWithOneOf("Area: ", "Dungeon: ") == true }?.displayName?.string ?: return@onReceive
             currentArea = Island.entries.firstOrNull { area.contains(it.displayName, true) } ?: Island.Unknown
         }
@@ -71,9 +77,11 @@ object LocationUtils {
         on<LevelEvent.Load> {
             currentArea = if (mc.hasSingleplayerServer()) Island.SinglePlayer else pendingArea ?: Island.Unknown
             isInSkyblock = pendingSkyblock
+            apiKnown = pendingKnown
             lobbyId = null
             pendingArea = null
             pendingSkyblock = false
+            pendingKnown = false
         }
     }
 
