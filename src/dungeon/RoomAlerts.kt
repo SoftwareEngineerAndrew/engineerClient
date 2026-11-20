@@ -8,7 +8,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.resources.Identifier
 import com.adm.events.CheckmarkUpdateEvent
 import com.adm.events.LevelEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.features.impl.dungeon.map.tile.DoorType
@@ -41,10 +41,10 @@ object RoomAlerts {
         on<CheckmarkUpdateEvent> {
             val room = room; val mark = checkmark
             val before = marks.put(room, mark)
-            if (ClearInfo.roomAlertsOn) mc.execute { onMark(room, before, mark) }
+            mc.execute { onMark(room, before, mark) }
         }
         on<LevelEvent.Load> { marks.clear() }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { marks.clear() }) { ClearInfo.roomAlertsOn }
         HudElementRegistry.attachElementBefore(VanillaHudElements.SLEEP, Identifier.fromNamespaceAndPath("engineerclient", "room_alert_vignette")) { gfx, _ ->
             EngineerClient.safely("room alert vignette") { drawVignette(gfx) }
         }

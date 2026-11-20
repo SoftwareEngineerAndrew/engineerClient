@@ -6,7 +6,7 @@ import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.events.LevelEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.SecretClicked
 import com.adm.utils.playSoundSettings
@@ -38,7 +38,7 @@ object InstantChime {
         SecretClicked.registerSetting(instant)
         on<LevelEvent.Load> { chimed.clear() }
         on<TickEvent.End> {
-            if (!instant.value || !DungeonUtils.inClear || !chimeOn()) return@on
+            if (!DungeonUtils.inClear) return@on
             val player = EngineerClient.mc.player ?: return@on
             val level = EngineerClient.mc.level ?: return@on
             val reach = player.boundingBox.inflate(1.0, 0.5, 1.0)
@@ -51,6 +51,6 @@ object InstantChime {
                 playSoundSettings(soundSettings())
             }
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { chimed.clear() }) { instant.value && chimeOn() }
     }
 }

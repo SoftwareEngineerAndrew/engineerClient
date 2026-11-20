@@ -7,6 +7,7 @@ import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.utils.Colors
 import com.adm.utils.addVec
@@ -108,12 +109,11 @@ object TermStatus {
     }
 
     fun install() {
-        on<EntityEvent.SetData> {
-            if (!Terminals.statusOn) return@on
+        Live.on<EntityEvent.SetData> {
             val stand = entity as? ArmorStand ?: return@on
             if (DungeonUtils.getF7Phase() == M7Phases.P3) track(stand)
         }
-        on<EntityEvent.Remove> { (entity as? ArmorStand)?.let { inactive.remove(it) } }
+        Live.on<EntityEvent.Remove> { (entity as? ArmorStand)?.let { inactive.remove(it) } }
 
         on<MessageEvent.Chat> {
             if (!DungeonUtils.inBoss) return@on
@@ -140,20 +140,19 @@ object TermStatus {
 
         on<LevelEvent.Load> { inactive.clear(); shouldRender = false; resetState() }
 
-        on<RenderExtractEvent> {
-            val on = Terminals.statusOn
-            if (on != wasOn) {
-                wasOn = on
+        Live.on<RenderExtractEvent> {
+            if (!wasOn) {
+                wasOn = true
                 // Stands named while Status was off were never tracked.
-                if (on && DungeonUtils.getF7Phase() == M7Phases.P3) mc.level?.entitiesForRendering()?.forEach { (it as? ArmorStand)?.let(::track) }
+                if (DungeonUtils.getF7Phase() == M7Phases.P3) mc.level?.entitiesForRendering()?.forEach { (it as? ArmorStand)?.let(::track) }
             }
             if (inactive.isEmpty()) return@on
-            val hide = on && Terminals.hideDefaultNames
+            val hide = Terminals.hideDefaultNames
             if (hide != namesHidden) {
                 namesHidden = hide
                 for (stand in inactive.keys) stand.isCustomNameVisible = !hide
             }
-            if (!on || !Terminals.waypoints || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
+            if (!Terminals.waypoints || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             inactive.forEach { (stand, kind) ->
                 val label = kind.label?.takeIf { kind.shown } ?: return@forEach
                 val look = Terminals.waypointStyle
@@ -166,6 +165,16 @@ object TermStatus {
             }
         }
         EventBus.subscribe(this)
+        SubscribeWhile.add(Live, ::off) { Terminals.statusOn }
+    }
+
+    private object Live
+
+    private fun off() {
+        if (namesHidden || Terminals.hideDefaultNames) for (stand in inactive.keys) stand.isCustomNameVisible = true
+        inactive.clear()
+        namesHidden = false
+        wasOn = false
     }
 
     private fun track(stand: ArmorStand) {

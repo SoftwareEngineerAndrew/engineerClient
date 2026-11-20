@@ -10,7 +10,7 @@ import com.engineerclient.practice.TermInfo
 import com.adm.events.RenderExtractEvent
 import com.adm.events.core.on
 import com.engineerclient.terminals.Terminals
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.utils.Colors
 import com.adm.utils.render.drawText
 import com.adm.utils.render.text
@@ -76,8 +76,8 @@ object TermProgress {
         PoseShare.onExtra(7) { sender, b -> heard(sender, 7, b) }
         PoseShare.onExtra(8) { sender, b -> heard(sender, 8, b) }
         ClientTickEvents.END_CLIENT_TICK.register { EngineerClient.safely("term progress") { tick() } }
-        on<RenderExtractEvent> { EngineerClient.safely("term progress labels") { if (Terminals.progressOn && Terminals.progressLabels) drawLabels(this) } }
-        EventBus.subscribe(this)
+        on<RenderExtractEvent> { EngineerClient.safely("term progress labels") { drawLabels(this) } }
+        SubscribeWhile.add(this) { Terminals.progressOn && Terminals.progressLabels }
     }
 
     // ------------------------------------------------------------------ what's sent

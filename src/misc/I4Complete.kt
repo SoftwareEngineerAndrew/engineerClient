@@ -42,7 +42,7 @@ object I4Complete {
     private var shown = false
     private var ssShown = false
 
-    fun register() = SubscribeWhile.add(this, { tagWasActive = null }) { RandomStuff.enabled }
+    fun register() = SubscribeWhile.add(this, ::reset) { RandomStuff.enabled }
 
     private fun reset() { tagWasActive = null; shown = false; ssShown = false }
 

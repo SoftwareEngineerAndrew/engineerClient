@@ -2,7 +2,7 @@ package com.engineerclient.terminals
 
 import com.engineerclient.EngineerClient.mc
 import com.adm.events.PacketEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.onReceive
 import com.adm.utils.noControlCodes
 import com.adm.utils.setSubtitle
@@ -20,9 +20,9 @@ object TermTitles {
     private val colorCode = Regex("&([0-9A-FK-ORa-fk-or])")
 
     fun install() {
-        onReceive<ClientboundSetTitleTextPacket> { if (Terminals.titlesOn) it.handle(text.string) }
-        onReceive<ClientboundSetSubtitleTextPacket> { if (Terminals.titlesOn) it.handle(text.string) }
-        EventBus.subscribe(this)
+        onReceive<ClientboundSetTitleTextPacket> { it.handle(text.string) }
+        onReceive<ClientboundSetSubtitleTextPacket> { it.handle(text.string) }
+        SubscribeWhile.add(this) { Terminals.titlesOn }
     }
 
     private fun PacketEvent.Receive.handle(text: String) {
