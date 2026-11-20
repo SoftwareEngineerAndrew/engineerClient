@@ -22,6 +22,7 @@ import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvent
 import net.minecraft.world.entity.animal.wolf.WolfSoundVariants
 import net.minecraft.sounds.SoundEvents
+import net.minecraft.sounds.SoundSource
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.phys.Vec3
@@ -51,7 +52,7 @@ object Sounds : Module(
     private val muteExplosions by BooleanSetting("Mute Explosions", false, desc = "Mutes every explosion sound.")
     private val keepHype by BooleanSetting("Keep Hyperion Explosions", true, desc = "Hyperion's Implosion still plays.").withDependency { muteExplosions }
     private val muteAotv by BooleanSetting("Mute AOTV Sounds", false, desc = "Mutes the Aspect of the End and Aspect of the Void teleport sound.")
-    private val muteBlessing by BooleanSetting("Mute Blessing Jingle", false, desc = "Mutes the rising harp notes in dungeons.")
+    private val muteBlessing by BooleanSetting("Mute Blessing Jingle", false, desc = "Mutes the five rising harp notes of a paying chest or essence skull in dungeons.")
     private val muteBonzoStaff by BooleanSetting("Mute Bonzo Staff Sound", false, desc = "Mutes the Bonzo Staff's ghast scream; the firework boom stays.")
     private val lastBreath by BooleanSetting("Last Breath Pull Sound", false, desc = "Ticking sound while drawing a Last Breath, like Spring Boots.")
     private val lastBreathVolume by NumberSetting("Last Breath Volume", 1f, 0.0..5.0, 0.1f, desc = "Volume of the ticking.").withDependency { lastBreath }
@@ -95,7 +96,7 @@ object Sounds : Module(
         fun at(id: Identifier): Route = m.getOrPut(id) { Route() }
         fun of(e: SoundEvent): Route = at(e.location())
 
-        of(SoundEvents.NOTE_BLOCK_HARP.value()).first = Drop { muteBlessing && it.volume == 0.7f && DungeonUtils.inDungeons }
+        of(SoundEvents.NOTE_BLOCK_HARP.value()).first = Drop { muteBlessing && jingleNote(it) }
         of(SoundEvents.GENERIC_EXPLODE.value()).first = Drop {
             // Hyperion's Implosion is the only explosion played at volume 1, pitch 1.
             muteExplosions && !(keepHype && it.volume == 1f && it.pitch == 1f)
@@ -128,6 +129,39 @@ object Sounds : Module(
         of(SoundEvents.GENERIC_EAT.value()).after = Drop { bonzoNewSound() && abs(it.pitch - 0.59f) < 0.02f }
         of(SoundEvents.ZOMBIE_VILLAGER_CURE).after = Drop { bonzoNewSound() && abs(it.pitch - 2f) < 0.01f }
         m
+    }
+
+    // The jingle: harp at volume 1 from one spot, 50, 56, 63, 69 and 75 sixty-thirds about 5 ticks apart. Other harps
+    // (Ice Fill's notes, players' own items) differ in volume, pitch or spot.
+    private val jingleSteps = floatArrayOf(50f, 56f, 63f, 69f, 75f)
+    private const val JINGLES = 4
+    private val jingleX = DoubleArray(JINGLES)
+    private val jingleY = DoubleArray(JINGLES)
+    private val jingleZ = DoubleArray(JINGLES)
+    private val jingleNext = IntArray(JINGLES)
+    private val jingleAt = LongArray(JINGLES)
+
+    private fun jingleNote(p: ClientboundSoundPacket): Boolean {
+        if (p.volume != 1f || p.source !== SoundSource.BLOCKS || !DungeonUtils.inDungeons) return false
+        val step = p.pitch * 63f
+        val now = System.currentTimeMillis()
+        if (abs(step - jingleSteps[0]) < 0.1f) {
+            var slot = 0
+            for (i in 1 until JINGLES) if (jingleAt[i] < jingleAt[slot]) slot = i
+            jingleX[slot] = p.x; jingleY[slot] = p.y; jingleZ[slot] = p.z
+            jingleNext[slot] = 1
+            jingleAt[slot] = now
+            return true
+        }
+        for (i in 0 until JINGLES) {
+            val next = jingleNext[i]
+            if (next == 0 || now - jingleAt[i] > 1500L || abs(step - jingleSteps[next]) >= 0.1f) continue
+            if (p.x != jingleX[i] || p.y != jingleY[i] || p.z != jingleZ[i]) continue
+            jingleNext[i] = if (next == jingleSteps.size - 1) 0 else next + 1
+            jingleAt[i] = now
+            return true
+        }
+        return false
     }
 
     private fun bonzoNewSound() = bonzo && bonzoMute &&
