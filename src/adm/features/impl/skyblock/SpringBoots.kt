@@ -20,6 +20,7 @@ import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.phys.AABB
+import kotlin.math.roundToInt
 
 object SpringBoots : Module(
     name = "Spring Boots",
@@ -28,9 +29,11 @@ object SpringBoots : Module(
     private val hud by HUD("Spring Boots", "Shows how high you will jump.") { example ->
         val blocks = height
         if (blocks == 0f && !example) return@HUD NONE
-        if (blocks != labelFor || label.isEmpty()) {
+        val percent = showPercent
+        if (blocks != labelFor || percent != labelPercent || label.isEmpty()) {
             labelFor = blocks
-            label = tierColor(blocks) + blocks
+            labelPercent = percent
+            label = tierColor(blocks) + if (percent) "${(blocks * 100 / HEIGHTS.last()).roundToInt()}%" else blocks
             labelX = 1 + mc.font.width(PREFIX)
             labelSize = (labelX + mc.font.width(label)) to mc.font.lineHeight
         }
@@ -42,10 +45,12 @@ object SpringBoots : Module(
     private val boxColor by ColorSetting("Box Color", Colors.MINECRAFT_RED, true, desc = "Color of the landing box.")
     private val boxStyle by SelectorSetting("Box Style", BoxStyle.OUTLINE, desc = "Style of the landing box.")
     private val throughWalls by BooleanSetting("Through Walls", true, desc = "Draws the box through blocks.")
+    private val showPercent by BooleanSetting("Show Percent", false, desc = "Shows the charge as a percent of the highest jump.")
 
     private const val PREFIX = "Height: "
     private var label = ""
     private var labelFor = 0f
+    private var labelPercent = false
     private var labelX = 0
     private var labelSize = 0 to 0
     private val NONE = 0 to 0
