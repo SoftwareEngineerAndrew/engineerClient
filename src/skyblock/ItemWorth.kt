@@ -1,6 +1,7 @@
 package com.engineerclient.skyblock
 
-import com.google.gson.JsonObject
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import com.adm.AdmMod
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
@@ -9,6 +10,7 @@ import com.adm.features.impl.dungeon.Croesus
 import com.adm.utils.customData
 import com.adm.utils.itemId
 import com.adm.utils.network.WebUtils.fetchJson
+import com.adm.utils.network.WebUtils.fetchString
 import com.adm.utils.skyblock.LocationUtils
 import com.adm.utils.noControlCodes
 import kotlinx.coroutines.launch
@@ -18,6 +20,7 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.component.CustomData
 import net.minecraft.world.item.ItemStack
+import java.io.StringReader
 import java.util.Locale
 
 /** Croesus' price section: lowest BIN, bazaar prices and an estimated worth for any item, in its tooltip. */
@@ -66,30 +69,67 @@ object ItemWorth {
     private suspend fun refresh() {
         if (idsByName.isEmpty()) loadItems()
         fetchJson<Map<String, Double>>(LBIN_URL).getOrNull()?.let { lbin = it }
-        val products = fetchJson<JsonObject>(BAZAAR_URL).getOrNull()?.getAsJsonObject("products") ?: return
-        val buy = HashMap<String, Double>(products.size())
-        val sell = HashMap<String, Double>(products.size())
-        for ((id, v) in products.entrySet()) {
-            val q = v.asJsonObject.getAsJsonObject("quick_status") ?: continue
-            buy[id] = q["buyPrice"].asDouble
-            sell[id] = q["sellPrice"].asDouble
-        }
+        val body = fetchString(BAZAAR_URL).getOrNull() ?: return
+        val buy = HashMap<String, Double>(2048)
+        val sell = HashMap<String, Double>(2048)
+        // Streamed: the order books in each product are skipped, never built.
+        runCatching {
+            JsonReader(StringReader(body)).obj { key ->
+                if (key != "products") return@obj skipValue()
+                obj { id ->
+                    obj { field ->
+                        if (field != "quick_status") return@obj skipValue()
+                        obj { price ->
+                            when (price) {
+                                "buyPrice" -> buy[id] = nextDouble()
+                                "sellPrice" -> sell[id] = nextDouble()
+                                else -> skipValue()
+                            }
+                        }
+                    }
+                }
+            }
+        }.onFailure { return }
         bazaarBuy = buy
         bazaarSell = sell
     }
 
     private suspend fun loadItems() {
-        val items = fetchJson<JsonObject>(ITEMS_URL).getOrNull()?.getAsJsonArray("items") ?: return
-        val npc = HashMap<String, Double>(items.size())
-        val names = HashMap<String, String>(items.size())
-        for (e in items) {
-            val o = e.asJsonObject
-            val id = o["id"]?.asString ?: continue
-            o["npc_sell_price"]?.asDouble?.let { npc[id] = it }
-            o["name"]?.asString?.noControlCodes?.let { names.putIfAbsent(it, id) }
-        }
+        val body = fetchString(ITEMS_URL).getOrNull() ?: return
+        val npc = HashMap<String, Double>(8192)
+        val names = HashMap<String, String>(8192)
+        runCatching {
+            JsonReader(StringReader(body)).obj { key ->
+                if (key != "items") return@obj skipValue()
+                beginArray()
+                while (hasNext()) {
+                    var id: String? = null
+                    var sellPrice: Double? = null
+                    var name: String? = null
+                    obj { field ->
+                        when (field) {
+                            "id" -> id = nextString()
+                            "npc_sell_price" -> sellPrice = nextDouble()
+                            "name" -> name = nextString()
+                            else -> skipValue()
+                        }
+                    }
+                    val itemId = id ?: continue
+                    sellPrice?.let { npc[itemId] = it }
+                    name?.noControlCodes?.let { names.putIfAbsent(it, itemId) }
+                }
+                endArray()
+            }
+        }.onFailure { return }
         npcSell = npc
         idsByName = names
+    }
+
+    private inline fun JsonReader.obj(field: JsonReader.(String) -> Unit) {
+        if (peek() == JsonToken.NULL) return nextNull()
+        beginObject()
+        while (hasNext()) field(nextName())
+        endObject()
     }
 
     /** What one of [id] is worth: its bazaar instant-sell price, else its lowest BIN. */
