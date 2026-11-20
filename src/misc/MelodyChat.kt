@@ -3,11 +3,12 @@ package com.engineerclient.misc
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.practice.TermInfo
+import com.engineerclient.terminals.Terminals
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.boss.MelodyMessage
 import com.adm.utils.skyblock.dungeon.DungeonUtils
@@ -73,6 +74,8 @@ object MelodyChat {
             }
         }
         on<LevelEvent.Load> { chat.clear(); section = 0; p3 = false }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { clear(); section = 0; p3 = false }) {
+            MelodyMessage.enabled && chatRows.value || Terminals.progressOn && Terminals.progressChatMelody
+        }
     }
 }
