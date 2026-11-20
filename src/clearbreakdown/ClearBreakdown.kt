@@ -17,6 +17,7 @@ import com.adm.events.MessageEvent
 import com.adm.events.SecretsUpdateEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
 import com.adm.features.impl.dungeon.map.DungeonScan
@@ -79,7 +80,12 @@ object ClearBreakdown {
     var clears = ClearCredit(); private set
     var secrets = SecretCredit(); private set
     /** A run is being tracked: from Mort until it posts or the world changes. */
-    @Volatile var active = false; private set
+    @Volatile var active = false
+        private set(value) {
+            if (field == value) return
+            field = value
+            SubscribeWhile.changed()
+        }
     private val gate = RunGate()
     @Volatile private var syncOpen = false
     /** Everyone in the run, in party order: name -> class colour. */
@@ -154,7 +160,7 @@ object ClearBreakdown {
             mc.execute { EngineerClient.safely("clear breakdown bat") { Sightings.onBat(x, y, z) } }
         }
         on<BlockInteractEvent> { EngineerClient.safely("clear breakdown click") { Sightings.onClick(pos) } }
-        on<BlockUpdateEvent> { EngineerClient.safely("clear breakdown block") { Sightings.onBlockChange(pos, updated) } }
+        SubscribeWhile.add(BlockWatch) { active }
 
         on<CheckmarkUpdateEvent> {
             if (!active) return@on
@@ -197,6 +203,12 @@ object ClearBreakdown {
     }
 
     fun install() = EventBus.subscribe(this)
+
+    private object BlockWatch {
+        init {
+            on<BlockUpdateEvent> { EngineerClient.safely("clear breakdown block") { Sightings.onBlockChange(pos, updated) } }
+        }
+    }
 
     private fun reset() {
         clears = ClearCredit(); secrets = SecretCredit()
