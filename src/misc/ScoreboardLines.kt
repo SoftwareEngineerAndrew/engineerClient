@@ -143,7 +143,8 @@ object ScoreboardLines {
             return all
         }
         val settings = (if (hideCatacombsLocation) 1 else 0) or (if (hideTimeElapsed) 2 else 0) or (if (hideCleared) 4 else 0)
-        if (System.currentTimeMillis() > dirtyUntil && objective === shownObjective && settings == shownSettings && all.size == shownSize) return shown
+        if (!dirty && objective === shownObjective && settings == shownSettings && all.size == shownSize) return shown
+        dirty = false
         shownObjective = objective
         shownSettings = settings
         shownSize = all.size
@@ -163,11 +164,12 @@ object ScoreboardLines {
     private var shownObjective: Objective? = null
     private var shownSettings = -1
     private var shownSize = -1
-    @Volatile private var dirtyUntil = 0L
+    private var dirty = false
 
-    // Packets are read before the client thread applies them, so rebuild for a short while, not once.
+    /** A scoreboard packet was applied (client thread): the next draw rebuilds. */
+    @JvmStatic
     fun markDirty() {
-        dirtyUntil = System.currentTimeMillis() + 250
+        dirty = true
     }
 
     // --- text helpers --------------------------------------------------------------------------

@@ -25,7 +25,6 @@ import com.adm.events.ParticleEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
-import com.adm.events.core.onReceive
 import com.adm.features.Category
 import com.adm.features.Module
 import com.adm.utils.Color
@@ -42,11 +41,6 @@ import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.TitleScreen
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.client.particle.Particle
-import net.minecraft.network.protocol.game.ClientboundResetScorePacket
-import net.minecraft.network.protocol.game.ClientboundSetDisplayObjectivePacket
-import net.minecraft.network.protocol.game.ClientboundSetObjectivePacket
-import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket
-import net.minecraft.network.protocol.game.ClientboundSetScorePacket
 import net.minecraft.client.particle.SmokeParticle
 import net.minecraft.client.particle.TerrainParticle
 import net.minecraft.core.particles.ParticleTypes
@@ -238,11 +232,6 @@ object Visibility : Module(
         }
         on<LevelEvent.Unload> { ScoreboardLines.hideLines = false }
         on<LevelEvent.Load> { damageNames.clear(); ScoreboardNametags.clearMemos() }
-        onReceive<ClientboundSetScorePacket> { ScoreboardLines.markDirty() }
-        onReceive<ClientboundResetScorePacket> { ScoreboardLines.markDirty() }
-        onReceive<ClientboundSetObjectivePacket> { ScoreboardLines.markDirty() }
-        onReceive<ClientboundSetDisplayObjectivePacket> { ScoreboardLines.markDirty() }
-        onReceive<ClientboundSetPlayerTeamPacket> { ScoreboardLines.markDirty() }
 
         // Hidden where it's drawn: what reads the action bar (secrets, mana) still gets it
         net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.replaceElement(net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.OVERLAY_MESSAGE) { original ->

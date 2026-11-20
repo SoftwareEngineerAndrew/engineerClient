@@ -64,6 +64,7 @@
     "SimMoveGuardMixin",
     "SimActorMixin",
     "ScoreboardSidebarMixin",
+    "ScoreboardDirtyMixin",
     "HudSidebarInvoker",
     "HudItemNameAccessor",
     "ShovelPathMixin",
