@@ -66,12 +66,13 @@ object KuudraUtils {
     init {
         TickTask(10) {
             if (!inKuudra) return@TickTask
-            if (!Giants.active) Giants.start()
+            if (!Live.active) Live.start()
             scan()
         }
 
         on<MessageEvent.Chat> {
             if (!inKuudra) return@on
+            val was = phase
             when (message) {
                 "[NPC] Elle: Okay adventurers, I will go and fish up Kuudra!" -> phase = 1
                 "[NPC] Elle: OMG! Great work collecting my supplies!" -> phase = 2
@@ -81,6 +82,8 @@ object KuudraUtils {
                 else -> if (message.startsWith("Party > ") && message.endsWith(": FRESH"))
                     partyFresh.find(message)?.let { freshers[it.groupValues[2]] = System.currentTimeMillis() }
             }
+            // Stands are read as they're named; what they say counts per phase, so read them all again at a new one.
+            if (phase != was && Live.active) Live.readStands()
         }
 
         onReceive<ClientboundSetPlayerTeamPacket> {
@@ -92,7 +95,7 @@ object KuudraUtils {
         }
 
         on<LevelEvent.Load> {
-            Giants.stop()
+            Live.stop()
             for (supply in Supply.entries) supply.isActive = true
             giantZombies.clear()
             buildingPiles.clear()
@@ -107,31 +110,51 @@ object KuudraUtils {
 
     private fun scan() {
         val level = mc.level ?: return
-        buildingPiles.clear()
         for (entity in level.entitiesForRendering()) {
-            when (entity) {
-                is ArmorStand -> readStand(entity)
-                is MagmaCube -> if (entity.size == 30 && entity.getAttributeBaseValue(Attributes.MAX_HEALTH) == 100000.0) kuudraEntity = entity
-            }
+            if (entity is MagmaCube && entity.size == 30 && entity.getAttributeBaseValue(Attributes.MAX_HEALTH) == 100000.0) kuudraEntity = entity
         }
     }
 
-    // Supplies appear and vanish with their giant, so they follow entity events instead of the scan.
-    private object Giants {
+    // Supplies appear and vanish with their giant, and piles, build progress and received supplies are stands' names,
+    // so they follow entity events instead of the scan.
+    private object Live {
         var active = false
             private set
 
         init {
-            on<EntityEvent.Add> { (entity as? Giant)?.let(::update) }
+            on<EntityEvent.Add> {
+                when (val e = entity) {
+                    is Giant -> update(e)
+                    is ArmorStand -> readStand(e)
+                    else -> {}
+                }
+            }
+            on<EntityEvent.SetData> { (entity as? ArmorStand)?.let(::readStand) }
             on<EntityEvent.SetItemSlot> { if (slot == EquipmentSlot.MAINHAND) (entity as? Giant)?.let(::update) }
-            on<EntityEvent.Remove> { if (entity is Giant) giantZombies.remove(entity) }
+            on<EntityEvent.Remove> {
+                when (val e = entity) {
+                    is Giant -> giantZombies.remove(e)
+                    is ArmorStand -> buildingPiles.remove(e)
+                    else -> {}
+                }
+            }
         }
 
         fun start() {
             giantZombies.clear()
-            mc.level?.entitiesForRendering()?.forEach { if (it is Giant) update(it) }
+            buildingPiles.clear()
+            mc.level?.entitiesForRendering()?.forEach {
+                when (it) {
+                    is Giant -> update(it)
+                    is ArmorStand -> readStand(it)
+                }
+            }
             EventBus.subscribe(this)
             active = true
+        }
+
+        fun readStands() {
+            mc.level?.entitiesForRendering()?.forEach { if (it is ArmorStand) readStand(it) }
         }
 
         fun stop() {
@@ -149,8 +172,9 @@ object KuudraUtils {
 
     private fun readStand(stand: ArmorStand) {
         val info = stands[stand, stand.name]
+        if (!info.pile) buildingPiles.remove(stand)
+        else if (stand !in buildingPiles) buildingPiles.add(stand)
         if (info === plainStand) return
-        if (info.pile) buildingPiles.add(stand)
         if (info.build >= 0 && phase == 2) {
             playersBuildingAmount = info.helpers
             buildDonePercentage = info.build
