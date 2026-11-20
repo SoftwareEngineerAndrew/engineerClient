@@ -14,7 +14,7 @@ import com.adm.events.LevelEvent
 import com.adm.events.MapUpdateEvent
 import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.map.DungeonMap
 import com.adm.features.impl.dungeon.map.DungeonScan
@@ -178,7 +178,7 @@ object MapPrediction {
         }
         on<LevelEvent.Load> { reset() }
         on<MessageEvent.Chat> { if (message == "Starting in 1 second.") startAt = System.currentTimeMillis() + 1000L }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { mapChanged = true }, ::reset) { DungeonMap.enabled }
     }
 
     private fun reset() {

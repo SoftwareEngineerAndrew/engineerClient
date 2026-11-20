@@ -4,7 +4,7 @@ import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.adm.events.LevelEvent
 import com.adm.events.ScoreUpdateEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 
@@ -12,6 +12,8 @@ import com.adm.utils.skyblock.dungeon.DungeonUtils
 object ScoreTime {
     private var saidS = false
     private var saidSecrets = false
+    /** The world it was switched off in: a world load missed since then starts over. */
+    private var offIn = java.lang.ref.WeakReference<Any?>(null)
 
     fun install() {
         on<LevelEvent.Load> {
@@ -20,7 +22,6 @@ object ScoreTime {
         }
         // The secret count, the secrets needed and the boss state all move the score, so a score change is when to look.
         on<ScoreUpdateEvent> {
-            if (!ClearInfo.scoreTimeOn) return@on
             if (!saidS && score >= 270 && ClearInfo.showS && DungeonUtils.inDungeons) {
                 saidS = true
                 mc.execute { say(ClearInfo.sText) }
@@ -30,7 +31,9 @@ object ScoreTime {
                 mc.execute { say("&bMin Secrets") }
             }
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { if (offIn.get() !== mc.level) { saidS = false; saidSecrets = false } }, { offIn = java.lang.ref.WeakReference(mc.level) }) {
+            ClearInfo.scoreTimeOn && (ClearInfo.showS || ClearInfo.showMinSecrets)
+        }
     }
 
     private fun secretsMet(): Boolean {

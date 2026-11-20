@@ -6,7 +6,7 @@ import com.adm.events.TickEvent
 import com.adm.events.core.on
 import com.adm.events.core.onSend
 import com.adm.AdmMod.mc
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
 import com.adm.features.impl.dungeon.map.tile.RoomType
@@ -354,7 +354,7 @@ object Zpew {
             log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking}${if (c.swimming) " swim" else ""} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.adm.utils.ServerUtils.currentPing}")
             sync("click")
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { reset(); wasEnabled = false }) { enabled }
     }
 
     private fun refused(message: String) {

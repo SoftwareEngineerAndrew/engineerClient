@@ -32,6 +32,7 @@ object DeadPlayers {
         onReceive<ClientboundSystemChatPacket> {
             if (overlay) return@onReceive
             val line = content.string
+            if (!line.startsWith(" ☠ ") && !line.startsWith(" ❣ ") && !line.startsWith("Your ")) return@onReceive
             EngineerClient.mc.execute { onChat(line) }
         }
         on<LevelEvent.Load> { dead.clear() }
@@ -39,7 +40,6 @@ object DeadPlayers {
     }
 
     private fun onChat(line: String) {
-        if (!line.startsWith(" ☠ ") && !line.startsWith(" ❣ ") && !line.startsWith("Your ")) return
         val me = EngineerClient.mc.player?.gameProfile?.name()?.lowercase()
         DIED.find(line)?.let { m -> (if (m.groupValues[1] == "You") me else m.groupValues[1].lowercase())?.let { dead += it }; return }
         REVIVED.find(line)?.let { m -> (if (m.groupValues[1] == "You") me else m.groupValues[1].lowercase())?.let { dead -= it }; return }

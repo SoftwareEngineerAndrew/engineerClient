@@ -11,7 +11,7 @@ import com.adm.clickgui.settings.impl.KeybindSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.clickgui.settings.impl.StringSetting
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.features.ModuleManager
 import com.adm.features.impl.skyblock.Splits
@@ -156,7 +156,7 @@ object SplitsLook {
             // Not drawn for a second (hidden, or nothing to show): the next draw lays it out again anyway.
             if (cached != null && System.nanoTime() - drawnAt > 1_000_000_000L) { cached = null; cachedKey = -1L }
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, { cached = null; cachedKey = -1L }) { Splits.enabled }
         (Splits.settings.remove("Keybind") as? KeybindSetting)?.let { ModuleManager.keybindSettingsCache.remove(it) }
         // The Show switches replace ADM's own Boss Entry toggle.
         Splits.settings.remove("Boss Entry Split")

@@ -16,7 +16,6 @@ import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.SecretsUpdateEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
 import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.events.core.onReceive
@@ -202,7 +201,7 @@ object ClearBreakdown {
         }
     }
 
-    fun install() = EventBus.subscribe(this)
+    fun install() = SubscribeWhile.add(this, { reset(); closeSync(); SecretsCounter.reset() }) { ClearInfo.clearBreakdownOn || ClearInfo.secretsCounterOn }
 
     private object BlockWatch {
         init {

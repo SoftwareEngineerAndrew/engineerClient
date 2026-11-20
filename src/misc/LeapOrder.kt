@@ -94,13 +94,15 @@ object LeapOrder {
             val now = DungeonUtils.customLeapOrder
             if (now != saved) EngineerClient.safely("leap order save") { save(now); spots.fill(""); if (now.isNotEmpty()) useCustom() }
             EngineerClient.safely("leap order party") { checkParty() }
+            // The sorting is no switch, so this looks each tick whether the screen listeners below can act.
+            val want = custom && DungeonUtils.inDungeons
+            if (want != (this in EventBus.activeSubscribers)) if (want) EventBus.subscribe(this) else EventBus.unsubscribe(this)
             EngineerClient.safely("leap order spots") { keepSpots() }
         }
         // Again just before ADM's leap menu draws or takes a click or key (it redoes its list on every tab list update).
         on<ScreenEvent.Render>(EventPriority.HIGHEST + 50) { EngineerClient.safely("leap order spots") { keepSpots() } }
         on<ScreenEvent.MouseClick>(EventPriority.HIGHEST + 50) { EngineerClient.safely("leap order spots") { keepSpots() } }
         on<ScreenEvent.KeyPress>(EventPriority.HIGHEST + 50) { EngineerClient.safely("leap order spots") { keepSpots() } }
-        EventBus.subscribe(this)
 
         // /adm leaporder with no names opens the screen; every /adm alias shares the one node.
         val afterCore = Identifier.fromNamespaceAndPath("engineerclient", "after_odin")

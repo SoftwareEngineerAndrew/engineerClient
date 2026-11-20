@@ -7,7 +7,7 @@ import com.google.gson.reflect.TypeToken
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument
@@ -48,7 +48,7 @@ object RunsLogger {
 
     fun install() {
         on<MessageEvent.Chat> {
-            if (!com.engineerclient.adr.ADR.runsLogger || !DungeonUtils.inDungeons) return@on
+            if (!DungeonUtils.inDungeons) return@on
             val text = message.replace(colorCode, "")
             milestoneRegex.find(text)?.let { m ->
                 milestone = m.groupValues[1][0] - '❶' + 1
@@ -76,11 +76,7 @@ object RunsLogger {
                 save(run.copy(seconds = h * 3600 + min * 60 + s, pb = m.groupValues[4].isNotEmpty()))
             }
         }
-        on<LevelEvent.Unload> {
-            pending?.let { save(it) }
-            pending = null
-            milestone = 0
-        }
+        on<LevelEvent.Unload> { flush() }
 
         ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
             dispatcher.register(literal("runslog")
@@ -100,7 +96,13 @@ object RunsLogger {
                         .then(argument("end", StringArgumentType.word())
                             .executes { between(it.floor(), StringArgumentType.getString(it, "start"), StringArgumentType.getString(it, "end")); 1 })))))
         }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this, ::flush) { com.engineerclient.adr.ADR.runsLogger }
+    }
+
+    private fun flush() {
+        pending?.let { save(it) }
+        pending = null
+        milestone = 0
     }
 
     private fun save(run: Run) {
