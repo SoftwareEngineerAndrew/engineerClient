@@ -100,7 +100,10 @@ object SimonSaysTracker {
                     updated.block is ButtonBlock && old.block !is ButtonBlock ->
                         if (GRID.count { level.getBlockState(it).block is ButtonBlock } >= 8) solver.buttonsUp(packetTick)
                     updated.isAir && !old.isAir ->
-                        if (GRID.count { level.getBlockState(it).isAir } > 8) solver.buttonsGone(packetTick)
+                        if (GRID.count { level.getBlockState(it).isAir } > 8) {
+                            solver.buttonsGone(packetTick)
+                            if (solver.answer.isEmpty()) com.engineerclient.devices.DevSimonSays.deviceStopped()
+                        }
                     updated.block is ButtonBlock && old.block is ButtonBlock &&
                         updated.getValue(BlockStateProperties.POWERED) && !old.getValue(BlockStateProperties.POWERED) ->
                         solver.pressed(pos.east(), tick) // own click: the client presses it before the server answers

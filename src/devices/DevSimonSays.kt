@@ -27,16 +27,23 @@ object DevSimonSays {
     private var startClickCounter = 0
     /** Before the device's buttons first come up: the start button may be spammed only then; a fail's restart arms it again. */
     private var firstPhase = true
+    /** The device is waiting for a start press: not started yet, or failed. */
+    private var stopped = true
+
+    /** The buttons went with no new round showing: a fail (or the device done). */
+    fun deviceStopped() { stopped = true }
 
     fun install() {
-        on<LevelEvent.Load> { clickInOrder.clear(); clickNeeded = 0; startClickCounter = 0; firstPhase = true }
-        on<MessageEvent.Chat> { if (message == "[BOSS] Goldor: Who dares trespass into my domain?") { startClickCounter = 0; firstPhase = true } }
+        on<LevelEvent.Load> { clickInOrder.clear(); clickNeeded = 0; startClickCounter = 0; firstPhase = true; stopped = true }
+        on<MessageEvent.Chat> { if (message == "[BOSS] Goldor: Who dares trespass into my domain?") { startClickCounter = 0; firstPhase = true; stopped = true } }
         on<BlockUpdateEvent> {
             if (!Devices.simonSaysOn || !Devices.blockWrongStart) return@on
-            if (pos == startButton) { if (updated.block is ButtonBlock && updated.getValue(BlockStateProperties.POWERED)) firstPhase = true }
-            else if (firstPhase && pos.x == 110 && pos.y in 120..123 && pos.z in 92..95 && updated.block is ButtonBlock && old.block !is ButtonBlock) {
-                firstPhase = false
-                startClickCounter = 0
+            if (pos == startButton) {
+                // Only a press that starts a new attempt arms it; a start press on a running device is itself a fail.
+                if (stopped && updated.block is ButtonBlock && updated.getValue(BlockStateProperties.POWERED)) { firstPhase = true; stopped = false }
+            } else if (pos.x == 110 && pos.y in 120..123 && pos.z in 92..95 && updated.block is ButtonBlock && old.block !is ButtonBlock) {
+                stopped = false
+                if (firstPhase) { firstPhase = false; startClickCounter = 0 }
             }
         }
 
