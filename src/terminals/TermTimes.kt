@@ -5,7 +5,7 @@ import com.engineerclient.terminals.sim.TermSimGUI
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
-import com.adm.events.core.EventBus
+import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import com.adm.utils.modMessage
 import net.minecraft.network.chat.Component
@@ -80,7 +80,7 @@ object TermTimes {
 
         on<TickEvent.Server> { if (!Terminals.realTime) currentTick += 50 }
         on<LevelEvent.Load> { resetSection(true) }
-        EventBus.subscribe(this)
+        SubscribeWhile.add(this) { Terminals.timesOn }
     }
 
     private fun split() = format("§8(§7${sectionTimer.seconds}s §8| §7${phaseTimer.seconds}s§8)") as String
