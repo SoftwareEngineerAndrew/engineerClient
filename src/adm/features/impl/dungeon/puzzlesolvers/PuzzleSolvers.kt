@@ -160,7 +160,7 @@ object PuzzleSolvers : Module(
             WeirdosSolver.reset()
             BoulderSolver.reset()
             TPMazeSolver.reset()
-            BlazeSolver.reset()
+            BlazeSolver.unload()
             BeamsSolver.reset()
             QuizSolver.unload()
         }
@@ -245,6 +245,7 @@ object PuzzleSolvers : Module(
             if (!DungeonUtils.inClear) return@on
             if (boulderSolver || boulderBlockWrong) BoulderSolver.onTick(boulderMode, boulderSolver)
             if (icePathRoute) IcePathSolver.onTick()
+            BlazeSolver.onTick(blazeSolver)
         }
 
         on<RenderExtractEvent> {

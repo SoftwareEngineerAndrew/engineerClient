@@ -5,6 +5,7 @@ import com.adm.events.EntityEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.RoomEnterEvent
 import com.adm.utils.Color
+import com.adm.utils.NameMemo
 import com.adm.utils.render.BoxStyle
 import com.adm.utils.render.drawLine
 import com.adm.utils.render.drawStyledBox
@@ -13,8 +14,10 @@ import com.adm.utils.skyblock.dungeon.DungeonListener
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.Puzzle
 import com.adm.utils.skyblock.dungeon.PuzzleStatus
+import com.adm.features.impl.dungeon.map.DungeonScan
 import com.adm.features.impl.dungeon.map.tile.DungeonRoom
 import net.minecraft.core.BlockPos
+import net.minecraft.util.Mth
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.monster.Blaze
@@ -39,11 +42,42 @@ object BlazeSolver {
         return false
     }
 
+    private val hpOf = NameMemo({ n -> maxHealth(n.string) })
+    private var roomFound = false
+
+    private fun inBlazeTile(e: Entity): Boolean {
+        val col = (Mth.floor(e.x) + 201) shr 5
+        val row = (Mth.floor(e.z) + 201) shr 5
+        if (col !in 0..5 || row !in 0..5) return false
+        val name = DungeonScan.tiles[row * 6 + col].room?.data?.name ?: return false
+        return name == "Lower Blaze" || name == "Higher Blaze"
+    }
+
+    // Tags only resend on a health change, so ones that came before the room was scanned are picked up once it is.
+    fun onTick(solving: Boolean) {
+        if (roomFound) return
+        var found = false
+        for (t in DungeonScan.tiles) {
+            val name = t.room?.data?.name ?: continue
+            if (name == "Lower Blaze" || name == "Higher Blaze") { found = true; break }
+        }
+        if (!found) return
+        roomFound = true
+        if (!solving) return
+        val level = mc.level ?: return
+        for (e in level.entitiesForRendering()) if (e is ArmorStand) consider(e)
+    }
+
     fun onEntityData(event: EntityEvent.SetData) {
         val stand = event.entity as? ArmorStand ?: return
+        consider(stand)
+    }
+
+    private fun consider(stand: ArmorStand) {
         if (!DungeonUtils.inClear || stand.isDeadOrDying) return
         val custom = stand.customName ?: return
-        val hp = maxHealth(custom.string) ?: return
+        if (!inBlazeTile(stand)) return
+        val hp = hpOf[stand, custom] ?: return
         val uuid = stand.uuid
         // Some tags read a 600/600 placeholder for a few ticks before their real health
         for (i in blazes.indices) {
@@ -154,8 +188,14 @@ object BlazeSolver {
         }
     }
 
+    fun unload() {
+        reset()
+        roomFound = false
+    }
+
     fun reset() {
         blazes.clear()
+        hpOf.clear()
         spotRoom = null
         spotBox = null
     }
