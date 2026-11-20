@@ -1,5 +1,6 @@
 package com.adm.utils.skyblock.dungeon
 
+import com.adm.AdmMod.mc
 import com.adm.features.impl.dungeon.ClassColors
 import com.adm.utils.Color
 import com.adm.utils.IVec2
@@ -25,7 +26,7 @@ data class DungeonPlayer(
     var mapPos: IVec2 = IVec2(0, 0),
     var yaw: Float = 0f,
 ) {
-    val renderYaw get() = entity?.yRot ?: yaw
+    val renderYaw get() = entity?.getYRot(mc.deltaTracker.getGameTimeDeltaPartialTick(true)) ?: yaw
 }
 
 /**

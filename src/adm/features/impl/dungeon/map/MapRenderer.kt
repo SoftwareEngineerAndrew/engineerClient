@@ -271,7 +271,7 @@ fun GuiGraphicsExtractor.renderPlayers() {
     pose().pushMatrix()
     val (selfX, selfZ) = playerRenderPosition(self, IVec2(0, 0))
     pose().translate(selfX, selfZ)
-    pose().rotate(Math.toRadians(180.0 + (self?.yRot ?: 0f).let { if (DungeonMap.playerHead) it else pointerYaw(it) }).toFloat())
+    pose().rotate(Math.toRadians(180.0 + (self?.yRot ?: 0f)).toFloat())
 
     if (DungeonMap.playerHead) {
         val skin = self?.skin
@@ -338,6 +338,9 @@ private val vanillaMarker = arrayOf(
 private val legacyMarker = arrayOf(
     "....1...", "...1b1..", "..1beb1.", "..1efe1.", "..1efe1.", "..1beb1.", "...111..", "........",
 )
+private val lcmMarker = arrayOf(
+    "....1...", "...1f1..", "...1f1..", "..1fff1.", "..1fff1.", "..1fff1.", "..11111.", "........",
+)
 
 private fun GuiGraphicsExtractor.pixelMarker(rows: Array<String>, color: Int) {
     for (y in rows.indices) for (x in 0 until 8) {
@@ -350,15 +353,18 @@ private fun GuiGraphicsExtractor.pixelMarker(rows: Array<String>, color: Int) {
     }
 }
 
-/** The vanilla markers turn in 16 steps, as on a map item. */
-fun pointerYaw(yaw: Float): Float =
-    if (DungeonMap.pointerStyle == DungeonMap.PointerStyle.ADM) yaw else Math.round(yaw / 22.5f) * 22.5f
-
 /** Your own map marker in the chosen style, centred on the pose's origin. */
 fun GuiGraphicsExtractor.selfArrow(color: Int) {
     when (DungeonMap.pointerStyle) {
         DungeonMap.PointerStyle.VANILLA -> return pixelMarker(vanillaMarker, color)
         DungeonMap.PointerStyle.LEGACY -> return pixelMarker(legacyMarker, color)
+        DungeonMap.PointerStyle.LCM -> {
+            pose().pushMatrix()
+            pose().scale(1.25f)
+            pixelMarker(lcmMarker, DungeonMap.lcmPointerColor.rgba)
+            pose().popMatrix()
+            return
+        }
         DungeonMap.PointerStyle.ADM -> {}
     }
     pose().pushMatrix()

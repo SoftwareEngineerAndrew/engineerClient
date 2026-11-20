@@ -42,9 +42,10 @@ object DungeonMap : Module(
     val playerPointerScale by NumberSetting("Player Pointer Scale",1f,0.5..2.0,0.1, desc = "Scale of your map pointer.").withDependency { playerDropdown && !playerHead }
     val pointerStyle by SelectorSetting("Pointer Style", PointerStyle.ADM, desc = "How your map pointer looks.").withDependency { playerDropdown && !playerHead }
     val pointerOutline by ColorSetting("Pointer Outline", Colors.BLACK, true, desc = "Outline colour of the ADM pointer.").withDependency { playerDropdown && !playerHead && pointerStyle == PointerStyle.ADM }
+    val lcmPointerColor by ColorSetting("LCM Pointer Color", Colors.WHITE, true, desc = "Colour of the LCM pointer.").withDependency { playerDropdown && !playerHead && pointerStyle == PointerStyle.LCM }
 
     enum class PointerStyle(private val label: String) {
-        ADM("ADM"), VANILLA("Vanilla"), LEGACY("1.8 Vanilla");
+        ADM("ADM"), VANILLA("Vanilla"), LEGACY("1.8 Vanilla"), LCM("LCM");
         override fun toString() = label
     }
 

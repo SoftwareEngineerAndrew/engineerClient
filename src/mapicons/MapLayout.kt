@@ -11,7 +11,7 @@ object MapLayout {
 
     private val TOP = listOf("Dungeon Map", "Disable in Boss", "LCM Style", "Room Text", "Text Scaling", "Show Checkmarks", "Show Question Marks", "Parse map websocket")
     private val LOOK = listOf("Background Color", "Background Outline", "Outline Width", "Room Size", "Door Width", "Custom Map Padding", "Map Padding")
-    private val PLAYERS = listOf("Players", "Player Names Scaling", "Player Name Color", "Own Player Head", "Player Head Scale", "Player Class Color Size", "Player Pointer Scale", "Own Marker Color")
+    private val PLAYERS = listOf("Players", "Player Names Scaling", "Player Name Color", "Own Player Head", "Player Head Scale", "Player Class Color Size", "Player Pointer Scale", "Pointer Style", "Pointer Outline", "LCM Pointer Color", "Own Marker Color")
 
     fun install() {
         val settings = DungeonMap.settings

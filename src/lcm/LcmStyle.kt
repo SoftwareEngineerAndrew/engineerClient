@@ -10,7 +10,6 @@ import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.features.impl.dungeon.map.DungeonMap
 import com.adm.features.impl.dungeon.map.DungeonScan
-import com.adm.features.impl.dungeon.map.pointerYaw
 import com.adm.features.impl.dungeon.map.selfArrow
 import com.adm.features.impl.dungeon.map.SpecialColumn
 import com.adm.features.impl.dungeon.map.buildExampleDoors
@@ -543,11 +542,13 @@ object LcmStyle {
             g.centeredText(mc.font, name, 0, 8, DungeonMap.playerNameColor.rgba)
             g.pose().popMatrix()
         }
-        g.pose().rotate(Math.toRadians(180.0 + if (own) pointerYaw(yaw) else yaw).toFloat())
-        // yours: the white marker, no class square
-        if (own) g.selfArrow(ownMarkerColor.value.rgba)
+        g.pose().rotate(Math.toRadians(180.0 + yaw).toFloat())
+        // yours: the marker with no class square, unless Own Player Head is on
+        if (own && !DungeonMap.playerHead) g.selfArrow(ownMarkerColor.value.rgba)
         else {
-            g.fill(-6, -6, 6, 6, color)
+            val back = if (own) 5 + DungeonMap.playerHeadBackgroundScale else 6
+            if (own) g.pose().scale(DungeonMap.playerHeadScale)
+            g.fill(-back, -back, back, back, color)
             if (skin != null) PlayerFaceExtractor.extractRenderState(g, skin, -5, -5, 10)
         }
         g.pose().popMatrix()
