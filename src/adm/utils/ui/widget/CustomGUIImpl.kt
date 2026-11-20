@@ -41,9 +41,10 @@ object CustomGUIImpl {
 
     private fun <E> runHandlers(event: E, selector: (HandlerSet) -> EventHandler<E>?): Boolean {
         var triggered = false
-        handlers.toList().forEach { set ->
-            if (!set.enabled()) return@forEach
-            val handler = selector(set) ?: return@forEach
+        for (i in handlers.indices) {
+            val set = handlers[i]
+            if (!set.enabled()) continue
+            val handler = selector(set) ?: continue
             if (handler(event) != false) triggered = true
         }
         return triggered
