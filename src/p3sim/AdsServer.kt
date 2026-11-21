@@ -186,12 +186,12 @@ object AdsServer {
     /** A stream the proxy opened: a connection into our own server for it. */
     private fun open(h: Host, id: Int) {
         val s = runCatching { Socket(InetAddress.getLoopbackAddress(), h.port).also { it.tcpNoDelay = true } }.getOrElse { sendId(h, CLOSE, id); return }
-        h.streams[id] = s
+        h.streams.put(id, s)?.let { runCatching { it.close() } }
         Thread({
             val buf = ByteArray(32 * 1024)
             try {
                 val inp = s.getInputStream()
-                while (true) { val n = inp.read(buf); if (n < 0) break; if (n > 0) sendId(h, DATA, id, buf, n) }
+                while (true) { val n = inp.read(buf); if (n < 0 || h.streams[id] !== s) break; if (n > 0) sendId(h, DATA, id, buf, n) }
             } catch (_: Exception) {
             } finally { closeStream(h, id, s) }
         }, "ads-server-$id").apply { isDaemon = true }.start()

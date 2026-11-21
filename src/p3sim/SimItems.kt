@@ -835,7 +835,10 @@ object SimItems {
     fun quiverShot() { if (quiverArrows > 0) quiverArrows-- }
 
     /** Main's quiver preview (slot 9 while a bow is held): a Flint Arrow feather, custom_data {quiver_arrow:"true"}. */
+    private var quiverCache: Pair<Int, ItemStack>? = null
+
     private fun quiverPreview(): ItemStack {
+        quiverCache?.let { (n, s) -> if (n == quiverArrows) return s }
         val s = ItemStack(Items.FEATHER)
         s.count = quiverArrows.coerceIn(1, 64)
         s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
@@ -845,10 +848,13 @@ object SimItems {
             "§7Arrows Remaining: §a" + "%,d".format(java.util.Locale.ROOT, quiverArrows), "", "§8This item is a preview of your", "§8currently selected arrow.")
         s.set(DataComponents.LORE, ItemLore(lore.map { l -> Sim.legacy(l).copy().withStyle { it.withItalic(false) } }))
         s.set(DataComponents.CUSTOM_DATA, CustomData.of(CompoundTag().also { it.putString("quiver_arrow", "true") }))
+        quiverCache = quiverArrows to s
         return s
     }
 
     /** Main's Magical Map (slot 9 while the Infinileap is held): map_id 1024, custom_data {id:"MAP",dontSaveToProfile:1,dontUpdateStack:1}. */
+    private val MAGICAL_MAP by lazy { magicalMap() }
+
     private fun magicalMap(): ItemStack {
         val s = ItemStack(Items.FILLED_MAP)
         s.set(DataComponents.CUSTOM_NAME, Component.literal("Magical Map").withStyle { it.withItalic(false).withColor(net.minecraft.ChatFormatting.AQUA) })
@@ -877,11 +883,11 @@ object SimItems {
         val heldId = idOf(held)
         val want = when {
             heldId != null && held.item is net.minecraft.world.item.BowItem -> quiverPreview()
-            heldId == "INFINITE_SPIRIT_LEAP" -> magicalMap()
+            heldId == "INFINITE_SPIRIT_LEAP" -> MAGICAL_MAP
             else -> if (idOf(cur) == "SKYBLOCK_MENU") return else MENU
         }
         if (ItemStack.isSameItemSameComponents(cur, want) && cur.count == want.count) return
-        inv.setItem(8, want)
+        inv.setItem(8, want.copy())
     }
     val AOTV get() = item(Items.DIAMOND_SHOVEL, "ASPECT_OF_THE_VOID", Lore.ASPECT_OF_THE_VOID_NAME, Lore.ASPECT_OF_THE_VOID, glint = true) { it.putInt("ethermerge", 1); it.putInt("tuned_transmission", 4) }.also { hy(it, "slayer/enderman/aspect_of_the_void", "legendary") }
     val PET_ROD get() = item(Items.FISHING_ROD, "PET_ROD", Lore.FISHING_ROD_NAME, Lore.FISHING_ROD).also { hy(it, null, "common") }

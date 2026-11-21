@@ -101,6 +101,7 @@ object GhostCapture {
         rec = GhostRecording(c.name, P3Plan.skillName())
         phase = p
         inCoreFor = 0
+        wasSwinging = false
     }
 
     /** The run ended before the core (a restart, Stop...): nothing kept. */

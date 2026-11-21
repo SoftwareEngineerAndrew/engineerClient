@@ -498,8 +498,7 @@ object Practice {
 
     private fun save() {
         EngineerClient.safely("p3sim practice save") {
-            file.parentFile.mkdirs()
-            file.writeText(gson.toJson(Saved(customStart?.let { list(it) }, customSection, customJobs.toList(), checkpoints.map { list(it) }, startDelay, leapWaypoints.map { list(it) }, customItem,
+            PlayerFiles.writeAtomic(file, gson.toJson(Saved(customStart?.let { list(it) }, customSection, customJobs.toList(), checkpoints.map { list(it) }, startDelay, leapWaypoints.map { list(it) }, customItem,
                 menuTab, menuSection)))
         }
     }

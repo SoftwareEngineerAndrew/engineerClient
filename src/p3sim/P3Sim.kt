@@ -188,7 +188,7 @@ object P3Sim : Module(
     val record: Boolean get() = recordS.value
 
     /** Visibility's Hide Players (with its Hide All / Distance settings); in the sim its rule hides the bots too. */
-    val hidePlayers: Boolean get() = com.engineerclient.render.Visibility.hidesPlayers()
+    val hidePlayers: Boolean get() = com.engineerclient.render.Visibility.hidesSimPlayers()
     fun toggleHidePlayers() = com.engineerclient.render.Visibility.toggleHidePlayers()
 
     /** A bot (a mannequin in the sim) Hide Players would hide if it were a player. Client thread. */

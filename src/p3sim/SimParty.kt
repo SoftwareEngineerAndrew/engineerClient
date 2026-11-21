@@ -588,8 +588,8 @@ object PartyClient {
         if (!P3Sim.inSim || mc.player == null) { if (helloSent) left(); return }
         if (!helloSent) {
             helloSent = true
-            lastProfile = profileJson(withFiles = true)
-            SimNet.send("hello", lastProfile!!)
+            lastProfile = profileJson(withFiles = false)
+            SimNet.send("hello", profileJson(withFiles = true))
             if (joiner) sendPlan(force = true)
             helloTicks = 0
             return
@@ -597,7 +597,7 @@ object PartyClient {
         // No roster back yet: the hello may have been lost (sent before the channel was ready); again every 5 s.
         if (me == null && ++helloTicks % 100 == 0) { SimNet.send("hello", profileJson(withFiles = true)); if (joiner) sendPlan(force = true) }
         val prof = profileJson(withFiles = false)
-        if (prof != lastProfile?.let { stripFiles(it) }) { lastProfile = prof; SimNet.send("profile", prof) }
+        if (prof != lastProfile) { lastProfile = prof; SimNet.send("profile", prof) }
         if (joiner && gotShared) {
             val now = PartySettings.snapshot(PartySettings.SHARED)
             val d = PartySettings.diff(lastShared, now)
@@ -605,10 +605,6 @@ object PartyClient {
             sendPlan()
         }
     }
-
-    private fun stripFiles(json: String): String = runCatching {
-        val o = JsonParser.parseString(json).asJsonObject; o.remove("files"); o.toString()
-    }.getOrDefault(json)
 
     private fun profileJson(withFiles: Boolean): String {
         val o = JsonObject()

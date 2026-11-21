@@ -233,6 +233,7 @@ object Fight {
         // Their ghost state goes (a pending revive with it), so a rejoin starts clean.
         Masks.leftOne(player)
         Players.forgetFiles(player)
+        posHistories.remove(player.uuid)
         val joiner = !Sim.isHost(player)
         val c = Players.classOf(player)
         val theirs = Players.jobsOf(player)

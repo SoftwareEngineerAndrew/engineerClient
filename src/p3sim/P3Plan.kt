@@ -53,7 +53,7 @@ object P3Plan {
 
     var skill = 1
     /** Your jobs: station ids ("S1 T1", "S2 Lights", "S3 west lever"...) and "gate 1".."gate 3". */
-    private val mine = LinkedHashSet<String>()
+    private val mine = java.util.concurrent.CopyOnWriteArraySet<String>()
     /** Which skill/class [mine] was made for: a change of either starts again from that role. */
     private var mineFor = ""
     /** Random only: each bot job between these (seconds after its section starts). */
@@ -80,9 +80,9 @@ object P3Plan {
      * Spots set in the Roles menu (where, and which way you or the bot face) for one skill and one class of yours ("1/MAGE/spawn", "1/MAGE/ee3"...): your P3
      * spawn ("spawn") and each early enter's spot ([EarlyEnter.key]), whoever does it.
      */
-    private var custom: HashMap<String, Spots.Spot>? = HashMap()
+    private var custom: java.util.concurrent.ConcurrentHashMap<String, Spots.Spot>? = java.util.concurrent.ConcurrentHashMap()
     /** [custom], made if it isn't there (a hotswapped game starts it null). */
-    private fun spots() = custom ?: HashMap<String, Spots.Spot>().also { custom = it }
+    private fun spots() = custom ?: java.util.concurrent.ConcurrentHashMap<String, Spots.Spot>().also { custom = it }
     private fun customKey(key: String) = "$skill/${P3Sim.ownClass?.name}/$key"
 
     /** The spot set for this skill and class, else the default ([defaultSpot]: Normal PF's, for every skill). */
@@ -132,6 +132,7 @@ object P3Plan {
     fun plan(): Roles.Plan = Roles.plan(preset())
     fun skillName() = SKILLS[skill.coerceIn(0, SKILLS.size - 1)]
 
+    @Synchronized
     fun mine(): Set<String> {
         val key = "$skill/${P3Sim.ownClass}"
         if (mineFor != key) {
@@ -148,7 +149,10 @@ object P3Plan {
     fun toggle(job: String) { mine(); if (!mine.remove(job)) mine += job; save() }
     /** Back to your class's role: your jobs, the bots picked and your stacks for this skill and class. */
     fun resetMine() {
-        mineFor = ""; mine()
+        synchronized(this) {
+            mineFor = "$skill/${P3Sim.ownClass}"
+            mine.clear(); mine += plan().jobsOf[P3Sim.ownClass].orEmpty()
+        }
         val prefix = "$skill/${P3Sim.ownClass?.name}/"
         pickMap().keys.removeIf { it.startsWith(prefix) }; stackSet().removeIf { it.startsWith(prefix) }
         save()
@@ -170,10 +174,10 @@ object P3Plan {
     fun roleDoerBot(job: String): DungeonClass? = plan().owners[job]?.firstOrNull { !Players.isPlayerClass(it) }
 
     /** Bots picked for jobs (skill/your class/job -> class), and your jobs a bot does too with the Helper on: for this skill and class. */
-    private var picks: HashMap<String, String>? = HashMap()
-    private var stacked: HashSet<String>? = HashSet()
-    private fun pickMap() = picks ?: HashMap<String, String>().also { picks = it }
-    private fun stackSet() = stacked ?: HashSet<String>().also { stacked = it }
+    private var picks: java.util.concurrent.ConcurrentHashMap<String, String>? = java.util.concurrent.ConcurrentHashMap()
+    private var stacked: MutableSet<String>? = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    private fun pickMap() = picks ?: java.util.concurrent.ConcurrentHashMap<String, String>().also { picks = it }
+    private fun stackSet() = stacked ?: java.util.concurrent.ConcurrentHashMap.newKeySet<String>().also { stacked = it }
     private fun jobKey(job: String) = "$skill/${P3Sim.ownClass?.name}/$job"
 
     private fun picked(job: String): DungeonClass? =

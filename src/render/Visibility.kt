@@ -529,12 +529,17 @@ object Visibility : Module(
 
     fun hidesPlayers() = enabled && hidePlayers
 
+    // The P3 Sim button: with the module off it hides the bots on its own instead of turning on every other tweak.
+    private var simHidePlayers = false
+
+    fun hidesSimPlayers() = hidesPlayers() || simHidePlayers
+
     fun toggleHidePlayers() {
-        if (hidesPlayers()) hidePlayers = false
-        else {
-            hidePlayers = true
-            if (!enabled) toggle()
-        }
+        if (hidesSimPlayers()) {
+            simHidePlayers = false
+            if (enabled) hidePlayers = false
+        } else if (enabled) hidePlayers = true
+        else simHidePlayers = true
     }
 
     fun withinHideRange(entity: Entity): Boolean {

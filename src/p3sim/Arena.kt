@@ -26,6 +26,25 @@ object Arena {
             if (x < x0 || y < y0 || z < z0 || x >= x0 + w || y >= y0 + h || z >= z0 + d) return Blocks.AIR.defaultBlockState()
             return states[cells[((y - y0) * d + (z - z0)) * w + (x - x0)].toInt()]
         }
+
+        private val sx0 = x0 shr 4; private val sy0 = y0 shr 4; private val sz0 = z0 shr 4
+        private val sw = ((x0 + w - 1) shr 4) - sx0 + 1; private val sh = ((y0 + h - 1) shr 4) - sy0 + 1
+        private val sd = ((z0 + d - 1) shr 4) - sz0 + 1
+        private val solid: BooleanArray by lazy {
+            val air = BooleanArray(states.size) { states[it].isAir }
+            val out = BooleanArray(sw * sh * sd)
+            var i = 0
+            for (y in 0 until h) for (z in 0 until d) for (x in 0 until w) {
+                if (!air[cells[i++].toInt()]) out[((((z0 + z) shr 4) - sz0) * sh + ((y0 + y) shr 4) - sy0) * sw + ((x0 + x) shr 4) - sx0] = true
+            }
+            out
+        }
+
+        /** Whether chunk section ([sx], [sy], [sz]) holds any non-air block of the arena. */
+        fun solidSection(sx: Int, sy: Int, sz: Int): Boolean {
+            if (sx < sx0 || sy < sy0 || sz < sz0 || sx >= sx0 + sw || sy >= sy0 + sh || sz >= sz0 + sd) return false
+            return solid[((sz - sz0) * sh + sy - sy0) * sw + sx - sx0]
+        }
     }
 
     @Volatile private var loaded: Data? = null
@@ -118,11 +137,12 @@ object Arena {
             val chunk = level.getChunk(cx, cz)
             val xs = maxOf(a.x0, cx shl 4) until minOf(a.x0 + a.w, (cx shl 4) + 16)
             val zs = maxOf(a.z0, cz shl 4) until minOf(a.z0 + a.d, (cz shl 4) + 16)
-            for (y in a.y0 until a.y0 + a.h) {
-                val si = chunk.getSectionIndex(y)
+            for (sy in (a.y0 shr 4)..((a.y0 + a.h - 1) shr 4)) {
+                val si = chunk.getSectionIndex(sy shl 4)
                 if (si < 0 || si >= chunk.sections.size) continue
                 val section = chunk.getSection(si)
-                for (z in zs) for (x in xs) {
+                if (section.hasOnlyAir() && !a.solidSection(cx, sy, cz)) continue
+                for (y in maxOf(a.y0, sy shl 4) until minOf(a.y0 + a.h, (sy shl 4) + 16)) for (z in zs) for (x in xs) {
                     val want = a.get(x, y, z)
                     if (section.getBlockState(x and 15, y and 15, z and 15) == want) continue
                     val pos = BlockPos(x, y, z)
