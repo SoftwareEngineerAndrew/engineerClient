@@ -72,6 +72,7 @@ object ThumbCapture {
     )
 
     private val queue = LinkedBlockingQueue<Job>(QUEUE_FRAMES)
+    private val pool = java.util.concurrent.ConcurrentLinkedQueue<IntArray>()
     @Volatile private var encoder: Thread? = null
 
     /** Title and subtitle packets ask for a frame once they are on screen. */
@@ -93,8 +94,8 @@ object ThumbCapture {
 
     /** End of a whole frame, render thread (RecThumbFrameMixin). */
     fun onFrameEnd() {
-        if (!on) { if (requests.isNotEmpty()) requests.clear(); return }
-        if (!Rec.active) return
+        if (!on) { if (requests.isNotEmpty()) requests.clear(); pool.clear(); return }
+        if (!Rec.active) { pool.clear(); return }
         DevgineerClient.safely("recorder thumb") { capture() }
     }
 
@@ -157,7 +158,7 @@ object ThumbCapture {
         var abgr: IntArray? = null
         try {
             if (Rec.session === session && session.running) {
-                buf.map(true, false).use { view -> abgr = IntArray(fw * fh).also { view.data().asIntBuffer().get(it) } }
+                buf.map(true, false).use { view -> abgr = pixels(fw * fh).also { view.data().asIntBuffer().get(it) } }
             }
         } catch (t: Throwable) {
             DevgineerClient.logger.error("[dc] recorder thumb read failed", t)
@@ -165,17 +166,28 @@ object ThumbCapture {
             runCatching { buf.close() }
         }
         val px = abgr ?: return
-        if (Rec.session !== session || !session.running) return
+        if (Rec.session !== session || !session.running) { recycle(px); return }
         val job = Job(session, seq, rel, px, fw, fh, ow, oh)
         val queued = queue.offer(job)
         if (queued) ensureEncoder() else skippedQueue.incrementAndGet()
-        if (!queued) return
+        if (!queued) { recycle(px); return }
         val sg = skippedGpu.getAndSet(0)
         val sq = skippedQueue.getAndSet(0)
         val st = skippedTyping.getAndSet(0)
         val skipped = if (sg + sq + st > 0) ",\"skipped\":{\"gpu\":$sg,\"queue\":$sq,\"typing\":$st}" else ""
         val body = ",\"file\":${RecorderFiles.q(rel)},\"w\":$ow,\"h\":$oh,\"why\":${RecorderFiles.q(why)},\"fw\":$fw,\"fh\":$fh,\"q\":$QUALITY$skipped}"
         Rec.emitLine(seq, env.length + body.length, "thumb", ms) { env + body }
+    }
+
+    private fun pixels(n: Int): IntArray {
+        while (true) {
+            val a = pool.poll() ?: return IntArray(n)
+            if (a.size == n) return a
+        }
+    }
+
+    private fun recycle(a: IntArray) {
+        if (on && Rec.active && pool.size < 2) pool.offer(a)
     }
 
     private fun ensureEncoder() {
@@ -189,10 +201,15 @@ object ThumbCapture {
     private fun encodeLoop() {
         while (true) {
             val job = try { queue.take() } catch (_: InterruptedException) { return }
-            if (job.session.isAbandoned) continue
+            if (job.session.isAbandoned) { recycle(job.abgr); continue }
             try {
-                val px = ThumbMath.downscale(ThumbMath.fromGl(job.abgr, job.w, job.h), job.w, job.h, job.ow, job.oh)
-                write(job, ThumbMath.jpeg(px, job.ow, job.oh, QUALITY))
+                val bytes = try {
+                    val px = ThumbMath.downscale(ThumbMath.fromGl(job.abgr, job.w, job.h), job.w, job.h, job.ow, job.oh)
+                    ThumbMath.jpeg(px, job.ow, job.oh, QUALITY)
+                } finally {
+                    recycle(job.abgr)
+                }
+                write(job, bytes)
             } catch (t: Throwable) {
                 DevgineerClient.logger.warn("[dc] recorder thumb ${job.rel} failed", t)
                 if (Rec.session === job.session) Rec.emit("error", "\"p\":\"thumb\",\"of\":${job.seq},\"file\":${RecorderFiles.q(job.rel)},\"err\":${RecorderFiles.q(t.toString())}")
@@ -244,22 +261,24 @@ object ThumbMath {
     const val SCALE = 4
 
     /**
-     * A GPU readback ([w] x [h], ABGR as ints, bottom row first) as ARGB with the top row first,
-     * opaque (what [downscale] and [jpeg] take).
+     * A GPU readback ([w] x [h], ABGR as ints, bottom row first) turned in place into ARGB with the
+     * top row first, opaque (what [downscale] and [jpeg] take); returns [abgr].
      */
     fun fromGl(abgr: IntArray, w: Int, h: Int): IntArray {
-        val out = IntArray(w * h)
-        for (y in 0 until h) {
-            val src = (h - 1 - y) * w
-            val dst = y * w
+        for (y in 0 until (h + 1) / 2) {
+            val top = y * w
+            val bottom = (h - 1 - y) * w
             for (x in 0 until w) {
-                val p = abgr[src + x]
-                // ABGR -> ARGB: swap the red and blue bytes.
-                out[dst + x] = 0xFF000000.toInt() or ((p and 0xFF) shl 16) or (p and 0xFF00) or ((p ushr 16) and 0xFF)
+                val a = argb(abgr[top + x])
+                abgr[top + x] = argb(abgr[bottom + x])
+                abgr[bottom + x] = a
             }
         }
-        return out
+        return abgr
     }
+
+    // ABGR -> ARGB: swap the red and blue bytes.
+    private fun argb(p: Int): Int = 0xFF000000.toInt() or ((p and 0xFF) shl 16) or (p and 0xFF00) or ((p ushr 16) and 0xFF)
 
     /** The thumbnail's size for a [w] x [h] frame. */
     fun outSize(w: Int, h: Int): Pair<Int, Int> = maxOf(1, w / SCALE) to maxOf(1, h / SCALE)
@@ -299,7 +318,7 @@ object ThumbMath {
         val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
         val out = ByteArrayOutputStream(w * h / 4)
         try {
-            ImageIO.createImageOutputStream(out).use { ios ->
+            javax.imageio.stream.MemoryCacheImageOutputStream(out).use { ios ->
                 writer.output = ios
                 val param = writer.defaultWriteParam.apply { compressionMode = ImageWriteParam.MODE_EXPLICIT; compressionQuality = quality }
                 writer.write(null, IIOImage(img, null, null), param)

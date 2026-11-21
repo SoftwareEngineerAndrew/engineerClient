@@ -45,7 +45,7 @@ object WorldCapture {
     private var source: String? = null
 
     /** Chunk packets seen on the network thread and not yet loaded: chunk -> tick seen. */
-    private val pendingLoads = ConcurrentHashMap<Long, Int>()
+    private val pendingLoads = ConcurrentHashMap<Long, Pair<RecorderSession?, Int>>()
     /** Chunks with a block change since their last snapshot (game thread). */
     private val dirty = HashSet<Long>()
     /** Map id -> SHA-1 of the colours last written (game thread). */
@@ -110,7 +110,7 @@ object WorldCapture {
     /** A chunk packet reached the network thread; it should load within a couple of ticks. */
     fun chunkPacket(x: Int, z: Int) {
         if (!Rec.active) return
-        pendingLoads[ChunkPos.pack(x, z)] = Rec.tick
+        pendingLoads[ChunkPos.pack(x, z)] = Rec.session to Rec.tick
     }
 
     // ------------------------------------------------------------------ events
@@ -157,8 +157,11 @@ object WorldCapture {
         if (pendingLoads.isNotEmpty()) {
             val it = pendingLoads.entries.iterator()
             while (it.hasNext()) {
-                val (key, t) = it.next()
-                if (Rec.tick - t > 2) {
+                val (key, at) = it.next()
+                val (s, t) = at
+                // Left over from a recording that ended before the chunk loaded: not this one's.
+                if (s !== Rec.session) it.remove()
+                else if (Rec.tick - t > 2) {
                     it.remove()
                     Rec.emit("cchunk", "\"ev\":\"ignored\",\"x\":${ChunkPos.getX(key)},\"z\":${ChunkPos.getZ(key)}")
                 }

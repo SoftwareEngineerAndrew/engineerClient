@@ -281,6 +281,7 @@ class RecorderSession(
     private var ioPartClosed = false
     @Volatile private var ioFailed: String? = null
     @Volatile private var guardStop: String? = null
+    private val folderChecking = AtomicBoolean()
     @Volatile private var freeDisk = -1L
     @Volatile private var ioNs = 0L
     @Volatile private var lastGoodSeq = -1L
@@ -870,14 +871,21 @@ class RecorderSession(
         freeDisk = free
         val minFree = (c.minFreeGb * RecorderFiles.GIB).toLong()
         if (free < minFree) { guardStop = "disk_free_below:\"why\":\"disk_free_below\",\"freeBytes\":$free,\"limitBytes\":$minFree"; queue.offer(Wake); return }
-        if (c.maxFolderGb > 0) {
-            val cap = (c.maxFolderGb * RecorderFiles.GIB).toLong()
-            var size = RecorderFiles.folderSize(root)
-            if (size > cap && c.deleteOldest) {
-                RecorderFiles.deleteOldest(root, liveDirs() + dir, size - cap)
-                size = RecorderFiles.folderSize(root)
+        if (c.maxFolderGb > 0 && folderChecking.compareAndSet(false, true)) {
+            // Walking (and trimming) the whole folder can take a while: never on the IO thread.
+            FOLDER_GUARD.execute {
+                try {
+                    if (running) runCatching {
+                        val cap = (c.maxFolderGb * RecorderFiles.GIB).toLong()
+                        var size = RecorderFiles.folderSize(root)
+                        if (size > cap && c.deleteOldest) {
+                            RecorderFiles.deleteOldest(root, liveDirs() + dir, size - cap)
+                            size = RecorderFiles.folderSize(root)
+                        }
+                        if (size > cap && running) { guardStop = "folder_cap:\"why\":\"folder_cap\",\"freeBytes\":$free,\"folderBytes\":$size,\"limitBytes\":$cap"; queue.offer(Wake) }
+                    }
+                } finally { folderChecking.set(false) }
             }
-            if (size > cap) { guardStop = "folder_cap:\"why\":\"folder_cap\",\"freeBytes\":$free,\"folderBytes\":$size,\"limitBytes\":$cap"; queue.offer(Wake) }
         }
     }
 
@@ -918,6 +926,7 @@ class RecorderSession(
         /** Every session not yet finished (closing ones included), for [shutdownAll]. */
         private val OPEN: MutableSet<RecorderSession> = ConcurrentHashMap.newKeySet()
         private val hooked = AtomicBoolean()
+        private val FOLDER_GUARD = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "dc-recorder-guard").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
 
         /** The directories of every session still writing (closing ones included): never deleted by the folder cap. */
         fun liveDirs(): Set<Path> = OPEN.mapTo(HashSet()) { it.dir }

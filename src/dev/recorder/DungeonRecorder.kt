@@ -317,6 +317,7 @@ object DungeonRecorder : Module(
         if (!inbound) off += "in"
         if (!outbound) off += "out"
         if (!movement) off += MOVEMENT
+        if (!effects) off += EFFECTS
         // "skip" (per-type filter) stays in the format for readers but is always empty; groups go in "off".
         // "skip" stays in the format (always empty: no packet type is ever left out of the lines).
         return "{\"skip\":[],\"off\":${off.joinToString(",", "[", "]") { q(it) }}," +

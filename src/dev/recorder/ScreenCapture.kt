@@ -51,6 +51,8 @@ object ScreenCapture {
     /** The last tooltip written (its lines' hash) and the tick it was last drawn on. */
     private var tooltipHash = 0
     private var tooltipTick = -10
+    private var seqHash = 0
+    private var seqFor = 0
 
     fun install() {
         if (installed) return
@@ -224,7 +226,19 @@ object ScreenCapture {
      */
     fun tooltipSeq(lines: List<FormattedCharSequence>, x: Int, y: Int) {
         if (!Rec.active) return
+        var h = lines.size
+        for (line in lines) {
+            var last: Style? = null
+            line.accept { _, st, cp ->
+                h = 31 * h + cp
+                if (st !== last) { h = 31 * h + st.hashCode(); last = st }
+                true
+            }
+        }
+        if (h == seqHash && tooltipHash == seqFor && Rec.tick - tooltipTick <= 1) { tooltipTick = Rec.tick; return }
         tooltip(lines.map { seqToComponent(it) }, x, y, seq = true)
+        seqHash = h
+        seqFor = tooltipHash
     }
 
     fun seqToComponent(s: FormattedCharSequence): Component {

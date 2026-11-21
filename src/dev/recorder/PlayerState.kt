@@ -26,6 +26,9 @@ object PlayerState {
     /** The session the trackers belong to; a new one starts them over. */
     private var forSession: Any? = null
     private var loggedFailure = false
+    /** Percent left per slot on cooldown last tick, to tell a restarted cooldown from one counting down. */
+    private val cdLeft = HashMap<Int, Float>()
+    private var cdRestarts = 0
 
     fun install() {
         // A keyframe holds the full inventory, effects, cooldowns and key map, so a reader starting
@@ -40,9 +43,10 @@ object PlayerState {
         val s = Rec.session
         if (s !== forSession) { forSession = s; slots.reset() }
         guard("me") { me(p) }
-        guard("effects") { val e = effects(p); if (Rec.changed("pl.effects", e)) Rec.emit("effects", "\"d\":$e") }
+        // Deduplicated on what does not count down by itself, so a running effect or cooldown is not a line every tick.
+        guard("effects") { val (e, key) = effects(p); if (Rec.changed("pl.effects", key)) Rec.emit("effects", "\"d\":$e") }
         guard("inv") { inventory(p) }
-        guard("cd") { val c = cooldowns(p); if (Rec.changed("pl.cd", c)) Rec.emit("cd", "\"s\":$c") }
+        guard("cd") { val (c, key) = cooldowns(p); if (Rec.changed("pl.cd", key)) Rec.emit("cd", "\"s\":$c") }
     }
 
     private fun me(p: LocalPlayer) {
@@ -115,16 +119,19 @@ object PlayerState {
         return sb.append('}').toString()
     }
 
-    /** [[id, amplifier, duration, ambient, visible, showIcon]] (duration -1 = infinite). */
-    private fun effects(p: LocalPlayer): String {
+    /** [[id, amplifier, duration, ambient, visible, showIcon]] (duration -1 = infinite), and its key with the end tick for the duration. */
+    private fun effects(p: LocalPlayer): Pair<String, String> {
         val sb = StringBuilder(128).append('[')
+        val key = StringBuilder(128)
         var first = true
         for (e in p.activeEffects) {
             if (!first) sb.append(','); first = false
-            sb.append('[').append(RecorderFiles.q(e.effect.registeredName)).append(',').append(e.amplifier).append(',').append(e.duration)
-                .append(',').append(e.isAmbient).append(',').append(e.isVisible).append(',').append(e.showIcon()).append(']')
+            val rest = ",${e.isAmbient},${e.isVisible},${e.showIcon()}]"
+            val name = RecorderFiles.q(e.effect.registeredName)
+            sb.append('[').append(name).append(',').append(e.amplifier).append(',').append(e.duration).append(rest)
+            key.append('[').append(name).append(',').append(e.amplifier).append(',').append(if (e.duration < 0) -1 else Rec.tick + e.duration).append(rest)
         }
-        return sb.append(']').toString()
+        return sb.append(']').toString() to key.toString()
     }
 
     private fun stacks(p: LocalPlayer): List<ItemStack> {
@@ -146,20 +153,28 @@ object PlayerState {
         Rec.emit("inv", sb.append(']').toString())
     }
 
-    /** [[slot, cooldown group, percent left]] for every stack on cooldown. */
-    private fun cooldowns(p: LocalPlayer): String {
+    /** [[slot, cooldown group, percent left]] for every stack on cooldown, and its key without the percent. */
+    private fun cooldowns(p: LocalPlayer): Pair<String, String> {
         val cds = p.cooldowns
         val inv = p.inventory
         val sb = StringBuilder(64).append('[')
+        val key = StringBuilder(64)
+        val seen = HashSet<Int>()
         var first = true
         for (slot in 0 until inv.containerSize) {
             val st = inv.getItem(slot)
             if (st.isEmpty || !cds.isOnCooldown(st)) continue
             if (!first) sb.append(','); first = false
-            sb.append('[').append(slot).append(',').append(RecorderFiles.q(cds.getCooldownGroup(st).toString())).append(',')
-            n(sb, cds.getCooldownPercent(st, 0f)); sb.append(']')
+            val group = RecorderFiles.q(cds.getCooldownGroup(st).toString())
+            val left = cds.getCooldownPercent(st, 0f)
+            sb.append('[').append(slot).append(',').append(group).append(','); n(sb, left); sb.append(']')
+            key.append('[').append(slot).append(',').append(group).append(']')
+            seen += slot
+            val was = cdLeft.put(slot, left)
+            if (was != null && left > was) cdRestarts++
         }
-        return sb.append(']').toString()
+        cdLeft.keys.retainAll(seen)
+        return sb.append(']').toString() to key.append('#').append(cdRestarts).toString()
     }
 
     /** The keyframe set: every slot, effects and cooldowns tagged with the keyframe id; the key map with the next me line. */
@@ -173,8 +188,8 @@ object PlayerState {
             all.forEachIndexed { i, st -> if (i > 0) sb.append(','); sb.append('[').append(i).append(',').append(RichJson.itemNow(st)).append(']') }
             Rec.emit("inv", sb.append(']').toString())
         }
-        guard("effects.full") { val e = effects(p); Rec.changed("pl.effects", e); Rec.emit("effects", "\"kf\":$kf,\"d\":$e") }
-        guard("cd.full") { val c = cooldowns(p); Rec.changed("pl.cd", c); Rec.emit("cd", "\"kf\":$kf,\"s\":$c") }
+        guard("effects.full") { val (e, key) = effects(p); Rec.changed("pl.effects", key); Rec.emit("effects", "\"kf\":$kf,\"d\":$e") }
+        guard("cd.full") { val (c, key) = cooldowns(p); Rec.changed("pl.cd", key); Rec.emit("cd", "\"kf\":$kf,\"s\":$c") }
         // The key map goes out with this tick's me line (keyframes run just before it).
         Rec.changed("pl.keys", "")
     }

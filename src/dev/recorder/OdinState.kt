@@ -464,6 +464,8 @@ object OdinState {
     private val saving: Class<*>? by lazy { runCatching { Class.forName("com.adm.clickgui.settings.Saving") }.getOrNull() }
     private val savingWrite by lazy { runCatching { saving?.getMethod("write", com.google.gson.Gson::class.java) }.getOrNull() }
 
+    private val mods by lazy { FabricLoader.getInstance().allMods.map { it.metadata.id to it.metadata.version.friendlyString }.sortedBy { it.first } }
+
     private fun hidden(s: Setting<*>): Boolean = (s as? RenderableSetting<*>)?.hidden ?: false
 
     /**
@@ -490,7 +492,7 @@ object OdinState {
             }
             out.append('{').append(o.sb).append('}')
         }
-        j.arr("mods", FabricLoader.getInstance().allMods.map { it.metadata.id to it.metadata.version.friendlyString }.sortedBy { it.first }) { out, (id, v) ->
+        j.arr("mods", mods) { out, (id, v) ->
             out.append('['); OdinJs.str(out, id); out.append(','); OdinJs.str(out, v); out.append(']')
         }
         return j.toString()

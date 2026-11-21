@@ -106,23 +106,26 @@ object BrecWire {
                 // A reconfiguration starts the prelude over.
                 if (was == ConnectionProtocol.PLAY) { clearPrelude(); clearWorld() }
                 addPrelude(f)
+                if (s != null) toLive(s, f, withheld)
                 return
             }
             if (was == ConnectionProtocol.CONFIGURATION) {
                 // The first play frame is the login packet: the world starts with it.
                 addPrelude(f)
                 clearWorld()
+                if (s != null) toLive(s, f, withheld)
                 return
             }
             if (dir == 0) lastIn = f
-            if (s != null) {
-                s.raw(f.seq, dir, f.phase, bytes, withheld, len)
-                if (timesN + 2 > times.size) times = times.copyOf(times.size * 2)
-                times[timesN++] = f.seq; times[timesN++] = f.ns
-                return
-            }
+            if (s != null) { toLive(s, f, withheld); return }
             world += f; worldBytes += len + 48
         }
+    }
+
+    private fun toLive(s: RecorderSession, f: Frame, withheld: Boolean) {
+        s.raw(f.seq, f.dir, f.phase, f.bytes, withheld, f.len)
+        if (timesN + 2 > times.size) times = times.copyOf(times.size * 2)
+        times[timesN++] = f.seq; times[timesN++] = f.ns
     }
 
     /** A respawn packet was just decoded (from the last inbound frame): the world buffer starts again from it. */
