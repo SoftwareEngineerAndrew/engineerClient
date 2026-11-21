@@ -110,7 +110,7 @@ object DungeonMap : Module(
     private fun applyShared(text: String) {
         val shared = try { gson.fromJson(text, Shared::class.java) } catch (_: Exception) { return } ?: return
         if (DungeonUtils.dungeonTeammatesNoSelf.none { it.name == shared.playerName }) return
-        val room = DungeonScan.rooms.firstOrNull { it.name == shared.roomName && it.tiles == shared.tiles } ?: return
+        val room = DungeonScan.rooms.firstOrNull { it.name == shared.roomName && it.tiles.size == shared.tiles.size && it.tiles.containsAll(shared.tiles) } ?: return
         val theirs = shared.foundSecrets
         if (theirs != null && (room.foundSecrets ?: -1) < theirs) room.foundSecrets = theirs
         room.playerWalkedInto = true

@@ -120,7 +120,7 @@ object SpecialColumn {
     private fun unseenInColumn(height: Int): Int {
         var left = height
         for (z in 0 until height) {
-            val room = DungeonScan.tiles[column - 1 + z * 6].room
+            val room = DungeonScan.tiles[column + z * 6].room
             if (room == null || room.isViewable) left--
         }
         return left
