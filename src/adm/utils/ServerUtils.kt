@@ -23,6 +23,9 @@ object ServerUtils {
     @Volatile
     private var worldStart = 0L
 
+    val serverTicks: Int
+        get() = tickCount
+
     private var pingsThisWorld = false
     private var lastBurst = 0L
     private var burstTicks = 0

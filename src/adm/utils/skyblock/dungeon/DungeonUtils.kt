@@ -59,7 +59,7 @@ object DungeonUtils {
         get() = DungeonListener.dungeonStats.percentCleared
 
     inline val totalRooms: Int
-        get() = if (completedRoomCount == 0 || percentCleared == 0) 0 else floor((completedRoomCount / (percentCleared * 0.01).toFloat()) + 0.4).toInt()
+        get() = DungeonListener.roomTotal
 
     inline val puzzles: List<Puzzle>
         get() = DungeonListener.puzzles.toList()
@@ -126,7 +126,7 @@ object DungeonUtils {
         private set
 
     fun updateScore() {
-        val completed = completedRoomCount + (if (!bloodDone) 1 else 0) + (if (!inBoss) 1 else 0)
+        val completed = DungeonListener.scoreRooms
         val total = if (totalRooms != 0) totalRooms else 36
 
         val exploration = floor?.let {

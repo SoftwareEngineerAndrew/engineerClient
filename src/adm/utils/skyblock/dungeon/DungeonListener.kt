@@ -9,6 +9,7 @@ import com.adm.features.impl.dungeon.LeapMenu
 import com.adm.features.impl.dungeon.LeapMenu.coreSorting
 import com.adm.features.impl.dungeon.Mimic
 import com.adm.features.impl.dungeon.map.DungeonScan
+import com.adm.utils.ServerUtils
 import com.adm.utils.network.WebUtils.hasBonusPaulScore
 import com.adm.utils.noControlCodes
 import com.adm.utils.romanToInt
@@ -21,6 +22,8 @@ import net.minecraft.world.entity.EntityTypes
 import net.minecraft.world.entity.monster.zombie.Zombie
 import net.minecraft.world.entity.player.Player
 import kotlin.jvm.optionals.getOrNull
+import kotlin.math.abs
+import kotlin.math.floor
 
 object DungeonListener {
 
@@ -28,7 +31,17 @@ object DungeonListener {
     var dungeonTeammatesNoSelf: List<DungeonPlayer> = ArrayList(4)
     var leapTeammates: List<DungeonPlayer> = ArrayList(4)
 
-    private var expectingBloodUpdate = false
+    private var watcherTick = -1
+    private var bossTick = -1
+    private var roomsTick = -100
+    private var clearedTick = -100
+    private var bossRoomCounted = false
+    var roomTotal = 0
+        private set
+
+    // the blood room and the room counted on entering boss score from the start, until the tab has them
+    val scoreRooms: Int
+        get() = dungeonStats.completedRooms + (if (dungeonStats.bloodDone) 0 else 1) + (if (bossRoomCounted) 0 else 1)
     var dungeonStats = DungeonStats()
     var puzzles = ArrayList<Puzzle>()
     var floor: Floor? = null
@@ -49,9 +62,15 @@ object DungeonListener {
     init {
         on<TickEvent.End> {
             if (!DungeonUtils.inDungeons) return@on
+            if (inBoss && !bossRoomCounted && ServerUtils.serverTicks - bossTick >= BOSS_ROOM_WAIT) {
+                bossRoomCounted = true
+                dungeonStats.bloodDone = true
+                DungeonUtils.updateScore()
+            }
             val newInBoss = getBoss()
             if (newInBoss == inBoss) return@on
             inBoss = newInBoss
+            if (newInBoss && bossTick < 0) bossTick = ServerUtils.serverTicks
             DungeonUtils.updateScore()
             com.adm.events.core.SubscribeWhile.changed()
         }
@@ -60,7 +79,12 @@ object DungeonListener {
             Blessing.entries.forEach { it.reset() }
             dungeonTeammatesNoSelf = emptyList()
             dungeonStats = DungeonStats()
-            expectingBloodUpdate = false
+            watcherTick = -1
+            bossTick = -1
+            roomsTick = -100
+            clearedTick = -100
+            bossRoomCounted = false
+            roomTotal = 0
             leapTeammates = emptyList()
             dungeonTeammates.clear()
             puzzles.clear()
@@ -79,7 +103,9 @@ object DungeonListener {
             if (!DungeonUtils.inDungeons) return@onReceive
             val tabListEntries = entries().mapNotNull { it.displayName?.string }.ifEmpty { return@onReceive }
             updateDungeonTeammates(tabListEntries)
+            val rooms = dungeonStats.completedRooms
             updateDungeonStats(tabListEntries)
+            if (dungeonStats.completedRooms != rooms) roomsChanged(dungeonStats.completedRooms > rooms)
             getDungeonPuzzles(tabListEntries)
             DungeonUtils.updateScore()
         }
@@ -96,8 +122,11 @@ object DungeonListener {
             if (!DungeonUtils.inDungeons) return@onReceive
 
             if (text.startsWith("Cleared: ")) clearedRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()?.let {
-                if (dungeonStats.percentCleared != it && expectingBloodUpdate) dungeonStats.bloodDone = true
-                dungeonStats.percentCleared = it
+                if (dungeonStats.percentCleared != it) {
+                    dungeonStats.percentCleared = it
+                    clearedTick = ServerUtils.serverTicks
+                    updateRoomTotal()
+                }
                 DungeonUtils.updateScore()
             }
 
@@ -114,7 +143,7 @@ object DungeonListener {
 
         on<MessageEvent.Chat> {
             if (!DungeonUtils.inDungeons) return@on
-            if (message.startsWith("[BOSS] The Watcher: You have proven yourself") && expectingBloodRegex.matches(message)) expectingBloodUpdate = true
+            if (message.startsWith("[BOSS] The Watcher: You have proven yourself") && expectingBloodRegex.matches(message) && watcherTick < 0) watcherTick = ServerUtils.serverTicks
             if (message.contains(" opened a ")) doorOpenRegex.find(message)?.let { dungeonStats.doorOpener = it.groupValues[1] }
             if (message.contains(" and became a ghost")) deathRegex.find(message)?.let { match ->
                 dungeonTeammates.find { teammate ->
@@ -172,6 +201,29 @@ object DungeonListener {
         dungeonStats.princeKilled = true
         DungeonUtils.updateScore()
         Mimic.announcePrince()
+    }
+
+    // the tab counts the blood room 61-110 server ticks after the Watcher's line, and it and the boss room within 20 ticks of entering boss
+    private const val BLOOD_WAIT = 60
+    private const val BOSS_ROOM_WAIT = 40
+
+    private fun roomsChanged(increased: Boolean) {
+        roomsTick = ServerUtils.serverTicks
+        if (increased) {
+            if (inBoss) {
+                bossRoomCounted = true
+                dungeonStats.bloodDone = true
+            } else if (watcherTick >= 0 && roomsTick - watcherTick >= BLOOD_WAIT) dungeonStats.bloodDone = true
+        }
+        updateRoomTotal()
+    }
+
+    // the sidebar's Cleared % and the tab's Completed Rooms can update a second apart; only a pair from the same tick gives the total
+    private fun updateRoomTotal() {
+        val done = dungeonStats.completedRooms
+        val cleared = dungeonStats.percentCleared
+        if (done == 0 || cleared == 0 || abs(roomsTick - clearedTick) > 1) return
+        roomTotal = floor(done / (cleared * 0.01).toFloat() + 0.4).toInt()
     }
 
     private fun mimicFound() {

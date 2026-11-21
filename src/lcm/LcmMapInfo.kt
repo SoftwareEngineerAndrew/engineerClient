@@ -75,11 +75,8 @@ object LcmMapInfo {
         val deathPenalty = (deaths * 2 - 1).coerceAtLeast(0)
         val needed = ceil(totalSecrets * factor * (40 - bonus - paul + deathPenalty) / 40f).toInt().coerceAtLeast(0)
 
-        val completedRooms = stats.completedRooms
-        val cleared = stats.percentCleared
-        val totalRooms = if (completedRooms == 0 || cleared == 0) 0 else floor((completedRooms / (cleared * 0.01).toFloat()) + 0.4).toInt()
-        val completed = completedRooms + (if (!stats.bloodDone) 1 else 0) + if (!DungeonListener.inBoss) 1 else 0
-        val total = if (totalRooms != 0) totalRooms else 36
+        val completed = DungeonListener.scoreRooms
+        val total = DungeonListener.roomTotal.takeIf { it != 0 } ?: 36
         val secretScore = if (totalSecrets > 0) floor(found.toDouble() / (totalSecrets.toDouble() * factor) * 40.0).toInt().coerceIn(0, 40) else 0
         val exploration = secretScore + floor(completed.toFloat() / total * 60f).coerceIn(0f, 60f).toInt()
         val skillRooms = floor(completed.toFloat() / total * 80f).coerceIn(0f, 80f).toInt()
