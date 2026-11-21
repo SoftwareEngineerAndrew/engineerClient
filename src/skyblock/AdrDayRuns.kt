@@ -28,7 +28,8 @@ object AdrDayRuns {
         return files.mapNotNull { f ->
             val size = Files.size(f)
             val name = f.fileName.toString()
-            cache[name]?.takeIf { it.first == size }?.second ?: read(f, day).also { cache[name] = size to it }
+            val c = cache[name]
+            if (c != null && c.first == size) c.second else read(f, day).also { cache[name] = size to it }
         }
     }
 

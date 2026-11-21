@@ -284,7 +284,7 @@ class RunRecorder(
     /** Your own container screens (terminals are GUIs with fixed titles): exact open/close times. */
     fun onGuiClose() {
         flushMouse()
-        lastSlots.clear(); lastCarried = null; lastMouseX = Float.NaN
+        lastSlots.clear(); slotStacks = arrayOfNulls(0); lastCarried = null; lastMouseX = Float.NaN
         emit("""{"k":"guiclose","t":$tick}""")
     }
 
@@ -295,19 +295,25 @@ class RunRecorder(
 
     /** A container screen opened: its menu type ("inventory" for your own), size and slot positions. */
     fun onContainerOpen(title: String, menu: String, w: Int, h: Int, slots: List<IntArray>) {
-        lastSlots.clear(); lastCarried = null; lastMouseX = Float.NaN
+        lastSlots.clear(); slotStacks = arrayOfNulls(0); lastCarried = null; lastMouseX = Float.NaN
         val sb = StringBuilder()
         slots.forEachIndexed { i, p -> if (i > 0) sb.append(','); sb.append('[').append(p[0]).append(',').append(p[1]).append(']') }
         emit("""{"k":"gui","t":$tick,"title":${str(title)},"menu":${str(menu)},"w":$w,"h":$h,"slots":[$sb]}""")
     }
 
     private val lastSlots = HashMap<Int, String>()
+    private var slotStacks = arrayOfNulls<ItemStack>(0)
+    private var slotCounts = IntArray(0)
     private var lastCarried: String? = null
 
     /** Each tick while a container is open: slots that changed since the last line, and the cursor's item. */
     fun onContainerTick(items: List<ItemStack>, carried: ItemStack) {
         val sb = StringBuilder()
+        if (slotStacks.size != items.size) { slotStacks = arrayOfNulls(items.size); slotCounts = IntArray(items.size) }
         items.forEachIndexed { i, stack ->
+            // Click prediction changes a stack's count in place: the same stack is only the same slot at the same count.
+            if (stack === slotStacks[i] && stack.count == slotCounts[i]) return@forEachIndexed
+            slotStacks[i] = stack; slotCounts[i] = stack.count
             val entry = slotEntry(i, stack)
             if (lastSlots.put(i, entry) == entry) return@forEachIndexed
             if (sb.isNotEmpty()) sb.append(',')
@@ -360,6 +366,12 @@ class RunRecorder(
     fun finish() {
         if (!confirmed) { abandon(); return }
         if (!began) { discard(); return }
+        heldFrame?.let { if (frames.isNotEmpty()) frames.append(','); frames.append(it) }
+        heldFrame = null
+        heldMouse?.let { if (mouse.isNotEmpty()) mouse.append(','); mouse.append(it) }
+        heldMouse = null
+        flushFrames()
+        flushMouse()
         emit("""{"k":"end","t":$tick,"ms":${System.currentTimeMillis()}}""")
         flushPending()
         val temp = tempFile ?: return
@@ -567,6 +579,10 @@ class RunRecorder(
         for (name in lastPlayer.keys.filter { it !in seen }) {
             lastPlayer.remove(name)
             playerRaw.remove(name)
+            if ('#' in name) {
+                skinsWritten.remove(name); lastHeldStack.remove(name); lastHeldHead.remove(name)
+                lastEquipment.remove(name); lastStacks.remove(name); lastSwing.remove(name)
+            }
             emit("""{"k":"pgone","t":$tick,"name":${str(name)}}""")
         }
     }
@@ -580,7 +596,7 @@ class RunRecorder(
         val sb = StringBuilder()
         var count = 0
         for (p in level.players()) {
-            val name = p.gameProfile.name()
+            val name = if (p.uuid.version() == 2) "${p.gameProfile.name()}#${p.id}" else p.gameProfile.name()
             val swing = p.currentSwing
             val prev = lastSwing.put(name, swing)
             if (swing == null || swing === prev) continue

@@ -30,6 +30,7 @@ object OnlineLink {
 
     @Volatile private var socket: WebSocket? = null
     @Volatile private var connecting = false
+    @Volatile private var generation = 0
     /** Replaced by this install's own game elsewhere: off until a restart. */
     @Volatile private var stopped = false
     @Volatile private var retryAt = 0L
@@ -91,9 +92,12 @@ object OnlineLink {
 
     private fun connect() {
         connecting = true
+        val g = ++generation
         http.newWebSocketBuilder().header("Authorization", "Bearer ${ADR.token()}").connectTimeout(Duration.ofSeconds(15))
             .buildAsync(URI.create("wss://$SITE/adr/api/online/game"), Listener())
             .whenComplete { ws, err ->
+                // close() ran while this was connecting: ADR is off, so this socket goes too.
+                if (g != generation) { runCatching { ws?.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }; return@whenComplete }
                 connecting = false
                 if (err != null) { retryLater(); return@whenComplete }
                 backoff = 5_000L
@@ -138,6 +142,8 @@ object OnlineLink {
 
     /** ADR turned off: offline. */
     fun close() {
+        generation++
+        connecting = false
         val ws = socket
         socket = null
         runCatching { ws?.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }

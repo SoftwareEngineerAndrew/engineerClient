@@ -85,6 +85,7 @@ object ADR : Module(
     private var unlistedChecked by BooleanSetting("Unlisted Runs Checked", false, desc = "").hide()
     private var ownerToken by StringSetting("Owner Token", "", 64, desc = "Identifies your uploads for /adr's link.", placeholder = "").hide()
 
+    @Synchronized
     internal fun token(): String {
         if (ownerToken.length < 32) {
             val r = java.security.SecureRandom()

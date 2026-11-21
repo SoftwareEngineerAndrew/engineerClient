@@ -43,6 +43,7 @@ class HudCapture(private val emit: (String) -> Unit) {
         val infos = EngineerClient.mc.connection?.listedOnlinePlayers ?: return
         val rows = infos.sortedWith(ORDER).take(80)
         val sb = StringBuilder()
+        val was = tabRows.size
         for ((i, info) in rows.withIndex()) {
             val comp = info.tabListDisplayName
             // The same Component as last tick (the game keeps it until the server sends a new one): nothing to read.
@@ -54,7 +55,7 @@ class HudCapture(private val emit: (String) -> Unit) {
             if (sb.isNotEmpty()) sb.append(',')
             sb.append('[').append(i).append(',').append(GeometryCapture.jsonString(text)).append(']')
         }
-        val resized = rows.size != tabRows.size
+        val resized = rows.size != was
         while (tabRows.size > rows.size) { tabRows.removeAt(tabRows.size - 1); tabComps.removeAt(tabComps.size - 1) }
         if (sb.isEmpty() && !resized) return
         emit("""{"k":"tab","t":$t${if (resized) ",\"n\":${rows.size}" else ""},"d":[$sb]}""")
@@ -68,13 +69,14 @@ class HudCapture(private val emit: (String) -> Unit) {
             .sortedWith(SIDEBAR_ORDER).take(15)
             .map { ADR.legacyText(PlayerTeam.formatNameForTeam(board.getPlayersTeam(it.owner()), it.ownerName())) }
         val sb = StringBuilder()
+        val was = sideRows.size
         for ((i, text) in lines.withIndex()) {
             if (i < sideRows.size && sideRows[i] == text) continue
             if (i < sideRows.size) sideRows[i] = text else sideRows.add(text)
             if (sb.isNotEmpty()) sb.append(',')
             sb.append('[').append(i).append(',').append(GeometryCapture.jsonString(text)).append(']')
         }
-        val resized = lines.size != sideRows.size
+        val resized = lines.size != was
         while (sideRows.size > lines.size) sideRows.removeAt(sideRows.size - 1)
         val retitled = title != sideTitle
         sideTitle = title
