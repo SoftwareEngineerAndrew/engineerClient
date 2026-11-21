@@ -1,6 +1,7 @@
 package com.adm.features.impl.boss
 
 import com.adm.features.impl.boss.WitherDragons.currentTick
+import com.adm.AdmMod.mc
 import com.adm.utils.Color
 import com.adm.utils.Colors
 import com.adm.utils.alert
@@ -10,6 +11,7 @@ import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket
 import net.minecraft.world.phys.AABB
 import java.util.*
+import kotlin.math.abs
 
 enum class WitherDragonsEnum(
     val spawnPos: BlockPos,
@@ -33,6 +35,10 @@ enum class WitherDragonsEnum(
     Purple(BlockPos(56, 14, 125), BlockPos(56, 22, 120), AABB(45.5, 13.0, 113.5, 68.5, 23.0, 136.5), '5', Colors.MINECRAFT_DARK_PURPLE, 53.0..59.0, 122.0..128.0);
 
     var arrowHits = 0
+
+    // Real spawns appear on the spawn column (rising for Purple); a dragon flying back into range can sit in another's box.
+    fun spawnsAt(x: Double, y: Double, z: Double): Boolean =
+        abs(x - spawnPos.x) <= 1.5 && abs(z - spawnPos.z) <= 1.5 && y >= spawnPos.y - 1 && y <= spawnPos.y + 16
 
     fun setAlive(entityUUID: UUID?) {
         if (entityUUID != null) this.entityUUID = entityUUID
@@ -106,10 +112,13 @@ fun handleSpawnPacket(particle: ClientboundLevelParticlesPacket) {
         particle.z % 1 != 0.0
     ) return
 
+    if (WitherDragons.runOver) return
     val dragon = WitherDragonsEnum.entries.find {
-        it.state == WitherDragonState.DEAD && particle.x in it.xRange && particle.z in it.zRange
+        it.state != WitherDragonState.SPAWNING && particle.x in it.xRange && particle.z in it.zRange
     } ?: return
 
+    // A dragon that died out of render distance never sends its death, so its next flames mean it's gone.
+    if (dragon.state == WitherDragonState.ALIVE) dragon.setDead(false)
     dragon.state = WitherDragonState.SPAWNING
     dragon.timeToSpawn = 100
     WitherDragons.spawnOrder.add(dragon)
@@ -118,9 +127,10 @@ fun handleSpawnPacket(particle: ClientboundLevelParticlesPacket) {
     val high = if (particle.y == HIGH_Y) " §lHIGH" else ""
     val mine = WitherDragons.myDragon()
     val second = mine != null && WitherDragons.split && WitherDragons.spawnOrder.count { it.state == WitherDragonState.SPAWNING } > 1
-    alert(if (second) "§${mine!!.colorCode}${mine.name} is yours!$high" else "§${dragon.colorCode}${dragon.name} is spawning!$high", true)
+    val title = if (second) "§${mine!!.colorCode}${mine.name} is yours!$high" else "§${dragon.colorCode}${dragon.name} is spawning!$high"
+    mc.execute { alert(title, true) }
 }
 
-// Some respawns show their flames higher up.
+// Some spawns are 8 blocks higher (dragon at y 22), flames too.
 private const val HIGH_Y = 27.0
 

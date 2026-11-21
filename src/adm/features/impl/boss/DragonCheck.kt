@@ -24,16 +24,22 @@ object DragonCheck {
         standDragons.clear()
     }
 
-    // The synced health only reads 1024, 200 or 0; the real HP is on the name stand 4 blocks above each dragon.
+    // Above this the synced health is the real HP (it reads 200 while spawning and 0 on death); the name stand trails it by a tick.
+    const val SYNCED_HP = 1024f
+
     fun dragonUpdate(event: EntityEvent.SetData) {
         val entity = event.entity as? EnderDragon ?: return
         val values = event.synchedDataValues
-        var dead = false
+        var hp = -1f
         for (i in values.indices) {
             val v = values[i]
-            if (v.id == 9) { dead = (v.value as? Float ?: return) <= 0f; break }
+            if (v.id == 9) { hp = v.value as? Float ?: return; break }
         }
-        if (!dead) return
+        if (hp > SYNCED_HP) {
+            if (dragonHealthMap[entity.uuid]?.first !== entity) dragonHealthMap[entity.uuid] = Pair(entity, hp)
+            return
+        }
+        if (hp != 0f) return
         if (dragonHealthMap.containsKey(entity.uuid)) dragonHealthMap[entity.uuid] = Pair(entity, 0f)
 
         WitherDragonsEnum.entries.firstOrNull { it.entityUUID == entity.uuid }?.let {
@@ -48,8 +54,12 @@ object DragonCheck {
             if (v.id == 2) { name = (v.value as? Optional<*>)?.orElse(null) as? Component; break }
         }
         if (name == null) return
-        val cached = standDragons.get(stand.id)
+        val cached = standDragons.get(stand.id)?.takeUnless { it.isRemoved }
         val dragon = cached ?: standDragon(stand) ?: return
+        if (dragon.health > SYNCED_HP) {
+            if (cached == null) standDragons.put(stand.id, dragon)
+            return
+        }
         val hp = if (dragon.isDeadOrDying) 0f else parseHp(name.string)
         if (hp < 0f) return
         if (cached == null) standDragons.put(stand.id, dragon)
@@ -104,7 +114,9 @@ object DragonCheck {
         val dragon = event.entity as? EnderDragon ?: return
         dragons.removeIf { it.isRemoved }
         dragons.add(dragon)
-        WitherDragonsEnum.entries.find { it.aabbDimensions.contains(event.entity.position()) }?.setAlive(event.entity.uuid)
+        val uuid = dragon.uuid
+        for (d in WitherDragonsEnum.entries) if (d.entityUUID == uuid) return
+        WitherDragonsEnum.entries.find { it.spawnsAt(dragon.x, dragon.y, dragon.z) }?.setAlive(uuid)
     }
 
     fun dragonSprayed(event: EntityEvent.SetItemSlot) {

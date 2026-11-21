@@ -80,6 +80,8 @@ object WitherDragons : Module(
     val spawnOrder = mutableListOf<WitherDragonsEnum>()
     val priorityDragon: WitherDragonsEnum? get() = spawnOrder.firstOrNull()
     var currentTick = 0L
+    // Hypixel starts one more spawn as the boss dies; it never comes.
+    @Volatile var runOver = false
 
     val dragonPBs = PersonalBest(this, "DragonPBs")
 
@@ -131,7 +133,20 @@ object WitherDragons : Module(
             }
         }
 
+        on<MessageEvent.Chat> {
+            if (runOver || DungeonUtils.getF7Phase() != M7Phases.P5) return@on
+            val i = message.indexOf("☠ Defeated ")
+            if (i < 0 || i > 8) return@on
+            runOver = true
+            for (dragon in WitherDragonsEnum.entries) if (dragon.state == WitherDragonState.SPAWNING) {
+                dragon.state = WitherDragonState.DEAD
+                dragon.timeToSpawn = 0
+                spawnOrder.remove(dragon)
+            }
+        }
+
         on<LevelEvent.Load> {
+            runOver = false
             DragonCheck.clear()
             WitherDragonsEnum.reset()
         }
@@ -153,8 +168,8 @@ object WitherDragons : Module(
 
     private fun RenderExtractEvent.drawDragons() {
         if (dragonHealth) for (tracked in DragonCheck.dragonHealthMap.values) {
-            val hp = tracked.second
             val dragon = tracked.first
+            val hp = if (dragon.health > DragonCheck.SYNCED_HP) dragon.health else tracked.second
             if (hp > 0 && !dragon.isRemoved && !dragon.isDeadOrDying) drawText(healthTexts(hp.toDouble()), dragon.renderPos, 5f, false)
         }
 
