@@ -87,7 +87,7 @@ object SearchBar : Module(
     private fun update(text: String) {
         value = text
         val lower = text.lowercase()
-        result = MathParser.parse(lower)
+        result = MathParser.calculation(lower)
         resultLine = null
         terms = lower.split(",").map { term -> term.split("&").map { it.trim() }.filter { it.isNotEmpty() }.map(::part) }.filter { it.isNotEmpty() }
         priceTerms = terms.any { term -> term.any { it.text == null } }
@@ -167,6 +167,9 @@ object SearchBar : Module(
     private object MathParser {
         private val number = Regex("^-?\\d+(\\.\\d+)?[bmk]?", RegexOption.IGNORE_CASE)
         private val operator = Regex("^[()+\\-*/^x]")
+
+        /** [text] worked out when it is a sum, not a bare number (a search for "5" still searches). */
+        fun calculation(text: String): Double = if ((tokens(text)?.size ?: 0) > 1) parse(text) else Double.NaN
 
         fun parse(text: String): Double {
             val tokens = tokens(text) ?: return Double.NaN
