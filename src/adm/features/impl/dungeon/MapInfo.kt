@@ -1,6 +1,7 @@
 package com.adm.features.impl.dungeon
 
 import com.engineerclient.dungeon.ClearInfo
+import com.adm.AdmMod.mc
 import com.adm.events.LevelEvent
 import com.adm.events.RenderExtractEvent
 import com.adm.events.RoomEnterEvent
@@ -28,7 +29,7 @@ object MapInfo {
         on<ScoreUpdateEvent> {
             if (shownTitle || !DungeonUtils.inDungeons || !ClearInfo.mapInfoOn || !ClearInfo.scoreAlert || score < 300) return@on
             shownTitle = true
-            alert(ClearInfo.scoreAlertText.replace('&', '§'))
+            mc.execute { alert(ClearInfo.scoreAlertText.replace('&', '§')) }
             modMessage("§b${DungeonUtils.score} §ascore reached in §6${DungeonUtils.dungeonTime} §8|| §e${DungeonUtils.floor?.name}§8.")
         }
 
