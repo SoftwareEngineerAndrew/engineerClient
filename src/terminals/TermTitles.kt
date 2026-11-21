@@ -31,11 +31,11 @@ object TermTitles {
             gateOpens.find(plain)?.let { return show("§aGate opens in §f${it.groupValues[1]}s") }
         }
         val (name, action, type, current, total) = titleRegex.find(plain)?.destructured ?: return
-        if (Terminals.phaseDone && current == total) return show("§aPhase Done!")
         if ((Terminals.selfOnly || Terminals.hideOthers) && name != mc.player?.name?.string) {
             if (Terminals.hideOthers) cancel()
             return
         }
+        if (Terminals.phaseDone && current == total) return show("§aPhase Done!")
         val replace = when (type) {
             "terminal" -> Terminals.replaceTerminal
             "lever" -> Terminals.replaceLever

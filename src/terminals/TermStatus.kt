@@ -120,16 +120,15 @@ object TermStatus {
                 completedRegex.matches(message) -> {
                     val m = completedRegex.find(message) ?: return@on
                     val completed = (m.groupValues[4].toIntOrNull() ?: 0).also { if (it == 1) firstInSection = true }
-                    if (completed == (m.groupValues[5].toIntOrNull() ?: 0)) {
-                        if (gate) newSection() else isComplete = true
-                        return@on
-                    }
                     when (m.groupValues[3]) {
                         "lever" -> levers++
                         "terminal" -> terminals++
                         "device" -> if (!firstInSection || lastCompleted != completed) device = true
                     }
                     lastCompleted = completed
+                    if (completed == (m.groupValues[5].toIntOrNull() ?: 0)) {
+                        if (gate) newSection() else isComplete = true
+                    }
                 }
                 gateRegex.matches(message) -> { gate = true; if (isComplete) newSection() }
                 goldorRegex.matches(message) -> { shouldRender = true; resetState() }
