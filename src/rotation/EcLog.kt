@@ -6,6 +6,8 @@ import java.nio.file.Path
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.Timer
+import kotlin.concurrent.timerTask
 
 /**
  * EC's own log: one file per game session under `logs/engineerclient/`, meant to be attached
@@ -34,6 +36,8 @@ object EcLog {
     private val stamp = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
     private var out: PrintWriter? = null
     private var flushedAt = 0L
+    private var dirty = false
+    private var hooked = false
 
     var path: Path? = null
         private set
@@ -48,6 +52,11 @@ object EcLog {
             val file = dir.resolve("ec-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".log")
             out = PrintWriter(Files.newBufferedWriter(file), false)
             path = file
+            if (!hooked) {
+                hooked = true
+                Runtime.getRuntime().addShutdownHook(Thread({ close() }, "ec log close"))
+                Timer("ec log flush", true).schedule(timerTask { synchronized(this@EcLog) { if (dirty) { out?.flush(); dirty = false } } }, 1000, 1000)
+            }
             header.forEach { log("SESSION", it) }
             prune(dir)
         } catch (t: Throwable) {
@@ -62,7 +71,7 @@ object EcLog {
             // Written through at most once a second (a flush a line cost the game thread a disk write per chat line), and at once
             // for anything that went wrong.
             val now = System.currentTimeMillis()
-            if (now - flushedAt > 1000 || tag == "WARN" || tag == "ERROR" || tag == "MARK") { out?.flush(); flushedAt = now }
+            if (now - flushedAt > 1000 || tag == "WARN" || tag == "ERROR" || tag == "MARK") { out?.flush(); flushedAt = now; dirty = false } else dirty = true
         }
     }
 
