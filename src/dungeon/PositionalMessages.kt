@@ -100,8 +100,7 @@ object PositionalMessages : Module(
                 val at = due[m] ?: continue
                 if (now >= at) { due.remove(m); if (m.message.isNotBlank()) sendCommand("pc ${m.message}") }
             } else {
-                due.remove(m)
-                if (!oncePerWorld) sent[m] = false
+                if (due.remove(m) != null || !oncePerWorld) sent[m] = false
             }
         }
     }

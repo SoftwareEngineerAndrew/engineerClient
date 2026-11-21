@@ -17,6 +17,7 @@ import kotlin.math.min
 class PosMsgScreen(private val previous: Screen?) : Screen(Component.literal("Positional Messages")) {
     private val list get() = PositionalMessages.messages
     private var scroll = 0
+    private var scrollLeft = 0.0
 
     private val winW get() = min(620, width - 20)
     private val winH get() = min(300, height - 20)
@@ -147,7 +148,11 @@ class PosMsgScreen(private val previous: Screen?) : Screen(Component.literal("Po
     }
 
     override fun mouseScrolled(mouseX: Double, mouseY: Double, horizontal: Double, vertical: Double): Boolean {
-        val to = (scroll - vertical.toInt()).coerceIn(0, max(0, list.size - visible))
+        // Touchpads and smooth wheels send fractions of a row: they add up.
+        scrollLeft += vertical
+        val steps = scrollLeft.toInt()
+        scrollLeft -= steps
+        val to = (scroll - steps).coerceIn(0, max(0, list.size - visible))
         if (to != scroll) { scroll = to; rebuildWidgets() }
         return true
     }
