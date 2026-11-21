@@ -119,7 +119,8 @@ class Tracker(val geo: Geometry, start: WaterSim, private val originMs: Double) 
         val o = Obs(r, cell, view, t ?: Int.MIN_VALUE)
         recent.addLast(o); while (recent.size > 80) recent.removeFirst()
         trace?.invoke("cell ${geo.x(cell)},${geo.y(cell)} v$view raw ${"%.1f".format(r)} e $e -> $t (head ${head.time}, drift ${"%.1f".format(drift)}) sendsAtE ${sends[e]?.entries?.joinToString { "${geo.x(it.key)},${geo.y(it.key)}=${it.value}" }}")
-        val tt = t ?: randomTick(cell, view, e)
+        // a run of misses is drift or a lag burst, not random ticks: left to relock/resync, not searched packet by packet
+        val tt = t ?: if (streak < 2) randomTick(cell, view, e) else null
         if (tt != null) {
             o.tick = tt
             used += key(tt, cell); matched++; streak = 0

@@ -83,7 +83,8 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
         // independent annealers from the same starts, each its own scratch board; the best wins
         fun ev() = Evaluator(base, t0, horizon, spacing, first, hold, objective, trials)
         val runs = if (threads <= 1) listOf(anneal(ev(), starts, budgetNs, iterations, Xorwow(seedsRnd[0]), levers))
-            else (0 until threads).map { k -> pool.submit<List<Pair<List<Flip>, Double>>> { anneal(ev(), starts, budgetNs, iterations, Xorwow(seedsRnd[k]), levers) } }.map { it.get() }
+            else joinAll((0 until threads).map { k -> pool.submit<List<Pair<List<Flip>, Double>>> { anneal(ev(), starts, budgetNs, iterations, Xorwow(seedsRnd[k]), levers) } })
+        if (Thread.currentThread().isInterrupted) throw InterruptedException()
         val eval = ev()
         val pick = if (!objective.trials) runs.flatten().minByOrNull { it.second }!!.first
             else {
@@ -95,10 +96,14 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
                 fun cheapest(k: Int, step: Int): Pair<Int, Double> {
                     val c = check()
                     var at = -1; var low = Double.POSITIVE_INFINITY
-                    for (i in k until cands.size step step) { val v = c.cost(cands[i], low); if (v < low) { low = v; at = i } }
+                    for (i in k until cands.size step step) {
+                        if (Thread.currentThread().isInterrupted) break
+                        val v = c.cost(cands[i], low); if (v < low) { low = v; at = i }
+                    }
                     return at to low
                 }
-                val found = if (threads <= 1) listOf(cheapest(0, 1)) else (0 until threads).map { k -> pool.submit<Pair<Int, Double>> { cheapest(k, threads) } }.map { it.get() }
+                val found = if (threads <= 1) listOf(cheapest(0, 1)) else joinAll((0 until threads).map { k -> pool.submit<Pair<Int, Double>> { cheapest(k, threads) } })
+                if (Thread.currentThread().isInterrupted) throw InterruptedException()
                 cands[found.filter { it.first >= 0 }.minWith(compareBy({ it.second }, { it.first })).first]
             }
         val flips = polish(eval, pick)
@@ -110,12 +115,14 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
     private fun anneal(eval: Evaluator, starts: List<List<Flip>>, budgetNs: Long, iterations: Int, rnd: Xorwow, levers: IntArray): List<Pair<List<Flip>, Double>> {
         val begin = System.nanoTime()
         var best: Pair<List<Flip>, Double>? = null
-        val top = java.util.TreeMap<Double, List<Flip>>()
+        val top = ArrayList<Pair<List<Flip>, Double>>()
         fun keep(f: List<Flip>, c: Double) {
-            if (top.size >= KEEP && c >= top.lastKey()) return
-            if (top.containsValue(f)) return
-            top[c] = f
-            while (top.size > KEEP) top.pollLastEntry()
+            if (top.size >= KEEP && c >= top.last().second) return
+            if (top.any { it.first == f }) return
+            var i = top.size
+            while (i > 0 && top[i - 1].second > c) i--
+            top.add(i, f to c)
+            if (top.size > KEEP) top.removeAt(top.size - 1)
         }
         for (s in starts) { val c = eval.cost(s); keep(s, c); if (best == null || c < best.second) best = s to c }
         var cur = best!!.first; var curCost = best.second
@@ -124,7 +131,7 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
         val temp0 = 60.0; val temp1 = 0.5
         while (true) {
             val el = System.nanoTime() - begin
-            if (el >= budgetNs || iter >= iterations) break
+            if (el >= budgetNs || iter >= iterations || Thread.currentThread().isInterrupted) break
             iter++
             val temp = temp0 * Math.pow(temp1 / temp0, max(el.toDouble() / budgetNs, iter.toDouble() / iterations))
             val cand = mutate(cur, eval.t0, rnd, levers)
@@ -142,7 +149,7 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
             // now and then go back to the best (the board punishes wandering far)
             if (iter % 400 == 0 && curCost > best!!.second + 30) { cur = best.first; curCost = best.second }
         }
-        return top.entries.map { it.value to it.key }
+        return top
     }
 
     /** A cost every candidate at or above which is turned down, for the acceptance draw [u]. */
@@ -455,6 +462,9 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
         /** The candidates a search of [budgetMs] is worth: a search that has tried them is done before its time is up. */
         fun iterations(budgetMs: Long, objective: Objective): Int = (budgetMs * if (objective.trials) TRIAL_RATE else RUN_RATE).toInt()
         val THREADS = maxOf(1, minOf(2, Runtime.getRuntime().availableProcessors() - 2))
+        /** A cancelled job's interrupt reaches its pool tasks too, so they don't hold up the next job. */
+        private fun <T> joinAll(fs: List<java.util.concurrent.Future<T>>): List<T> =
+            try { fs.map { it.get() } } catch (e: InterruptedException) { fs.forEach { it.cancel(true) }; throw e }
         private val pool = java.util.concurrent.Executors.newFixedThreadPool(THREADS) { r -> Thread(r, "ec-waterboard-planner").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }
     }
 }
