@@ -24,7 +24,10 @@ object EtherSound {
         EXPLODE({ it.sound.value() == SoundEvents.GENERIC_EXPLODE.value() && it.volume == 1f && it.pitch == 1f }),
     }
 
+    // Filled on the game thread, swallowed on the network thread: every use holds this lock.
     private val owed = Server.entries.associateWith { ArrayDeque<Long>() }
+
+    private fun owe(server: Server, at: Long) = synchronized(owed) { owed.getValue(server).addLast(at) }
 
     /** The camera teleported: play the sounds now. */
     fun played(kind: Kind = Kind.ETHER) {
@@ -37,32 +40,34 @@ object EtherSound {
                 } catch (_: Throwable) {
                     vanilla()
                 }
-                owed.getValue(Server.DRAGON).addLast(now)
+                owe(Server.DRAGON, now)
             }
             Kind.AOTV -> {
                 if (!com.engineerclient.visual.Sounds.mutesAotv()) playSoundAtPlayer(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f)
-                owed.getValue(Server.TELEPORT).addLast(now)
+                owe(Server.TELEPORT, now)
             }
             Kind.HYPE -> {
                 playSoundAtPlayer(SoundEvents.ENDERMAN_TELEPORT, 1f, 1f)
                 playSoundAtPlayer(SoundEvents.GENERIC_EXPLODE.value(), 1f, 1f)
-                owed.getValue(Server.TELEPORT).addLast(now)
-                owed.getValue(Server.EXPLODE).addLast(now)
+                owe(Server.TELEPORT, now)
+                owe(Server.EXPLODE, now)
             }
         }
     }
 
     private fun vanilla() = playSoundAtPlayer(SoundEvents.ENDER_DRAGON_HURT, 1f, PITCH)
 
-    fun clear() = owed.values.forEach { it.clear() }
+    fun clear() = synchronized(owed) { owed.values.forEach { it.clear() } }
 
     /** A server sound arrived: true when a camera teleport already played it, so it's not played again. */
     @JvmStatic fun swallow(packet: ClientboundSoundPacket): Boolean {
         val server = Server.entries.firstOrNull { it.matches(packet) } ?: return false
-        val queue = owed.getValue(server)
         val now = System.currentTimeMillis()
-        while (queue.isNotEmpty() && now - queue.first() > KEEP_MS) queue.removeFirst()
-        return queue.removeFirstOrNull() != null
+        synchronized(owed) {
+            val queue = owed.getValue(server)
+            while (queue.isNotEmpty() && now - queue.first() > KEEP_MS) queue.removeFirst()
+            return queue.removeFirstOrNull() != null
+        }
     }
 
     // ADM's Etherwarp settings, read through its accessors (no public getters).
