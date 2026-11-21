@@ -135,18 +135,22 @@ object LeapOrder {
         if (name.equals(mc.player?.name?.string, ignoreCase = true)) mc.player?.let { return it.skin }
         val key = name.lowercase(Locale.ROOT)
         skins[key]?.let { return it }
-        if (looking.add(key)) {
+        if ((looking[key] ?: 0L) <= System.currentTimeMillis()) {
+            looking[key] = Long.MAX_VALUE
             CompletableFuture.supplyAsync({ mc.services().profileResolver().fetchByName(name) }, Util.nonCriticalIoPool())
                 .thenCompose { p -> p.map { mc.skinManager.get(it) }.orElse(CompletableFuture.completedFuture(Optional.empty())) }
                 .whenComplete { s, e ->
                     if (e != null) EngineerClient.logger.warn("[ec] leap order: no skin for {} ({})", name, e.toString())
-                    s?.ifPresent { skins[key] = it }
+                    val skin = s?.orElse(null)
+                    if (skin != null) skins[key] = skin
+                    else looking[key] = System.currentTimeMillis() + 60_000L
                 }
         }
         return DefaultPlayerSkin.getDefaultSkin()
     }
     private val skins = ConcurrentHashMap<String, PlayerSkin>()
-    private val looking = ConcurrentHashMap.newKeySet<String>()
+    /** When a name's lookup may start again: never while one runs, a minute after one fails. */
+    private val looking = ConcurrentHashMap<String, Long>()
 
     /** Brigadier's node command (no setter: ADM's node is given the bare run in place). */
     private val COMMAND by lazy { com.mojang.brigadier.tree.CommandNode::class.java.getDeclaredField("command").apply { isAccessible = true } }
