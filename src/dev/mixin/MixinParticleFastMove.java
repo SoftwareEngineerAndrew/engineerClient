@@ -1,5 +1,6 @@
 package com.devgineerclient.mixin;
 
+import com.devgineerclient.misc.RenderTweaks;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.world.phys.AABB;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,6 +23,7 @@ public abstract class MixinParticleFastMove {
 
     @Inject(method = "move(DDD)V", at = @At("HEAD"), cancellable = true)
     private void engineerclient$skipParticleBlockCollisions(double dx, double dy, double dz, CallbackInfo ci) {
+        if (!RenderTweaks.INSTANCE.getFastParticles()) return;
         if (dx != 0.0D || dy != 0.0D || dz != 0.0D) {
             this.setBoundingBox(this.getBoundingBox().move(dx, dy, dz));
             this.setLocationFromBoundingbox();
