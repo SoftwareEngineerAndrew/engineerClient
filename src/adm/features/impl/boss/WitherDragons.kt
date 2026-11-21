@@ -25,6 +25,7 @@ import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.EntityTypes
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.item.BowItem
+import java.util.concurrent.CopyOnWriteArrayList
 
 object WitherDragons : Module(
     name = "Wither Dragons",
@@ -77,7 +78,8 @@ object WitherDragons : Module(
         LastBreathRelease.hudText()?.let { textDim(it, 0, 0, Colors.WHITE) } ?: (0 to 0)
     }.withDependency { lastBreathDropDown && lastBreath }
 
-    val spawnOrder = mutableListOf<WitherDragonsEnum>()
+    // Spawn packets and server ticks land on the netty thread, deaths on the client thread.
+    val spawnOrder: MutableList<WitherDragonsEnum> = CopyOnWriteArrayList()
     val priorityDragon: WitherDragonsEnum? get() = spawnOrder.firstOrNull()
     var currentTick = 0L
     // Hypixel starts one more spawn as the boss dies; it never comes.
