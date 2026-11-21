@@ -49,7 +49,7 @@ class GpuTimer(private val slots: Int) {
     }
 
     /** Each finished frame's GPU time (ns). */
-    fun poll(each: (Long) -> Unit) {
+    fun poll(out: LongArray) {
         val p = pool ?: return
         for (i in 0 until slots) {
             if (!pending[i]) continue
@@ -57,7 +57,7 @@ class GpuTimer(private val slots: Int) {
             if (!a.isPresent || !b.isPresent) continue
             pending[i] = false
             val ns = ((b.asLong - a.asLong) * period).toLong()
-            if (ns in 0..1_000_000_000L) each(ns)
+            if (ns in 0..1_000_000_000L) { out[0] += ns; out[1]++; if (ns > out[2]) out[2] = ns }
         }
     }
 }
@@ -136,13 +136,18 @@ object PerfMonitor {
     private val hitches = ConcurrentLinkedQueue<Hitch>()
     private var hitchesThisSecond = 0
 
+    private val gpuOut = LongArray(3)
+
     /** The start of a frame (Minecraft.runTick): closes the last one. */
     @JvmStatic fun frame() {
         if (!on) { lastFrame = 0L; return }
         val now = System.nanoTime()
         if (main == null) { main = Thread.currentThread(); startThreads() }
         val w = win
-        gpu.poll { w.gpuSum += it; w.gpuN++; if (it > w.gpuMax) w.gpuMax = it }
+        val g = gpuOut
+        g[0] = 0L; g[1] = 0L; g[2] = w.gpuMax
+        gpu.poll(g)
+        w.gpuSum += g[0]; w.gpuN += g[1].toInt(); w.gpuMax = g[2]
         if (lastFrame != 0L) {
             val dt = now - lastFrame
             for (i in 0 until PHASES) { w.sum[i] += acc[i]; if (acc[i] > w.max[i]) w.max[i] = acc[i] }
@@ -204,7 +209,7 @@ object PerfMonitor {
         Thread({
             while (true) {
                 if (on) runCatching { classify(m.stackTrace) }.getOrNull()?.let { samples += it }
-                try { Thread.sleep(10) } catch (_: InterruptedException) { break }
+                try { Thread.sleep(if (on) 10 else 250) } catch (_: InterruptedException) { break }
             }
         }, "ec perf sampler").apply { isDaemon = true; priority = Thread.MAX_PRIORITY; start() }
         Thread({ writerLoop() }, "ec perf writer").apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
@@ -386,7 +391,10 @@ object PerfMonitor {
         firstFrames(s)
     }
 
-    private fun rssMb(): Long? = runCatching { Files.readAllLines(Path.of("/proc/self/status")).first { it.startsWith("VmRSS:") }.split(Regex("\\s+"))[1].toLong() / 1024 }.getOrNull()
+    private val WHITESPACE = Regex("\\s+")
+    private val THREAD_NUMBER = Regex("[-# ]?\\d+$")
+
+    private fun rssMb(): Long? = runCatching { Files.readAllLines(Path.of("/proc/self/status")).first { it.startsWith("VmRSS:") }.split(WHITESPACE)[1].toLong() / 1024 }.getOrNull()
 
     private fun threadCpu(secs: Double): List<Pair<String, Double>> = runCatching {
         val out = HashMap<String, Double>()
@@ -400,7 +408,7 @@ object PerfMonitor {
                 val key = task.fileName.toString()
                 seen += key
                 val prev = taskCpuLast.put(key, cpu) ?: continue
-                val pool = name.replace(Regex("[-# ]?\\d+$"), "")
+                val pool = name.replace(THREAD_NUMBER, "")
                 out.merge(pool, (cpu - prev) / ticksPerSecond / secs * 100, Double::plus)
             }
         }
