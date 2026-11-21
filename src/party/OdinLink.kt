@@ -62,14 +62,18 @@ object OdinLink {
         }
     }
 
-    /** One top-level string field, read without building the tree the handlers parse again. */
+    /** One top-level string field, read without building the tree the handlers parse again; null if the key comes twice (they keep the last). */
     private fun field(json: String, name: String): String? {
         val r = JsonReader(StringReader(json))
         r.beginObject()
+        var found: String? = null
+        var seen = false
         while (r.hasNext()) {
-            if (r.nextName() == name && r.peek() == JsonToken.STRING) return r.nextString()
-            r.skipValue()
+            if (r.nextName() != name) { r.skipValue(); continue }
+            if (seen) return null
+            seen = true
+            if (r.peek() == JsonToken.STRING) found = r.nextString() else r.skipValue()
         }
-        return null
+        return found
     }
 }
