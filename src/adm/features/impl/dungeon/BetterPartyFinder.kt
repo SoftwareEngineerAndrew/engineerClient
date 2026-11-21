@@ -81,7 +81,7 @@ object BetterPartyFinder : Module(
     //https://regex101.com/r/XYnAVm/2
     private val pfRegex = Regex("^Party Finder > (?:\\[.{1,7}])? ?(.{1,16}) joined the dungeon group! \\(.*\\)$")
 
-    private val kickedList = mutableSetOf<String>()
+    private val kickedList = ConcurrentHashMap.newKeySet<String>()
     private var selfJoinedLast = false
 
     private val partyMemberRegex = Regex("^\\s*(\\w{1,16}):?\\s+(Archer|Tank|Berserk|Healer|Mage)\\s*\\((\\d+)\\)\\s*$")
