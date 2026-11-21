@@ -91,6 +91,7 @@ object HudManager : Screen(Component.literal("HUD Manager")) {
     override fun isPauseScreen(): Boolean = false
 
     fun resetHUDS() {
+        for (setting in hudSettingsCache) setting.hud.unlink()
         for (setting in hudSettingsCache) {
             val hud = setting.hud
             hud.x = 10

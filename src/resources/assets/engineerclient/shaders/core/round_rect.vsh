@@ -25,11 +25,13 @@ void main() {
     vertexColor = Color;
     localPos = UV0;
     halfSize = vec2(UV1) / 8.0;
-    radii = vec4(
+    vec4 raw = vec4(
         float(UV2.x & 0xFF), // top left
         float((UV2.x >> 8) & 0xFF), // top right
         float(UV2.y  & 0xFF), // bottom right
         float((UV2.y >> 8) & 0xFF)  // bottom left
-    ) / 4.0;
+    );
+    // 255: fully round, the fragment shader caps it at the half size
+    radii = mix(raw / 4.0, vec4(1e6), equal(raw, vec4(255.0)));
     edgeWidth = LineWidth;
 }

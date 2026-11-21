@@ -25,7 +25,8 @@ object RoundedRectRenderer {
     private const val AA_PADDING = 2f
     private const val HALF_EXTENT_SCALE = 8f
     private const val RADIUS_SCALE = 4f
-    private const val MAX_RADIUS = 255f / RADIUS_SCALE
+    private const val FULL_ROUND = 255
+    private const val MAX_RADIUS = (FULL_ROUND - 1) / RADIUS_SCALE
 
     val FORMAT: VertexFormat = VertexFormat.builder(0)
         .addAttribute(DefaultVertexFormat.POSITION_SEMANTIC_NAME, GpuFormat.RGB32_FLOAT)
@@ -79,6 +80,7 @@ object RoundedRectRenderer {
         val halfWidth = (right - left) * 0.5f
         val halfHeight = (bottom - top) * 0.5f
         if (halfWidth <= 0f || halfHeight <= 0f) return
+        val full = min(halfWidth, halfHeight)
 
         val pose = snapshotPose(context.pose())
         val scissor = context.scissorStack.peek()
@@ -99,8 +101,8 @@ object RoundedRectRenderer {
                 (left + right) * 0.5f, (top + bottom) * 0.5f,
                 topLeftColor, topRightColor, bottomRightColor, bottomLeftColor,
                 fixedPoint(halfWidth), fixedPoint(halfHeight),
-                packRadius(corners.topLeft) or (packRadius(corners.topRight) shl 8),
-                packRadius(corners.bottomRight) or (packRadius(corners.bottomLeft) shl 8),
+                packRadius(corners.topLeft, full) or (packRadius(corners.topRight, full) shl 8),
+                packRadius(corners.bottomRight, full) or (packRadius(corners.bottomLeft, full) shl 8),
                 edgeWidth, pipeline, textureSetup,
                 scissor, bounds
             )
@@ -129,8 +131,9 @@ object RoundedRectRenderer {
     private fun fixedPoint(value: Float): Int =
         (value * HALF_EXTENT_SCALE).roundToInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
 
-    private fun packRadius(radius: Float): Int =
-        (radius.coerceIn(0f, MAX_RADIUS) * RADIUS_SCALE).roundToInt().coerceIn(0, 255)
+    private fun packRadius(radius: Float, full: Float): Int =
+        if (radius > MAX_RADIUS && radius >= full) FULL_ROUND
+        else (radius.coerceIn(0f, MAX_RADIUS) * RADIUS_SCALE).roundToInt().coerceIn(0, FULL_ROUND - 1)
 
     private class Element(
         private val pose: Matrix3x2fc,
