@@ -277,7 +277,7 @@ object MapPrediction {
     @JvmStatic
     /** Wither and blood doors the prediction is sure of between tiles the map hasn't shown; the last pass's while it's catching up. */
     fun certainDoors(): List<com.adm.features.impl.dungeon.map.tile.DungeonDoor> {
-        if (!started()) return emptyList()
+        if (!started() || !on || !DungeonMap.enabled || !supported()) return emptyList()
         val p = shown ?: return emptyList()
         if (shownKey != lastKey || p === doorsFor) return doorsCache
         doorsFor = p
