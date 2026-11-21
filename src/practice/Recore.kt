@@ -81,6 +81,7 @@ object Recore : Module(
     @JvmStatic
     fun simStart(section: Int) {
         reset()
+        if (section == 5) { sectionsOver = 3; coreWatch = true; return }
         if (section !in 1..4) return
         terms = true
         sectionsOver = section - 1
