@@ -58,11 +58,14 @@ object DevSimonSays {
                 } else if (Devices.customClickSounds) playSoundSettings(Devices.correctSound())
             }
             if (pos.x == 110 && pos.y in 120..123 && pos.z in 92..95) {
-                if (Devices.announceProgress && clickInOrder.isNotEmpty() && pos.east() == clickInOrder.last()) sendCommand("pc SS ${clickInOrder.size}/4")
-                if (Devices.ssBlockWrong && !sneaking && pos.east() != clickInOrder.getOrNull(clickNeeded)) {
+                val correct = pos.east() == clickInOrder.getOrNull(clickNeeded)
+                if (Devices.ssBlockWrong && !sneaking && !correct) {
                     if (Devices.customClickSounds) playSoundSettings(Devices.wrongSound())
                     cancel()
-                } else if (Devices.customClickSounds) playSoundSettings(Devices.correctSound())
+                    return@on
+                }
+                if (Devices.customClickSounds) playSoundSettings(Devices.correctSound())
+                if (Devices.announceProgress && correct && clickNeeded == clickInOrder.size - 1) sendCommand("pc SS ${clickInOrder.size}/4")
             }
         }
 
