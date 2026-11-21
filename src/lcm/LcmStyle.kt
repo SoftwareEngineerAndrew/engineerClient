@@ -105,6 +105,7 @@ object LcmStyle {
     @JvmStatic
     fun render(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int>? {
         if (!example && (!DungeonUtils.inDungeons || (disableInBoss() && DungeonUtils.inBoss))) return NONE
+        if (failed) return null
         val width = mapWidth(example)
         val height = rows(example) * TILE - (TILE - ROOM) + PAD * 2
         g.pose().pushMatrix()
@@ -118,12 +119,13 @@ object LcmStyle {
                 if (!DungeonUtils.inBoss) drawPlayers(g)
             }
         } catch (t: Throwable) {
-            // ADM fills its rooms in from map packets as they come: a read mid-change just draws the next frame
-            if (t !is ConcurrentModificationException && !failed) {
+            // ADM fills its rooms in from map packets as they come: a read mid-change just draws the next frame.
+            // This frame is half drawn either way, so ADM only takes over from the next one.
+            if (t !is ConcurrentModificationException) {
                 failed = true
                 EngineerClient.logger.error("[ec] LCM Style failed, ADM draws the map", t)
             }
-            return null
+            return width to height
         } finally {
             g.pose().popMatrix()
         }

@@ -103,7 +103,7 @@ object LcmMapInfo {
         state[8] = if (!stats.princeKilled && princeLeft(floorNumber)) 1 else 0
         state[9] = if (bats < batsPossible) bats.coerceAtMost(5) else -1
         state[10] = crypts
-        state[11] = LcmStyle.rows(false)
+        state[11] = LcmStyle.mapWidth(false)
     }
 
     private fun rebuild() {
@@ -120,10 +120,7 @@ object LcmMapInfo {
         if (state[9] >= 0) bonus.append("§7B: §c").append(state[9]).append("   ")
         if (state[10] < 5) bonus.append("§c").append(state[10]).append("§7/§a5")
         val second = bonus.toString().trim()
-        // as wide as the map's rooms (16 each, 4 between) and 5 of background either side
-        val rows = state[11]
-        val mapWidth = rows * 16 + (rows - 1) * 4 + 10
-        lines = if (mc.font.width("$first   $second") < mapWidth) listOf("$secrets   ${if (second.isNotEmpty()) "$second   " else ""}$unknown$scoreText")
+        lines = if (mc.font.width("$first   $second") < state[11]) listOf("$secrets   ${if (second.isNotEmpty()) "$second   " else ""}$unknown$scoreText")
             else listOf(first, second)
     }
 
