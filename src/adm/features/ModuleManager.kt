@@ -145,6 +145,10 @@ object ModuleManager {
         }
     }
 
+    fun saveModule(module: Module) {
+        configs.firstOrNull { it.modules[module.name.lowercase()] === module }?.saveModule(module) ?: saveConfigurations()
+    }
+
     fun render(guiGraphics: GuiGraphicsExtractor, tickCounter: DeltaTracker) {
         if (mc.level == null || mc.player == null || mc.gui.screen() == HudManager) return
 

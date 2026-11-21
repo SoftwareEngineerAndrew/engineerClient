@@ -4,7 +4,7 @@ import com.adm.clickgui.settings.impl.MapSetting
 import com.adm.features.Module
 import com.adm.features.ModuleManager
 
-class PersonalBest(module: Module, name: String) {
+class PersonalBest(private val module: Module, name: String) {
 
     private val mapSetting = module.registerSetting(MapSetting(name, mutableMapOf<String, Float>()))
     /**
@@ -29,7 +29,7 @@ class PersonalBest(module: Module, name: String) {
 
     fun set(index: String, time: Float) {
         mapSetting.value[index] = time
-        ModuleManager.saveConfigurations()
+        ModuleManager.saveModule(module)
     }
 
     fun reset() {

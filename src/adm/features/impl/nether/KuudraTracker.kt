@@ -171,7 +171,7 @@ object KuudraTracker : Module(
 
     private fun changed() {
         stale = true
-        ModuleManager.saveConfigurations()
+        ModuleManager.saveModule(this)
     }
 
     private fun buildRows(): List<Row> {
