@@ -89,22 +89,22 @@ object SplitsManager {
         if (index == 0) return
 
         val previous = splits[index - 1]
-        val segmentTime = (split.time - previous.time) / 1000f
+        val segmentTime = if (previous.time != 0L) (split.time - previous.time) / 1000f else null
 
         if (!displayAllowed()) return
         if (index == splits.lastIndex) finishRun(index, segmentTime)
-        else currentSplits.personalBest?.time(previous.name, segmentTime, "s§7!", "§6${previous.name} §7took §6", Splits.enabled)
+        else if (segmentTime != null) currentSplits.personalBest?.time(previous.name, segmentTime, "s§7!", "§6${previous.name} §7took §6", Splits.enabled)
     }
 
-    private fun finishRun(totalIndex: Int, lastSegmentTime: Float) {
+    private fun finishRun(totalIndex: Int, lastSegmentTime: Float?) {
         val rows = currentRows()
         val splits = currentSplits.splits
         val personalBest = currentSplits.personalBest
 
         schedule(10) {
             if (rows.isEmpty()) return@schedule
-            personalBest?.time(splits[totalIndex - 1].name, lastSegmentTime, "s§7!", "§6${splits[totalIndex - 1].name} §7took §6", Splits.enabled)
-            personalBest?.time(splits[totalIndex].name, rows.last().time / 1000f, "s§7!", "§6Total time §7took §6", Splits.enabled)
+            if (lastSegmentTime != null) personalBest?.time(splits[totalIndex - 1].name, lastSegmentTime, "s§7!", "§6${splits[totalIndex - 1].name} §7took §6", Splits.enabled)
+            if (rows.last().time > 0) personalBest?.time(splits[totalIndex].name, rows.last().time / 1000f, "s§7!", "§6Total time §7took §6", Splits.enabled)
             rows.forEachIndexed { i, row ->
                 if (Splits.enabled) modMessage("§6${if (i == rows.lastIndex) "Total" else row.name} §7took §6${formatTime(row.time)}§7.")
             }

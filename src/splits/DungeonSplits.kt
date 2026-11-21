@@ -60,7 +60,7 @@ object DungeonSplits : Module(
     private val subs = SubSplitTracker()
     private val blood = BloodRunDetail()
 
-    private var serverTicks = 0
+    @Volatile private var serverTicks = 0
     private fun now() = Stamp(System.currentTimeMillis(), serverTicks)
 
     /** Each boss sub split's best time, per floor (SubSplitGrades: ticks, or ms for the real-time ones). */
@@ -257,9 +257,11 @@ object DungeonSplits : Module(
 
         // ADM's server tick: the server's own clock, which falls behind when it lags.
         on<TickEvent.Server> {
-            serverTicks++; subs.onServerTick(); sampleLag()
+            serverTicks++
             val now = serverTicks
+            val at = now()
             EngineerClient.mc.execute {
+                EngineerClient.safely("sub splits tick") { subs.onServerTick(); sampleLag(at) }
                 EngineerClient.safely("storm detail") {
                     storm.onServerTick(now)
                     // Show Crush Info: each 20-tick crush check from his lightning until he dies.
@@ -302,7 +304,7 @@ object DungeonSplits : Module(
             }
             // A terminal section's door: its ~228 barriers turn to air in the tick the section ends
             // (its last completion and its gate both in). Seen whatever chat cleaners hide.
-            if (open(SplitTracker.TERMS) && old.block == Blocks.BARRIER && updated.isAir) {
+            if (old.block == Blocks.BARRIER && updated.isAir && open(SplitTracker.TERMS)) {
                 val section = SECTION_DOORS.indexOfFirst { (x, z) -> pos.x in x && pos.z in z }
                 if (section >= 0) sectionDoor[section]++
             }
@@ -313,7 +315,7 @@ object DungeonSplits : Module(
                 }
             }
             // Maxor's beacon turning to bedrock is his kill.
-            if (open(SplitTracker.MAXOR) && pos.x == 73 && pos.y == 221 && pos.z == 73 && updated.block == Blocks.BEDROCK) {
+            if (updated.block == Blocks.BEDROCK && pos.x == 73 && pos.y == 221 && pos.z == 73 && open(SplitTracker.MAXOR)) {
                 subs.onMaxorKilled(now())
             }
         }
@@ -592,7 +594,7 @@ object DungeonSplits : Module(
         }
     }
 
-    private fun open(label: String) = tracker.split(label)?.stop == null && tracker.split(label) != null
+    private fun open(label: String) = tracker.split(label)?.let { it.stop == null } == true
 
     private fun teamNames(): Set<String> =
         DungeonUtils.dungeonTeammates.mapTo(HashSet()) { it.name }.also { set -> mc.player?.let { set += it.name.string } }
@@ -787,9 +789,9 @@ object DungeonSplits : Module(
 
     fun lag(): Long? = synchronized(lagSamples) { lagSamples.minOrNull()?.takeIf { lagShown } }
 
-    private fun sampleLag() {
+    private fun sampleLag(at: Stamp) {
         val splits = tracker.splits().takeIf { it.isNotEmpty() } ?: return
-        val ms = SplitPace.lag(splits, now())
+        val ms = SplitPace.lag(splits, at)
         synchronized(lagSamples) {
             lagSamples.addLast(ms)
             while (lagSamples.size > 20) lagSamples.removeFirst()

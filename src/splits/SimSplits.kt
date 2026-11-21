@@ -51,6 +51,7 @@ object SimSplits {
     private var pending: String? = null
     private var headMs = 0L
     private var needStart = false
+    private var startTries = 0
 
     /** ADM's run starts as its "Starting in 1 second." line would (nothing is said in chat: Hypixel's P3 has no such line). */
     private fun startCoreRun(): Boolean {
@@ -69,6 +70,7 @@ object SimSplits {
         pending = coreName
         this.headMs = headMs
         needStart = true
+        startTries = 0
         tick()
     }
 
@@ -85,7 +87,14 @@ object SimSplits {
     /** Every client tick: starts ADM's run once it can (the dungeon bridge up), and fills it in. */
     fun tick() {
         val name = pending ?: return
-        if (needStart) { if (!startCoreRun()) return; needStart = false }
+        if (needStart) {
+            if (!startCoreRun()) {
+                // Left the sim, or ADM never takes the run: a later real run mustn't be started by it.
+                if (++startTries > 40 || !com.engineerclient.p3sim.P3Sim.inSim) { pending = null; needStart = false }
+                return
+            }
+            needStart = false
+        }
         val g = group() ?: return
         val splits = g.splits
         val k = splits.indexOfFirst { it.name == name }
