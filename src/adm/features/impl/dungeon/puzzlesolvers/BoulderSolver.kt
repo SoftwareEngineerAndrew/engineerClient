@@ -59,7 +59,7 @@ object BoulderSolver {
         val key = Triple(b, from, mode)
         if (plans.containsKey(key) || !solving.add(key)) return
         worker.execute {
-            try { plans[key] = solve(b, from, mode) ?: emptyList() } catch (_: Throwable) {} finally { solving.remove(key) }
+            try { plans[key] = solve(b, from, mode) ?: emptyList() } catch (_: Throwable) { plans[key] = emptyList() } finally { solving.remove(key) }
         }
     }
 
@@ -364,6 +364,7 @@ object BoulderSolver {
                     val front = frontOf(cell, dc, dr) ?: continue
                     if (dist[front] == -1) continue
                     val after = push(node.board, cell, dc, dr) ?: continue
+                    if ((after shl 6 or front.toLong()) in closed) continue
                     queue.add(Node(node.cost + cost(1, dist[front]), after, front, node, Step(cell, dc, dr, after), node.lean + 6 - c))
                 }
             }
