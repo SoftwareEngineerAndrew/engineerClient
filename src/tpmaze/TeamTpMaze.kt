@@ -209,7 +209,7 @@ object TeamTpMaze {
     private fun enter(room: DungeonRoom) {
         mazeRoom = room
         frameOf(room)?.let { f -> if (frame?.sameAs(f) != true) frame = f }
-        if (on.value && !connected) connect()
+        if (active() && !connected) connect()
     }
 
     private fun connect() {

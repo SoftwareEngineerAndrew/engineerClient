@@ -5,17 +5,20 @@ import com.adm.AdmMod.logger
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.WebSocket
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.CompletionStage
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 fun webSocket(func: WebSocketConnection.() -> Unit) = WebSocketConnection().apply(func)
 
 class WebSocketConnection {
     private val _webSocket = AtomicReference<WebSocket?>(null)
+    private val generation = AtomicInteger()
     private val httpClient by lazy { HttpClient.newHttpClient() }
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "Odin-WebSocket").apply { isDaemon = true } }
     private var onMessageFunc: (String) -> Unit = { }
@@ -49,15 +52,34 @@ class WebSocketConnection {
         return true
     }
 
-    fun connect(url: String) = executor.execute {
+    private fun deliver(message: String) {
+        try {
+            onMessageFunc(message)
+        } catch (e: Exception) {
+            logger.error("WebSocket message handler failed: ${e.message}", e)
+        }
+    }
+
+    fun connect(url: String) {
+        val gen = generation.incrementAndGet()
+        executor.execute { open(url, gen) }
+    }
+
+    private fun open(url: String, gen: Int) {
+        if (generation.get() != gen) return
         _webSocket.getAndSet(null)?.sendClose(1000, "Reconnecting")
 
         val listener = object : WebSocket.Listener {
             private val messageBuilder = StringBuilder()
+            private val binaryBuffer = ByteArrayOutputStream()
 
             override fun onOpen(webSocket: WebSocket) {
+                val old = synchronized(generation) {
+                    if (generation.get() != gen) null.also { webSocket.sendClose(1000, "Superseded") }
+                    else _webSocket.getAndSet(webSocket) ?: webSocket
+                } ?: return
+                if (old !== webSocket) old.sendClose(1000, "Superseded")
                 logger.info("WebSocket connected to $url")
-                _webSocket.set(webSocket)
                 webSocket.request(1)
             }
 
@@ -66,15 +88,21 @@ class WebSocketConnection {
                 if (last) {
                     val message = messageBuilder.toString()
                     messageBuilder.clear()
-                    if (_webSocket.get() === webSocket) onMessageFunc(message)
+                    if (_webSocket.get() === webSocket) deliver(message)
                 }
                 webSocket.request(1)
                 return null
             }
 
             override fun onBinary(webSocket: WebSocket, data: ByteBuffer, last: Boolean): CompletionStage<*>? {
-                val text = StandardCharsets.UTF_8.decode(data).toString()
-                if (_webSocket.get() === webSocket) onMessageFunc(text)
+                val bytes = ByteArray(data.remaining())
+                data.get(bytes)
+                binaryBuffer.write(bytes)
+                if (last) {
+                    val text = String(binaryBuffer.toByteArray(), StandardCharsets.UTF_8)
+                    binaryBuffer.reset()
+                    if (_webSocket.get() === webSocket) deliver(text)
+                }
                 webSocket.request(1)
                 return null
             }
@@ -101,7 +129,10 @@ class WebSocketConnection {
     }
 
     fun shutdown() {
-        val ws = _webSocket.getAndSet(null) ?: return
+        val ws = synchronized(generation) {
+            generation.incrementAndGet()
+            _webSocket.getAndSet(null)
+        } ?: return
         executor.execute { ws.sendClose(1000, "Client shutdown") }
     }
 }
