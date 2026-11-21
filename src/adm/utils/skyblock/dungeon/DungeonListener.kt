@@ -122,6 +122,8 @@ object DungeonListener {
                 }?.deaths?.inc()
             }
             if (!dungeonStats.mimicKilled && DungeonUtils.isFloor(6, 7) && message.contains(MIMIC_CHARMED)) mimicFound()
+            // A Charm kill sends only its CHARM line, not "A Prince falls".
+            if (!dungeonStats.princeKilled && DungeonUtils.inClear && (message == PRINCE_FALLS || message.contains(PRINCE_CHARMED))) princeFound()
 
             if (!message.startsWith("Party > ")) return@on
             val partyMatch = partyMessageRegex.find(message) ?: return@on
@@ -163,6 +165,14 @@ object DungeonListener {
     }
 
     private const val MIMIC_CHARMED = "You charmed a Mimic"
+    private const val PRINCE_FALLS = "A Prince falls. +1 Bonus Score"
+    private const val PRINCE_CHARMED = "You charmed the Prince"
+
+    private fun princeFound() {
+        dungeonStats.princeKilled = true
+        DungeonUtils.updateScore()
+        Mimic.announcePrince()
+    }
 
     private fun mimicFound() {
         dungeonStats.mimicKilled = true

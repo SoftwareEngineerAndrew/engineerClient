@@ -36,7 +36,6 @@ object Mimic : Module(
     val chestHighlightOn get() = enabled && chestHighlight
     private val chestColor by ColorSetting("Mimic Chest Color", Color(255, 0, 0, 0.75f), true, desc = "Color of the mimic chest.").withDependency { chestHighlight }
 
-    private const val PRINCE_LINE = "A Prince falls. +1 Bonus Score"
     private const val BAT_LINE = "A Bat has been slain. +1 Bonus Score"
 
     /** Trapped chests on secret chest spots, found as the rooms come in, with the box drawn on each. */
@@ -71,16 +70,17 @@ object Mimic : Module(
 
         on<MessageEvent.Chat> {
             if (!DungeonUtils.inClear) return@on
-            if (message == PRINCE_LINE && !DungeonUtils.princeKilled) {
-                if (princeMessageToggle) sendCommand("pc Prince Killed!")
-                DungeonListener.dungeonStats.princeKilled = true
-            } else if (message == BAT_LINE) {
+            if (message == BAT_LINE) {
                 if (batMessageToggle && !DungeonListener.dungeonStats.batKilled) sendCommand("pc Bat Killed!")
                 mc.player?.name?.string?.let { DungeonListener.dungeonStats.batKillers.add(it) }
                 DungeonListener.dungeonStats.batKilled = true
                 DungeonUtils.updateScore()
             }
         }
+    }
+
+    fun announcePrince() {
+        if (enabled && princeMessageToggle) sendCommand("pc Prince Killed!")
     }
 
     fun announceMimic() {
