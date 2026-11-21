@@ -79,7 +79,8 @@ object SecretWaypoints {
 
     private val secrets get() = SecretPack.bundled
     @Volatile private var ownPack: RoomPack? = null
-    private var loading = false
+    @Volatile private var loading = false
+    @Volatile private var retryAt = 0L
     private val roomsPack: RoomPack? get() = KnownWorld.roomPack ?: Packs.current?.rooms ?: ownPack
 
     // A room's spots stay until its rotation, clay, tiles, core or the pack change.
@@ -210,11 +211,19 @@ object SecretWaypoints {
     }
 
     private fun load() {
-        if (loading) return
+        if (loading || System.currentTimeMillis() < retryAt) return
         loading = true
         CompletableFuture.runAsync {
             val dir = PackFiles.defaultDir()
-            ownPack = RoomPack.load(PackSource.resolve(dir, BundledPacks.JAR, PackFiles.cacheRootFor(dir), PackReport(), listOf(PackFiles.ROOMS_INDEX, PackFiles.ROOMS_BLOCKS)))
+            val report = PackReport()
+            val pack = runCatching { RoomPack.load(PackSource.resolve(dir, BundledPacks.JAR, PackFiles.cacheRootFor(dir), report, listOf(PackFiles.ROOMS_INDEX, PackFiles.ROOMS_BLOCKS)), report) }
+                .onFailure { report.error(it.toString()) }.getOrNull()
+            ownPack = pack
+            if (pack == null) {
+                EngineerClient.logger.warn("[ec] Secret Waypoints couldn't load the rooms pack: ${report.errors().joinToString("; ")}")
+                retryAt = System.currentTimeMillis() + 60_000L
+                loading = false
+            }
         }
     }
 

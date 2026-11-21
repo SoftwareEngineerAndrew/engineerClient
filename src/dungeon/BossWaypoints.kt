@@ -23,6 +23,7 @@ import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.CopyOnWriteArrayList
 
 // Subscribed while Waypoints is on.
@@ -135,8 +136,10 @@ object BossWaypoints {
     private fun save() {
         runCatching {
             Files.createDirectories(file.parent)
-            Files.writeString(file, gson.toJson(mapOf("waypoints" to waypoints)))
-        }
+            val tmp = file.resolveSibling("boss-waypoints.json.tmp")
+            Files.writeString(tmp, gson.toJson(mapOf("waypoints" to waypoints)))
+            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        }.onFailure { EngineerClient.logger.warn("[ec] Couldn't save boss waypoints", it) }
     }
 
     private fun load() {
@@ -156,6 +159,10 @@ object BossWaypoints {
                 waypoints += Waypoint(f("x"), f("y"), f("z"), f("dx"), f("dy"), f("dz"), color, o.get("throughWall")?.asBoolean ?: false)
             }
             save()
+        }.onFailure {
+            EngineerClient.logger.error("[ec] Couldn't read boss waypoints", it)
+            // The next save writes the file again from what loaded: keep the unreadable one.
+            runCatching { if (Files.exists(file)) Files.copy(file, file.resolveSibling("boss-waypoints.json.bak"), StandardCopyOption.REPLACE_EXISTING) }
         }
     }
 
