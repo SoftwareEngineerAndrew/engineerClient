@@ -139,6 +139,12 @@ object I4Paint {
     private var gpuVertices: GpuBuffer? = null
     private var gpuIndexCount = 0
 
+    /** Frees the vertex buffer once nothing is drawn (render thread). */
+    fun release() {
+        if (gpuMesh == null) return
+        gpuVertices?.close(); gpuVertices = null; gpuIndexCount = 0; gpuMesh = null
+    }
+
     /** Puts [m]'s vertices on the GPU if they are not already there; false when it has nothing to draw. */
     private fun upload(m: Mesh): Boolean {
         if (gpuMesh !== m) {

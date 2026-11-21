@@ -199,8 +199,8 @@ object I4Aims : Module(
         cache[key]?.let { if (geo !== it) { geo = it; replan() } }
         val running = job
         if (running != null) {
-            // Something worked out ahead gives way to the stance you need.
-            if (running.ahead && running.key != key && key !in cache) running.cancelled = true
+            // Something worked out ahead, or for a spot you already left, gives way to the stance you need.
+            if (running.key != key && key !in cache && (running.ahead || running.key != key.copy(crouch = !key.crouch))) running.cancelled = true
             return
         }
         val want = if (key !in cache) key else key.copy(crouch = !key.crouch).takeIf { it !in cache } ?: return
@@ -292,6 +292,7 @@ object I4Aims : Module(
     private fun forget() {
         reset(); board = null; geo = null; cache.clear(); lattice = null; stablePos = null; lastPos = null; stillTicks = 0
         job?.cancelled = true
+        I4Paint.release()
     }
 
     override fun onEnable() { forget(); super.onEnable() }
@@ -412,6 +413,7 @@ object I4Aims : Module(
             if (tracked.isNotEmpty()) tracked.entries.removeIf { ticks - it.value > 60 }
             if (!atBoard()) {
                 mesh = null; meshGeo = null
+                I4Paint.release()
                 // Away 2 s: the attempt is over (the board itself stays read until the world changes).
                 if (++awayTicks > 40 && solver.started) reset()
                 return@on
