@@ -266,7 +266,8 @@ class GhostPlayer(val run: GhostRun, private val world: World, private val body:
         /** Devices can be done before their section (pre-devving); terminals and levers only in it. */
         fun isDevice(id: String) = id.endsWith(" SS") || id.endsWith(" Lights") || id.endsWith(" Arrows") || id.endsWith(" Target")
 
-        fun isTerminal(id: String) = Regex("S\\d T\\d").matches(id)
+        private val TERMINAL_ID = Regex("S\\d T\\d")
+        fun isTerminal(id: String) = TERMINAL_ID.matches(id)
 
         /** The first run tick from which you stood within [SETTLE] of where you were at [at] until then (not before [from]). */
         fun settle(run: GhostRun, from: Int, at: Int): Int {

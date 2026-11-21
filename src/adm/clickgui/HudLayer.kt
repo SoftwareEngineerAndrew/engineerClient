@@ -28,7 +28,7 @@ object HudLayer {
         for (i in list.indices) {
             val setting = list[i]
             val draw = setting.drawer
-            if (draw == null) needsCompose = true
+            if (draw == null) { if (setting.isEnabled) needsCompose = true }
             else if (setting.isEnabled) paint(graphics, setting.hud, draw, example, mouseX, mouseY)
         }
         if (snapped) graphics.pose().popMatrix()

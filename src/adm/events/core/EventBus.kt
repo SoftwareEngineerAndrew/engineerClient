@@ -80,7 +80,7 @@ object EventBus {
         eventClass: Class<out Event>,
         allListeners: Array<ListenerEntry<*>>
     ) {
-        val activeClasses = subscriberClasses.values
+        val activeClasses = subscriberClasses.values.toHashSet()
 
         @Suppress("UNCHECKED_CAST")
         val activeListeners = allListeners
