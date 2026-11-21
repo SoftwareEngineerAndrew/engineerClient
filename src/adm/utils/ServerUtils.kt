@@ -13,6 +13,7 @@ import net.minecraft.util.Util
 import kotlin.math.min
 
 object ServerUtils {
+    @JvmField @Volatile var lastPacketAt = System.currentTimeMillis()
     private const val SECOND_NANOS = 1_000_000_000L
     private const val BURST_GAP_NANOS = 40_000_000L
     private const val PING_WAIT_NANOS = 250_000_000L
@@ -48,6 +49,7 @@ object ServerUtils {
     // Hypixel sends a ping packet every tick; other servers only flush a burst of packets each tick and a time update each second.
     @JvmStatic
     fun onPacket(packet: Packet<*>) {
+        lastPacketAt = System.currentTimeMillis()
         val now = System.nanoTime()
         when (packet) {
             is ClientboundPingPacket -> if (packet.id != 0) {

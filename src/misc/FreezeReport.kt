@@ -1,28 +1,25 @@
 package com.engineerclient.misc
 
 import com.engineerclient.EngineerClient
-import com.adm.events.PacketEvent
-import com.adm.events.core.EventBus
-import com.adm.events.core.on
+import com.adm.utils.ServerUtils
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 
 /** When the game stops ticking or packets stop coming for [STALL_MS], every thread's stack goes to the log once, so a freeze can be traced. */
 object FreezeReport {
     @Volatile private var lastTick = System.currentTimeMillis()
-    @Volatile private var lastPacket = System.currentTimeMillis()
+    @Volatile private var idleAt = System.currentTimeMillis()
     @Volatile private var reported = false
-    @Volatile private var packetReported = false
+    @Volatile private var packetReportedFor = -1L
 
     fun install() {
-        ClientTickEvents.END_CLIENT_TICK.register { lastTick = System.currentTimeMillis(); reported = false; if (EngineerClient.mc.connection == null) lastPacket = lastTick }
-        on<PacketEvent.Receive> { lastPacket = System.currentTimeMillis(); packetReported = false }
-        EventBus.subscribe(this)
+        ClientTickEvents.END_CLIENT_TICK.register { lastTick = System.currentTimeMillis(); reported = false; if (EngineerClient.mc.connection == null) idleAt = lastTick }
         Thread({
             while (true) {
                 try { Thread.sleep(1000) } catch (_: InterruptedException) { return@Thread }
                 val now = System.currentTimeMillis()
                 if (now - lastTick >= STALL_MS && !reported) { reported = true; EngineerClient.safely("freeze report") { report("game not ticking", now - lastTick) } }
-                if (now - lastPacket >= STALL_MS && now - lastTick < STALL_MS && !packetReported) { packetReported = true; EngineerClient.safely("freeze report") { report("no packets", now - lastPacket) } }
+                val lastPacket = maxOf(ServerUtils.lastPacketAt, idleAt)
+                if (now - lastPacket >= STALL_MS && now - lastTick < STALL_MS && packetReportedFor != lastPacket) { packetReportedFor = lastPacket; EngineerClient.safely("freeze report") { report("no packets", now - lastPacket) } }
             }
         }, "engineerclient-freeze-report").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }.start()
     }
