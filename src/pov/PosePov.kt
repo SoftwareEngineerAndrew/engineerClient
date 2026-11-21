@@ -521,7 +521,8 @@ object PosePov : Module(
             val swing = p?.let { swingOf(it.id, now) } ?: sh?.let { swingFrom(it.swingAt + it.bufferNs, now) } ?: 0f
             val others = bodies.filter { it.slot != i }
             // Nothing in it moved and nothing new to draw (a teammate standing still): last frame's picture stays.
-            val held = (sh?.item ?: p?.mainHandItem)?.let { System.identityHashCode(it) * 31 + it.count } ?: 0
+            // A shared pose's stack is made fresh each call: its item, not the stack, says whether it changed.
+            val held = sh?.item?.let { System.identityHashCode(it.item) * 31 + it.count } ?: p?.mainHandItem?.let { System.identityHashCode(it) * 31 + it.count } ?: 0
             val cam = FeedSig(target, e.pos, e.yaw, e.pitch, swing, held, BlockMesh.changes + PiecePool.version + MeshBundles.count * 1_000_003L + System.identityHashCode(KnownWorld.rooms) * 7L + PovVisibility.knownCount * 131L + culls[i].generation * 1_000_033L + viewDistance.toLong() * 7919L)
             val sig = if (seen.isEmpty() && others.isEmpty() && boxes.isEmpty()) cam else null
             // With entities in it but its camera and world as they were: drawn again only every STILL_NS (they still move,
@@ -1327,38 +1328,35 @@ object PosePov : Module(
         val n = minOf(boxes.size, MAX_BOXES)
         if (n == 0) return 0
         val white = MeshCodec.sprites()?.let { CompactMesh.SpriteTable.of(it.named("minecraft:block/white_concrete")) } ?: return 0
-        val bytes = java.nio.ByteBuffer.allocateDirect(n * 6 * 4 * CompactMesh.VERTEX).order(java.nio.ByteOrder.nativeOrder())
-        fun p(v: Double) = ((v + 256) * 64 + 0.5).toInt().coerceIn(0, 65535).toShort()
-        for (k in 0 until n) {
-            val b = boxes[k]
-            val x0 = b.x0 - ox; val x1 = b.x1 - ox; val z0 = b.z0 - oz; val z1 = b.z1 - oz
-            for (f in 0 until 6) {
-                val s = SIDE_SHADE[f]
-                val r = (((b.rgb shr 16) and 255) * s).toInt().toByte(); val g = (((b.rgb shr 8) and 255) * s).toInt().toByte(); val bl = ((b.rgb and 255) * s).toInt().toByte()
-                for (c in 0 until 4) {
-                    // Corner c of side f: two of its coordinates step around the face, the third is the side's.
-                    val a = c == 1 || c == 2; val bb = c >= 2
-                    val (x, y, z) = when (f) {
-                        0 -> Triple(if (a) x1 else x0, b.y0, if (bb) z1 else z0)
-                        1 -> Triple(if (a) x1 else x0, b.y1, if (bb) z1 else z0)
-                        2 -> Triple(if (a) x1 else x0, if (bb) b.y1 else b.y0, z0)
-                        3 -> Triple(if (a) x1 else x0, if (bb) b.y1 else b.y0, z1)
-                        4 -> Triple(x0, if (bb) b.y1 else b.y0, if (a) z1 else z0)
-                        else -> Triple(x1, if (bb) b.y1 else b.y0, if (a) z1 else z0)
+        val bytes = MemoryUtil.memAlloc(n * 6 * 4 * CompactMesh.VERTEX)
+        try {
+            fun p(v: Double) = ((v + 256) * 64 + 0.5).toInt().coerceIn(0, 65535).toShort()
+            for (k in 0 until n) {
+                val b = boxes[k]
+                val x0 = b.x0 - ox; val x1 = b.x1 - ox; val z0 = b.z0 - oz; val z1 = b.z1 - oz
+                for (f in 0 until 6) {
+                    val s = SIDE_SHADE[f]
+                    val r = (((b.rgb shr 16) and 255) * s).toInt().toByte(); val g = (((b.rgb shr 8) and 255) * s).toInt().toByte(); val bl = ((b.rgb and 255) * s).toInt().toByte()
+                    for (c in 0 until 4) {
+                        // Corner c of side f: two of its coordinates step around the face, the third is the side's.
+                        val a = c == 1 || c == 2; val bb = c >= 2
+                        val x = when (f) { 0, 1, 2, 3 -> if (a) x1 else x0; 4 -> x0; else -> x1 }
+                        val y = when (f) { 0 -> b.y0; 1 -> b.y1; else -> if (bb) b.y1 else b.y0 }
+                        val z = when (f) { 0, 1 -> if (bb) z1 else z0; 2 -> z0; 3 -> z1; else -> if (a) z1 else z0 }
+                        bytes.putShort(p(x)).putShort(p(y)).putShort(p(z)).putShort(white.toShort())
+                        bytes.putShort(if (a) 2048 else 0).putShort(if (bb) 2048 else 0)
+                        bytes.put(r).put(g).put(bl).put((-1).toByte())
                     }
-                    bytes.putShort(p(x)).putShort(p(y)).putShort(p(z)).putShort(white.toShort())
-                    bytes.putShort(if (a) 2048 else 0).putShort(if (bb) 2048 else 0)
-                    bytes.put(r).put(g).put(bl).put((-1).toByte())
                 }
             }
-        }
-        bytes.flip()
-        val size = bytes.remaining().toLong()
-        val buf = boxBuffers[i]?.takeIf { it.size() >= size } ?: run {
-            boxBuffers[i]?.close()
-            RenderSystem.getDevice().createBuffer({ "pov previews boxes" }, com.mojang.renderpearl.api.buffers.GpuBuffer.USAGE_VERTEX or com.mojang.renderpearl.api.buffers.GpuBuffer.USAGE_COPY_DST, maxOf(size, 64L * 6 * 4 * CompactMesh.VERTEX)).also { boxBuffers[i] = it }
-        }
-        RenderSystem.getDevice().createCommandEncoder().writeToBuffer(buf.slice(0, size), bytes)
+            bytes.flip()
+            val size = bytes.remaining().toLong()
+            val buf = boxBuffers[i]?.takeIf { it.size() >= size } ?: run {
+                boxBuffers[i]?.close()
+                RenderSystem.getDevice().createBuffer({ "pov previews boxes" }, com.mojang.renderpearl.api.buffers.GpuBuffer.USAGE_VERTEX or com.mojang.renderpearl.api.buffers.GpuBuffer.USAGE_COPY_DST, maxOf(size, 64L * 6 * 4 * CompactMesh.VERTEX)).also { boxBuffers[i] = it }
+            }
+            RenderSystem.getDevice().createCommandEncoder().writeToBuffer(buf.slice(0, size), bytes)
+        } finally { MemoryUtil.memFree(bytes) }
         return n * 6
     }
 

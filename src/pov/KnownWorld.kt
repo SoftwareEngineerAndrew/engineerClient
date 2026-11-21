@@ -1,5 +1,6 @@
 package com.engineerclient.pov
 
+import com.engineerclient.EngineerClient
 import com.engineerclient.adr.RoomKeys
 import com.engineerclient.p3sim.Arena
 import com.engineerclient.dungeonpack.rooms.BlockStates
@@ -105,11 +106,14 @@ object KnownWorld {
     // Worked out again only when a room is placed (it was asked for several times a frame).
     @Volatile private var roomList: List<Room>? = null
     val rooms: List<Room> get() = roomList ?: tiles.filterNotNull().distinct().also { roomList = it }
-    private var doorsKey = ""
+    private var lastDoors: Map<Slot, DoorKind> = emptyMap()
+    // A room's core is read once it's found: it never changes, and the column scan was every frame.
+    private val cores = HashMap<DungeonRoom, Int>()
     @Volatile private var pack: RoomPack? = null
     val roomPack: RoomPack? get() = pack
     @Volatile private var arenaReady = false
-    private var loading = false
+    @Volatile private var loading = false
+    @Volatile private var loadRetryAt = 0L
 
     /** The cells this run changed (any thread; a live view). */
     val changedCells: Set<Long> get() = changed.keys
@@ -146,22 +150,30 @@ object KnownWorld {
     fun reset() {
         sharedBy.clear(); RoomEdges.reset()
         changed.clear(); changedSections.clear(); touchedCells.clear()
-        tiles.fill(null); roomList = null; edits = emptyMap(); editSections = emptySet(); doorsKey = ""
+        tiles.fill(null); roomList = null; edits = emptyMap(); editSections = emptySet(); lastDoors = emptyMap(); cores.clear()
     }
 
     /** Starts reading the room pack and the arena off-thread the first time they're wanted; [onReady] runs on arrival. */
     fun load(onReady: () -> Unit) {
-        if (loading) return
+        if (loading || System.currentTimeMillis() < loadRetryAt) return
         loading = true
+        val report = PackReport()
         CompletableFuture.runAsync {
             pack = Packs.current?.rooms ?: run {
                 val dir = PackFiles.defaultDir()
-                val source = PackSource.resolve(dir, BundledPacks.JAR, PackFiles.cacheRootFor(dir), PackReport(), listOf(PackFiles.ROOMS_INDEX, PackFiles.ROOMS_BLOCKS))
+                val source = PackSource.resolve(dir, BundledPacks.JAR, PackFiles.cacheRootFor(dir), report, listOf(PackFiles.ROOMS_INDEX, PackFiles.ROOMS_BLOCKS))
                 RoomPack.load(source)
             }
             Arena.data
             arenaReady = true
-        }.whenComplete { _, _ -> onReady() }
+        }.whenComplete { _, err ->
+            if (err != null || pack == null || !arenaReady) {
+                EngineerClient.logger.warn("[pose pov] room pack didn't load: ${report.errors()}", err)
+                loadRetryAt = System.currentTimeMillis() + 60_000L
+                loading = false
+            }
+            onReady()
+        }
     }
 
     /** Whether the boss arena is drawn from the shipped data: F7 and M7 (they differ only in P5). */
@@ -180,7 +192,7 @@ object KnownWorld {
             if (!RoomKeys.rotationKnown(room) || room.tiles.isEmpty()) continue
             val ts = room.tiles.map { Tile(it.x, it.z) }
             if (ts.any { it.x !in 0..5 || it.z !in 0..5 }) continue
-            val core = core(level, room)
+            val core = cores[room]?.takeIf { room.data?.cores?.contains(it) == true } ?: core(level, room)?.also { cores[room] = it }
             val entry = core?.let { pack.designByCore(it) }
             val design = entry?.let { pack.design(it.design) } ?: pack.designsByName(name).firstOrNull() ?: continue
             val variant = entry?.takeIf { it.design == design.id }?.variant
@@ -223,9 +235,8 @@ object KnownWorld {
             changedRooms = true
         }
         val doors = doors()
-        val dk = doors.entries.sortedBy { "${it.key}" }.joinToString { "${it.key}=${it.value}" }
-        if (!changedRooms && dk == doorsKey) return
-        doorsKey = dk
+        if (!changedRooms && doors == lastDoors) return
+        lastDoors = doors
         val old = edits
         edits = try {
             RegionEdits.build(rooms.map { it.inst }, doors).associate { BlockPos.asLong(it.x, it.y, it.z) to BlockStates.rotated(it.state, it.quarterTurns) }

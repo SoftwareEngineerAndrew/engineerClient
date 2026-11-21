@@ -233,8 +233,8 @@ object PoseWire {
          * (someone it doesn't reach over TURN); either way it counts. The frames to send, in order.
          */
         fun relayFrames(frame: ByteArray, now: Long, relay: Boolean): List<ByteArray> {
-            val sig = frame.copyOfRange(3, 16) + frame.copyOfRange(17, 20)
-            val changed = !sig.contentEquals(lastSig)
+            val sig = frame.copyOfRange(3, 17) + frame.copyOfRange(18, 20)
+            val changed = !sig.contentEquals(lastSig) || (frame[16].toInt() and 1) != 0
             val out = ArrayList<ByteArray>(2)
             if (changed && !prevSent && relay) prevFrame?.let { out += it }
             prevSent = changed || now - selfAt > STILL_NS

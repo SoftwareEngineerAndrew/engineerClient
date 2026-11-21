@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.Block
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.IdentityHashMap
 import java.util.concurrent.CompletableFuture
 
@@ -38,7 +39,8 @@ object RoomEdges {
     @Volatile private var hashes: IntArray? = null
     @Volatile private var places: IntArray? = null
     private var designs: List<RoomDesign> = emptyList()
-    private var indexing = false
+    @Volatile private var indexing = false
+    @Volatile private var indexRetryAt = 0L
     private val dirty = BooleanArray(36) { true }
     private var stepAt = 0L
     private var next = 0
@@ -145,26 +147,36 @@ object RoomEdges {
     // --- the index --------------------------------------------------------------------------------------------------------
 
     private fun index(pack: RoomPack) {
-        if (indexing) return
+        if (indexing || System.currentTimeMillis() < indexRetryAt) return
         indexing = true
         val ds = pack.designs
         val file = FabricLoader.getInstance().configDir.resolve("engineerclient").resolve("pov-cache").resolve("edges-$FORMAT-${pack.version}-${ds.size}.idx")
         CompletableFuture.runAsync {
-            runCatching {
-                if (Files.exists(file)) DataInputStream(Files.newInputStream(file).buffered()).use { inp ->
+            val read = runCatching {
+                if (!Files.exists(file)) null else DataInputStream(Files.newInputStream(file).buffered()).use { inp ->
                     val n = inp.readInt()
+                    require(n >= 0 && n <= (Files.size(file) - 4) / 8) { "edge index cut short" }
                     val h = IntArray(n); val p = IntArray(n)
                     for (i in 0 until n) { h[i] = inp.readInt(); p[i] = inp.readInt() }
-                    designs = ds; places = p; hashes = h
-                    return@runAsync
+                    h to p
                 }
-                val (h, p) = build(pack, ds)
-                Files.createDirectories(file.parent)
-                DataOutputStream(Files.newOutputStream(file).buffered()).use { out ->
-                    out.writeInt(h.size)
-                    for (k in h.indices) { out.writeInt(h[k]); out.writeInt(p[k]) }
+            }.getOrElse { runCatching { Files.deleteIfExists(file) }; null }
+            runCatching {
+                val (h, p) = read ?: build(pack, ds).also { (bh, bp) ->
+                    runCatching {
+                        Files.createDirectories(file.parent)
+                        val tmp = file.resolveSibling(file.fileName.toString() + ".tmp")
+                        DataOutputStream(Files.newOutputStream(tmp).buffered()).use { out ->
+                            out.writeInt(bh.size)
+                            for (k in bh.indices) { out.writeInt(bh[k]); out.writeInt(bp[k]) }
+                        }
+                        Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                    }
                 }
                 designs = ds; places = p; hashes = h
+            }.onFailure {
+                indexRetryAt = System.currentTimeMillis() + 60_000L
+                indexing = false
             }
         }
     }

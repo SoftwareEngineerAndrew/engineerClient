@@ -128,6 +128,7 @@ class TurnLink(
     private var bindingAt = 0L
     private var retryAt = 0L
     private var backoff = 5_000L
+    private var opens = 0
     private var reported: String? = null
     private val random = SecureRandom()
     private var window = 0L
@@ -154,14 +155,17 @@ class TurnLink(
         realm = null; nonce = null; authKey = null; authTried = false; mapped = null
         relayed = null; txs.clear()
         for (p in peers.values) p.bound = false
+        val gen = ++opens
+        // Only this open's own failures count: a stop() or a newer open() since makes them moot.
+        fun failIfCurrent(why: String) = synchronized(this) { if (state == State.ALLOCATING && socket == null && gen == opens) fail(why) }
         Thread.ofPlatform().name("engineerclient-pov-turn").daemon(true).start {
             // The server's address (prefer IPv4: the relayed addresses are), then the socket, talking to it alone.
             val addr = runCatching { InetAddress.getAllByName(host).let { a -> a.firstOrNull { it is Inet4Address } ?: a.first() } }.getOrNull()
-            if (addr == null) { fail("couldn't look up $host"); return@start }
+            if (addr == null) { failIfCurrent("couldn't look up $host"); return@start }
             val s = runCatching { DatagramSocket().also { it.connect(InetSocketAddress(addr, port)) } }.getOrNull()
-            if (s == null) { fail("couldn't open a UDP socket"); return@start }
+            if (s == null) { failIfCurrent("couldn't open a UDP socket"); return@start }
             synchronized(this) {
-                if (state != State.ALLOCATING || socket != null) { s.close(); return@start }
+                if (state != State.ALLOCATING || socket != null || gen != opens) { s.close(); return@start }
                 socket = s
                 request(ALLOCATE)
             }
@@ -325,7 +329,11 @@ class TurnLink(
         val buf = ByteArray(1500)
         while (socket === s) {
             val pk = DatagramPacket(buf, buf.size)
-            try { s.receive(pk) } catch (_: Exception) { break }
+            try { s.receive(pk) } catch (e: Exception) {
+                // An ICMP error back from the server, say: this reader is the only one, so the allocation goes and is made again.
+                synchronized(this) { if (socket === s) fail("read failed: ${e.message}") }
+                break
+            }
             try { packet(pk.data, pk.length) } catch (e: Exception) { log("TURN: ${e.message}") }
         }
     }
