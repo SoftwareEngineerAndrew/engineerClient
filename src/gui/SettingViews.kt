@@ -262,8 +262,8 @@ class ColorView(override val setting: ColorSetting) : SettingView(setting) {
         ui.g.roundedRectOutlined(sx0, sy, sx1, sy + 13, color.rgba, color.withAlpha(1f).darker().rgba, 1.5f, Theme.RADIUS)
         ui.click(sx0, sy, sx1, sy + 13) { open = !open }
         ui.click(x, y, x + Theme.WIDTH, y + h) { open = !open }
-        if (AdmClickGui.focus !== hex) hex.set(color.hex(allowAlpha))
         if (progress <= 0f) return
+        if (AdmClickGui.focus !== hex) hex.set(color.hex(allowAlpha))
 
         val top = y + h
         ui.clipped(x, top, x + Theme.WIDTH, top + (PICKER_TOTAL * progress).roundToInt()) {

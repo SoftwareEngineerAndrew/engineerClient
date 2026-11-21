@@ -35,6 +35,7 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     var hoveredView: SettingView? = null
     private var dragMove: ((Double, Double) -> Unit)? = null
     private var dragEnd: (() -> Unit)? = null
+    private var swallowChar = false
 
     private var tipText: String? = null
     private var tipX = 0
@@ -89,7 +90,7 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
         else mutableListOf(Panel(one.name, listOf(view(one).also { it.expanded = true }), (vw - Theme.WIDTH) / 2, 20))
         for (p in panels) p.layout()
         tipShown = null
-        focus = search
+        focus(search)
         runCatching { SplitsLook.refreshPlaceholders() }
     }
 
@@ -172,6 +173,10 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     }
 
     override fun charTyped(event: CharacterEvent): Boolean {
+        if (swallowChar) {
+            swallowChar = false
+            return true
+        }
         val f = focus
         if (f is TextField) return f.char(event)
         if (f == null && event.isAllowedChatCharacter && !event.codepointAsString().isBlank()) {
@@ -182,6 +187,7 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
     }
 
     override fun keyPressed(event: KeyEvent): Boolean {
+        swallowChar = false
         when (val f = focus) {
             is KeybindView -> {
                 f.bind(event)
@@ -196,7 +202,11 @@ object AdmClickGui : Screen(Component.literal("ADM")) {
             focus(search)
             return true
         }
-        if (hoveredView?.key(event, true) == true) return true
+        if (hoveredView?.key(event, true) == true) {
+            // The same press still sends a character event, which must not reach the search box.
+            swallowChar = true
+            return true
+        }
         return super.keyPressed(event)
     }
 
