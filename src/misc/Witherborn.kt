@@ -42,10 +42,11 @@ object Witherborn {
     /** A wither [id] appearing at ([x], [y], [z]): true when it is a Witherborn wither. */
     @JvmStatic
     fun onSpawn(id: Int, x: Double, y: Double, z: Double): Boolean {
-        if (!seen.add(id)) return id in minions
-        val players = runCatching { EngineerClient.mc.level?.players()?.toList() }.getOrNull() ?: return false
-        val near = players.any { it.distanceToSqr(x, y, z) <= NEAR * NEAR }
+        if (id in seen) return id in minions
+        // The game thread changes the player list meanwhile: a copy caught mid-change can hold nulls or fail, and is tried again next time.
+        val near = runCatching { EngineerClient.mc.level?.players()?.toList()?.any { it != null && it.distanceToSqr(x, y, z) <= NEAR * NEAR } }.getOrNull() ?: return false
         if (near) minions += id
+        seen += id
         return near
     }
 
