@@ -42,7 +42,7 @@ object SupplyHelper : Module(
     }
 
     private val dropSpots = Supply.entries.filter { it != Supply.None && it != Supply.Square }.map { Spot(it, it.dropOffSpot) }
-    private val areaLabels = Supply.entries.map { "§e${it.name}" to Vec3.atCenterOf(it.pickUpSpot) }
+    private val areaLabels = Supply.entries.filter { it != Supply.None }.map { "§e${it.name}" to Vec3.atCenterOf(it.pickUpSpot) }
 
     // One reusable slot per giant: the spot only moves when the giant does.
     private class PickUp {

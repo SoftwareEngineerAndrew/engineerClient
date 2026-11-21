@@ -32,6 +32,7 @@ object RemovePerks : Module(
 
         on<GuiEvent.SlotClick> {
             if (screen !is AbstractContainerScreen<*> || !perkMenu(screen)) return@on
+            if (slotIndex !in 0 until screen.menu.slots.size) return@on
             if (hidden(-1, screen.menu.getSlot(slotIndex).item.hoverName)) cancel()
         }
     }

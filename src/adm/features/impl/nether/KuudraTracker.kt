@@ -12,6 +12,7 @@ import com.adm.utils.lore
 import com.adm.utils.render.text
 import net.minecraft.ChatFormatting
 import net.minecraft.client.gui.GuiGraphicsExtractor
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.MutableComponent
 import net.minecraft.world.item.Items
@@ -102,9 +103,11 @@ object KuudraTracker : Module(
 
         on<GuiEvent.SlotClick> {
             if (kindOf(screen.title) != CHEST) return@on
-            val carried = mc.player?.containerMenu?.carried ?: return@on
-            if (!carried.`is`(Items.CHEST)) return@on
-            val lore = carried.lore
+            val menu = (screen as? AbstractContainerScreen<*>)?.menu ?: return@on
+            if (slotIndex !in 0 until menu.slots.size) return@on
+            val clicked = menu.getSlot(slotIndex).item
+            if (!clicked.`is`(Items.CHEST)) return@on
+            val lore = clicked.lore
             if (lore.any { it.string == "Already opened!" || it.string == "Can't open another chest!" }) return@on
             recordChest(lore.map { it.string }, screen.title.string)
         }
@@ -217,12 +220,13 @@ object KuudraTracker : Module(
         val keys = keyCosts()
         val freeChests = if (sample) 0 else free
         val paidChests = if (sample) 1 else paid
+        val opened = freeChests + paidChests
         return View(
             rows,
             if (sample) Vesuvius.getPriceOfKey("Infernal Kuudra Key").toString() else "%,.0f".format(keys),
             "%,.0f".format(profit - keys),
             "Total Chests: Free [$freeChests], Paid [$paidChests]",
-            "Avg [${"%,.0f".format((profit - keys) / (freeChests + paidChests))}]"
+            if (opened == 0) "Avg [0]" else "Avg [${"%,.0f".format((profit - keys) / opened)}]"
         )
     }
 

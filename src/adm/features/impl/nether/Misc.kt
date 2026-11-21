@@ -35,7 +35,7 @@ object Misc : Module(
         val self = mc.player ?: return
         val players = mc.level?.players() ?: return
         var nearby = 0
-        for (other in players) if (other.distanceToSqr(self) < 49 && other.uuid.version() == 4) nearby++
+        for (other in players) if (other !== self && other.distanceToSqr(self) < 49 && other.uuid.version() == 4) nearby++
         sendCommand("pc Used $mana mana ($nearby players nearby)")
     }
 }

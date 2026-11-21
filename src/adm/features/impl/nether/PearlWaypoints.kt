@@ -33,7 +33,6 @@ object PearlWaypoints : Module(
         val startBoxes = starts.map { AABB(it) }.toTypedArray()
         val aims = aims.toTypedArray()
         val aimBoxes = aims.map { AABB(it) }.toTypedArray()
-        val dropMarker = AABB(supply.dropOffSpot.above())
     }
 
     private val cannonAim = BlockPos(-59, 106, -59)
@@ -91,8 +90,9 @@ object PearlWaypoints : Module(
                 }
                 if (shown && dynamicWaypoints) {
                     val target = if (route.supply == Supply.Square) missing else route.supply
+                    if (target == Supply.None || target == Supply.Square) continue
                     aimMarkers(player.renderX, player.renderY, player.renderZ, target.dropOffSpot, dynamicWaypointsColor)
-                    boxes.outline(route.dropMarker, dynamicWaypointsColor)
+                    boxes.outline(AABB(target.dropOffSpot.above()), dynamicWaypointsColor)
                 }
             }
             drawBoxes(boxes)
