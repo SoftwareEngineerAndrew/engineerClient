@@ -508,23 +508,36 @@ object BrWaypoints2 : Module(
      */
     private fun worldDoors(links: HashMap<DungeonRoom, MutableList<Pair<DungeonRoom, Pair<Int, Int>>>>) {
         val level = mc.level ?: return
-        for (tz in 0..5) for (tx in 0..5) for ((dx, dz) in listOf(1 to 0, 0 to 1)) {
+        val p = doorProbe
+        for (tz in 0..5) for (tx in 0..5) for (dir in 0..1) {
+            val dx = 1 - dir
+            val dz = dir
             if (tx + dx > 5 || tz + dz > 5) continue
             val a = DungeonScan.tiles[tx + tz * 6].room ?: continue
             val b = DungeonScan.tiles[tx + dx + (tz + dz) * 6].room ?: continue
             if (a === b) continue
             val gx = -185 + 16 * (2 * tx + dx)
             val gz = -185 + 16 * (2 * tz + dz)
-            val cells = listOf(-2, -1, 1, 2).flatMap { d -> listOf(70, 71).map { y -> BlockPos(gx + d * dx, y, gz + d * dz) } }
-            if (!cells.all { level.isLoaded(it) }) continue
-            val states = cells.map { level.getBlockState(it) }
-            if (!states.all { it.isAir || it.block == Blocks.BARRIER || it.block == Blocks.COAL_BLOCK || it.block == Blocks.DYED_TERRACOTTA.red() }) continue
-            val wither = states.any { it.block == Blocks.COAL_BLOCK || it.block == Blocks.DYED_TERRACOTTA.red() }
+            var open = true
+            var wither = false
+            cells@ for (d in DOOR_OFFSETS) for (y in 70..71) {
+                p.set(gx + d * dx, y, gz + d * dz)
+                if (!level.isLoaded(p)) { open = false; break@cells }
+                val state = level.getBlockState(p)
+                val block = state.block
+                val witherBlock = block == Blocks.COAL_BLOCK || block == Blocks.DYED_TERRACOTTA.red()
+                if (!state.isAir && block != Blocks.BARRIER && !witherBlock) { open = false; break@cells }
+                if (witherBlock) wither = true
+            }
+            if (!open) continue
             if (wither) { witherSides += a; witherSides += b }
             links.getOrPut(a) { mutableListOf() } += b to (gx to gz)
             links.getOrPut(b) { mutableListOf() } += a to (gx to gz)
         }
     }
+
+    private val doorProbe = BlockPos.MutableBlockPos()
+    private val DOOR_OFFSETS = intArrayOf(-2, -1, 1, 2)
 
     private var tracedRoom: String? = null
 
