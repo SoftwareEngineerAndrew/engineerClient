@@ -22,6 +22,7 @@ import java.util.concurrent.Executors
 // Players walk on the ground between boulders: a strip north of row 0 they drop into, a strip south of row 5 that leads to the chest.
 // A click on a face centre (the button or sign 2 blocks out from the boulder's centre) pushes that boulder 3 away from the face,
 // into an empty cell of the grid, or toward -x into another boulder, which is deleted. Every other push does nothing.
+// The -x push into a boulder works only from some cells (the ones in DELETES); from the others, (3, 1) for one, the click does nothing.
 object BoulderSolver {
     enum class Mode(private val label: String) { CLICKS("Least Clicks"), MOVEMENT("Least Blocks Traveled"), BALANCED("Balanced"); override fun toString() = label }
 
@@ -34,6 +35,7 @@ object BoulderSolver {
     private const val DONE = 63
     private const val CHEST = SOUTH + 3
     private const val MAX_STATES = 200_000
+    private const val DELETES = (1L shl 9) or (1L shl 19) or (1L shl 30) or (1L shl 32) or (1L shl 33)
     private val PUSHES = arrayOf(intArrayOf(0, -1), intArrayOf(0, 1), intArrayOf(-1, 0), intArrayOf(1, 0))
     private val LAYOUTS = longArrayOf(
         0x105E94E0B87L, 0x20F7BB8EE80L, 0x31DDA33F8C1L, 0x24A228A8A22L,
@@ -153,7 +155,7 @@ object BoulderSolver {
         val tr = cell / 7 + dr
         if (tc !in 0..6 || tr !in 0..5) return null
         val target = tc + 7 * tr
-        if (b shr target and 1L == 1L && dc != -1) return null
+        if (b shr target and 1L == 1L && (dc != -1 || DELETES shr cell and 1L == 0L)) return null
         return b and (1L shl cell).inv() or (1L shl target)
     }
 
