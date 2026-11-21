@@ -178,6 +178,7 @@ object ExtraStats {
 
         out.append("\n").append(Component.literal(getChatBreak()))
         modMessage(out, "")
+        run.reset()
     }
 
     private class RunStats {
