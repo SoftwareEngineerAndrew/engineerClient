@@ -2,57 +2,47 @@ package com.engineerclient.misc
 
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.HUDSetting
+import com.adm.clickgui.settings.impl.KeybindSetting
 import com.adm.features.ModuleManager
 import com.engineerclient.EngineerClient
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
+import com.google.gson.Gson
+import com.google.gson.JsonPrimitive
 import java.io.File
 
-/** On a fresh install, turns on what the player already had on in Odin, Devonian and Blade Addons. Only ever turns things on. */
+/**
+ * Once after a fresh install, turns on what the player had on in Odin, Devonian and Blade Addons and takes Odin's keybinds
+ * for it, from the copies [com.engineerclient.ModTakeover] kept. A launch that stops before this leaves it for the next one.
+ */
 object ModImport {
+    private val gson = Gson()
 
     fun run(gameDir: File) {
-        val config = File(gameDir, "config")
+        val dir = File(gameDir, "config/${ImportTables.IMPORTED}")
+        val pending = File(dir, ImportTables.PENDING)
+        if (!pending.isFile) return
         var on = 0
-        val saved = File(config, "engineerclient/imported")
-        fun source(name: String) = com.engineerclient.ModTakeover.imported[name] ?: File(saved, name)
-        read(source("odin-config.json"))?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { e ->
-            val m = e as? JsonObject ?: return@forEach
-            val name = m["name"]?.asString ?: return@forEach
-            if (m["enabled"]?.asBoolean != true) return@forEach
-            val odin = ImportTables.ODIN[name] ?: ImportTables.Odin(name).takeIf { ModuleManager.modules.containsKey(name.lowercase()) } ?: return@forEach
-            if (turnOn(odin.to)) on++
-            val module = odin.to.substringBefore('>')
-            m.getAsJsonObject("settings")?.entrySet()?.forEach { (key, value) ->
-                if (isOn(value) && turnOn("$module>${odin.renames[key] ?: key}", onlyIfExists = true)) on++
-            }
+        for (step in ImportTables.plan(dir)) {
+            try { if (apply(step)) on++ } catch (t: Throwable) { EngineerClient.logger.warn("[ec] importing ${step.to} failed", t) }
         }
-        read(source("devonianConfig.json"))?.asJsonObject?.getAsJsonObject("config")?.let { on += apply(it, ImportTables.DEVONIAN) }
-        read(source("blade-addons.json"))?.asJsonObject?.let { on += apply(it, ImportTables.BLADE) }
-        if (on > 0) EngineerClient.logger.info("[ec] turned on $on settings from other mods' configs")
+        ModuleManager.saveConfigurations()
+        pending.delete()
+        EngineerClient.logger.info("[ec] took $on settings from other mods' configs")
     }
 
-    private fun apply(json: JsonObject, table: Map<String, String>): Int =
-        table.count { (key, to) -> json[key]?.let { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean && it.asBoolean } == true && turnOn(to) }
-
-    private fun isOn(v: JsonElement) =
-        (v.isJsonPrimitive && v.asJsonPrimitive.isBoolean && v.asBoolean) || (v is JsonObject && v["enabled"]?.asBoolean == true)
-
-    /** With [onlyIfExists], a setting the module doesn't have leaves the module as it was. */
-    private fun turnOn(to: String, onlyIfExists: Boolean = false): Boolean {
-        val module = ModuleManager.modules[to.substringBefore('>').lowercase()] ?: return false
-        val name = to.substringAfter('>', "")
+    private fun apply(step: ImportTables.Step): Boolean {
+        val module = ModuleManager.modules[step.to.substringBefore('>').lowercase()] ?: return false
+        val name = step.to.substringAfter('>', "")
         if (name.isNotEmpty()) {
-            when (val s = module.settings[name]) {
-                is BooleanSetting -> s.value = true
-                is HUDSetting -> s.value.enabled = true
-                else -> if (onlyIfExists) return false
+            val s = module.settings[name]
+            val v = step.value
+            when {
+                s is BooleanSetting && (v == null || (v as? JsonPrimitive)?.isBoolean == true) -> s.value = v?.asBoolean ?: true
+                s is HUDSetting && v == null -> s.value.enabled = true
+                s is KeybindSetting && v != null -> s.read(v, gson)
+                step.loose -> return false
             }
         }
         if (!module.enabled) module.toggle()
         return true
     }
-
-    private fun read(file: File) = try { if (file.isFile) JsonParser.parseString(file.readText()) else null } catch (t: Throwable) { null }
 }

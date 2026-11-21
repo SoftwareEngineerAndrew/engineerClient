@@ -174,9 +174,9 @@ object EngineerClient : ClientModInitializer {
         // fresh install nothing has saved state yet, so turn these on once.
         if (firstRun) {
             for (m in listOf(AgroSphere, com.engineerclient.practice.Recore, com.engineerclient.p3sim.P3Sim, RandomStuff, com.engineerclient.dungeon.TickTimers, ADR)) if (!m.enabled) m.toggle()
-            safely("mod import") { com.engineerclient.misc.ModImport.run(mc.gameDirectory) }
             ModuleManager.saveConfigurations()
         }
+        safely("mod import") { com.engineerclient.misc.ModImport.run(mc.gameDirectory) }
 
         // Keybinds and commands change settings without a screen that saves on close.
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING.register { safely("save on exit") { ModuleManager.saveConfigurations() } }

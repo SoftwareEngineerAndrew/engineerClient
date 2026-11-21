@@ -10,11 +10,13 @@ import net.fabricmc.loader.api.FabricLoader
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
- * Runs before any mod reads its settings. On a fresh install Odin's, Devonian's and Blade Addons' configs are moved aside to
- * config/odin-moved, devonian-moved and blade-moved for [com.engineerclient.misc.ModImport], and Odin's settings for ADM's modules become ADM's. Every launch,
- * what Engineer Client also does is switched off in those mods' configs, so only one of each runs.
+ * Runs before any mod reads its settings. On a fresh install Odin's, Devonian's and Blade Addons' configs are copied to
+ * config/engineerclient/imported for [com.engineerclient.misc.ModImport], and Odin's settings for ADM's modules become ADM's. Every launch,
+ * what Engineer Client also does is switched off in those mods' configs, so only one of each runs; nothing else in them changes.
  */
 object ModTakeover : PreLaunchEntrypoint {
     private val logger = LoggerFactory.getLogger("engineerclient")
@@ -41,16 +43,17 @@ object ModTakeover : PreLaunchEntrypoint {
         val blade = File(config, "blade-addons.json")
 
         if (!File(config, "engineerclient/config.json").exists()) {
+            val saved = File(config, ImportTables.IMPORTED)
+            // A copy already there is from a launch that stopped before the import, taken before anything was switched off.
+            val kept = listOf(odin, devonian, blade).count { keep(it, File(saved, it.name)) }
+            if (kept > 0) File(saved, ImportTables.PENDING).let { if (!it.exists()) it.createNewFile() }
             val adm = File(config, "adm/adm-config.json")
-            val odinJson = read(odin) as? JsonArray
+            val odinJson = (read(File(saved, odin.name)) ?: read(odin)) as? JsonArray
             if (!adm.exists() && odinJson != null) {
                 val own = JsonArray().apply { odinJson.filter { (it as? JsonObject)?.get("name")?.asString in ADM_NAMES }.forEach(::add) }
                 adm.parentFile.mkdirs()
                 write(adm, own)
             }
-            moveAside(config, "odin-moved", listOf(File(config, "odin")))?.let { imported[odin.name] = File(it, odin.name) }
-            moveAside(config, "devonian-moved", listOf(devonian, File(config, "devonian")))?.let { imported[devonian.name] = File(it, devonian.name) }
-            moveAside(config, "blade-moved", listOf(blade, File(config, "blade-addons"), File(config, "blade-addons-waypoints.json")))?.let { imported[blade.name] = File(it, blade.name) }
         }
 
         (read(odin) as? JsonArray)?.let { list ->
@@ -70,24 +73,20 @@ object ModTakeover : PreLaunchEntrypoint {
         }
     }
 
-    /** Where each mod's config went this launch, by its file name. */
-    val imported = mutableMapOf<String, File>()
-
-    // Moved rather than edited or deleted, so the player keeps them as they were.
-    private fun moveAside(config: File, name: String, files: List<File>): File? {
-        val present = files.filter { it.exists() }
-        if (present.isEmpty()) return null
-        var dir = File(config, name)
-        var n = 2
-        while (dir.exists()) dir = File(config, "$name-${n++}")
-        dir.mkdirs()
-        for (f in present) try {
-            java.nio.file.Files.move(f.toPath(), File(dir, f.name).toPath())
+    /** Copies [from] to [to] unless [to] is already there; true when [to] is there afterwards. */
+    private fun keep(from: File, to: File): Boolean {
+        if (to.isFile) return true
+        if (!from.isFile) return false
+        return try {
+            to.parentFile.mkdirs()
+            val tmp = File(to.parentFile, to.name + ".ec-tmp")
+            Files.copy(from.toPath(), tmp.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            Files.move(tmp.toPath(), to.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            true
         } catch (t: Throwable) {
-            logger.warn("[ec] moving ${f.name} failed", t)
+            logger.warn("[ec] copying ${from.name} failed", t)
+            false
         }
-        logger.info("[ec] moved ${present.joinToString { it.name }} to config/${dir.name}")
-        return dir
     }
 
     private fun switchOff(json: JsonObject, keys: Set<String>): Int {
@@ -104,6 +103,6 @@ object ModTakeover : PreLaunchEntrypoint {
     private fun write(file: File, json: JsonElement) {
         val tmp = File(file.parentFile, file.name + ".ec-tmp")
         tmp.writeText(gson.toJson(json))
-        java.nio.file.Files.move(tmp.toPath(), file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
 }

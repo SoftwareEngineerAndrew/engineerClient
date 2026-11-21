@@ -1,9 +1,55 @@
 package com.engineerclient.misc
 
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.google.gson.JsonPrimitive
+import java.io.File
+
 /** Other mods' settings and what they are in Engineer Client. No game classes here: [com.engineerclient.ModTakeover] reads it before the game loads. */
 object ImportTables {
+    /** Where [com.engineerclient.ModTakeover] keeps copies of the other mods' configs, under config; [PENDING] is there until they're imported. */
+    const val IMPORTED = "engineerclient/imported"
+    const val PENDING = "pending"
+
     /** "Module" turns the module on; "Module>Setting" also turns that switch or HUD on. */
     internal class Odin(val to: String, val renames: Map<String, String> = emptyMap())
+
+    /** Turns [to] on, or sets it to [value]; [loose] skips it where the module has no such setting. */
+    internal class Step(val to: String, val value: JsonElement? = null, val loose: Boolean = false)
+
+    /** A module of ours that is several Odin modules, each one of its switches: the ones that were off in Odin stay off. */
+    private val PARTS = mapOf("LD WD Pet Keybinds" to listOf("Wardrobe Keybinds", "Loadout Keybinds", "Pet Keybinds"))
+
+    /** What to turn on (and the keybinds to take) from the copies in [dir]. */
+    internal fun plan(dir: File): List<Step> {
+        val steps = ArrayList<Step>()
+        val odinOn = HashSet<String>()
+        (read(File(dir, "odin-config.json")) as? JsonArray)?.forEach { e ->
+            val m = e as? JsonObject ?: return@forEach
+            val name = (m["name"] as? JsonPrimitive)?.asString ?: return@forEach
+            if (!isTrue(m["enabled"])) return@forEach
+            odinOn += name
+            val odin = ODIN[name] ?: Odin(name)
+            steps += Step(odin.to)
+            val module = odin.to.substringBefore('>')
+            (m["settings"] as? JsonObject)?.entrySet()?.forEach { (key, value) ->
+                if (key == "Keybind") return@forEach
+                val to = "$module>${odin.renames[key] ?: key}"
+                if (isTrue(value) || (value is JsonObject && isTrue(value["enabled"]))) steps += Step(to, loose = true)
+                else if (value is JsonPrimitive && value.isString && value.asString.startsWith("key.")) steps += Step(to, value, loose = true)
+            }
+        }
+        for ((module, parts) in PARTS) if (parts.any { it in odinOn }) for (p in parts) if (p !in odinOn) steps += Step("$module>$p", JsonPrimitive(false))
+        ((read(File(dir, "devonianConfig.json")) as? JsonObject)?.get("config") as? JsonObject)?.let { c -> DEVONIAN.forEach { (k, to) -> if (isTrue(c[k])) steps += Step(to) } }
+        (read(File(dir, "blade-addons.json")) as? JsonObject)?.let { c -> BLADE.forEach { (k, to) -> if (isTrue(c[k])) steps += Step(to) } }
+        return steps
+    }
+
+    private fun isTrue(v: JsonElement?) = v is JsonPrimitive && v.isBoolean && v.asBoolean
+
+    private fun read(file: File): JsonElement? = try { if (file.isFile) JsonParser.parseString(file.readText()) else null } catch (t: Throwable) { null }
 
     internal val ODIN = mapOf(
         "Simon Says" to Odin("Devices>Enable Simon Says"),
@@ -31,8 +77,11 @@ object ImportTables {
         "Map Info" to Odin("Clear Info>Enable Map Info"),
         "Extra Stats" to Odin("Clear Info>Enable Extra Stats"),
         "Performance HUD" to Odin("Performance"),
-        "Wardrobe Keybinds" to Odin("LD WD Pet Keybinds", mapOf("Disable Unequip" to "Wardrobe Disable Unequip")),
-        "Pet Keybinds" to Odin("LD WD Pet Keybinds", mapOf("Disable Unequip" to "Pet Disable Unequip")),
+        "Wardrobe Keybinds" to Odin("LD WD Pet Keybinds>Wardrobe Keybinds", mapOf("Disable Unequip" to "Wardrobe Disable Unequip",
+            "Next Page" to "Wardrobe Next Page", "Previous Page" to "Wardrobe Previous Page", "Unequip" to "Wardrobe Unequip")),
+        "Loadout Keybinds" to Odin("LD WD Pet Keybinds>Loadout Keybinds", mapOf("Next Page" to "Loadout Next Page", "Previous Page" to "Loadout Previous Page")),
+        "Pet Keybinds" to Odin("LD WD Pet Keybinds>Pet Keybinds", mapOf("Disable Unequip" to "Pet Disable Unequip", "Next Page" to "Pet Next Page",
+            "Previous Page" to "Pet Previous Page", "Unequip" to "Pet Unequip", "Close If Already Equipped" to "Close If Equipped")),
     )
 
     internal val DEVONIAN = mapOf(
