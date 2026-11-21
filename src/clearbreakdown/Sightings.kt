@@ -6,7 +6,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.world.entity.ambient.Bat
 import net.minecraft.world.entity.item.ItemEntity
 import net.minecraft.world.entity.player.Player
-import net.minecraft.world.level.block.SkullBlock
+import net.minecraft.world.level.block.AbstractSkullBlock
 import net.minecraft.world.level.block.entity.SkullBlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.chunk.status.ChunkStatus
@@ -70,7 +70,7 @@ object Sightings {
     }
 
     fun onBlockChange(pos: BlockPos, updated: BlockState) {
-        if (!tracking || updated.block is SkullBlock) return
+        if (!tracking || updated.block is AbstractSkullBlock) return
         if (essence.remove(pos)) seenBlock("essence", pos)
     }
 

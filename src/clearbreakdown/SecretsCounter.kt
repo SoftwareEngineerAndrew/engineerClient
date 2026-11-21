@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** ADM's Secrets Counter: each player's secrets this run at the end of any run, won or not; yours from the stats box, teammates' from the API. */
 object SecretsCounter {
-    /** Each teammate's lifetime secrets when last asked: the run start, or the end of their last run with us. */
+    /** Each teammate's lifetime secrets when last asked: the run start, or the end of the run. */
     private val totals = ConcurrentHashMap<String, Long>()
     private var startTaken = false
     @Volatile private var own: Long? = null
@@ -44,7 +44,6 @@ object SecretsCounter {
         startTaken = true
         scope.launch {
             for (player in team) {
-                if (totals.containsKey(player.name)) continue
                 RequestUtils.pullSecrets(player.name).onSuccess { totals[player.name] = it }
             }
         }
