@@ -1,5 +1,6 @@
 package com.engineerclient.visual
 
+import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
@@ -51,9 +52,11 @@ object Performance : Module(
     private val cpsLabelColor by ColorSetting("CPS Label Color", Color(85, 255, 255, 1f), false, desc = "Colour of the CPS label.")
 
     private var record by BooleanSetting("Record Performance", false, desc = "Logs frame times and hitches to logs/perf.")
+    private val sampleStacks by BooleanSetting("Sample Stacks", false, desc = "Also records where the game thread is, 100 times a second.").withDependency { record }
     private var switchedOn by BooleanSetting("Switched On", false, desc = "").hide()
 
     val recording get() = enabled && record
+    val sampling get() = recording && sampleStacks
 
     fun enableMonitorByDefault() {
         if (switchedOn) return

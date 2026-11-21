@@ -67,12 +67,12 @@ class GpuTimer(private val slots: Int) {
  * nothing. One file a launch, logs/perf/perf-<time>.jsonl (the newest [KEEP_FILES] kept), a JSON object a line:
  *  - "s": a second: frame rate, frame times (avg, 99th percentile, worst), each phase of the game thread (avg and worst ms,
  *    GamePerfMixin), ticks, GPU time, heap, allocation, GC, classes loaded and JIT time (the warm-up after a launch), CPU by
- *    thread, where the game thread was (sampled 100 times a second, by mod), the world, where you are and the screen;
+ *    thread, where the game thread was (Sample Stacks: sampled 100 times a second, by mod), the world, where you are and the screen;
  *  - "hitch": every frame of [HITCH_NS] or more: its phases, the GCs during it, the game thread's stacks sampled in it;
  *  - "gc": every collection, with its pause; "mark": the launch's moments (LaunchTimeline), world loads and screens opened;
  *  - "first": the first minute after reaching Skyblock in a line (also to logs/perf/summary.log): how smooth the start was.
  * The game thread only takes nanoTimes and adds them up; everything else (the JVM, threads, the file) is on two background
- * threads, and thread CPU comes from /proc, so nothing here pauses the game.
+ * threads, and thread CPU comes from /proc. Only Sample Stacks stops the game thread, briefly, for each stack it reads.
  */
 object PerfMonitor {
     private val on get() = Performance.recording
@@ -135,14 +135,22 @@ object PerfMonitor {
     private val windows = ConcurrentLinkedQueue<Window>()
     private val hitches = ConcurrentLinkedQueue<Hitch>()
     private var hitchesThisSecond = 0
+    private var paused = false
+    @Volatile private var rebase = false
 
     private val gpuOut = LongArray(3)
 
     /** The start of a frame (Minecraft.runTick): closes the last one. */
     @JvmStatic fun frame() {
-        if (!on) { lastFrame = 0L; return }
+        if (!on) { lastFrame = 0L; paused = true; return }
         val now = System.nanoTime()
         if (main == null) { main = Thread.currentThread(); startThreads() }
+        // Back on after a pause: the second from before it would span the whole pause.
+        if (paused) {
+            paused = false
+            win = Window(now); acc.fill(0L); hitchesThisSecond = 0
+            rebase = true
+        }
         val w = win
         val g = gpuOut
         g[0] = 0L; g[1] = 0L; g[2] = w.gpuMax
@@ -208,8 +216,9 @@ object PerfMonitor {
         val m = main ?: return
         Thread({
             while (true) {
-                if (on) runCatching { classify(m.stackTrace) }.getOrNull()?.let { samples += it }
-                try { Thread.sleep(if (on) 10 else 250) } catch (_: InterruptedException) { break }
+                val sampling = Performance.sampling
+                if (sampling) runCatching { classify(m.stackTrace) }.getOrNull()?.let { samples += it }
+                try { Thread.sleep(if (sampling) 10 else 250) } catch (_: InterruptedException) { break }
             }
         }, "ec perf sampler").apply { isDaemon = true; priority = Thread.MAX_PRIORITY; start() }
         Thread({ writerLoop() }, "ec perf writer").apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
@@ -266,6 +275,8 @@ object PerfMonitor {
     // --- the writer ---------------------------------------------------------------------------------------------------------
 
     private var out: BufferedWriter? = null
+    private var retryAt = 0L
+    private var warned = false
     private val recentSamples = ArrayDeque<Sample>()
     private val recentGcs = ArrayDeque<Gc>()
     private val bucketCount = HashMap<String, Int>()
@@ -273,13 +284,17 @@ object PerfMonitor {
 
     private fun open(): BufferedWriter? {
         out?.let { return it }
+        if (System.currentTimeMillis() < retryAt) return null
         return runCatching {
             val dir = mc.gameDirectory.toPath().resolve("logs").resolve("perf")
             Files.createDirectories(dir)
             val name = "perf-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".jsonl"
-            Files.list(dir).use { s -> s.filter { it.fileName.toString().startsWith("perf-") }.sorted(Comparator.reverseOrder()).skip(KEEP_FILES - 1L).forEach { Files.deleteIfExists(it) } }
+            runCatching { Files.list(dir).use { s -> s.filter { it.fileName.toString().startsWith("perf-") }.sorted(Comparator.reverseOrder()).skip(KEEP_FILES - 1L).forEach { Files.deleteIfExists(it) } } }
             Files.newBufferedWriter(dir.resolve(name), StandardOpenOption.CREATE, StandardOpenOption.APPEND)
-        }.onFailure { EngineerClient.logger.warn("[perf] can't open the perf log", it) }.getOrNull()?.also { out = it }
+        }.onFailure {
+            retryAt = System.currentTimeMillis() + 30_000L
+            if (!warned) { warned = true; EngineerClient.logger.warn("[perf] can't open the perf log", it) }
+        }.getOrNull()?.also { out = it }
     }
 
     private fun writerLoop() {
@@ -290,7 +305,15 @@ object PerfMonitor {
     }
 
     private fun drain() {
-        val w = open() ?: return
+        val w = open() ?: run {
+            samples.clear(); gcs.clear(); marks.clear(); hitches.clear(); windows.clear()
+            return
+        }
+        if (rebase) {
+            rebase = false
+            allocLast = -1L; mainAllocLast = -1L; classesLast = -1L; jitLast = -1L
+            gcLast.clear(); taskCpuLast.clear(); bucketCount.clear(); bucketN = 0
+        }
         val now = System.nanoTime()
         while (true) { val s = samples.poll() ?: break; recentSamples.addLast(s); bucketCount.merge(s.bucket, 1, Int::plus); bucketN++ }
         while (true) {
