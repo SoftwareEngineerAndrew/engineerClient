@@ -88,7 +88,10 @@ object BossBar : Module(
         val now = System.currentTimeMillis()
         val c = cache[event]
         if (c != null && c.progress == progress && (c.text != null || now - c.at < 1000)) return c.text
-        val text = known(ChatFormatting.stripFormatting(event.name.string) ?: "", progress) ?: scan(progress)
+        val named = known(ChatFormatting.stripFormatting(event.name.string) ?: "", progress)
+        // The bar eases for a while after every change, so the entities are looked through at most 5 times a second.
+        if (named == null && c != null && now - c.at < 200) return c.text
+        val text = named ?: scan(progress)
         if (c == null) { if (cache.size > 8) cache.clear(); cache[event] = Cached(progress, now, text) } else { c.progress = progress; c.at = now; c.text = text }
         return text
     }
