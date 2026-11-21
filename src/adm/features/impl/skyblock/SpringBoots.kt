@@ -132,7 +132,7 @@ object SpringBoots : Module(
             if (blocks == 0f || !LocationUtils.isInSkyblock) return@on
             val player = mc.player ?: return@on
             val y = player.y + blocks
-            drawStyledBox(AABB(player.x, y, player.z, player.x + 1.0, y + 1.0, player.z + 1.0), boxColor, boxStyle, !throughWalls)
+            drawStyledBox(AABB(player.x - 0.5, y, player.z - 0.5, player.x + 0.5, y + 1.0, player.z + 0.5), boxColor, boxStyle, !throughWalls)
         }
     }
 }

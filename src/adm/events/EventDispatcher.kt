@@ -62,9 +62,11 @@ object EventDispatcher {
 
         onReceive<ClientboundTakeItemEntityPacket> {
             if (!DungeonUtils.inClear) return@onReceive
+            val player = mc.player ?: return@onReceive
+            if (playerId != player.id) return@onReceive
             val itemEntity = mc.level?.getEntity(itemId) as? ItemEntity ?: return@onReceive
-            if (itemEntity.item.hoverName.string.containsOneOf(dungeonItemDrops, true) && itemEntity.distanceTo(mc.player ?: return@onReceive) <= 6)
-                SecretPickupEvent.Item(itemEntity).postAndCatch()
+            if (itemEntity.item.hoverName.string.containsOneOf(dungeonItemDrops, true) && itemEntity.distanceTo(player) <= 6)
+                mc.execute { SecretPickupEvent.Item(itemEntity).postAndCatch() }
         }
 
         on<EntityEvent.Remove> {

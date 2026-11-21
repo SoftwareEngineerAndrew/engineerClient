@@ -6,6 +6,7 @@ import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.clickgui.settings.impl.StringSetting
+import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.MessageSentEvent
 import com.adm.events.core.on
@@ -82,6 +83,8 @@ object ChatCommands : Module(
     private val dtReason = mutableListOf<Pair<String, String>>()
 
     init {
+        on<LevelEvent.Load> { dtReason.clear() }
+
         on<MessageEvent.Chat> {
             if ((message.contains("> EXTRA STATS <") || message.startsWith("[NPC] Elle: ")) && message.matches(endRunRegex)) {
                 if (!dt || dtReason.isEmpty()) return@on

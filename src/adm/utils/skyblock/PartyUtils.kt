@@ -134,9 +134,8 @@ object PartyUtils {
                 val memberMatch = memberFormat.find(segment.trim()) ?: return@forEach
                 addMember(memberMatch.groupValues[2])
                 if (type == "Leader") partyLeader = memberMatch.groupValues[2]
-
-                return true
             }
+            return true
         }
 
         partyWith.find(message)?.let { match ->

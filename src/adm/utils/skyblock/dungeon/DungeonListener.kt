@@ -148,7 +148,7 @@ object DungeonListener {
             if (message.contains(" and became a ghost")) deathRegex.find(message)?.let { match ->
                 dungeonTeammates.find { teammate ->
                     teammate.name == (match.groupValues[1].takeUnless { it == "You" } ?: mc.player?.name?.string)
-                }?.deaths?.inc()
+                }?.let { it.deaths++ }
             }
             if (!dungeonStats.mimicKilled && DungeonUtils.isFloor(6, 7) && message.contains(MIMIC_CHARMED)) mimicFound()
             // A Charm kill sends only its CHARM line, not "A Prince falls".

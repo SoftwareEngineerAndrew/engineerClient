@@ -65,7 +65,7 @@ object PlayerDisplay : Module(
         val bar = ActionBarListener
         when {
             example -> mana.mana(this, 2000, 20000, !separateOverflow)
-            !LocationUtils.isInSkyblock || bar.maxMana == 0 || bar.currentMana == 0 && separateOverflow -> NONE
+            !LocationUtils.isInSkyblock || bar.maxMana == 0 -> NONE
             else -> mana.mana(this, bar.currentMana, bar.maxMana, !separateOverflow && overflowManaHud.enabled)
         }
     }
