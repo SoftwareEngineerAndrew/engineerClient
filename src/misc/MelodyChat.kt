@@ -30,7 +30,7 @@ object MelodyChat {
     class Heard(val percent: Int, val at: Long)
 
     private val PARTY = Regex("""^Party > (?:\[[^]]*] )?(\w{1,16}): (.*)$""")
-    private val PERCENT = Regex("""(\d+)%""")
+    private val PERCENT = Regex("""(?i)melody\D*?(\d{1,3})%""")
     private val ROWS = Regex("""(?i)melody.*?\b([0-3])/3\b""")
     private val TERMINAL = Regex("""^(\w{1,16}) activated a terminal! \(\d+/\d+\)$""")
 
@@ -59,7 +59,7 @@ object MelodyChat {
         val sender = party.groupValues[1]
         if (sender.equals(mc.user.name, ignoreCase = true)) return
         val said = party.groupValues[2]
-        val percent = PERCENT.find(said)?.groupValues?.get(1)?.toIntOrNull()
+        val percent = PERCENT.find(said)?.groupValues?.get(1)?.toIntOrNull()?.coerceAtMost(100)
             ?: ROWS.find(said)?.groupValues?.get(1)?.toIntOrNull()?.let { (it * 100 + 1) / 3 } ?: return
         // The furthest progress wins, so a stray number doesn't move it back; the time is of the latest message.
         val heard = Heard(maxOf(percent, chat[sender]?.percent ?: 0), System.nanoTime())
