@@ -3,15 +3,16 @@ package com.engineerclient.practice
 import com.engineerclient.EngineerClient
 import com.adm.events.BlockUpdateEvent
 import com.adm.events.LevelEvent
-import com.adm.events.PacketEvent
 import com.adm.events.TickEvent
 import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
+import com.adm.events.core.onReceive
 import com.engineerclient.devices.DevSimonSays
 import com.engineerclient.devices.Devices
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.M7Phases
 import net.minecraft.core.BlockPos
+import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
 import net.minecraft.world.level.block.ButtonBlock
@@ -58,32 +59,8 @@ object SimonSaysTracker {
         // relit in one tick) is how a skip's chain starts show, and ADM's BlockUpdateEvent skips it as no
         // change. Stamped with the server tick on arrival, and what the lamp was taken from the packets before
         // it (in arrival order), then handled on the client thread.
-        on<PacketEvent.Receive> {
-            if (!active() || (packet !is ClientboundBlockUpdatePacket && packet !is ClientboundSectionBlocksUpdatePacket) || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
-            val changes = when (val p = packet) {
-                is ClientboundBlockUpdatePacket -> if (onDevice(p.pos)) listOf(p.pos.immutable() to p.blockState) else return@on
-                is ClientboundSectionBlocksUpdatePacket -> ArrayList<Pair<BlockPos, BlockState>>().also { l ->
-                    p.runUpdates { pos, state -> if (onDevice(pos)) l += pos.immutable() to state }
-                }.ifEmpty { return@on }
-                else -> return@on
-            }
-            val at = tick
-            // A lamp not seen since the world loaded: taken as a change (packets come for changes, re-sends aside).
-            val lamps = changes.filter { it.first.x == 111 }.map { (pos, state) ->
-                val lit = state.block == Blocks.SEA_LANTERN
-                Triple(pos, lit, lampLit.put(pos, lit) ?: !lit)
-            }
-            for ((pos, _) in changes) if (pos.x == 110) buttonTick[pos] = at
-            if (lamps.isEmpty()) return@on
-            val handle = Runnable {
-                if (!active() || SimonSaysPractice.practicing || DungeonUtils.getF7Phase() != M7Phases.P3) return@Runnable
-                EngineerClient.safely("ss solver lamps") {
-                    for ((pos, lit, was) in lamps) solver.lamp(pos, lit, was, at)
-                    sync()
-                }
-            }
-            if (EngineerClient.mc.isSameThread) handle.run() else EngineerClient.mc.execute(handle)
-        }
+        onReceive<ClientboundBlockUpdatePacket> { lampPacket(this) }
+        onReceive<ClientboundSectionBlocksUpdatePacket> { lampPacket(this) }
         on<TickEvent.End> {
             if (!active() || SimonSaysPractice.practicing || DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             // A tick behind: that tick's lamp packets may still be on their way to this thread.
@@ -123,5 +100,32 @@ object SimonSaysTracker {
     private fun sync() {
         DevSimonSays.clickInOrder.clear(); DevSimonSays.clickInOrder.addAll(solver.answer)
         DevSimonSays.clickNeeded = solver.next
+    }
+
+    private fun lampPacket(packet: Packet<*>) {
+        if (!active() || DungeonUtils.getF7Phase() != M7Phases.P3) return
+        val changes = when (val p = packet) {
+            is ClientboundBlockUpdatePacket -> if (onDevice(p.pos)) listOf(p.pos.immutable() to p.blockState) else return
+            is ClientboundSectionBlocksUpdatePacket -> ArrayList<Pair<BlockPos, BlockState>>().also { l ->
+                p.runUpdates { pos, state -> if (onDevice(pos)) l += pos.immutable() to state }
+            }.ifEmpty { return }
+            else -> return
+        }
+        val at = tick
+        // A lamp not seen since the world loaded: taken as a change (packets come for changes, re-sends aside).
+        val lamps = changes.filter { it.first.x == 111 }.map { (pos, state) ->
+            val lit = state.block == Blocks.SEA_LANTERN
+            Triple(pos, lit, lampLit.put(pos, lit) ?: !lit)
+        }
+        for ((pos, _) in changes) if (pos.x == 110) buttonTick[pos] = at
+        if (lamps.isEmpty()) return
+        val handle = Runnable {
+            if (!active() || SimonSaysPractice.practicing || DungeonUtils.getF7Phase() != M7Phases.P3) return@Runnable
+            EngineerClient.safely("ss solver lamps") {
+                for ((pos, lit, was) in lamps) solver.lamp(pos, lit, was, at)
+                sync()
+            }
+        }
+        if (EngineerClient.mc.isSameThread) handle.run() else EngineerClient.mc.execute(handle)
     }
 }
