@@ -205,9 +205,11 @@ object BloodCamp : Module(
                 spawn.landing = landing
                 spawn.seen = true
                 spawn.landingMs = now
-                spawn.velX = (newPos.x - spawn.start.x) / elapsed
-                spawn.velY = (newPos.y - spawn.start.y) / elapsed
-                spawn.velZ = (newPos.z - spawn.start.z) / elapsed
+                if (elapsed > 0) {
+                    spawn.velX = (newPos.x - spawn.start.x) / elapsed
+                    spawn.velY = (newPos.y - spawn.start.y) / elapsed
+                    spawn.velZ = (newPos.z - spawn.start.z) / elapsed
+                }
                 spawn.at = newPos
             }
         }
