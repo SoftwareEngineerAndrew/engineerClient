@@ -68,6 +68,7 @@ object BlazeDaggerHUD : Module(
 
     private val DAGGERS = Dagger.entries.toTypedArray()
     private val ATTUNEMENTS = Attunement.entries.toTypedArray()
+    private val ATTUNEMENT_WORD = Regex("""\b(auric|ashen|spirit|crystal)\b""", RegexOption.IGNORE_CASE)
 
     // Per dagger, bit 0 = first attunement on, bit 1 = second; only a title or the item lore makes it known.
     private val attuned = IntArray(2)
@@ -92,7 +93,8 @@ object BlazeDaggerHUD : Module(
     private fun sibling(d: Dagger, a: Attunement): Attunement = if (a == d.first) d.second else d.first
 
     private fun fromTitle(text: String): Boolean {
-        val heard = ATTUNEMENTS.firstOrNull { text.contains(it.name, ignoreCase = true) } ?: return false
+        val word = ATTUNEMENT_WORD.find(text)?.value ?: return false
+        val heard = ATTUNEMENTS.firstOrNull { it.name.equals(word, ignoreCase = true) } ?: return false
         for (d in DAGGERS) {
             val bit = if (heard == d.first) 1 else if (heard == d.second) 2 else continue
             attuned[d.ordinal] = bit
@@ -165,6 +167,7 @@ object BlazeDaggerHUD : Module(
         }
 
         onReceive<ClientboundSetSubtitleTextPacket> {
+            if (!LocationUtils.isInSkyblock || daggerOf(mc.player?.mainHandItem) == null) return@onReceive
             if (fromTitle(text().string)) it.cancel()
         }
 
