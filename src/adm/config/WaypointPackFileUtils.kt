@@ -9,6 +9,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.minecraft.util.FileUtil
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 object WaypointPackFileUtils {
     private val folder = File(AdmMod.configFile, "dungeon-waypoints").apply { mkdirs() }
@@ -46,12 +48,18 @@ object WaypointPackFileUtils {
             ?: LinkedHashMap()
     } catch (e: Exception) {
         e.printStackTrace()
+        // Move the unreadable file aside so the next save can't overwrite the user's waypoints.
+        val f = file(name)
+        if (runCatching { Files.move(f.toPath(), File(folder, "$name.json.corrupt").toPath(), StandardCopyOption.REPLACE_EXISTING) }.isSuccess)
+            modMessage("§cPack '$name' could not be read, saved it as $name.json.corrupt")
         LinkedHashMap()
     }
 
     internal fun write(name: String, waypoints: Map<String, List<DungeonWaypoint>>) {
         try {
-            file(name).writeText(DungeonWaypointConfig.gson.toJson(waypoints))
+            val tmp = File(folder, "$name.json.tmp")
+            tmp.writeText(DungeonWaypointConfig.gson.toJson(waypoints))
+            Files.move(tmp.toPath(), file(name).toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } catch (e: Exception) {
             e.printStackTrace()
         }

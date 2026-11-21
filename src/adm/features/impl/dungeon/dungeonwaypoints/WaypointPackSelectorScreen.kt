@@ -84,8 +84,8 @@ class WaypointPackSelectorScreen(private val parent: Screen?) : AdmScreen(Compon
                     val clipboard = mc.keyboardHandler.clipboard
                     busyWhile {
                         val decoded = DungeonWaypointConfig.decodeWaypoints(null, clipboard)
-                        if (decoded != null && WaypointStore.importPack(name, decoded)) modMessage("§aImported waypoints as pack '$name'!")
-                        else modMessage("§cFailed to decode waypoints from clipboard.")
+                        if (decoded == null) modMessage("§cFailed to decode waypoints from clipboard.")
+                        else if (WaypointStore.importPack(name, decoded)) modMessage("§aImported waypoints as pack '$name'!")
                     }
                 }
             }.at(184, TOOLBAR_Y)
