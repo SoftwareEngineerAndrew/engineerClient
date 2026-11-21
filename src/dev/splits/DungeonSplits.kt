@@ -1,6 +1,7 @@
 package com.devgineerclient.splits
 
 import com.devgineerclient.DevgineerClient
+import com.engineerclient.misc.Witherborn
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.StringSetting
@@ -479,11 +480,16 @@ object DungeonSplits : Module(
 
     /** A boss's wither: the one nearest the name tag carrying [name], or nearest you without one. */
     private fun bossWither(level: net.minecraft.client.multiplayer.ClientLevel, name: String): WitherBoss? {
-        val withers = level.entitiesForRendering().filterIsInstance<WitherBoss>().filter { Witherborn.isBoss(it) }
         val tag = level.entitiesForRendering().firstOrNull { it is ArmorStand && it.customName?.string?.contains(name) == true }
         val anchor = tag ?: mc.player ?: return null
-        val found = withers.minByOrNull { it.distanceToSqr(anchor) }
-        return found
+        var best: WitherBoss? = null
+        var bestD = 0.0
+        for (e in level.entitiesForRendering()) {
+            if (e !is WitherBoss || !Witherborn.isBoss(e)) continue
+            val d = e.distanceToSqr(anchor)
+            if (best == null || d < bestD) { best = e; bestD = d }
+        }
+        return best
     }
 
     /** Goldor and where he waits once the core opens. */

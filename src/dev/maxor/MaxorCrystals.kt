@@ -1,6 +1,7 @@
 package com.devgineerclient.maxor
 
 import com.devgineerclient.DevgineerClient
+import com.engineerclient.misc.Witherborn
 import com.devgineerclient.maxor.CrystalCycles.From
 import com.devgineerclient.maxor.CrystalCycles.Side
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
@@ -111,10 +112,10 @@ object MaxorCrystals : Module(
             // Server ticks as Odin counts them: top-level pings only (the anticheat's bundled pairs are not ticks).
             is ClientboundPingPacket -> if (p.id != 0 && !inBundle) ticks++
             is ClientboundLoginPacket, is ClientboundRespawnPacket -> { model?.end(null); model = null; withers.clear(); health.clear() }
-            is ClientboundSystemChatPacket -> if (!p.overlay) chat(p.content.string.replace(CONTROL_CODES, ""))
+            is ClientboundSystemChatPacket -> if (!p.overlay) p.content.string.let { chat(if (it.indexOf('§') < 0) it else it.replace(CONTROL_CODES, "")) }
             is ClientboundAddEntityPacket -> {
                 // Not a Witherborn wither (full Storm armor): it is never Maxor.
-                if (p.type == EntityTypes.WITHER && !com.engineerclient.misc.Witherborn.onSpawn(p.id, p.x, p.y, p.z)) withers += p.id
+                if (p.type == EntityTypes.WITHER && !Witherborn.onSpawn(p.id, p.x, p.y, p.z)) withers += p.id
                 val m = model ?: return
                 if (p.type != EntityTypes.END_CRYSTAL) return
                 if (p.y > 231) { m.crystalsBack(ticks); return }

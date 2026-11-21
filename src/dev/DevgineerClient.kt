@@ -7,7 +7,6 @@ import com.devgineerclient.misc.FastLaunch
 import com.devgineerclient.recorder.DungeonRecorder
 import com.devgineerclient.splits.DungeonSplits
 import com.devgineerclient.splits.PaceTargets
-import com.devgineerclient.splits.Witherborn
 import com.adm.config.ModuleConfig
 import com.adm.features.ModuleManager
 import net.fabricmc.api.ClientModInitializer
@@ -40,7 +39,6 @@ object DevgineerClient : ClientModInitializer {
         safely("edt") { com.devgineerclient.misc.Edt.install() }
         safely("sound collector") { com.devgineerclient.misc.SoundCollector.install() }
         safely("pace targets") { PaceTargets.install() }
-        safely("witherborn") { Witherborn.register() }
     }
 
     /** Every handler that runs inside Odin's bus or a coroutine must not be able to take Odin down with it. */

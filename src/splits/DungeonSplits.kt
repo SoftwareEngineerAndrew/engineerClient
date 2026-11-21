@@ -535,23 +535,28 @@ object DungeonSplits : Module(
      */
     private val NECRON_GONE = 20
 
+    private val bossWithers = ArrayList<WitherBoss>()
+
     /** A boss's wither: the one nearest the name tag carrying [name], or nearest you without one. */
     private fun bossWither(level: net.minecraft.client.multiplayer.ClientLevel, name: String): WitherBoss? {
         val memo = when (name) { "Storm" -> stormTag; "Necron" -> necronTag; else -> goldorTag }
         var tag: net.minecraft.world.entity.Entity? = null
+        val withers = bossWithers
+        withers.clear()
         for (e in level.entitiesForRendering()) {
-            if (e !is ArmorStand) continue
+            if (e is WitherBoss) { if (Witherborn.isBoss(e)) withers += e; continue }
+            if (tag != null || e !is ArmorStand) continue
             val n = e.customName ?: continue
-            if (memo[e, n]) { tag = e; break }
+            if (memo[e, n]) tag = e
         }
-        val anchor = tag ?: mc.player ?: return null
+        val anchor = tag ?: mc.player ?: return null.also { withers.clear() }
         var best: WitherBoss? = null
         var bestD = 0.0
-        for (e in level.entitiesForRendering()) {
-            if (e !is WitherBoss || !Witherborn.isBoss(e)) continue
+        for (e in withers) {
             val d = e.distanceToSqr(anchor)
             if (best == null || d < bestD) { best = e; bestD = d }
         }
+        withers.clear()
         return best
     }
 
