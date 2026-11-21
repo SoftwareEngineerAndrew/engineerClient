@@ -17,7 +17,18 @@ class SplitDetail {
     fun reset() = entries.clear()
 
     fun add(split: String, at: Stamp, label: String, who: String = "", step: Boolean = false, note: String = "") {
-        entries.getOrPut(split) { mutableListOf() } += Entry(label, at, who, step, note)
+        add(split, Entry(label, at, who, step, note))
+    }
+
+    fun add(split: String, e: Entry) {
+        entries.getOrPut(split) { mutableListOf() } += e
+    }
+
+    /** Puts [new] where [old] (that very entry) is; nothing when it is gone. */
+    fun replace(split: String, old: Entry, new: Entry) {
+        val l = entries[split] ?: return
+        val i = l.indexOfFirst { it === old }
+        if (i >= 0) l[i] = new
     }
 
     fun lines(split: String): List<Entry> = entries[split].orEmpty()

@@ -9,6 +9,8 @@ import java.util.Locale
  * fight is (the bosses). Seconds to one decimal, no "s".
  *
  * Nothing here touches Minecraft: the module feeds it the moments the game shows and asks for rows.
+ * It draws the blood rush and portal rows itself; the boss splits' rows are the module's graded steps,
+ * and their moments here only tell the module what to watch for.
  * A row is tab-separated cells, the first being the split's total, for the HUD to lay out as a
  * table. A cell that is not known is left empty so the columns after it stay in line.
  *
@@ -17,9 +19,8 @@ import java.util.Locale
  */
 class Scorecard {
 
-    // Blood, the way Devonian splits it: the dialog (his first line to "Let's see how you can handle
-    // this."), the move (that line to the Watcher's first move at least 45 server ticks after it -
-    // roughly 55-150 ticks, depending on the camp), then the clear.
+    // Blood: the Watcher's move, at least 45 server ticks after "Let's see how you can handle this."
+    // (roughly 55-150 ticks, depending on the camp); only watched for, its row is the graded steps.
     /** "Let's see how you can handle this." */
     var watcherHandle: Stamp? = null
         private set
@@ -129,10 +130,10 @@ class Scorecard {
 
     /**
      * The table's rows, one per split that has started. [bloodRooms] is each finished blood rush
-     * room's total in ticks and [rushOver] whether the blood door is open; [terms] the four
-     * terminal sections.
+     * room's total in ticks and [rushOver] whether the blood door is open. The blood rush and the
+     * portal are drawn here; every other split is [graded]'s.
      */
-    fun rows(splits: List<Split>, now: Stamp, bloodRooms: List<Long>, rushOver: Boolean, terms: List<Split>,
+    fun rows(splits: List<Split>, now: Stamp, bloodRooms: List<Long>, rushOver: Boolean,
              /** A boss split's graded cells (total, then its sub splits), or null for this class's own. */
              graded: (Split) -> List<String>? = { null }): List<String> {
         val out = mutableListOf<String>()
@@ -147,58 +148,12 @@ class Scorecard {
                     for (t in bloodRooms) cells += "§c" + fmt(t * 50)
                     if (rushOver && bloodRooms.isNotEmpty()) cells += "§6" + fmt(bloodRooms.sum() * 50 / bloodRooms.size)
                 }
-                SplitTracker.BLOOD -> {
-                    cells += colour(s.label) + real(s.start, end)
-                    // Devonian's three: the dialog, the move, the clear.
-                    val handle = watcherHandle?.takeIf { it.realMs >= s.start.realMs }
-                    val moved = watcherMoved?.takeIf { handle != null && it.realMs >= handle.realMs }
-                    cells += "§7" + real(s.start, handle)
-                    cells += "§5" + real(handle, moved)
-                    if (s.stop != null) cells += "§c" + real(moved, s.stop)
-                }
                 SplitTracker.PORTAL -> {
                     cells += colour(s.label) + real(s.start, end)
                     val open = portalOpen?.takeIf { it.realMs >= s.start.realMs }
                     cells += "§5" + real(s.start, open)
                     // From the portal opening to the boss: everyone is warped in on the same tick.
                     if (s.stop != null) cells += "§6" + real(open, s.stop)
-                }
-                SplitTracker.MAXOR -> {
-                    cells += colour(s.label) + tick(s.start, end)
-                    val placed1 = crystals.getOrNull(1)
-                    val stun1 = maxorStuns.firstOrNull()
-                    val placed2 = crystals.getOrNull(3)
-                    cells += "§3" + tick(s.start, placed1)
-                    cells += "§6" + tick(placed1, stun1)
-                    cells += "§3" + tick(stun1, placed2)
-                    // From Maxor starting, not the one before: how long he took all told.
-                    if (s.stop != null) cells += "§c" + tick(s.start, maxorGone?.takeIf { it.realMs <= s.stop.realMs })
-                }
-                SplitTracker.STORM -> {
-                    cells += colour(s.label) + tick(s.start, end)
-                    val c1 = crushes.getOrNull(0); val c2 = crushes.getOrNull(1)
-                    val f1 = freed.getOrNull(0)
-                    cells += "§6" + tick(stormMoving, c1)
-                    cells += "§c" + tick(c1, f1)
-                    cells += "§6" + tick(f1, c2)
-                    // The last one runs to his death; a third crush on the way turns it dark red.
-                    cells += (if (crushes.size > 2) "§4" else "§c") + tick(c2, stormDead)
-                }
-                SplitTracker.TERMS -> {
-                    cells += colour(s.label) + real(s.start, end)
-                    for (t in terms) if (t.stop != null) cells += "§8" + real(t.start, t.stop)
-                }
-                SplitTracker.GOLDOR -> {
-                    cells += colour(s.label) + tick(s.start, end)
-                    // Anyone already in when the core opens counts from the opening.
-                    val inAt = allIn?.let { if (it.realMs < s.start.realMs) s.start else it }
-                    cells += "§5" + tick(s.start, inAt)
-                    cells += "§3" + tick(inAt, goldorHit)
-                    cells += "§c" + tick(goldorHit, goldorDead)
-                }
-                SplitTracker.NECRON -> {
-                    cells += colour(s.label) + tick(s.start, end)
-                    cells += "§a" + tick(necronFree, necronMid)
                 }
                 else -> continue
             }
@@ -218,9 +173,6 @@ class Scorecard {
 
     /** Seconds to one decimal on the real clock, or "" if either end is not known yet. */
     private fun real(from: Stamp?, to: Stamp?) = if (from == null || to == null) "" else fmt(to.realMs - from.realMs)
-
-    /** The same on the server's clock. */
-    private fun tick(from: Stamp?, to: Stamp?) = if (from == null || to == null) "" else fmt((to.tick - from.tick) * 50L)
 
     private fun fmt(ms: Long) = String.format(Locale.ROOT, "%.1f", ms.coerceAtLeast(0) / 1000.0)
 

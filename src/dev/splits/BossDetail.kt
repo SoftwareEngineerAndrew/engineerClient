@@ -19,9 +19,12 @@ class BossDetail(private val detail: SplitDetail) {
 
     private val pickedAt = HashMap<String, Stamp>()
     private var necronHit = false
+    /** Goldor's hits as one entry, counted, so a whole fight of them is one line. */
+    private var goldorHits: SplitDetail.Entry? = null
+    private var goldorHitCount = 0
 
     fun reset() {
-        pickedAt.clear(); necronHit = false
+        pickedAt.clear(); necronHit = false; goldorHits = null; goldorHitCount = 0
     }
 
     fun onChat(msg: String, at: Stamp) {
@@ -60,10 +63,21 @@ class BossDetail(private val detail: SplitDetail) {
     fun onSimonPress(at: Stamp, who: String?) =
         detail.add(SplitTracker.TERMS, at, "§ass button", who.orEmpty(), note = "button seen powering; presser = nearest player, a guess")
 
-    /** A wither took a hit. Goldor's every hit while he is alive; Necron's only the first. */
+    /** A wither took a hit. Goldor's every hit while he is alive, counted on one line; Necron's only the first. */
     fun onBossHit(split: String, at: Stamp) {
         when (split) {
-            SplitTracker.GOLDOR -> detail.add(split, at, "§ehit", note = "damage packet - only while he is in view; no attacker sent")
+            SplitTracker.GOLDOR -> {
+                val first = goldorHits
+                goldorHitCount++
+                if (first == null) {
+                    goldorHits = SplitDetail.Entry("§ehit", at, note = "damage packet - only while he is in view; no attacker sent").also { detail.add(split, it) }
+                    return
+                }
+                val next = first.copy(label = "§ehit x$goldorHitCount", note = "damage packets - only while he is in view; no attacker sent; last " +
+                    SplitFormat.seconds(at.realMs - first.at.realMs) + " after the first")
+                detail.replace(split, first, next)
+                goldorHits = next
+            }
             SplitTracker.NECRON -> if (!necronHit) { necronHit = true; detail.add(split, at, "§cfirst hit", note = "damage packet - only while he is in view") }
         }
     }

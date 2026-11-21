@@ -92,7 +92,7 @@ object DungeonSplits : Module(
             "§3Pace 4:58 §8(4:57)", "§8Lag §71.35s",
         ))
         val now = now()
-        val rows = card.rows(tracker.splits(), now, blood.roomTicks(), blood.over, subs.forSplit(SplitTracker.TERMS)) { scorecardCells(it, now) }
+        val rows = card.rows(tracker.splits(), now, blood.roomTicks(), blood.over) { scorecardCells(it, now) }
         // Pace against the targets (F7: personal bests, else the dark green times), real time first; and the time lost to lag.
         val extra = if (rows.isEmpty()) emptyList() else listOfNotNull(
             pace(now)?.let { "§3Pace " + SplitPace.mss(it.ms) + " §8(" + SplitPace.mss(it.ticks * 50) + ")" },
@@ -159,6 +159,9 @@ object DungeonSplits : Module(
     private val barriers = mutableListOf<Pair<Int, Int>>()
     private val cleared = mutableListOf<Pair<Int, Int>>()
     private val keysSeen = HashSet<Int>()
+    /** Each armor stand's name when it was last checked for the key, so an unchanged name is not flattened again. */
+    private val standNames = HashMap<Int, net.minecraft.network.chat.Component>()
+    private val bossTags = HashMap<String, Int>()
     private val crystalsSeen = HashSet<Int>()
     private val watchedMobs = HashMap<Int, Pair<String, Stamp>>()
 
@@ -169,7 +172,7 @@ object DungeonSplits : Module(
         goldorAt = null; goldorMoved = false; necronAt = null; necronId = null; necronDiedAt = null; goldorBar = null
         portalSeen = false; goldorHitNoted = false; coreUnseenNoted = false; watcherAt = null; watcherNotSeenNoted = false
         maxorAt = null; maxorCheck = null
-        barriers.clear(); cleared.clear(); keysSeen.clear(); crystalsSeen.clear(); watchedMobs.clear(); necronTnt.clear()
+        barriers.clear(); cleared.clear(); keysSeen.clear(); standNames.clear(); bossTags.clear(); crystalsSeen.clear(); watchedMobs.clear(); necronTnt.clear()
     }
 
     private fun Stamp.minus(ticks: Int) = Stamp(realMs - ticks * 50L, tick - ticks)
@@ -269,8 +272,9 @@ object DungeonSplits : Module(
             // The key is an armor stand named "Wither Key"; it appears where the last mob died.
             if (blood.active) for (e in level.entitiesForRendering()) {
                 if (e !is ArmorStand || e.id in keysSeen) continue
-                val name = e.customName?.string ?: continue
-                if (KEY.containsMatchIn(name)) {
+                val c = e.customName ?: continue
+                if (standNames.put(e.id, c) === c) continue
+                if (KEY.containsMatchIn(c.string)) {
                     keysSeen += e.id
                     blood.onKeySpawned(now(), distanceTo(e))
                 }
@@ -480,7 +484,9 @@ object DungeonSplits : Module(
 
     /** A boss's wither: the one nearest the name tag carrying [name], or nearest you without one. */
     private fun bossWither(level: net.minecraft.client.multiplayer.ClientLevel, name: String): WitherBoss? {
-        val tag = level.entitiesForRendering().firstOrNull { it is ArmorStand && it.customName?.string?.contains(name) == true }
+        fun isTag(e: net.minecraft.world.entity.Entity?) = e is ArmorStand && e.customName?.string?.contains(name) == true
+        val tag = bossTags[name]?.let { level.getEntity(it) }?.takeIf { isTag(it) }
+            ?: level.entitiesForRendering().firstOrNull { isTag(it) }?.also { bossTags[name] = it.id }
         val anchor = tag ?: mc.player ?: return null
         var best: WitherBoss? = null
         var bestD = 0.0
@@ -841,8 +847,13 @@ object DungeonSplits : Module(
     private fun ecBests(floor: String?): StringSetting? =
         com.adm.features.ModuleManager.modules["sub splits"]?.settings?.get("Sub Split Bests $floor") as? StringSetting
 
-    private fun bests(floor: String?): MutableMap<String, Long> = SubSplitGrades.parseBests(
-        ecBests(floor)?.value ?: when (floor) { "F7" -> bestsF7; "M7" -> bestsM7; else -> "" })
+    @Volatile private var bestsParsed: Pair<String, Map<String, Long>> = "" to emptyMap()
+
+    private fun bests(floor: String?): MutableMap<String, Long> {
+        val text = ecBests(floor)?.value ?: when (floor) { "F7" -> bestsF7; "M7" -> bestsM7; else -> "" }
+        val cached = bestsParsed.takeIf { it.first == text } ?: (text to SubSplitGrades.parseBests(text)).also { bestsParsed = it }
+        return HashMap(cached.second)
+    }
 
     private fun saveBests(floor: String?, bests: Map<String, Long>) {
         val text = SubSplitGrades.formatBests(bests)
