@@ -13,8 +13,8 @@ import com.adm.features.impl.boss.WitherDragons
 import com.adm.utils.Colors
 import com.adm.utils.alert
 import com.adm.utils.itemId
-import com.adm.utils.loreString
 import com.adm.utils.modMessage
+import com.adm.utils.ServerUtils
 import com.adm.utils.sendCommand
 import com.adm.utils.render.textDim
 import com.adm.utils.strength
@@ -23,6 +23,7 @@ import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket
 import net.minecraft.resources.Identifier
 import net.minecraft.sounds.SoundEvents
+import kotlin.math.abs
 
 object Ragnarock : Module(
     name = "Ragnarock",
@@ -44,9 +45,9 @@ object Ragnarock : Module(
     private const val BUFF_TICKS = 200
 
     private var tick = 0L
+    private var clicked = -1L
     private var castStart = -1L
     private var buffStart = -1L
-    private var readyAt = 0L
 
     private fun hudText(): String? {
         if (castStart >= 0) return "§eRag: §fcasting ${((CHANNEL_TICKS - (tick - castStart)).coerceAtLeast(0) / 20f).toFixed(2)}s"
@@ -58,58 +59,66 @@ object Ragnarock : Module(
         return if (lead > 0) "§6Rag in §f${(lead / 20f).toFixed(2)}s" else "§aRag now!"
     }
 
-    private val cooldownLine = Regex("^This ability is on cooldown for (\\d+)s\\.$")
-    private val cooldownLore = Regex("Cooldown: (\\d+)s")
-
+    // Hypixel only starts a cast it takes (off cooldown, with the mana), and then clicks a lever at you on that tick
+    // and each second after; it lands with a wolf's death 60 ticks after the first lever.
+    private const val LEVER_PITCH = 2f
+    private const val LEVER_VOLUME = 0.55f
     private const val CAST_PITCH = 1.4920635f
 
-    // The cast plays a wolf death sound at this pitch; any wolf variant's death sound counts.
     private val castSounds: Set<Identifier> by lazy {
         SoundEvents.WOLF_SOUNDS.values.mapTo(HashSet()) { it.adultSounds().deathSound().value().location() }
     }
 
+    private fun near(x: Double, y: Double, z: Double, range: Double): Boolean =
+        (mc.player?.distanceToSqr(x, y, z) ?: return false) <= range * range
+
+    private fun cancelled() {
+        clicked = -1
+        if (castStart < 0) return
+        castStart = -1
+        if (cancelAlert) alert("§cRagnarock Cancelled!")
+    }
+
     init {
         on<MessageEvent.Chat> {
-            if (message.startsWith("Ragnarock was cancelled due to ") &&
-                (message == "Ragnarock was cancelled due to being hit!" || message == "Ragnarock was cancelled due to taking damage!")
-            ) {
-                castStart = -1
-                if (cancelAlert) alert("§cRagnarock Cancelled!")
-            }
-            cooldownLine.matchEntire(message)?.let {
-                castStart = -1
-                readyAt = tick + it.groupValues[1].toLong() * 20
-            }
+            if (message == "Ragnarock was cancelled due to being hit!" || message == "Ragnarock was cancelled due to taking damage!") cancelled()
+        }
+
+        on<MessageEvent.Overlay> {
+            if ("CANCELLED" in message) cancelled()
         }
 
         onSend<ServerboundUseItemPacket> {
-            val held = mc.player?.mainHandItem ?: return@onSend
-            if (castStart >= 0 || buffStart >= 0 || tick < readyAt || held.itemId != "RAGNAROCK_AXE") return@onSend
-            castStart = tick
-            // a second short, so a cooldown reduction never hides a real cast
-            val cooldown = held.loreString.firstNotNullOfOrNull { cooldownLore.find(it)?.groupValues?.get(1)?.toLongOrNull() } ?: 0L
-            readyAt = tick + (cooldown - 1).coerceAtLeast(0) * 20
+            if (mc.player?.mainHandItem?.itemId == "RAGNAROCK_AXE") clicked = tick
         }
 
         on<TickEvent.Server> {
             tick++
-            if (castStart >= 0 && (tick - castStart > CHANNEL_TICKS + 20 || mc.player?.mainHandItem?.itemId != "RAGNAROCK_AXE")) castStart = -1
+            if (castStart >= 0 && tick - castStart > CHANNEL_TICKS + 40) castStart = -1
             if (buffStart >= 0 && tick - buffStart >= BUFF_TICKS) buffStart = -1
         }
 
         on<LevelEvent.Load> {
+            clicked = -1
             castStart = -1
             buffStart = -1
         }
 
         onReceive<ClientboundSoundPacket> {
-            if (pitch != CAST_PITCH || sound.value().location() !in castSounds) return@onReceive
-            val held = mc.player?.mainHandItem ?: return@onReceive
-            if (held.itemId != "RAGNAROCK_AXE") return@onReceive
+            if (abs(pitch - LEVER_PITCH) < 0.01f && abs(volume - LEVER_VOLUME) < 0.01f && sound.value().location().path == "block.lever.click" && near(x, y, z, 2.0)) {
+                // the first lever comes back within a round trip of the click; later ones, or anyone else's, don't start one
+                val trip = ServerUtils.averagePing / 50 + 1
+                if (castStart < 0 && clicked >= 0 && tick - clicked <= trip + 3) castStart = tick
+                return@onReceive
+            }
+            if (pitch != CAST_PITCH || sound.value().location() !in castSounds || !near(x, y, z, 3.0)) return@onReceive
+            if (castStart < 0 && (clicked < 0 || tick - clicked > CHANNEL_TICKS + 40)) return@onReceive
             castStart = -1
+            clicked = -1
             buffStart = tick
             if (castAlert) alert("§aCasted Rag")
             if (!strengthGainedMessage) return@onReceive
+            val held = mc.player?.mainHandItem?.takeIf { it.itemId == "RAGNAROCK_AXE" } ?: return@onReceive
             val gained = (held.strength * 1.5).toInt()
             modMessage("§7Gained strength: §4$gained")
             if (announceStrengthGained) sendCommand("pc Gained strength from Ragnarock: $gained")
