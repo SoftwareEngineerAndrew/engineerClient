@@ -279,6 +279,8 @@ fun GuiGraphicsExtractor.renderPlayers() {
         pose().popMatrix()
     }
 
+    // within a stratum fills sort under textured heads, so your marker gets its own
+    nextStratum()
     pose().pushMatrix()
     val (selfX, selfZ) = playerRenderPosition(self, IVec2(0, 0))
     pose().translate(selfX, selfZ)
