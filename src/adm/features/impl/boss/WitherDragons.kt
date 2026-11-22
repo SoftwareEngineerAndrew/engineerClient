@@ -23,7 +23,6 @@ import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.entity.EntityTypes
-import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.item.BowItem
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -109,9 +108,7 @@ object WitherDragons : Module(
 
         on<EntityEvent.SetData> {
             if (DungeonUtils.getF7Phase() != M7Phases.P5) return@on
-            val stand = entity as? ArmorStand
-            if (stand != null) { if (dragonHealth) DragonCheck.standUpdate(stand, synchedDataValues) }
-            else DragonCheck.dragonUpdate(this)
+            DragonCheck.dragonUpdate(this)
         }
 
         on<BlockUpdateEvent> {
@@ -170,9 +167,8 @@ object WitherDragons : Module(
 
     private fun RenderExtractEvent.drawDragons() {
         if (dragonHealth) for (tracked in DragonCheck.dragonHealthMap.values) {
-            val dragon = tracked.first
-            val hp = if (dragon.health > DragonCheck.SYNCED_HP) dragon.health else tracked.second
-            if (hp > 0 && !dragon.isRemoved && !dragon.isDeadOrDying) drawText(healthTexts(hp.toDouble()), dragon.renderPos, 5f, false)
+            val (dragon, hp) = tracked
+            if (hp > 0 && !dragon.isRemoved) drawText(healthTexts(hp.toDouble()), dragon.renderPos, 5f, false)
         }
 
         boxes.clear()
