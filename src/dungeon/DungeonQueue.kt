@@ -50,7 +50,7 @@ object DungeonQueue : Module(
     private val announceKick by BooleanSetting("Announce Kick", false, desc = "Announce when you get kicked from skyblock.")
 
     private val autoRequeue by BooleanSetting("Auto Requeue", false, desc = "Automatically starts a new dungeon at the end of a dungeon.")
-    private val requeueDelay by NumberSetting("Requeue Delay", 2, 0..30, 1, desc = "The delay in seconds before requeuing.", unit = "s").withDependency { autoRequeue }
+    private val requeueDelay by NumberSetting("Requeue Delay", 2, 0..30, 1, desc = "The delay in seconds before requeuing, skipped on alpha.", unit = "s").withDependency { autoRequeue }
     private val disablePartyLeave by BooleanSetting("Disable on leave/kick", true, desc = "Disables the requeue on party leave message.").withDependency { autoRequeue }
     private val requeueMinParty by NumberSetting("Requeue Min Party Size", 1, 1..5, 1, desc = "Skips the requeue when the party is smaller.").withDependency { autoRequeue }
 
@@ -134,8 +134,11 @@ object DungeonQueue : Module(
             when {
                 announceKick && (kicked || message.matches(timeoutExeceptionRegex)) -> sendCommand("pc I was kicked!")
                 autoRequeue && message.matches(extraStatsRegex) -> {
-                    if (!disableRequeue.also { disableRequeue = false }) schedule(requeueDelay * 20) {
-                        if (!disableRequeue && canRequeue()) sendCommand("instancerequeue")
+                    if (!disableRequeue.also { disableRequeue = false }) {
+                        if (onAlpha()) { if (canRequeue()) sendCommand("instancerequeue") }
+                        else schedule(requeueDelay * 20) {
+                            if (!disableRequeue && canRequeue()) sendCommand("instancerequeue")
+                        }
                     }
                 }
             }
@@ -239,6 +242,13 @@ object DungeonQueue : Module(
         if (!PartyUtils.isInParty) return requeueMinParty <= 1
         if (PartyUtils.partyLeader != null && !PartyUtils.isLeader()) return false
         return PartyUtils.members.size >= requeueMinParty
+    }
+
+    // alpha has no requeue cooldown
+    private fun onAlpha(): Boolean {
+        if (mc.hasSingleplayerServer()) return false
+        val host = mc.currentServer?.ip?.trim()?.lowercase()?.substringBefore(':')?.trimEnd('.') ?: return false
+        return host == "alpha.hypixel.net" || host.endsWith(".alpha.hypixel.net")
     }
 
     private fun manualRequeue() {
