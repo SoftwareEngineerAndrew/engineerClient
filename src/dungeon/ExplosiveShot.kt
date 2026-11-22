@@ -21,15 +21,17 @@ object ExplosiveShot : Module(
 ) {
     private val onlyInBoss by BooleanSetting("Only In Boss", true, desc = "Only says the damage during the boss fight.")
     private val timerOnlyInClear by BooleanSetting("Timer Only In Clear", false, desc = "Only shows the cooldown timer before the boss.")
+    private val timerLabel by BooleanSetting("Timer Label", true, desc = "Shows \"Explosive Shot:\" before the time.")
 
     private val timerHud by HUD("Explosive Shot Timer", "Time left on Explosive Shot's cooldown.", true, 420, 82, 1f) { example ->
         if (!example && timerOnlyInClear && (!DungeonUtils.inDungeons || DungeonUtils.inBoss)) return@HUD 0 to 0
         val left = if (example) 23400L else readyAt - System.currentTimeMillis()
         if (left <= 0) return@HUD 0 to 0
         val tenths = (left + 99) / 100
-        if (tenths != shownTenths) {
+        if (tenths != shownTenths || timerLabel != shownLabel) {
             shownTenths = tenths
-            shownText = "§6Explosive Shot: §f${tenths / 10}.${tenths % 10}s"
+            shownLabel = timerLabel
+            shownText = (if (timerLabel) "§6Explosive Shot: §f" else "§f") + "${tenths / 10}.${tenths % 10}s"
             shownWidth = mc.font.width(shownText)
         }
         text(mc.font, shownText, 0, 0, Colors.WHITE.rgba, true)
@@ -44,6 +46,7 @@ object ExplosiveShot : Module(
 
     private var readyAt = 0L
     private var shownTenths = -1L
+    private var shownLabel = true
     private var shownText = ""
     private var shownWidth = 0
 
