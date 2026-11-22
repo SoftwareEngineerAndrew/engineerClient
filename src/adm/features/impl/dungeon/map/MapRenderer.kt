@@ -38,6 +38,7 @@ private val whiteIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/w
 private val questionIcon = Identifier.fromNamespaceAndPath("engineerclient", "map/question.png")
 private val lcmGreen = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/green_check.png")
 private val lcmWhite = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/white_check.png")
+private val lcmSelfMarker = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/self_marker.png")
 private val lcmCross = Identifier.fromNamespaceAndPath("engineerclient", "dtmap/cross.png")
 private const val LCM_ICON = 10
 private val greyText = Color(100, 100, 100).rgba
@@ -358,9 +359,6 @@ private val vanillaMarker = arrayOf(
 private val legacyMarker = arrayOf(
     "....1...", "...1b1..", "..1beb1.", "..1efe1.", "..1efe1.", "..1beb1.", "...111..", "........",
 )
-private val lcmMarker = arrayOf(
-    "....1...", "...1f1..", "...1f1..", "..1fff1.", "..1fff1.", "..1fff1.", "..11111.", "........",
-)
 
 private fun GuiGraphicsExtractor.pixelMarker(rows: Array<String>, color: Int) {
     for (y in rows.indices) for (x in 0 until 8) {
@@ -382,13 +380,9 @@ fun GuiGraphicsExtractor.selfArrow(color: Int) {
     when (DungeonMap.pointerStyle) {
         DungeonMap.PointerStyle.VANILLA -> return pixelMarker(vanillaMarker, color)
         DungeonMap.PointerStyle.LEGACY -> return pixelMarker(legacyMarker, color)
-        DungeonMap.PointerStyle.LCM -> {
-            pose().pushMatrix()
-            pose().scale(1.25f)
-            pixelMarker(lcmMarker, DungeonMap.lcmPointerColor.rgba)
-            pose().popMatrix()
-            return
-        }
+        // dtMap's marker, flipped the way dtMap draws it
+        DungeonMap.PointerStyle.LCM ->
+            return blit(RenderPipelines.GUI_TEXTURED, lcmSelfMarker, 5, 5, 10f, 10f, -10, -10, 10, 10, DungeonMap.lcmPointerColor.rgba)
         DungeonMap.PointerStyle.ADM -> {}
     }
     pose().pushMatrix()
