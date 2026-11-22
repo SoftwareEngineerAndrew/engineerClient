@@ -139,7 +139,7 @@ object WaterBoardSolver {
     /** The world it was switched off in: a world load missed since then starts over. */
     private var offIn = java.lang.ref.WeakReference<Any?>(null)
 
-    private fun newWorld() { reset(); carried = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed; timed = false }
+    private fun newWorld() { reset(); timed = false }
 
     /**
      * ADM's Water Board solver stays quiet while this draws: once it has a plan, and from the first flip on (ADM's table no
@@ -149,14 +149,8 @@ object WaterBoardSolver {
 
     private fun active(): Boolean = on.value && PuzzleSolvers.enabled && DungeonUtils.inDungeons && !solved()
 
-    // ADM keeps the last run's status until the tab list names the puzzle again
-    private var carried = false
     private var timed = false
-    private fun solved(): Boolean {
-        val done = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed
-        if (!done) carried = false
-        return done && !carried
-    }
+    private fun solved(): Boolean = Puzzle.WATER_BOARD.status == PuzzleStatus.Completed
 
     private fun nowMs(): Double = System.nanoTime() / 1e6
 

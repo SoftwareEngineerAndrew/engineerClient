@@ -88,6 +88,7 @@ object DungeonListener {
             leapTeammates = emptyList()
             dungeonTeammates.clear()
             puzzles.clear()
+            Puzzle.entries.forEach { it.status = null; it.player = null }
             inBoss = false
             floor = null
             paul = false
