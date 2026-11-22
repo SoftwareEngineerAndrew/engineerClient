@@ -13,6 +13,7 @@ import com.adm.utils.render.BoxBatch
 import com.adm.utils.render.BoxStyle
 import com.adm.utils.render.drawBoxes
 import com.adm.utils.render.drawLine
+import com.adm.utils.render.drawTracer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
@@ -87,6 +88,22 @@ object BeamsSolver {
         }
         event.drawBoxes(batch)
         if (beamsTracer) for (i in tracers.indices) event.drawLine(tracers[i], color = colors[i], depth = false)
+    }
+
+    // The selected lantern's partner, or else the nearest lantern of a pair still to link.
+    fun tracer(event: RenderExtractEvent, color: Color) {
+        if (DungeonUtils.currentRoomName != "Creeper Beams") return
+        val level = mc.level ?: return
+        val player = mc.player ?: return
+        var to = selected?.let { partners[it] }?.takeIf { level.getBlockState(it).block == Blocks.SEA_LANTERN }
+        if (to == null) {
+            var best = Double.MAX_VALUE
+            for ((a, pair) in currentLanternPairs) for (pos in arrayOf(a, pair.first)) {
+                val d = player.distanceToSqr(pos.center)
+                if (d < best) { best = d; to = pos }
+            }
+        }
+        event.drawTracer((to ?: return).center, color, false)
     }
 
     fun onBlockChange(event: BlockUpdateEvent) {

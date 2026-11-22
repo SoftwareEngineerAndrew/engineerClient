@@ -10,6 +10,7 @@ import com.adm.utils.Color
 import com.adm.utils.modMessage
 import com.adm.utils.render.BoxStyle
 import com.adm.utils.render.drawStyledBox
+import com.adm.utils.render.drawTracer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.world.phys.AABB
@@ -119,6 +120,11 @@ object BoulderSolver {
         }
         val count = if (showAllBoulderClicks) faces.size else 1
         for (i in 0 until count) event.drawStyledBox(faces[i], boulderColor, boulderStyle, false)
+    }
+
+    fun tracer(event: RenderExtractEvent, color: Color) {
+        if (faces.isEmpty() || plan.isEmpty() || DungeonUtils.currentRoomName != "Boulder") return
+        event.drawTracer(faces[0].center, color, false)
     }
 
     fun reset() {

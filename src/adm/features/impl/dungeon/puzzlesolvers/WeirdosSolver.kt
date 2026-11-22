@@ -3,9 +3,11 @@ package com.adm.features.impl.dungeon.puzzlesolvers
 import com.adm.AdmMod.mc
 import com.adm.events.RenderExtractEvent
 import com.adm.utils.Color
+import com.adm.utils.center
 import com.adm.utils.playSoundAtPlayer
 import com.adm.utils.render.BoxStyle
 import com.adm.utils.render.drawStyledBox
+import com.adm.utils.render.drawTracer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import net.minecraft.core.BlockPos
 import net.minecraft.sounds.SoundEvents
@@ -37,6 +39,11 @@ object WeirdosSolver {
         wrongPositions.forEach {
             event.drawStyledBox(AABB(it), weirdosWrongColor, weirdosStyle)
         }
+    }
+
+    fun tracer(event: RenderExtractEvent, color: Color) {
+        if (DungeonUtils.currentRoomName != "Three Weirdos") return
+        correctPos?.let { event.drawTracer(it.center, color, false) }
     }
 
     fun isWrongClick(pos: BlockPos): Boolean {

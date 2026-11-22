@@ -9,6 +9,7 @@ import com.adm.utils.NameMemo
 import com.adm.utils.render.BoxStyle
 import com.adm.utils.render.drawLine
 import com.adm.utils.render.drawStyledBox
+import com.adm.utils.render.drawTracer
 import com.adm.utils.sendCommand
 import com.adm.utils.skyblock.dungeon.DungeonListener
 import com.adm.utils.skyblock.dungeon.DungeonUtils
@@ -167,6 +168,11 @@ object BlazeSolver {
             if (blazeLineNext && i in 1..blazeLineAmount)
                 event.drawLine(listOf(blazes[i - 1].stand.boundingBox.center, aabb.center), color = color, thickness = blazeLineWidth, depth = true)
         }
+    }
+
+    fun tracer(event: RenderExtractEvent, color: Color) {
+        if (blazes.isEmpty() || !inBlazeRoom) return
+        event.drawTracer(box(blazes[0].stand).center, color, false)
     }
 
     // Each blaze has to be hit after every one before it: arrows already flying count, and they land first only on an earlier tick.

@@ -62,14 +62,18 @@ object PuzzleSolvers : Module(
     private val blazeSpotColor by ColorSetting("Standing Spot Color", Colors.MINECRAFT_AQUA.withAlpha(.5f), true, desc = "Color of the standing spot.").withDependency { blazeSolver && blazeDropDown && blazeSpot }
     private val blazeSendComplete by BooleanSetting("Send Complete", false, desc = "Send complete message.").withDependency { blazeSolver && blazeDropDown }
     private val hideBlazes by BooleanSetting("Hide Blazes", true, desc = "Hides the blazes while the solver is active.").withDependency { blazeSolver && blazeDropDown }
+    private val blazeTracer by BooleanSetting("Blaze Tracer", false, desc = "Shows a tracer to the next blaze to shoot.").withDependency { blazeSolver && blazeDropDown }
+    private val blazeTracerColor by ColorSetting("Blaze Tracer Color", Colors.MINECRAFT_GREEN, true, desc = "Color for the blaze tracer.").withDependency { blazeTracer && blazeSolver && blazeDropDown }
     val blazeBlockWrong by BooleanSetting("Blaze Block Wrong Shots", true, desc = "Blocks bow shots that would hit a blaze out of order.").withDependency { blazeDropDown }
     private val blazeReset by ActionSetting("Reset Blaze", desc = "Resets the solver.") { BlazeSolver.reset() }.withDependency { blazeSolver && blazeDropDown }
 
     private val beamsDropDown by DropdownSetting("Creeper Beams", desc = "Shows settings for the Creeper Beams puzzle solver.")
     private val beamsSolver by BooleanSetting("Creeper Beams Solver", true, desc = "Shows you the solution for the Creeper Beams puzzle.").withDependency { beamsDropDown }
     private val beamStyle by SelectorSetting("Beams Style", BoxStyle.FILLED_OUTLINE, desc = "Whether or not the box should be filled.").withDependency { beamsSolver && beamsDropDown }
-    private val beamsTracer by BooleanSetting("Beams Tracer", false, desc = "Shows a tracer to the next lantern.").withDependency { beamsSolver && beamsDropDown }
+    private val beamsTracer by BooleanSetting("Beams Tracer", false, desc = "Draws a line between each lantern pair.").withDependency { beamsSolver && beamsDropDown }
     private val beamsAlpha by NumberSetting("Beams Color Alpha", .7f, 0.0..1.0, .05f, desc = "The alpha of the color.").withDependency { beamsSolver && beamsDropDown }
+    private val beamsNextTracer by BooleanSetting("Next Lantern Tracer", false, desc = "Shows a tracer to the next lantern to hit.").withDependency { beamsSolver && beamsDropDown }
+    private val beamsNextTracerColor by ColorSetting("Next Lantern Tracer Color", Colors.MINECRAFT_GREEN, true, desc = "Color for the next lantern tracer.").withDependency { beamsNextTracer && beamsSolver && beamsDropDown }
     val beamsBlockWrong by BooleanSetting("Beams Block Wrong Hits", true, desc = "Blocks shots and punches on lanterns that aren't the solution's next one.").withDependency { beamsDropDown }
     private val beamsReset by ActionSetting("Reset Beams", desc = "Resets the solver.") { BeamsSolver.reset() }.withDependency { beamsSolver && beamsDropDown }
 
@@ -84,6 +88,8 @@ object PuzzleSolvers : Module(
     private val weirdosColor by ColorSetting("Weirdos Correct Color", Colors.MINECRAFT_GREEN.withAlpha(0.7f), true, desc = "Color for the weirdos solver.").withDependency { weirdosSolver && weirdosDropDown }
     private val weirdosWrongColor by ColorSetting("Weirdos Wrong Color", Colors.MINECRAFT_RED.withAlpha(.7f), true,  desc = "Color for the incorrect Weirdos.").withDependency { weirdosSolver && weirdosDropDown }
     private val weirdosStyle by SelectorSetting("Weirdos Style", BoxStyle.FILLED_OUTLINE, desc = "Whether or not the box should be filled.").withDependency { weirdosSolver && weirdosDropDown }
+    private val weirdosTracer by BooleanSetting("Weirdos Tracer", false, desc = "Shows a tracer to the correct chest.").withDependency { weirdosSolver && weirdosDropDown }
+    private val weirdosTracerColor by ColorSetting("Weirdos Tracer Color", Colors.MINECRAFT_GREEN, true, desc = "Color for the weirdos tracer.").withDependency { weirdosTracer && weirdosSolver && weirdosDropDown }
     private val weirdosBlockWrong by BooleanSetting("Weirdos Block Wrong Clicks", true, desc = "Blocks opening a chest that isn't the right one.").withDependency { weirdosDropDown }
     private val weirdosReset by ActionSetting("Reset Weirdos", desc = "Resets the solver.") { WeirdosSolver.reset() }.withDependency { weirdosSolver && weirdosDropDown }
 
@@ -95,6 +101,8 @@ object PuzzleSolvers : Module(
         val text = if (quizSolver) QuizSolver.timerText(example) else null
         if (text != null) textDim(text, 0, 0, Colors.WHITE) else 0 to 0
     }.withDependency { quizDropdown && quizSolver }
+    private val quizTracer by BooleanSetting("Quiz Tracer", false, desc = "Shows a tracer to the correct answer.").withDependency { quizDropdown && quizSolver }
+    private val quizTracerColor by ColorSetting("Quiz Tracer Color", Colors.MINECRAFT_GREEN, true, desc = "Color for the quiz tracer.").withDependency { quizDropdown && quizSolver && quizTracer }
     private val quizBlockWrong by BooleanSetting("Quiz Block Wrong Clicks", true, desc = "Blocks clicking an answer that isn't the right one.").withDependency { quizDropdown }
     private val quizReset by ActionSetting("Reset Quiz", desc = "Resets the solver.") { QuizSolver.reset() }.withDependency { quizDropdown && quizSolver }
 
@@ -104,6 +112,8 @@ object PuzzleSolvers : Module(
     private val showAllBoulderClicks by BooleanSetting("Show All Boulder Clicks", false, desc = "Shows all the clicks or only the first.").withDependency { boulderDropDown && boulderSolver }
     private val boulderTarget by SelectorSetting("Boulder Highlight", BoulderSolver.Target.BOULDER, desc = "Highlights the boulder or the button and sign you click.").withDependency { boulderDropDown && boulderSolver }
     private val boulderStyle by SelectorSetting("Boulder Style", BoxStyle.OUTLINE, desc = "Whether or not the box should be filled.").withDependency { boulderDropDown && boulderSolver }
+    private val boulderTracer by BooleanSetting("Boulder Tracer", false, desc = "Shows a tracer to the next click.").withDependency { boulderDropDown && boulderSolver }
+    private val boulderTracerColor by ColorSetting("Boulder Tracer Color", Colors.MINECRAFT_GREEN, true, desc = "Color for the boulder tracer.").withDependency { boulderDropDown && boulderSolver && boulderTracer }
     private val boulderBlockWrong by BooleanSetting("Boulder Block Wrong Clicks", true, desc = "Blocks pushes that would leave Boulder unsolvable.").withDependency { boulderDropDown }
     private val boulderColor by ColorSetting("Boulder Color", Colors.MINECRAFT_GREEN, true, desc = "The color of the box.").withDependency { boulderDropDown && boulderSolver }
 
@@ -255,6 +265,11 @@ object PuzzleSolvers : Module(
             if (boulderSolver) BoulderSolver.onRenderWorld(this, showAllBoulderClicks, boulderTarget, boulderStyle, boulderColor)
             if (blazeSolver)   BlazeSolver.onRenderWorld(this, blazeLineNext, blazeLineAmount, blazeStyle, blazeFirstColor, blazeSecondColor, blazeThirdColor, blazeAllColor, blazeLineWidth)
             if (blazeSolver && blazeSpot) BlazeSolver.renderSpot(this, blazeSpotColor)
+            if (weirdosSolver && weirdosTracer) WeirdosSolver.tracer(this, weirdosTracerColor)
+            if (boulderSolver && boulderTracer) BoulderSolver.tracer(this, boulderTracerColor)
+            if (blazeSolver && blazeTracer) BlazeSolver.tracer(this, blazeTracerColor)
+            if (beamsSolver && beamsNextTracer) BeamsSolver.tracer(this, beamsNextTracerColor)
+            if (quizSolver && quizTracer) QuizSolver.tracer(this, quizTracerColor)
             if (beamsSolver)   BeamsSolver.onRenderWorld(this, beamStyle, beamsTracer, beamsAlpha)
             if (quizSolver)    QuizSolver.onRenderWorld(this, quizColor, quizDepth)
             if (icePathRoute)  IcePathSolver.onRenderWorld(this, icePathColor, icePathNextColor)

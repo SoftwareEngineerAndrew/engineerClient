@@ -7,6 +7,7 @@ import com.adm.utils.Color
 import com.adm.utils.JsonResourceLoader
 import com.adm.utils.render.drawBeaconBeam
 import com.adm.utils.render.drawFilledBox
+import com.adm.utils.render.drawTracer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.toFixed
 import net.minecraft.core.BlockPos
@@ -127,6 +128,11 @@ object QuizSolver {
             event.drawFilledBox(box, quizColor, depth = quizDepth)
             event.drawBeaconBeam(below[i]!!, quizColor)
         }
+    }
+
+    fun tracer(event: RenderExtractEvent, color: Color) {
+        if (triviaAnswers == null || DungeonUtils.currentRoomName != "Quiz") return
+        for (i in 0 until 3) if (correct[i]) belowBox[i]?.let { event.drawTracer(it.center, color, false) }
     }
 
     fun isWrongClick(pos: BlockPos): Boolean {
