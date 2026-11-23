@@ -68,7 +68,8 @@ object LocationUtils {
         }
 
         onReceive<ClientboundSetPlayerTeamPacket> (EventPriority.LOW) {
-            if (!isCurrentArea(Island.Unknown)) return@onReceive
+            // Not tied to the area: the Mod API usually knows it before the sidebar comes, and the lobby id still has to be read.
+            if (lobbyId != null) return@onReceive
             val text = parameters.getOrNull()?.let { it.playerPrefix.string.plus(it.playerSuffix.string).noControlCodes } ?: return@onReceive
 
             lobbyRegex.find(text)?.groupValues?.get(1)?.let { lobbyId = it }
