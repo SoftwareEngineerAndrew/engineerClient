@@ -112,6 +112,15 @@ object Terminals : Module(
     val waypointsThroughWalls by BooleanSetting("Waypoints Through Walls", true, desc = "Waypoints show through walls.").withDependency { statusDrop && waypoints }
     val hideDefaultNames by BooleanSetting("Hide Default Names", true, desc = "Hides Hypixel's names over inactive ones.").withDependency { statusDrop }
 
+    // ------------------------------------------------------------------ Gate Warning
+    private val gateDrop by DropdownSetting("Gate Warning", false, desc = "A warning when a section is nearly done and its gate is still up.")
+    val gateWarning by BooleanSetting("Enable Gate Warning", false, desc = "Warns in sections 1-3 when the gate isn't blown near the end.").withDependency { gateDrop }
+    val gateWarningLeft by NumberSetting("Tasks Left", 2, 1..6, 1, desc = "Warns with this many tasks left (2: 5/7, 6/8).").withDependency { gateDrop }
+    val gateWarningTime by NumberSetting("Warning Duration", 3f, 0.5..10.0, 0.5, desc = "How long it shows, unless the gate goes first.", unit = "s").withDependency { gateDrop }
+    private val gateWarningHud by HUD("Gate Warning", "The gate warning text.", true, 400, 150, 2f) { GateWarning.draw(this, it) }
+    val gateWarningSound by BooleanSetting("Gate Warning Sound", true, desc = "A sound with the warning.").withDependency { gateDrop }
+    val gateSound = createSoundSettings("Gate Sound", "block.note_block.pling") { gateDrop && gateWarningSound }
+
     // ------------------------------------------------------------------ Titles
     private val titlesDrop by DropdownSetting("Titles", false, desc = "Custom completion titles.")
     val titles by BooleanSetting("Enable Titles", false, desc = "Replaces Hypixel's terminal, lever and device titles.").withDependency { titlesDrop }
@@ -156,6 +165,7 @@ object Terminals : Module(
     val soundsOn get() = enabled && sounds
     val statusOn get() = enabled && status
     val titlesOn get() = enabled && titles
+    val gateWarningOn get() = enabled && gateWarning
     val hitboxesOn get() = enabled && hitboxes
 
     @JvmStatic
@@ -191,6 +201,7 @@ object Terminals : Module(
         TermSounds.install()
         TermStatus.install()
         TermTitles.install()
+        GateWarning.install()
         TermProgress.install()
         TerminalHitboxes.install()
     }
