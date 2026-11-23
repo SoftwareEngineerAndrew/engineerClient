@@ -3,6 +3,7 @@ package com.engineerclient.misc
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.HUDSetting
 import com.adm.clickgui.settings.impl.KeybindSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.features.ModuleManager
 import com.engineerclient.EngineerClient
 import com.google.gson.Gson
@@ -39,6 +40,7 @@ object ModImport {
                 s is BooleanSetting && (v == null || (v as? JsonPrimitive)?.isBoolean == true) -> s.value = v?.asBoolean ?: true
                 s is HUDSetting && v == null -> s.value.enabled = true
                 s is KeybindSetting && v != null -> s.read(v, gson)
+                s is SelectorSetting<*> && v != null -> s.read(v, gson)
                 step.loose -> return false
             }
         }

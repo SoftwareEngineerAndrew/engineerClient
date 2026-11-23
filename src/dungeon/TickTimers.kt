@@ -11,6 +11,7 @@ import com.adm.clickgui.settings.impl.ColorSetting
 import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.HudElement
 import com.adm.clickgui.settings.impl.NumberSetting
+import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.events.BlockUpdateEvent
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
@@ -126,8 +127,7 @@ object TickTimers : Module(
 
     private val goldorDropdown by DropdownSetting("Goldor", desc = "Goldor timer and Exit Core Text.")
     private val goldorOn by BooleanSetting("Goldor Timer", true, desc = "Time since Goldor's first line, green / gold / red through each 3 s death tick.").withDependency { goldorDropdown }
-    private val deathTicks by BooleanSetting("Goldor In Death Ticks", false, desc = "Shows only the time within each 3 s death tick.").withDependency { goldorDropdown && goldorOn }
-    private val goldorUp by BooleanSetting("Goldor Tick Up", false, desc = "Within each death tick, counts up instead of down from 3 s.").withDependency { goldorDropdown && goldorOn && deathTicks }
+    private val goldorCount by SelectorSetting("Goldor Count", GoldorCount.PHASE, desc = "The whole phase, or only each 3 s death tick counting down or up.").withDependency { goldorDropdown && goldorOn }
     private val goldorHud by HUD("Goldor HUD", "The Goldor timer.", false, 400, 260, 2f) { example ->
         if (combine) return@HUD 0 to 0
         if (example) return@HUD draw(fmt(0), GREEN)
@@ -157,6 +157,11 @@ object TickTimers : Module(
     private val displayInTicks by BooleanSetting("Display in Ticks", false, desc = "Fire Freeze in ticks instead of seconds.").withDependency { otherDropdown && fireFreezeHud.enabled }
     private val symbolDisplay by BooleanSetting("Display Symbol", true, desc = "Displays s or t after Fire Freeze's time.").withDependency { otherDropdown && fireFreezeHud.enabled }
     private val showPrefix by BooleanSetting("Show Prefix", true, desc = "Shows Fire Freeze's prefix.").withDependency { otherDropdown && fireFreezeHud.enabled }
+
+    enum class GoldorCount(private val label: String) {
+        PHASE("Full Phase"), DOWN("3s Down"), UP("3s Up");
+        override fun toString() = label
+    }
 
     private val YELLOW = Color(0xFFFFFF55.toInt())
     private val GREEN = Color(0xFF55FF55.toInt())
@@ -266,7 +271,11 @@ object TickTimers : Module(
         if (!goldorOn || phase != 3) return null
         val seconds = goldorTicks / 20.0
         val mod = seconds % 3
-        val shown = if (!deathTicks) seconds else if (goldorUp) mod else 3 - mod
+        val shown = when (goldorCount) {
+            GoldorCount.PHASE -> seconds
+            GoldorCount.DOWN -> 3 - mod
+            GoldorCount.UP -> mod
+        }
         return fmt(shown) to if (mod < 1) GREEN else if (mod < 2) GOLD else RED
     }
 

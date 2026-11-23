@@ -43,7 +43,10 @@ object ImportTables {
         }
         for ((module, parts) in PARTS) if (parts.any { it in odinOn }) for (p in parts) if (p !in odinOn) steps += Step("$module>$p", JsonPrimitive(false))
         ((read(File(dir, "devonianConfig.json")) as? JsonObject)?.get("config") as? JsonObject)?.let { c -> DEVONIAN.forEach { (k, to) -> if (isTrue(c[k])) steps += Step(to) } }
-        (read(File(dir, "blade-addons.json")) as? JsonObject)?.let { c -> BLADE.forEach { (k, to) -> if (isTrue(c[k])) steps += Step(to) } }
+        (read(File(dir, "blade-addons.json")) as? JsonObject)?.let { c ->
+            BLADE.forEach { (k, to) -> if (isTrue(c[k])) steps += Step(to) }
+            if (isTrue(c["inDeathTicks"])) steps += Step("Tick Timers>Goldor Count", JsonPrimitive(if (isTrue(c["makeGoldorTickUp"])) "UP" else "DOWN"))
+        }
         return steps
     }
 
@@ -289,8 +292,6 @@ object ImportTables {
         "tickDownStormTickTimer" to "Tick Timers>Storm Tick Down",
         "enableStormDeathTime" to "Tick Timers>Storm Death Time",
         "enableGoldorTickTimer" to "Tick Timers>Goldor Timer",
-        "inDeathTicks" to "Tick Timers>Goldor In Death Ticks",
-        "makeGoldorTickUp" to "Tick Timers>Goldor Tick Up",
         "enableTermStartTimer" to "Tick Timers>Term Start Timer",
         "combineTickTimers" to "Tick Timers>Combine Timers",
         "enablePositionalMessages" to "Positional Messages>Positional Messages",

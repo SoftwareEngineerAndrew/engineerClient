@@ -269,6 +269,17 @@ object ConfigMigration {
 
 
 
+        // Goldor In Death Ticks and Goldor Tick Up are Goldor Count.
+        module(modules, "Tick Timers")?.let {
+            val s = settings(it)
+            val ticks = s.remove("Goldor In Death Ticks") ?: return@let
+            val up = s.remove("Goldor Tick Up")?.asBoolean == true
+            if (!s.has("Goldor Count")) s.addProperty("Goldor Count", if (!ticks.asBoolean) "PHASE" else if (up) "UP" else "DOWN")
+            changed = true
+        }
+
+
+
         // Legit Zpew is Etherwarp's Legit Zpew setting; Etherwarp is switched on where it wasn't, with its guess box off.
 
         module(modules, "Legit Zpew")?.let { lz ->
