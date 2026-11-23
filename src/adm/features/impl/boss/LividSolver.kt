@@ -31,6 +31,7 @@ object LividSolver : Module(
         val ticks = if (example) INVULN_TICKS else if (inF5Boss() && invulnTicks > 0) invulnTicks else return@HUD 0 to 0
         textDim(timerText(ticks), 0, 0)
     }
+    private val timerPrefix by BooleanSetting("Timer Prefix", true, desc = "\"Livid:\" in front of the timer.")
     private val highlightColor by ColorSetting("Highlight Color", Colors.MINECRAFT_LIGHT_PURPLE, true, desc = "Color of the highlight box around Livid.")
     private val tracer by BooleanSetting("Tracer", false, desc = "Draws a line to the correct Livid.")
     private val tracerColor by ColorSetting("Tracer Color", Colors.MINECRAFT_LIGHT_PURPLE, true, desc = "Color of the tracer.").withDependency { tracer }
@@ -75,7 +76,7 @@ object LividSolver : Module(
     private var shownPrefix = true
 
     private fun timerText(ticks: Int): String {
-        val prefix = com.adm.features.impl.render.ClickGUIModule.timerPrefixes
+        val prefix = com.adm.features.impl.render.ClickGUIModule.timerPrefixes && timerPrefix
         if (ticks != shownTicks || prefix != shownPrefix) {
             val color = if (ticks > 260) "§a" else if (ticks > 130) "§e" else "§c"
             shownText = "${if (prefix) "§bLivid: " else ""}$color${ticks}t "

@@ -346,7 +346,7 @@ object TickTimers : Module(
 
     private fun formatTimer(time: Int, max: Int, prefix: String): String {
         val timeDisplay = if (displayInTicks) "$time${if (symbolDisplay) "t" else ""}" else "${fixed(time.toDouble())}${if (symbolDisplay) "s" else ""}"
-        return "${if (showPrefix) "$prefix " else ""}${colour(time, max)}$timeDisplay"
+        return "${if (showPrefix && com.adm.features.impl.render.ClickGUIModule.timerPrefixes) "$prefix " else ""}${colour(time, max)}$timeDisplay"
     }
 
     private fun chat(message: String) {

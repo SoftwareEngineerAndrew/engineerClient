@@ -47,6 +47,8 @@ object DungeonQueue : Module(
         text(mc.font, line.text, 0, 0, -1)
         line.size
     }
+    private val warpCooldownPrefix by BooleanSetting("Warp Cooldown Prefix", true, desc = "\"Warp Cooldown:\" in front of its time.")
+    private val kickedPrefix by BooleanSetting("Kicked Timer Prefix", true, desc = "\"Time kicked:\" in front of its time.")
     private val announceKick by BooleanSetting("Announce Kick", false, desc = "Announce when you get kicked from skyblock.")
 
     private val autoRequeue by BooleanSetting("Auto Requeue", false, desc = "Automatically starts a new dungeon at the end of a dungeon.")
@@ -85,17 +87,17 @@ object DungeonQueue : Module(
     private val instanceRegex = Regex("(?:\\[[^]]+] )?\\w+ entered (?:MM )?\\w+ Catacombs, (?:Floor \\w+|Entrance)!")
     private val warpRegex = Regex("^Sending to server .+")
 
-    private val cooldownLine = TimerLine("§bWarp Cooldown: §f", 10)
-    private val kickedLine = TimerLine("§5Time kicked: §f", 100)
+    private val cooldownLine = TimerLine("§bWarp Cooldown: §f", 10) { warpCooldownPrefix }
+    private val kickedLine = TimerLine("§5Time kicked: §f", 100) { kickedPrefix }
 
-    private class TimerLine(private val prefix: String, private val scale: Int) {
+    private class TimerLine(private val prefix: String, private val scale: Int, private val shown: () -> Boolean) {
         private var units = Long.MIN_VALUE
         private var prefixed = true
         var text = ""
         var size = 0 to 9
 
         fun at(value: Long): TimerLine {
-            val withPrefix = com.adm.features.impl.render.ClickGUIModule.timerPrefixes
+            val withPrefix = com.adm.features.impl.render.ClickGUIModule.timerPrefixes && shown()
             if (value == units && withPrefix == prefixed) return this
             units = value
             prefixed = withPrefix

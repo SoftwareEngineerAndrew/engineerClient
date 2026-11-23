@@ -46,6 +46,7 @@ object BloodCamp : Module(
         textDim(moveText(ticks), 0, 0, Colors.MINECRAFT_RED)
     }
 
+    private val moveTimerPrefix by BooleanSetting("Move Timer Prefix", true, desc = "\"Move Timer:\" in front of the move HUD's time.")
     private val assistDropdown by DropdownSetting("Blood Assist Dropdown", desc = "Shows settings for rendering boxes on mobs spawning in the blood room.")
     private val bloodAssist by BooleanSetting("Blood Camp Assist", true, desc = "Draws boxes to spawning mobs in the blood room.").withDependency { assistDropdown }
 
@@ -125,7 +126,7 @@ object BloodCamp : Module(
     private var moveTextPrefix = true
 
     private fun moveText(ticks: Int): String {
-        val prefix = com.adm.features.impl.render.ClickGUIModule.timerPrefixes
+        val prefix = com.adm.features.impl.render.ClickGUIModule.timerPrefixes && moveTimerPrefix
         if (ticks != moveTextTicks || prefix != moveTextPrefix) {
             moveTextTicks = ticks
             moveTextPrefix = prefix

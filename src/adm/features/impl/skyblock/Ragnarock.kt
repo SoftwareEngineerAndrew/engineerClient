@@ -35,6 +35,7 @@ object Ragnarock : Module(
     private val announceStrengthGained by BooleanSetting("Announce strength", false, "Announce gained strength in party chat").withDependency { strengthGainedMessage }
 
     private val ragDragonTimer by BooleanSetting("Rag in dragon spawn", true, "Shows when to rag for the next M7 dragon.")
+    private val timerPrefix by BooleanSetting("Timer Prefix", true, "\"Rag:\" in front of the timer.")
     private val hud by HUD("Rag Timer HUD", "Shows the Ragnarock channel and strength time.") { example ->
         if (example) return@HUD textDim(rag("§e") + "§fcasting 2.15s", 0, 0, Colors.WHITE)
         val text = hudText() ?: return@HUD 0 to 0
@@ -49,7 +50,7 @@ object Ragnarock : Module(
     private var castStart = -1L
     private var buffStart = -1L
 
-    private fun rag(color: String) = if (com.adm.features.impl.render.ClickGUIModule.timerPrefixes) "${color}Rag: " else ""
+    private fun rag(color: String) = if (com.adm.features.impl.render.ClickGUIModule.timerPrefixes && timerPrefix) "${color}Rag: " else ""
 
     private fun hudText(): String? {
         if (castStart >= 0) return rag("§e") + "§fcasting ${((CHANNEL_TICKS - (tick - castStart)).coerceAtLeast(0) / 20f).toFixed(2)}s"

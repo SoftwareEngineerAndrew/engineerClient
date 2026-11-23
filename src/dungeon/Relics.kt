@@ -53,10 +53,11 @@ object Relics : Module(
     private val cauldronHighlight by BooleanSetting("Cauldron Highlight", true, desc = "Boxes your relic's cauldron, seen through walls.")
     private val cauldronTracer by BooleanSetting("Cauldron Tracer", false, desc = "Draws a line to your relic's cauldron.")
     private val spawnHud by HUD("Relic Spawn HUD", "Time until the relics appear, from Necron's death throes.") { example ->
-        if (example) return@HUD textDim(if (com.adm.features.impl.render.ClickGUIModule.timerPrefixes) "§dRelics: §a2.95s" else "§a2.95s", 0, 0, Colors.WHITE)
+        if (example) return@HUD textDim(if (com.adm.features.impl.render.ClickGUIModule.timerPrefixes && spawnPrefix) "§dRelics: §a2.95s" else "§a2.95s", 0, 0, Colors.WHITE)
         val t = spawnIn
-        if (!enabled || t <= 0) 0 to 0 else textDim((if (com.adm.features.impl.render.ClickGUIModule.timerPrefixes) spawnTexts else bareSpawnTexts)(t.toDouble()), 0, 0, Colors.WHITE)
+        if (!enabled || t <= 0) 0 to 0 else textDim((if (com.adm.features.impl.render.ClickGUIModule.timerPrefixes && spawnPrefix) spawnTexts else bareSpawnTexts)(t.toDouble()), 0, 0, Colors.WHITE)
     }
+    private val spawnPrefix by BooleanSetting("Relic Spawn Prefix", true, desc = "\"Relics:\" in front of the spawn time.")
     private val blockWrong by BooleanSetting("Block Wrong Cauldron", true, desc = "Right clicks on a cauldron that isn't your relic's do nothing.")
     private val allTimes by BooleanSetting("All Relic Times", true, desc = "Once all five relics are in, says in chat when each was placed.")
     private val leapHighlight by BooleanSetting("Relic Leap Highlight", true, desc = "Before P5, where the teammate below Necron's platform is in the leap menu.")
