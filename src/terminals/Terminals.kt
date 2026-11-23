@@ -126,6 +126,8 @@ object Terminals : Module(
     val titles by BooleanSetting("Enable Titles", false, desc = "Replaces Hypixel's terminal, lever and device titles.").withDependency { titlesDrop }
     val selfOnly by BooleanSetting("Self Only", false, desc = "Only your own.").withDependency { titlesDrop }
     val hideOthers by BooleanSetting("Hide Others", false, desc = "Hides teammates' titles, keeps your own.").withDependency { titlesDrop }
+    val hideAtPre4 by BooleanSetting("Hide At Pre4", false, desc = "No titles while standing on the 4th device.").withDependency { titlesDrop }
+    val hideAtSs by BooleanSetting("Hide At SS", false, desc = "No titles while at Simon Says.").withDependency { titlesDrop }
     val titleDuration by NumberSetting("Title Duration", 20, 5..100, 5, desc = "How long a title stays.", unit = " ticks").withDependency { titlesDrop }
     val useSubtitle by BooleanSetting("Use Subtitle", true, desc = "As a subtitle instead of a title.").withDependency { titlesDrop }
     val replaceTerminal by BooleanSetting("Replace Terminal", true, desc = "Terminal titles.").withDependency { titlesDrop }
@@ -200,7 +202,6 @@ object Terminals : Module(
         TermTimes.install()
         TermSounds.install()
         TermStatus.install()
-        TermTitles.install()
         GateWarning.install()
         TermProgress.install()
         TerminalHitboxes.install()

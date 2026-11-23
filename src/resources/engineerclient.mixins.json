@@ -69,6 +69,8 @@
     "ScoreboardDirtyMixin",
     "HudSidebarInvoker",
     "HudItemNameAccessor",
+    "HudTitleAccessor",
+    "TermTitleMixin",
     "ShovelPathMixin",
     "LavaAsWaterMixin",
     "TpMazeTeleportMixin",
