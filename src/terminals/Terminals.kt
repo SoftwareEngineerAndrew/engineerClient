@@ -114,10 +114,10 @@ object Terminals : Module(
 
     // ------------------------------------------------------------------ Gate Warning
     private val gateDrop by DropdownSetting("Gate Warning", false, desc = "A warning when a section is nearly done and its gate is still up.")
-    val gateWarning by BooleanSetting("Enable Gate Warning", false, desc = "Warns in sections 1-3 when the gate isn't blown near the end.").withDependency { gateDrop }
+    val gateWarning by BooleanSetting("Enable Gate Warning", true, desc = "Warns in sections 1-3 when the gate isn't blown near the end.").withDependency { gateDrop }
     val gateWarningLeft by NumberSetting("Tasks Left", 2, 1..6, 1, desc = "Warns with this many tasks left (2: 5/7, 6/8).").withDependency { gateDrop }
     val gateWarningTime by NumberSetting("Warning Duration", 3f, 0.5..10.0, 0.5, desc = "How long it shows, unless the gate goes first.", unit = "s").withDependency { gateDrop }
-    private val gateWarningHud by HUD("Gate Warning", "The gate warning text.", true, 400, 150, 2f) { GateWarning.draw(this, it) }
+    private val gateWarningHud by HUD("Gate Warning HUD", "The gate warning text.", true, 400, 150, 2f) { GateWarning.draw(this, it) }
     val gateWarningSound by BooleanSetting("Gate Warning Sound", true, desc = "A sound with the warning.").withDependency { gateDrop }
     val gateSound = createSoundSettings("Gate Sound", "block.note_block.pling") { gateDrop && gateWarningSound }
 

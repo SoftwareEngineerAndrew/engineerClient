@@ -269,6 +269,19 @@ object ConfigMigration {
 
 
 
+        // Gate Warning's HUD shared the dropdown's name, so the warning couldn't be switched on.
+        module(modules, "Terminals")?.let {
+            val s = settings(it)
+            val hud = s["Gate Warning"]?.takeIf { it.isJsonObject }?.asJsonObject ?: return@let
+            s.remove("Gate Warning")
+            hud.addProperty("enabled", true)
+            if (!s.has("Gate Warning HUD")) s.add("Gate Warning HUD", hud)
+            s.addProperty("Enable Gate Warning", true)
+            changed = true
+        }
+
+
+
         // Goldor In Death Ticks and Goldor Tick Up are Goldor Count.
         module(modules, "Tick Timers")?.let {
             val s = settings(it)
