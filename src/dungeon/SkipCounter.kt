@@ -22,32 +22,28 @@ import kotlin.math.ceil
  * lets you skip. Secrets are 40 points; every bonus point (crypts, Mimic, Prince, bats, Paul) lets a fortieth of the
  * needed secrets go. The bonus counted is the planned one until the run's own is higher.
  *
- * A room isn't left while anyone is in it, nor while someone who stepped from it into a dead end (yellow, a puzzle, a
- * room with no other door) is still in there: they'll walk back through it. It is once they leave the dead end any
- * other way (a leap), or walk back through it and out.
+ * A room isn't left while anyone is in it or past it (further from the entrance, through it): they'll walk back through
+ * it to get anywhere else. It is the moment nobody is past it any more: walked back out without its secrets, or a leap.
+ * The blood room holds nothing open: nobody walks back from it.
  */
 object SkipCounter {
-    /** Each player's room as last placed, and the room they're coming back through. */
+    /** Each player's room as last placed. */
     private val at = HashMap<String, DungeonRoom>()
-    private val holding = HashMap<String, DungeonRoom>()
     private val visited = HashSet<DungeonRoom>()
 
     fun install() {
         ClientTickEvents.END_CLIENT_TICK.register { EngineerClient.safely("skip counter") { tick() } }
-        on<LevelEvent.Load> { at.clear(); holding.clear(); visited.clear() }
+        on<LevelEvent.Load> { at.clear(); visited.clear() }
     }
 
     private fun tick() {
         if (!DungeonUtils.inDungeons || DungeonUtils.inBoss) return
         val me = mc.user.name
         for (p in DungeonUtils.dungeonTeammates) {
-            if (p.isDead) { at.remove(p.name); holding.remove(p.name); continue }
+            if (p.isDead) { at.remove(p.name); continue }
             val room = (if (p.name == me) DungeonUtils.currentRoom else roomOf(p)) ?: continue
-            val was = at.put(p.name, room)
+            at[p.name] = room
             visited += room
-            if (was == null || was === room) continue
-            holding.remove(p.name)
-            if (deadEndOff(room, was)) holding[p.name] = was
         }
     }
 
@@ -59,23 +55,38 @@ object SkipCounter {
         return ClearBreakdown.roomAt(x, z)
     }
 
-    /** [room] is reached only through [from]: yellow and puzzles always, any other room when its only door is to [from]. */
-    private fun deadEndOff(room: DungeonRoom, from: DungeonRoom): Boolean {
-        val mine = room.tiles.mapTo(HashSet()) { it.z * 6 + it.x }
-        val theirs = from.tiles.mapTo(HashSet()) { it.z * 6 + it.x }
-        var toFrom = false
-        var elsewhere = false
+    /** Each room's neighbour on the way back to the entrance, by the doors on the map. */
+    private fun towardEntrance(): Map<DungeonRoom, DungeonRoom> {
+        val start = DungeonScan.rooms.firstOrNull { it.type == RoomType.ENTRANCE } ?: return emptyMap()
+        val links = HashMap<DungeonRoom, MutableSet<DungeonRoom>>()
         for (d in DungeonScan.doors.values) {
-            val other = when {
-                d.originTileIndex in mine -> d.destinationTileIndex
-                d.destinationTileIndex in mine -> d.originTileIndex
-                else -> continue
-            }
-            if (other in mine) continue
-            if (other in theirs) toFrom = true else elsewhere = true
+            val a = DungeonScan.tiles.getOrNull(d.originTileIndex)?.room ?: continue
+            val b = DungeonScan.tiles.getOrNull(d.destinationTileIndex)?.room ?: continue
+            if (a === b) continue
+            links.getOrPut(a) { HashSet() } += b
+            links.getOrPut(b) { HashSet() } += a
         }
-        if (room.type == RoomType.CHAMPION || room.type == RoomType.PUZZLE) return true
-        return toFrom && !elsewhere
+        val back = HashMap<DungeonRoom, DungeonRoom>()
+        val queue = ArrayDeque(listOf(start))
+        val seen = hashSetOf(start)
+        while (queue.isNotEmpty()) {
+            val r = queue.removeFirst()
+            for (n in links[r].orEmpty()) if (seen.add(n)) { back[n] = r; queue += n }
+        }
+        return back
+    }
+
+    /** The rooms someone is in or past. */
+    private fun open(): Set<DungeonRoom> {
+        val back = towardEntrance()
+        val out = HashSet<DungeonRoom>()
+        for (r in at.values + listOfNotNull(DungeonUtils.currentRoom)) {
+            out += r
+            if (r.type == RoomType.BLOOD) continue
+            var p = back[r]
+            while (p != null) { out += p; p = back[p] }
+        }
+        return out
     }
 
     fun render(g: GuiGraphicsExtractor, example: Boolean): Pair<Int, Int> {
@@ -107,11 +118,7 @@ object SkipCounter {
     /** Secrets not found in rooms left behind. Solo, only rooms you've cleared: one you left uncleared you're coming back to. */
     private fun skipped(): Int {
         val solo = DungeonUtils.dungeonTeammates.size <= 1
-        val here = DungeonUtils.currentRoom
-        val busy = HashSet<DungeonRoom>()
-        here?.let { busy += it }
-        busy += at.values
-        busy += holding.values
+        val busy = open()
         return DungeonScan.rooms.sumOf { room ->
             val max = room.data?.maxSecrets ?: 0
             val left = if (solo) room.checkmark == MapCheckmark.WHITE else room in visited || room.walkedInto || room.playerWalkedInto
