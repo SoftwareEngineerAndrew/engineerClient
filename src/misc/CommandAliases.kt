@@ -25,6 +25,7 @@ object CommandAliases : Module(
     name = "Command Aliases",
     category = Category.SKYBLOCK,
     description = "Your own short commands: /alias runs its command, with anything typed after it.",
+    toggled = true,
     key = null,
 ) {
     private const val SLOTS = 20
@@ -52,10 +53,11 @@ object CommandAliases : Module(
 
     init {
         for (i in 1..SLOTS) {
+            val first = i == 1
             val previous = slots.lastOrNull()
             val shown = { previous == null || previous.used() }
-            val alias = StringSetting("Alias $i", "", 32, desc = "What you type, without the slash; can be several words.", placeholder = "d")
-            val command = StringSetting("Command $i", "", 200, desc = "What Alias $i runs.", placeholder = "warp dungeon_hub")
+            val alias = StringSetting("Alias $i", if (first) "d" else "", 32, desc = "What you type, without the slash; can be several words.", placeholder = "d")
+            val command = StringSetting("Command $i", if (first) "warp dungeon_hub" else "", 200, desc = "What Alias $i runs.", placeholder = "warp dungeon_hub")
             registerSetting(alias.withDependency(shown))
             registerSetting(command.withDependency(shown))
             slots += Slot(alias, command)
