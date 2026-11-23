@@ -90,15 +90,19 @@ object DungeonQueue : Module(
 
     private class TimerLine(private val prefix: String, private val scale: Int) {
         private var units = Long.MIN_VALUE
+        private var prefixed = true
         var text = ""
         var size = 0 to 9
 
         fun at(value: Long): TimerLine {
-            if (value == units) return this
+            val withPrefix = com.adm.features.impl.render.ClickGUIModule.timerPrefixes
+            if (value == units && withPrefix == prefixed) return this
             units = value
+            prefixed = withPrefix
             val fraction = (value % scale).toString()
             text = buildString {
-                append(prefix).append(value / scale).append('.')
+                if (withPrefix) append(prefix)
+                append(value / scale).append('.')
                 repeat(scale.toString().length - 1 - fraction.length) { append('0') }
                 append(fraction).append('s')
             }

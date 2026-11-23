@@ -36,7 +36,7 @@ object Ragnarock : Module(
 
     private val ragDragonTimer by BooleanSetting("Rag in dragon spawn", true, "Shows when to rag for the next M7 dragon.")
     private val hud by HUD("Rag Timer HUD", "Shows the Ragnarock channel and strength time.") { example ->
-        if (example) return@HUD textDim("§eRag: §fcasting 2.15s", 0, 0, Colors.WHITE)
+        if (example) return@HUD textDim(rag("§e") + "§fcasting 2.15s", 0, 0, Colors.WHITE)
         val text = hudText() ?: return@HUD 0 to 0
         textDim(text, 0, 0, Colors.WHITE)
     }
@@ -49,9 +49,11 @@ object Ragnarock : Module(
     private var castStart = -1L
     private var buffStart = -1L
 
+    private fun rag(color: String) = if (com.adm.features.impl.render.ClickGUIModule.timerPrefixes) "${color}Rag: " else ""
+
     private fun hudText(): String? {
-        if (castStart >= 0) return "§eRag: §fcasting ${((CHANNEL_TICKS - (tick - castStart)).coerceAtLeast(0) / 20f).toFixed(2)}s"
-        if (buffStart >= 0) return "§cRag: §a${((BUFF_TICKS - (tick - buffStart)) / 20f).toFixed(2)}s"
+        if (castStart >= 0) return rag("§e") + "§fcasting ${((CHANNEL_TICKS - (tick - castStart)).coerceAtLeast(0) / 20f).toFixed(2)}s"
+        if (buffStart >= 0) return rag("§c") + "§a${((BUFF_TICKS - (tick - buffStart)) / 20f).toFixed(2)}s"
         if (!ragDragonTimer) return null
         val spawn = WitherDragons.nextSpawnTicks()
         if (spawn < 0) return null

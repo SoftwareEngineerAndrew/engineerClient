@@ -122,11 +122,14 @@ object BloodCamp : Module(
 
     private var moveTextTicks = -1
     private var moveTextValue = ""
+    private var moveTextPrefix = true
 
     private fun moveText(ticks: Int): String {
-        if (ticks != moveTextTicks) {
+        val prefix = com.adm.features.impl.render.ClickGUIModule.timerPrefixes
+        if (ticks != moveTextTicks || prefix != moveTextPrefix) {
             moveTextTicks = ticks
-            moveTextValue = "Move Timer: ${ticks / 20}.${((ticks % 20) * 5).toString().padStart(2, '0')}s"
+            moveTextPrefix = prefix
+            moveTextValue = "${if (prefix) "Move Timer: " else ""}${ticks / 20}.${((ticks % 20) * 5).toString().padStart(2, '0')}s"
         }
         return moveTextValue
     }

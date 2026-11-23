@@ -72,11 +72,15 @@ object LividSolver : Module(
         return name != bodyNames[livid] && name.endsWith(" Livid") && name in bodyNames
     }
 
+    private var shownPrefix = true
+
     private fun timerText(ticks: Int): String {
-        if (ticks != shownTicks) {
+        val prefix = com.adm.features.impl.render.ClickGUIModule.timerPrefixes
+        if (ticks != shownTicks || prefix != shownPrefix) {
             val color = if (ticks > 260) "§a" else if (ticks > 130) "§e" else "§c"
-            shownText = "§bLivid: $color${ticks}t "
+            shownText = "${if (prefix) "§bLivid: " else ""}$color${ticks}t "
             shownTicks = ticks
+            shownPrefix = prefix
         }
         return shownText
     }
