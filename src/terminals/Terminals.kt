@@ -121,6 +121,20 @@ object Terminals : Module(
     val gateWarningSound by BooleanSetting("Gate Warning Sound", true, desc = "A sound with the warning.").withDependency { gateDrop }
     val gateSound = createSoundSettings("Gate Sound", "block.note_block.pling") { gateDrop && gateWarningSound }
 
+    // ------------------------------------------------------------------ Done Warning
+    private val doneDrop by DropdownSetting("Done Warning", false, desc = "A warning when a chosen terminal is done (needs that teammate on ADM).")
+    val doneWarning by BooleanSetting("Enable Done Warning", false, desc = "Warns when the terminal picked for a section is done.").withDependency { doneDrop }
+    private val doneS1 by SelectorSetting("Section 1", TermDoneWarning.Pick.Off, "Which section 1 terminal.", TermDoneWarning.Pick.entries - TermDoneWarning.Pick.T5).withDependency { doneDrop }
+    private val doneS2 by SelectorSetting("Section 2", TermDoneWarning.Pick.Off, "Which section 2 terminal.").withDependency { doneDrop }
+    private val doneS3 by SelectorSetting("Section 3", TermDoneWarning.Pick.Off, "Which section 3 terminal.", TermDoneWarning.Pick.entries - TermDoneWarning.Pick.T5).withDependency { doneDrop }
+    private val doneS4 by SelectorSetting("Section 4", TermDoneWarning.Pick.Off, "Which section 4 terminal.", TermDoneWarning.Pick.entries - TermDoneWarning.Pick.T5).withDependency { doneDrop }
+    val doneWarningTime by NumberSetting("Done Warning Duration", 2f, 0.5..10.0, 0.5, desc = "How long it shows.", unit = "s").withDependency { doneDrop }
+    private val doneWarningHud by HUD("Done Warning", "The terminal done warning text.", true, 400, 170, 2f) { TermDoneWarning.draw(this, it) }
+    val doneWarningSound by BooleanSetting("Done Warning Sound", true, desc = "A sound with the warning.").withDependency { doneDrop }
+    val doneSound = createSoundSettings("Done Sound", "block.note_block.pling") { doneDrop && doneWarningSound }
+
+    fun donePick(section: Int) = when (section) { 1 -> doneS1; 2 -> doneS2; 3 -> doneS3; 4 -> doneS4; else -> TermDoneWarning.Pick.Off }
+
     // ------------------------------------------------------------------ Titles
     private val titlesDrop by DropdownSetting("Titles", false, desc = "Custom completion titles.")
     val titles by BooleanSetting("Enable Titles", false, desc = "Replaces Hypixel's terminal, lever and device titles.").withDependency { titlesDrop }
@@ -168,6 +182,7 @@ object Terminals : Module(
     val statusOn get() = enabled && status
     val titlesOn get() = enabled && titles
     val gateWarningOn get() = enabled && gateWarning
+    val doneWarningOn get() = enabled && doneWarning
     val hitboxesOn get() = enabled && hitboxes
 
     @JvmStatic
@@ -203,6 +218,7 @@ object Terminals : Module(
         TermSounds.install()
         TermStatus.install()
         GateWarning.install()
+        TermDoneWarning.install()
         TermProgress.install()
         TerminalHitboxes.install()
     }

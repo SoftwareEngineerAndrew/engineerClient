@@ -70,6 +70,10 @@ object TermProgress {
     }
 
     private val terms = ConcurrentHashMap<String, Term>()
+    /** Each teammate's last terminal, and when it closed (System.nanoTime), for [lastTerminalOf]. */
+    private val closed = ConcurrentHashMap<String, Pair<Int, Long>>()
+    private var ownTerminal = -1
+    private var ownAt = 0L
     private val sses = ConcurrentHashMap<String, Ss>()
 
     fun install() {
@@ -117,7 +121,7 @@ object TermProgress {
         val me = mc.player
         if (me == null || !DungeonUtils.inBoss || DungeonUtils.getF7Phase() != M7Phases.P3) {
             if (inP3) { inP3 = false; EngineerClient.safely("term progress report") { report() } }
-            terms.clear(); sses.clear(); countdowns.clear()
+            terms.clear(); sses.clear(); countdowns.clear(); closed.clear(); ownTerminal = -1
             sentTerm = null; termFrame = null; ssStart = 0L; ssRounds = 0; ssShown = 0; ssFrame = null
             return
         }
@@ -133,6 +137,7 @@ object TermProgress {
         val term = TerminalUtils.currentTerm
         val near = TERMINALS.indices.minByOrNull { TERMINALS[it].distanceToSqr(me.position()) }?.takeIf { TERMINALS[it].distanceTo(me.position()) <= REACH }
         if (term != null && near != null && me.containerMenu !== me.inventoryMenu) {
+            ownTerminal = near; ownAt = nowMs
             val melody = term.type == TerminalTypes.MELODY
             val left = if (melody) 0 else term.solution.size.coerceIn(0, 40)
             if (term !== sentTerm) { sentTerm = term; termMax = 0 }
@@ -177,7 +182,7 @@ object TermProgress {
             7 -> {
                 if (b.remaining() != 5) return
                 val terminal = b.get().toInt() and 255
-                if (terminal == 255) { terms.remove(sender); return }
+                if (terminal == 255) { terms.remove(sender)?.let { closed[sender] = it.terminal to now }; return }
                 val type = TerminalTypes.entries.getOrNull(b.get().toInt() and 255) ?: return
                 val left = b.get().toInt() and 255
                 val total = b.get().toInt() and 255
@@ -195,6 +200,13 @@ object TermProgress {
             }
         }
     }
+
+    /** The terminal you had open in the last 2 s. */
+    fun ownLastTerminal(): Int? = ownTerminal.takeIf { it >= 0 && System.currentTimeMillis() - ownAt < 2000 }
+
+    /** The terminal teammate [name] (lower case) has open, or closed in the last 3 s. */
+    fun lastTerminalOf(name: String): Int? =
+        terms[name]?.terminal ?: closed[name]?.takeIf { System.nanoTime() - it.second < 3_000_000_000L }?.first
 
     /** [name]'s entry made again from what it was. */
     private inline fun <T : Any> put(map: ConcurrentHashMap<String, T>, name: String, make: (T?) -> T) { map[name] = make(map[name]) }
