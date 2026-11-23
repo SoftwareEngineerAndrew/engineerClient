@@ -29,7 +29,7 @@ class WebSocketConnection {
 
     val connected get() = _webSocket.get() != null
 
-    /** ADM's party link: takes a message first and says whether every teammate got it, so the socket is only the fallback. */
+    /** ADM's party link: takes a message first; true when it has it, and sends it through [sendSocket] itself if needed. */
     var bridge: ((String) -> Boolean)? = null
 
     /** A message that came over ADM's party link, handled as if the socket had brought it. */
@@ -37,6 +37,10 @@ class WebSocketConnection {
 
     fun send(message: String): Boolean {
         if (bridge?.invoke(message) == true) return true
+        return sendSocket(message)
+    }
+
+    fun sendSocket(message: String): Boolean {
         val ws = _webSocket.get()
         if (ws == null) {
             logger.warn("Cannot send message: WebSocket not connected")

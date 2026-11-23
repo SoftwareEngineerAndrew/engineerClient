@@ -55,10 +55,15 @@ object PoseShare {
     private const val D_LOOK = PoseWire.D_LOOK
     /**
      * The kinds [shareExtra] frames can be, read by whoever registered for them ([onExtra]): the same number on the relay and
-     * over TURN, and taken by nothing else on either (TURN's 0-2 are [TurnLink]'s own, 3 and 4 terminals, 9-12 [PoseWire]'s;
+     * over TURN, and taken by nothing else on either (TURN's 0-2 are [TurnLink]'s own, 3 and 4 terminals, 5 and 6 [shareReliable]'s, 9-12 [PoseWire]'s;
      * the relay's 0-5 and 9 its own), below TURN's limit of 16.
      */
     private val EXTRA_KINDS = setOf(7, 8, 13, 14, 15)
+    /** TURN kinds of [shareReliable]: [seq u16][kind][body], and its ack [seq u16]. */
+    private const val R_DATA = 5
+    private const val R_ACK = 6
+    private const val R_RESEND_MS = 100L
+    private const val R_GIVE_UP_MS = 750L
     /** A shared view older than this isn't shown: an old frame would pass for where they are now. */
     private const val STALE_NS = PoseTrack.STALE_NS
     private const val GUI_STALE_NS = 3_000_000_000L
@@ -108,7 +113,7 @@ object PoseShare {
     @Volatile private var relayExtras: Set<Int> = emptySet()
 
     private val turn = TurnLink({ slot, kind, body -> EngineerClient.safely("pose turn") { direct(slot, kind, body) } }, { EngineerClient.logger.info("[pose share] $it") },
-        anyOrder = setOf(D_TICK, D_LOOK))
+        anyOrder = setOf(D_TICK, D_LOOK, R_DATA, R_ACK))
     /** Whether the relay hands out TURN credentials (it has a key), and the ones it gave. */
     @Volatile private var turnOffered = false
     @Volatile private var creds: Pair<String, String>? = null
@@ -205,6 +210,7 @@ object PoseShare {
         if (watch != sentWatch) { sentWatch = watch; sendBinary(byteArrayOf(5, if (watch) 1 else 0)) }
 
         turnTick(nowMs)
+        reliableTick(nowMs)
 
         // A ping every 2 s while poses flow (the round trip, for the delays shown), otherwise only to keep the socket open.
         if (nowMs - lastPing > (if (wanted || watch) 2000 else 30_000)) {
@@ -334,11 +340,104 @@ object PoseShare {
         return direct.size
     }
 
+    private class Reliable(val frame: ByteArray, val done: ((Set<String>) -> Unit)?, val at: Long) {
+        /** Linked slot -> the seq it's sent under, until acked. */
+        val waiting = HashMap<Int, Int>()
+        val got = HashSet<String>()
+        var sentAt = 0L
+    }
+
+    private val reliables = ArrayList<Reliable>()
+    private val rSeq = HashMap<Int, Int>()
+    private val rSeen = ConcurrentHashMap<Int, LinkedHashSet<Int>>()
+    private val random = java.util.Random()
+
+    /**
+     * An event every linked teammate should get once: over TURN, sent again until each acks it; teammates the relay
+     * carries for get it that way (a socket, so it gets there). [done] gets who surely has it, once each has or after
+     * [R_GIVE_UP_MS]. Readers ([onExtra]) must take a repeat: a lost ack, or the relay after TURN gave up, sends one.
+     */
+    fun shareReliable(frame: ByteArray, done: ((Set<String>) -> Unit)? = null) {
+        if (!ready || roster.isEmpty()) { done?.invoke(emptySet()); return }
+        val r = Reliable(frame, done, System.currentTimeMillis())
+        val fast = turnSlots()
+        val relay = relayTakes(frame[0].toInt() and 255)
+        var viaRelay = false
+        synchronized(reliables) {
+            for ((slot, name) in roster) when {
+                slot in fast -> { val q = ((rSeq[slot] ?: random.nextInt(65536)) + 1) and 0xFFFF; rSeq[slot] = q; r.waiting[slot] = q }
+                relay -> { viaRelay = true; r.got += name }
+            }
+            if (r.waiting.isNotEmpty()) reliables += r
+        }
+        if (viaRelay) sendBinary(frame)
+        if (r.waiting.isEmpty()) done?.invoke(r.got) else resend(r, r.at)
+    }
+
+    private fun resend(r: Reliable, nowMs: Long) {
+        r.sentAt = nowMs
+        val sends = synchronized(reliables) { r.waiting.entries.map { it.key to it.value } }
+        for ((slot, q) in sends) turn.broadcast(R_DATA, byteArrayOf((q shr 8).toByte(), q.toByte()) + r.frame, setOf(slot))
+    }
+
+    private fun reliableTick(nowMs: Long) {
+        val over = ArrayList<Reliable>()
+        val again = ArrayList<Reliable>()
+        synchronized(reliables) {
+            val it = reliables.iterator()
+            while (it.hasNext()) {
+                val r = it.next()
+                r.waiting.keys.retainAll(roster.keys)
+                if (r.waiting.isEmpty() || nowMs - r.at > R_GIVE_UP_MS) { it.remove(); over += r }
+                else if (nowMs - r.sentAt >= R_RESEND_MS) again += r
+            }
+        }
+        for (r in again) resend(r, nowMs)
+        for (r in over) finish(r)
+    }
+
+    /** Given up on TURN for whoever hasn't acked: the relay, if it takes the kind. */
+    private fun finish(r: Reliable) {
+        val left = synchronized(reliables) { r.waiting.keys.mapNotNull { roster[it] }.also { r.waiting.clear() } }
+        if (left.isNotEmpty() && relayTakes(r.frame[0].toInt() and 255)) { sendBinary(r.frame); r.got += left }
+        r.done?.let { d -> EngineerClient.safely("pose share reliable") { d(r.got) } }
+    }
+
+    private fun acked(slot: Int, q: Int) {
+        val r = synchronized(reliables) {
+            val r = reliables.firstOrNull { it.waiting[slot] == q } ?: return
+            r.waiting.remove(slot); roster[slot]?.let { r.got += it }
+            if (r.waiting.isNotEmpty()) return
+            reliables.remove(r); r
+        }
+        r.done?.let { d -> EngineerClient.safely("pose share reliable") { d(r.got) } }
+    }
+
+    /** A [R_DATA] from [slot]: acked whatever it is, read once. */
+    private fun reliable(slot: Int, sender: String, body: ByteArray) {
+        if (body.size < 3) return
+        turn.broadcast(R_ACK, body.copyOf(2), setOf(slot))
+        val q = ((body[0].toInt() and 255) shl 8) or (body[1].toInt() and 255)
+        val seen = rSeen.getOrPut(slot) { LinkedHashSet() }
+        val fresh = synchronized(seen) { seen.add(q).also { if (seen.size > 256) seen.remove(seen.first()) } }
+        val kind = body[2].toInt() and 255
+        if (fresh && kind in EXTRA_KINDS) extra(sender, kind, ByteBuffer.wrap(body, 3, body.size - 3).slice())
+    }
+
+    private fun dropReliables() {
+        val all = synchronized(reliables) { reliables.toList().also { reliables.clear(); rSeq.clear() } }
+        rSeen.clear()
+        for (r in all) r.done?.let { d -> EngineerClient.safely("pose share reliable") { d(r.got) } }
+    }
+
     /** Whether the relay passes on frames of [kind] (see [shareExtra]). */
     fun relayTakes(kind: Int) = kind in relayExtras
 
     /** How many party members are linked with you right now (sharing with you, by the relay or TURN). */
     val linkedCount get() = roster.size
+
+    /** The names (lower case) of the party members linked with you right now. */
+    val linkedNames: Collection<String> get() = roster.values
 
     /**
      * TURN, every tick: credentials once linked with someone (and again if they're turned down; the relay gives a socket one
@@ -435,6 +534,7 @@ object PoseShare {
         sending = CompletableFuture.completedFuture(null)
         ready = false; wanted = false; sentWatch = false; guiFrame = null; own.forgetRelay()
         stopTurn()
+        dropReliables()
         roster.clear(); subjects.clear(); sentParty = emptyList(); sentEntries = emptyList(); partyAt = 0L
         socket = ws
     }
@@ -489,6 +589,7 @@ object PoseShare {
 
     private fun retryLater(minMs: Long = 0L) {
         socket = null; ready = false; wanted = false
+        dropReliables()
         // Spread out, so a relay restart doesn't bring every game back in the same instant.
         retryAt = System.currentTimeMillis() + maxOf(backoff, minMs) + (Math.random() * 1000).toLong()
         backoff = (backoff * 2).coerceAtMost(60_000L)
@@ -501,6 +602,7 @@ object PoseShare {
         roster.clear(); subjects.clear(); tracks.clear()
         guiFrame = null; sentWatch = false
         stopTurn()
+        dropReliables()
         runCatching { ws?.sendClose(WebSocket.NORMAL_CLOSURE, "bye") }
     }
 
@@ -552,6 +654,7 @@ object PoseShare {
                     if (slot in 1..255 && name in teammates) roster[slot] = name
                 }
                 turn.retain(roster.keys)
+                rSeen.keys.retainAll(roster.keys)
             }
             "s" -> {
                 val i = m["i"]?.asInt ?: return; val n = m["n"]?.asString?.let { ids[it] } ?: return
@@ -595,6 +698,8 @@ object PoseShare {
             D_TICK -> PoseWire.readTick(body)?.let { h -> heard(sender, null, slot, now, true, true, h) }
             D_LOOK -> PoseWire.readLook(body)?.let { h -> heard(sender, null, slot, now, true, true, h) }
             PoseWire.D_ROUTE -> if (body.size == 1) tracks[sender]?.turnLeft(now)
+            R_DATA -> reliable(slot, sender, body)
+            R_ACK -> if (body.size == 2) acked(slot, ((body[0].toInt() and 255) shl 8) or (body[1].toInt() and 255))
             3 -> gui(sender, b, now)
             PoseWire.D_ROOMS -> rooms(sender, b)
             4 -> if (body.isEmpty()) tracks[sender]?.gui = null
@@ -657,7 +762,7 @@ object PoseShare {
             val prev = bin
             if (prev == null && last && !tooBig) EngineerClient.safely("pose share") { onBinary(data) }
             else if (!tooBig) {
-                if ((prev?.remaining() ?: 0) + data.remaining() > 64) tooBig = true
+                if ((prev?.remaining() ?: 0) + data.remaining() > 512) tooBig = true
                 else bin = ByteBuffer.allocate((prev?.remaining() ?: 0) + data.remaining()).also { n -> prev?.let { n.put(it) }; n.put(data); n.flip() }
                 if (last && !tooBig) bin?.let { EngineerClient.safely("pose share") { onBinary(it) } }
             }

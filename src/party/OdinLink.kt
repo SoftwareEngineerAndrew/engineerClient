@@ -21,8 +21,8 @@ import java.nio.charset.StandardCharsets
  */
 object OdinLink {
     private const val KIND = 14
-    // TURN packets are 300 bytes; less its 20 of header and tag, and this frame's own 2.
-    private const val MAX_JSON = 278
+    // TURN packets are 300 bytes; less its 16 of header and tag, the reliable seq and kind, and the channel.
+    private const val MAX_JSON = 280
 
     /** A channel's socket, the field naming who sent a message, and other listeners on the same lobby channel. Index = wire channel. */
     private class Channel(val socket: WebSocketConnection, val nameField: String, val also: List<WebSocketConnection> = emptyList())
@@ -40,13 +40,19 @@ object OdinLink {
         PoseShare.onExtra(KIND) { sender, b -> EngineerClient.safely("odin link") { heard(sender, b) } }
     }
 
-    /** Sends over the link; true only if every teammate surely got it, so the socket can be skipped. */
+    /**
+     * Sends over the link, and true when every teammate is linked: then the socket only carries it to whoever didn't ack.
+     * False sends it over the socket at once too (someone isn't linked), and the handlers take the repeat.
+     */
     private fun send(channel: Int, json: String): Boolean {
         val body = json.toByteArray(StandardCharsets.UTF_8)
-        if (body.size > MAX_JSON) return false
-        val reached = PoseShare.shareExtra(byteArrayOf(KIND.toByte(), channel.toByte()) + body)
-        val teammates = DungeonUtils.dungeonTeammatesNoSelf.size
-        return teammates > 0 && reached >= teammates
+        if (body.size > MAX_JSON || PoseShare.linkedCount == 0) return false
+        val mates = DungeonUtils.dungeonTeammatesNoSelf.map { it.name.lowercase() }
+        if (mates.isEmpty()) return false
+        val all = PoseShare.linkedNames.containsAll(mates)
+        val socket = channels[channel].socket
+        PoseShare.shareReliable(byteArrayOf(KIND.toByte(), channel.toByte()) + body) { got -> if (all && !got.containsAll(mates)) socket.sendSocket(json) }
+        return all
     }
 
     private fun heard(sender: String, b: ByteBuffer) {

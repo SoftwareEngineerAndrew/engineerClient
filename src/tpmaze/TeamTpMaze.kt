@@ -95,6 +95,8 @@ object TeamTpMaze {
     /** Ticks since we asked for the connection, while it isn't open: past [RETRY] we ask again. */
     private var waiting = 0
     private const val RETRY = 200
+    /** Ticks before trying a message again that neither the link nor the socket took. */
+    private const val SEND_AGAIN = 10
     /** Teammates whose client has said something on the channel: only they are given pads (anyone else won't see theirs). */
     private val heard = HashSet<String>()
     /** Teammates' names, and each one's last server position, while we're in the maze. */
@@ -329,12 +331,12 @@ object TeamTpMaze {
         val linked = PoseShare.linkedCount > 0
         if (connected && (socket.connected || linked)) {
             if (socket.connected) waiting = 0
-            if (!helloSent) { helloSent = socket.send(message(hello = true)) || linked; if (helloSent) dirty = false }
             if (cooldown > 0) cooldown--
+            else if (!helloSent) { helloSent = socket.send(message(hello = true)); if (helloSent) dirty = false else cooldown = SEND_AGAIN }
             else if (dirty) {
                 // Nothing to tell (a hello we can't add to): stay quiet.
                 if (map.links(sureOnly = true).isEmpty() && map.exit == null && map.looks().isEmpty()) dirty = false
-                else if (socket.send(message(hello = false)) || linked) { dirty = false; cooldown = 4 }
+                else if (socket.send(message(hello = false))) { dirty = false; cooldown = 4 } else cooldown = SEND_AGAIN
             }
         }
     }
