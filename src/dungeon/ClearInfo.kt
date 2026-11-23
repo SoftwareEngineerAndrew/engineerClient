@@ -95,5 +95,6 @@ object ClearInfo : Module(
         RoomAlerts.install()
         ExtraStats.install()
         ClearBreakdown.install()
+        SkipCounter.install()
     }
 }
