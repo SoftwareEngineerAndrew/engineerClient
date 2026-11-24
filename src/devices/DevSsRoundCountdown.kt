@@ -17,7 +17,6 @@ import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.Vec3
-import java.util.Locale
 import kotlin.math.min
 
 /** Over the first button of Simon Says rounds 2-4: the time until a click sent now lands as the buttons come back. */
@@ -48,7 +47,7 @@ object DevSsRoundCountdown {
             val left = at - System.nanoTime()
             val lamp = DevSimonSays.clickInOrder.firstOrNull() ?: button ?: return@on
             if (left < -GO_NS || (left <= 0 && DevSimonSays.clickNeeded > 0)) return@on
-            val text = if (left <= 0) "§a§lGO!" else "§b${String.format(Locale.ROOT, "%.2f", left / 1e9)}s"
+            val text = if (left <= 0) "§a§lGO!" else "§b${(left + TICK_NS - 1) / TICK_NS}t"
             drawText(text, Vec3(lamp.x - 0.4, lamp.y + 0.75, lamp.z + 0.5), 0.8f, false)
         }
         // The gate is only checked again on boss entry and setting changes, so it can't wait for P3 itself.
@@ -81,7 +80,7 @@ object DevSsRoundCountdown {
         if (showStart < 0 || maxOf(lamps, expected) < 2) { sendAt = 0L; return }
         val backAt = maxOf(lastLamp, showStart + 8L * (maxOf(expected, lamps) - 1)) + 18
         val anchor = arrivals.minOfOrNull { it.second - it.first * TICK_NS } ?: return
-        sendAt = anchor + backAt * TICK_NS - rtt() * 1_000_000L
+        sendAt = anchor + (backAt + 1) * TICK_NS - rtt() * 1_000_000L
         button = firstLamp
     }
 
