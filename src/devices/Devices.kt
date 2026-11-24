@@ -35,6 +35,7 @@ object Devices : Module(
     val ssStyle by SelectorSetting("Box Style", BoxStyle.FILLED_OUTLINE, desc = "How the buttons are boxed.").withDependency { ssDrop }
     val announceProgress by BooleanSetting("Announce Progress", true, desc = "Party chat when you finish a round.").withDependency { ssDrop }
     val ssRoundCountdown by BooleanSetting("Round Countdown", true, desc = "Over the first button, time until rounds 2-4 take clicks, after your ping.").withDependency { ssDrop }
+    val ssCountdownSeconds by BooleanSetting("Countdown In Seconds", false, desc = "Seconds in steps of 0.05 instead of ticks.").withDependency { ssDrop && ssRoundCountdown }
     val ssBlockWrong by BooleanSetting("Block Wrong Clicks", false, desc = "Blocks wrong buttons; sneak overrides.").withDependency { ssDrop }
     val blockWrongStart by BooleanSetting("Block Wrong on Start", false, desc = "Blocks start button spam in the first phase.").withDependency { ssDrop }
     val maxStartClicks by NumberSetting("Max Start Clicks", 4, 1..10, 1, desc = "Start button clicks allowed in the first phase.").withDependency { ssDrop && blockWrongStart }
