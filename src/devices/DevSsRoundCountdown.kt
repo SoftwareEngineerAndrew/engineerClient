@@ -42,7 +42,7 @@ object DevSsRoundCountdown {
         onReceive<ClientboundBlockUpdatePacket> { block(pos, blockState) }
         onReceive<ClientboundSectionBlocksUpdatePacket> { runUpdates { pos, state -> block(pos, state) } }
         on<RenderExtractEvent> {
-            if (!on()) return@on
+            if (DungeonUtils.getF7Phase() != M7Phases.P3) return@on
             val at = sendAt
             if (at == 0L) return@on
             val left = at - System.nanoTime()
@@ -51,10 +51,9 @@ object DevSsRoundCountdown {
             val text = if (left <= 0) "§a§lGO!" else "§b${String.format(Locale.ROOT, "%.2f", left / 1e9)}s"
             drawText(text, Vec3(lamp.x - 0.4, lamp.y + 0.75, lamp.z + 0.5), 0.8f, false)
         }
-        SubscribeWhile.add(this, ::reset, {}) { on() }
+        // The gate is only checked again on boss entry and setting changes, so it can't wait for P3 itself.
+        SubscribeWhile.add(this, ::reset, {}) { Devices.ssRoundCountdownOn && DungeonUtils.inBoss && DungeonUtils.floor?.floorNumber == 7 }
     }
-
-    private fun on() = Devices.ssRoundCountdownOn && DungeonUtils.getF7Phase() == M7Phases.P3
 
     @Synchronized private fun serverTick() {
         tick++
