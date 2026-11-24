@@ -34,6 +34,7 @@ object Devices : Module(
     val ssThirdColor by ColorSetting("Third Color", Colors.MINECRAFT_RED.withAlpha(0.5f), true, desc = "The rest.").withDependency { ssDrop }
     val ssStyle by SelectorSetting("Box Style", BoxStyle.FILLED_OUTLINE, desc = "How the buttons are boxed.").withDependency { ssDrop }
     val announceProgress by BooleanSetting("Announce Progress", true, desc = "Party chat when you finish a round.").withDependency { ssDrop }
+    val ssRoundCountdown by BooleanSetting("Round Countdown", true, desc = "Over the first button, time until rounds 2-4 take clicks, after your ping.").withDependency { ssDrop }
     val ssBlockWrong by BooleanSetting("Block Wrong Clicks", false, desc = "Blocks wrong buttons; sneak overrides.").withDependency { ssDrop }
     val blockWrongStart by BooleanSetting("Block Wrong on Start", false, desc = "Blocks start button spam in the first phase.").withDependency { ssDrop }
     val maxStartClicks by NumberSetting("Max Start Clicks", 4, 1..10, 1, desc = "Start button clicks allowed in the first phase.").withDependency { ssDrop && blockWrongStart }
@@ -81,6 +82,7 @@ object Devices : Module(
 
     val startCountdownOn get() = enabled && startCountdown
     val simonSaysOn get() = enabled && simonSays
+    val ssRoundCountdownOn get() = simonSaysOn && ssRoundCountdown
     val arrowAlignOn get() = enabled && arrowAlign
     val arrowsOn get() = enabled && arrowsDevice
     val ssPracticeOn get() = enabled && ssPractice
@@ -113,6 +115,7 @@ object Devices : Module(
     fun install() {
         DevStartCountdown.install()
         DevSimonSays.install()
+        DevSsRoundCountdown.install()
         DevArrowAlign.install()
         DevArrows.install()
         SimonSaysPractice.install()
