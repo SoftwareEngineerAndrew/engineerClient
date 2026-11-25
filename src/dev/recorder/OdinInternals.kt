@@ -114,7 +114,7 @@ object OdinInternals {
         // ---- puzzle solvers (all run under the PuzzleSolvers module)
         Probe("odin.solver", "QuizSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "QuizSolver", "timer", "triviaAnswers", "triviaOptions")),
         Probe("odin.solver", "BlazeSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "BlazeSolver", "blazes", "inBlazeRoom")),
-        Probe("odin.solver", "BoulderSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "BoulderSolver", "board", "plan")),
+        Probe("odin.solver", "BoulderSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "BoulderSolver", "currentPositions")),
         Probe("odin.solver", "IceFillSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "IceFillSolver", "currentPatterns")),
         Probe("odin.solver", "WeirdosSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "WeirdosSolver", "correctPos", "wrongPositions")),
         Probe("odin.solver", "BeamsSolver", PUZZLE + "PuzzleSolvers", fields(PUZZLE + "BeamsSolver", "currentLanternPairs", "scanned")),

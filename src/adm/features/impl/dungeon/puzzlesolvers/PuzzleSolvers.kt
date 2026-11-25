@@ -22,6 +22,7 @@ import net.minecraft.network.chat.Style
 import net.minecraft.network.protocol.game.ClientboundBlockEventPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
 import net.minecraft.network.protocol.game.ClientboundSoundPacket
+import net.minecraft.world.InteractionHand
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.monster.Blaze
 import net.minecraft.world.level.block.Blocks
@@ -108,13 +109,8 @@ object PuzzleSolvers : Module(
 
     private val boulderDropDown by DropdownSetting("Boulder", desc = "Shows settings for the boulder puzzle solver.")
     private val boulderSolver by BooleanSetting("Boulder Solver", true, desc = "Solver for the boulder puzzle.").withDependency { boulderDropDown }
-    private val boulderMode by SelectorSetting("Boulder Mode", BoulderSolver.Mode.CLICKS, desc = "Fewest clicks, fewest blocks walked, or the fastest mix of both.").withDependency { boulderDropDown && boulderSolver }
     private val showAllBoulderClicks by BooleanSetting("Show All Boulder Clicks", false, desc = "Shows all the clicks or only the first.").withDependency { boulderDropDown && boulderSolver }
-    private val boulderTarget by SelectorSetting("Boulder Highlight", BoulderSolver.Target.BOULDER, desc = "Highlights the boulder or the button and sign you click.").withDependency { boulderDropDown && boulderSolver }
     private val boulderStyle by SelectorSetting("Boulder Style", BoxStyle.OUTLINE, desc = "Whether or not the box should be filled.").withDependency { boulderDropDown && boulderSolver }
-    private val boulderTracer by BooleanSetting("Boulder Tracer", false, desc = "Shows a tracer to the next click.").withDependency { boulderDropDown && boulderSolver }
-    private val boulderTracerColor by ColorSetting("Boulder Tracer Color", Colors.MINECRAFT_GREEN, true, desc = "Color for the boulder tracer.").withDependency { boulderDropDown && boulderSolver && boulderTracer }
-    private val boulderBlockWrong by BooleanSetting("Boulder Block Wrong Clicks", true, desc = "Blocks pushes that would leave Boulder unsolvable.").withDependency { boulderDropDown }
     private val boulderColor by ColorSetting("Boulder Color", Colors.MINECRAFT_GREEN, true, desc = "The color of the box.").withDependency { boulderDropDown && boulderSolver }
 
     private val puzzleTimers by BooleanSetting("Puzzle Timers", true, desc = "Shows the time it took to solve each puzzle.")
@@ -202,7 +198,6 @@ object PuzzleSolvers : Module(
             if (!DungeonUtils.inClear) return@on
             if (beamsSolver) BeamsSolver.onBlockChange(this)
             IceFillSolver.onBlockChange(this)
-            if (boulderSolver || boulderBlockWrong) BoulderSolver.onBlockChange(this)
         }
 
         on<ParticleEvent> {
@@ -213,8 +208,12 @@ object PuzzleSolvers : Module(
 
         on<BlockInteractEvent> {
             if (!DungeonUtils.inClear) return@on
-            if ((weirdosBlockWrong && WeirdosSolver.isWrongClick(pos)) || (quizBlockWrong && QuizSolver.isWrongClick(pos)) ||
-                (boulderBlockWrong && BoulderSolver.blocksClick(pos))) { cancel(); blocked() }
+            if ((weirdosBlockWrong && WeirdosSolver.isWrongClick(pos)) || (quizBlockWrong && QuizSolver.isWrongClick(pos))) { cancel(); blocked() }
+        }
+
+        on<UseItemOnPostEvent> {
+            if (!DungeonUtils.inClear || hand == InteractionHand.OFF_HAND) return@on
+            if (boulderSolver) BoulderSolver.playerInteract(this)
         }
 
         onReceive<ClientboundPlayerPositionPacket> {
@@ -253,7 +252,6 @@ object PuzzleSolvers : Module(
 
         on<TickEvent.End> {
             if (!DungeonUtils.inClear) return@on
-            if (boulderSolver || boulderBlockWrong) BoulderSolver.onTick(boulderMode, boulderSolver)
             if (icePathRoute) IcePathSolver.onTick()
             BlazeSolver.onTick(blazeSolver)
         }
@@ -262,11 +260,10 @@ object PuzzleSolvers : Module(
             if (!DungeonUtils.inClear) return@on
             if (iceFillSolver) IceFillSolver.onRenderWorld(this, iceFillColor)
             if (weirdosSolver) WeirdosSolver.onRenderWorld(this, weirdosColor, weirdosWrongColor, weirdosStyle)
-            if (boulderSolver) BoulderSolver.onRenderWorld(this, showAllBoulderClicks, boulderTarget, boulderStyle, boulderColor)
+            if (boulderSolver) BoulderSolver.onRenderWorld(this, showAllBoulderClicks, boulderStyle, boulderColor)
             if (blazeSolver)   BlazeSolver.onRenderWorld(this, blazeLineNext, blazeLineAmount, blazeStyle, blazeFirstColor, blazeSecondColor, blazeThirdColor, blazeAllColor, blazeLineWidth)
             if (blazeSolver && blazeSpot) BlazeSolver.renderSpot(this, blazeSpotColor)
             if (weirdosSolver && weirdosTracer) WeirdosSolver.tracer(this, weirdosTracerColor)
-            if (boulderSolver && boulderTracer) BoulderSolver.tracer(this, boulderTracerColor)
             if (blazeSolver && blazeTracer) BlazeSolver.tracer(this, blazeTracerColor)
             if (beamsSolver && beamsNextTracer) BeamsSolver.tracer(this, beamsNextTracerColor)
             if (quizSolver && quizTracer) QuizSolver.tracer(this, quizTracerColor)
