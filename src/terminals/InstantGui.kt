@@ -23,7 +23,8 @@ object InstantGui {
     private class WaitScreen : Screen(Component.literal("")) {
         override fun isPauseScreen() = false
         override fun extractBackground(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {}
-        override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {}
+        override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) =
+            TermSolver.drawBlank(graphics, width, height)
     }
 
     private fun clicked(entity: Entity) {
