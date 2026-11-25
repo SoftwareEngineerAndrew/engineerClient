@@ -40,6 +40,7 @@ object Terminals : Module(
     private val hideNumbers by BooleanSetting("Hide Numbers' Numbers", false, desc = "Numbers: hides the 1-10, leaving only the order colours (/termsim too).").withDependency { solverDrop }
     private val numbersShown by NumberSetting("Show Next Numbers", 0, 0..10, 1, desc = "The next this many panes still show their number (0: none).").withDependency { solverDrop && hideNumbers }
     val clickLimit by BooleanSetting("Click Limit", true, desc = "Hypixel takes 5 terminal clicks per 500 ms; one it would drop isn't sent.").withDependency { solverDrop }
+    val instantGui by BooleanSetting("Open GUI Instantly", false, desc = "A blank screen as soon as you click a terminal; the slots fill in as Hypixel sends them.").withDependency { solverDrop }
     val resyncTimeout by NumberSetting("Resync Timeout", 0, 0..1000, 25, desc = "A click Hypixel hasn't answered after this long is undone (0: from your ping).", unit = "ms").withDependency { solverDrop }
 
     private val colorsDrop by DropdownSetting("Solver Colors", false, desc = "Solver colors.").withDependency { solverDrop }
@@ -221,5 +222,6 @@ object Terminals : Module(
         TermDoneWarning.install()
         TermProgress.install()
         TerminalHitboxes.install()
+        InstantGui.install()
     }
 }

@@ -44,6 +44,8 @@ object TerminalHitboxes {
     /** Hypixel's terminal windows. */
     private val TERM_TITLE = Regex("^(Click in order!|Select all the .+ items!|What starts with: '.+'\\?|Correct all the panes!|Change all to same color!|Click the button on time!)$")
 
+    fun seenDone(i: Int) = doneSeen[i]
+
     /** A new P3 or world: nothing done, nothing clicked. From [TermInfo]. */
     fun reset() {
         doneSeen.fill(false); lastClicked = -1; openedTerm = -1
@@ -76,7 +78,7 @@ object TerminalHitboxes {
     }
 
     /** The terminal whose stand [e] is, as an index in [TERMINALS], or -1. */
-    private fun terminalOf(e: net.minecraft.world.entity.Entity): Int {
+    fun terminalOf(e: net.minecraft.world.entity.Entity): Int {
         if (e !is net.minecraft.world.entity.decoration.ArmorStand) return -1
         return TERMINALS.indexOfFirst { kotlin.math.abs(e.x - it.at.x) < 0.01 && kotlin.math.abs(e.z - it.at.z) < 0.01 && e.y > it.at.y - 0.5 && e.y < it.at.y + 0.1 }
     }
