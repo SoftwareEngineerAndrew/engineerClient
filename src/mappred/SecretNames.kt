@@ -6,7 +6,7 @@ package com.engineerclient.mappred
  * secrets have to add up to what the named rooms leave of the total ([targets]: each total the tab list
  * allows, less the named rooms' secrets). [missing]: names the floor never has ([FloorRules.missingNames]).
  */
-class SecretNames(used: Set<String>, private val targets: IntArray, missing: Set<String> = emptySet(), private val factor: (RoomName) -> Double = { 1.0 }) {
+class SecretNames @JvmOverloads constructor(used: Set<String>, private val targets: IntArray, missing: Set<String> = emptySet(), private val factor: (RoomName) -> Double = { 1.0 }) {
     /** Names still free in each pool. */
     val avail: Array<List<RoomName>> = run {
         // one Blaze a map: Lower or Higher
