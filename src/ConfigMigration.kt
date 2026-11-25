@@ -1597,8 +1597,6 @@ object ConfigMigration {
 
             to.addProperty("Enable Clear Breakdown", on(cb))
 
-            to.addProperty("Secrets Counter", on(cb) && cb?.let(::settings)?.get("Secrets Counter")?.let { it.isJsonPrimitive && it.asBoolean } == true)
-
             module(modules, "Clear Info")?.addProperty("enabled", listOf(mi, es, st, ra, cb).any(::on))
 
             listOfNotNull(st, ra, cb).forEach { modules.remove(it) }

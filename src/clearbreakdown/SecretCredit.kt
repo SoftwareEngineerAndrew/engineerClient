@@ -23,8 +23,6 @@ data class PlayerSecrets(val total: Int?, val rooms: List<RoomSecrets>, val unkn
  * finder is theirs; one with several goes to the only one who still has secrets left to place,
  * over and over until nothing changes; what's still shared after that is split in proportion to
  * what each has left, as an estimate. What a total has beyond the rooms is "unknown rooms".
- *
- * Nothing here touches Minecraft, so it tests headlessly.
  */
 class SecretCredit(private val mergeMs: Long = 1000, private val exactMs: Long = 3000) {
     private class Group(val roomKey: String, val roomName: String, var candidates: Set<String>, var exact: Boolean, val atMs: Long, var units: Int, val gap: Boolean = false)

@@ -49,7 +49,7 @@ import net.minecraft.world.phys.Vec3
  * look, which is always at the final pad), teammates' teleports seen in the world (a guess until their own client says), and the
  * maps of teammates who run this too, over ADM's party link ([com.engineerclient.party.OdinLink]) and ADM's websocket for the rest.
  * The socket is ADM's lobby channel, a second one beside ADM's map
- * sync like [com.engineerclient.clearbreakdown.OdinSync]: the messages carry none of the fields ADM's map or Melody read, so their
+ * sync: the messages carry none of the fields ADM's map or Melody read, so their
  * handlers drop them. Each message is the sender's whole map (at most 15 pairs), sent when it changes; a client that comes in asks
  * for everyone's.
  *

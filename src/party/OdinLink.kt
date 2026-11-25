@@ -1,7 +1,6 @@
 package com.engineerclient.party
 
 import com.engineerclient.EngineerClient
-import com.engineerclient.clearbreakdown.OdinSync
 import com.engineerclient.pov.PoseShare
 import com.engineerclient.tpmaze.TeamTpMaze
 import com.google.gson.stream.JsonReader
@@ -30,7 +29,7 @@ object OdinLink {
     private val channels: List<Channel> by lazy {
         listOf(
             Channel(MelodyMessage.melodyWebSocket, "username"),
-            Channel(DungeonMap.syncSocket, "playerName", listOf(OdinSync.socket)),
+            Channel(DungeonMap.syncSocket, "playerName"),
             Channel(TeamTpMaze.socket, "from"),
         )
     }

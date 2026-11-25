@@ -16,8 +16,7 @@ data class Clear(val room: String, val solo: Boolean)
  * ADM never says when a reset puzzle is back to normal (it stays red until it turns white or
  * green), so the time after the red X is what counts toward the attempt that clears it.
  *
- * Nothing here touches Minecraft, so it tests headlessly: the module feeds it each tick's
- * presence (player name to room key) and the checkmarks of the room types that count.
+ * Fed each tick's presence (player name to room key) and the checkmarks of the room types that count.
  */
 class ClearCredit(private val helpTicks: Int = 40) {
     private val ticks = HashMap<String, HashMap<String, Int>>()

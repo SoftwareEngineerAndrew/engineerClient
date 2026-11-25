@@ -78,16 +78,15 @@ object ClearInfo : Module(
     val showTeammates by BooleanSetting("Show Teammates", false, desc = "Show teammates.").withDependency { statsDrop && extraStats }
 
     // ------------------------------------------------------------------ Clear Breakdown
-    private val breakdownDrop by DropdownSetting("Clear Breakdown", false, desc = "Everyone's rooms and secrets at the end of a run.")
-    val clearBreakdown by BooleanSetting("Enable Clear Breakdown", true, desc = "Rooms cleared alone - cleared and secrets; hover for each room.").withDependency { breakdownDrop }
-    val secretsCounter by BooleanSetting("Secrets Counter", false, desc = "ADM's per-teammate secret lines at the end of every run.").withDependency { breakdownDrop }
+    private val breakdownDrop by DropdownSetting("Clear Breakdown", false, desc = "Everyone's secrets at the end of a run, below Extra Stats.")
+    val clearBreakdown by BooleanSetting("Enable Clear Breakdown", true, desc = "Each player's secrets at the end of every run.").withDependency { breakdownDrop }
+    val breakdownMode by SelectorSetting("Breakdown", ClearBreakdown.Mode.FULL, desc = "Just secret totals, or rooms cleared and secrets by room too.").withDependency { breakdownDrop && clearBreakdown }
 
     val mapInfoOn get() = enabled && mapInfo
     val scoreTimeOn get() = enabled && scoreTime
     val roomAlertsOn get() = enabled && roomAlerts
     val extraStatsOn get() = enabled && extraStats
     val clearBreakdownOn get() = enabled && clearBreakdown
-    val secretsCounterOn get() = enabled && secretsCounter
 
     fun install() {
         MapInfo.install()

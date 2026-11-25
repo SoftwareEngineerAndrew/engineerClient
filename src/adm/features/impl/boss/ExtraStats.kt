@@ -45,6 +45,9 @@ object ExtraStats {
     )
 
     private val run = RunStats()
+    /** How many summaries have printed: Clear Breakdown posts after this run's. */
+    @Volatile var summaries = 0
+        private set
 
     fun install() {
         on<MessageEvent.Chat> {
@@ -178,6 +181,7 @@ object ExtraStats {
 
         out.append("\n").append(Component.literal(getChatBreak()))
         modMessage(out, "")
+        summaries++
         run.reset()
     }
 

@@ -12,7 +12,7 @@ import com.adm.utils.skyblock.dungeon.DungeonPlayer
 import com.adm.utils.skyblock.dungeon.DungeonUtils
 import com.adm.utils.skyblock.dungeon.Floor
 import com.engineerclient.EngineerClient
-import com.engineerclient.clearbreakdown.ClearBreakdown
+import com.engineerclient.clearbreakdown.RoomTracker
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import kotlin.math.ceil
@@ -55,11 +55,11 @@ object SkipCounter {
     }
 
     private fun roomOf(p: DungeonPlayer): DungeonRoom? {
-        p.entity?.let { return ClearBreakdown.roomAt(it.x, it.z) }
+        p.entity?.let { return RoomTracker.roomAt(it.x, it.z) }
         if (p.mapPos.data == 0L) return null
         val x = ((p.mapPos.x + 128) / 2.0 - DungeonScan.startX) * 32.0 / DungeonScan.roomGap - 200
         val z = ((p.mapPos.z + 128) / 2.0 - DungeonScan.startY) * 32.0 / DungeonScan.roomGap - 200
-        return ClearBreakdown.roomAt(x, z)
+        return RoomTracker.roomAt(x, z)
     }
 
     /** Each room's neighbour on the way back to the entrance, by the doors on the map. */
