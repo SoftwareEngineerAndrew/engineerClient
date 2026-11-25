@@ -139,9 +139,10 @@ object LeapMenu : Module(
         return View(s.pos, s.yaw, s.pitch)
     }
 
-    /** The view's own look while it isn't following theirs. */
-    private var freeYaw = 0f
-    private var freePitch = 0f
+    /** Not following theirs: their look when the view first finds them, then turned by your mouse. */
+    private var startLook: FloatArray? = null
+    private var turnedYaw = 0f
+    private var turnedPitch = 0f
 
     /** A leap is being shown before it lands: you can't move, turn or change slot until it does. */
     @JvmStatic
@@ -150,19 +151,23 @@ object LeapMenu : Module(
     /** The mouse while [locked]: it turns the view only. */
     @JvmStatic
     fun turn(xo: Double, yo: Double) {
-        freeYaw += (xo * 0.15).toFloat()
-        freePitch = (freePitch + (yo * 0.15).toFloat()).coerceIn(-90f, 90f)
+        turnedYaw += (xo * 0.15).toFloat()
+        turnedPitch += (yo * 0.15).toFloat()
     }
 
     /** Where the view is while a picked leap is on its way: with the player picked. */
     @JvmStatic
     fun visualPos(): Vec3? = view(mc.deltaTracker.getGameTimeDeltaPartialTick(false))?.pos
 
-    /** Its look: theirs, or yours turned freely: yaw, pitch. */
+    /** Its look: theirs, or theirs then turned freely: yaw, pitch. */
     @JvmStatic
     fun visualLook(partialTicks: Float): FloatArray? {
         val v = view(partialTicks) ?: return null
-        return if (followLook) floatArrayOf(v.yaw, v.pitch) else floatArrayOf(freeYaw, freePitch)
+        if (followLook) return floatArrayOf(v.yaw, v.pitch)
+        val start = startLook ?: floatArrayOf(v.yaw, v.pitch).also { startLook = it }
+        val pitch = (start[1] + turnedPitch).coerceIn(-90f, 90f)
+        turnedPitch = pitch - start[1]
+        return floatArrayOf(start[0] + turnedYaw, pitch)
     }
 
     /** Arrived: you go on looking where the view was, not back where you were before the leap. */
@@ -297,7 +302,7 @@ object LeapMenu : Module(
     /** [player] picked: the view goes to them; the click waits for the server's menu if it isn't here yet. */
     private fun pick(player: DungeonPlayer) {
         pending = player
-        mc.player?.let { freeYaw = it.yRot; freePitch = it.xRot }
+        startLook = null; turnedYaw = 0f; turnedPitch = 0f
         pickedAt = System.currentTimeMillis()
         clickedAt = 0L
         moved = false
