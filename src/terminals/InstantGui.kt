@@ -17,6 +17,12 @@ import net.minecraft.world.entity.Entity
 
 /** Open GUI Instantly: a blank screen the moment you click a terminal, so the mouse is free before Hypixel's window arrives. */
 object InstantGui {
+    enum class Size(private val label: String, val type: TerminalTypes) {
+        PANES("Correct Panes", TerminalTypes.PANES), RUBIX("Rubix", TerminalTypes.RUBIX), NUMBERS("Numbers", TerminalTypes.NUMBERS),
+        STARTS_WITH("Starts With", TerminalTypes.STARTS_WITH), SELECT("Select All", TerminalTypes.SELECT), MELODY("Melody", TerminalTypes.MELODY);
+        override fun toString() = label
+    }
+
     private val refused = setOf("This Terminal has already been completed!", "This Terminal doesn't seem to be responsive at the moment.")
     private var openedAt = 0L
 
@@ -24,7 +30,7 @@ object InstantGui {
         override fun isPauseScreen() = false
         override fun extractBackground(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {}
         override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) =
-            TermSolver.drawBlank(graphics, width, height)
+            TermSolver.drawBlank(graphics, width, height, Terminals.instantStyle.type)
     }
 
     private fun clicked(entity: Entity) {

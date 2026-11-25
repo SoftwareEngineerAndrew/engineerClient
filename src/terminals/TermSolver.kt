@@ -181,13 +181,15 @@ object TermSolver {
 
     private val CHEST = net.minecraft.resources.Identifier.withDefaultNamespace("textures/gui/container/generic_54.png")
 
-    /** Open GUI Instantly's screen before Hypixel's window is in: the solver's empty grid, or an empty 5 row chest. */
-    fun drawBlank(g: GuiGraphicsExtractor, width: Int, height: Int) {
+    /** Open GUI Instantly's screen before Hypixel's window is in: [type]'s empty grid, or its empty chest. */
+    fun drawBlank(g: GuiGraphicsExtractor, width: Int, height: Int, type: TerminalTypes) {
         if (Terminals.solverOn && Terminals.style == Terminals.Style.CUSTOM) {
-            val rows = 4; val cols = 7
+            val melody = type == TerminalTypes.MELODY
+            val rows = if (melody) 5 else type.layout[2]
+            val cols = if (melody) 7 else type.layout[3]
             val w = cols * CELL + (cols - 1) * Terminals.gap
             val h = rows * CELL + (rows - 1) * Terminals.gap
-            val scale = Terminals.customSize
+            val scale = if (melody) Terminals.melodySize else Terminals.customSize
             g.pose().pushMatrix()
             g.pose().translate((width - w * scale) / 2f, (height - h * scale) / 2f)
             g.pose().scale(scale)
@@ -195,7 +197,7 @@ object TermSolver {
             g.pose().popMatrix()
             return
         }
-        val top = 5 * 18 + 17
+        val top = type.windowSize / 9 * 18 + 17
         val x = (width - 176) / 2
         val y = (height - top - 96) / 2
         g.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, CHEST, x, y, 0f, 0f, 176, top, 256, 256)
