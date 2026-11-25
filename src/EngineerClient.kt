@@ -143,6 +143,7 @@ object EngineerClient : ClientModInitializer {
         // (reading never writes the file).
         safely("lcm style") { com.engineerclient.lcm.LcmStyle.install() }
         safely("map prediction") { com.engineerclient.mappred.MapPrediction.install() }
+        safely("mimic finder") { com.engineerclient.mimic.MimicFinder.install() }
         safely("map icons") { com.engineerclient.mapicons.MapIcons.install() }
         safely("map sizes") { com.engineerclient.mapicons.MapSizes.install() }
         safely("map layout") { com.engineerclient.mapicons.MapLayout.install() }

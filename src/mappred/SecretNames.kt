@@ -6,14 +6,15 @@ package com.engineerclient.mappred
  * secrets have to add up to what the named rooms leave of the total ([targets]: each total the tab list
  * allows, less the named rooms' secrets). [missing]: names the floor never has ([FloorRules.missingNames]).
  */
-class SecretNames(used: Set<String>, private val targets: IntArray, missing: Set<String> = emptySet()) {
+class SecretNames(used: Set<String>, private val targets: IntArray, missing: Set<String> = emptySet(), private val factor: (RoomName) -> Double = { 1.0 }) {
     /** Names still free in each pool. */
     val avail: Array<List<RoomName>> = run {
         // one Blaze a map: Lower or Higher
         val taken = if (used.any { it in BLAZES }) used + BLAZES else used
         Array(MapStats.POOLS) { p -> MapStats.NAMES.filter { it.pool == p && it.name !in taken && it.name !in missing } }
     }
-    private val poolWeight = DoubleArray(MapStats.POOLS) { p -> avail[p].sumOf { it.seen.toDouble() } }
+    private fun weight(n: RoomName) = n.seen * factor(n)
+    private val poolWeight = DoubleArray(MapStats.POOLS) { p -> avail[p].sumOf { weight(it) } }
     /** [solve]'s answers by pools. */
     private class Box(val result: Result?)
     private val cache = java.util.concurrent.ConcurrentHashMap<String, Box>()
@@ -48,7 +49,7 @@ class SecretNames(used: Set<String>, private val targets: IntArray, missing: Set
         val byPool = pools.toList().groupingBy { it }.eachCount()
         val ps = byPool.keys.toIntArray()
         val top = maxOf(maxT, 0) + 1
-        val w = Array(ps.size) { j -> DoubleArray(avail[ps[j]].size) { avail[ps[j]][it].seen / poolWeight[ps[j]] } }
+        val w = Array(ps.size) { j -> DoubleArray(avail[ps[j]].size) { weight(avail[ps[j]][it]) / poolWeight[ps[j]] } }
         val sec = Array(ps.size) { j -> IntArray(avail[ps[j]].size) { avail[ps[j]][it].secrets } }
         val fact = DoubleArray(ps.size) { j -> (1..byPool.getValue(ps[j])).fold(1.0) { a, b -> a * b } }
         // each pool by its secrets, and every pool but one together (past the highest target nothing counts)

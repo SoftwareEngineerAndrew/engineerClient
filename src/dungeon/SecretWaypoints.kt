@@ -75,7 +75,7 @@ object SecretWaypoints {
 
     private enum class Kind(val label: String, val tag: String = label) { CHEST("Chest"), ITEM("Item"), ESSENCE("Essence"), BAT("Bat"), KEY("Redstone Key", "Redstone"), LEVER("Lever") }
 
-    private class Spot(val kind: Kind, val pos: BlockPos, val box: AABB)
+    private class Spot(val kind: Kind, val pos: BlockPos, val box: AABB, val locked: Boolean = false)
 
     private val secrets get() = SecretPack.bundled
     @Volatile private var ownPack: RoomPack? = null
@@ -210,6 +210,18 @@ object SecretWaypoints {
         return spotsOf(room, pack).filter { it.kind == Kind.CHEST }.map { it.pos }
     }
 
+    class ChestSite(val pos: BlockPos, val locked: Boolean)
+
+    /** [room]'s secret chest sites; null while its design or rotation isn't known yet. */
+    fun chestSites(room: DungeonRoom): List<ChestSite>? {
+        val pack = roomsPack ?: return null.also { load() }
+        if (room.data?.name == null || Rot.fromWord(room.rotation?.name) == null) return null
+        if (room.shape == RoomShape.OneByOne && room.clayPos == null && room.data?.name != "Fairy") return null
+        return spotsOf(room, pack).filter { it.kind == Kind.CHEST }.map { ChestSite(it.pos, it.locked) }
+    }
+
+    val pack: RoomPack? get() = roomsPack ?: null.also { load() }
+
     private fun load() {
         if (loading || System.currentTimeMillis() < retryAt) return
         loading = true
@@ -267,7 +279,7 @@ object SecretWaypoints {
                 SecretType.BAT -> Kind.BAT
                 SecretType.KEY -> continue
             }
-            out += spot(kind, s.pos, p)
+            out += spot(kind, s.pos, p, s.type == SecretType.LOCKED_CHEST)
         }
         for (l in d.levers) out += spot(Kind.LEVER, l.pos, p)
         d.key?.skulls?.forEach { out += spot(Kind.KEY, it.first, p) }
@@ -279,7 +291,7 @@ object SecretWaypoints {
         (it.type == SecretType.CHEST || it.type == SecretType.LOCKED_CHEST) && it.pos.x == at.x && it.pos.z == at.z && at.y - it.pos.y in 1..2
     }
 
-    private fun spot(kind: Kind, c: Pos, p: Placement): Spot {
+    private fun spot(kind: Kind, c: Pos, p: Placement, locked: Boolean = false): Spot {
         val w = p.toWorld(c.x, c.y, c.z)
         val pos = BlockPos(w.x, w.y, w.z)
         val x = w.x.toDouble(); val y = w.y.toDouble(); val z = w.z.toDouble()
@@ -290,7 +302,7 @@ object SecretWaypoints {
             Kind.ITEM -> AABB(x + 0.25, y, z + 0.25, x + 0.75, y + 0.5, z + 0.75)
             Kind.BAT -> AABB(x + 0.25, y + 0.25, z + 0.25, x + 0.75, y + 0.75, z + 0.75)
         }
-        return Spot(kind, pos, box)
+        return Spot(kind, pos, box, locked)
     }
 
     private fun core(room: DungeonRoom): Int? {

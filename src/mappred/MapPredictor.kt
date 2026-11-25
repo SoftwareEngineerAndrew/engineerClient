@@ -171,7 +171,7 @@ class Prediction(val w: Int, val h: Int, val probs: Array<FloatArray?>, val spli
                  val doors: List<PredictedDoor> = emptyList(), val raw: Array<FloatArray?> = probs)
 
 /** What a [Prediction] says once read against its map: the names the secret total leaves ([certainNames]) and the like. */
-class MapPredictor(private val view: MapView) {
+class MapPredictor(private val view: MapView, private val nameFactor: (RoomName) -> Double = { 1.0 }) {
     private val w = view.w
     private val h = view.h
     private val n = w * h
@@ -222,7 +222,7 @@ class MapPredictor(private val view: MapView) {
         }
         val targets = view.secretTotals.map { it - known }.filter { it >= 0 }.toIntArray()
         if (targets.isEmpty()) return
-        secrets = SecretNames(used, targets, rules.missingNames)
+        secrets = SecretNames(used, targets, rules.missingNames, nameFactor)
     }
 
     /**

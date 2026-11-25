@@ -140,6 +140,8 @@ object MapPrediction {
     @Volatile private var shownView: MapView? = null
     /** Every unnamed room's names once the map is known for sure ([MapPredictor.certainNames]); null until then. */
     @Volatile private var shownNames: List<NamedRoom>? = null
+    /** [shownNames] leaning to rooms the Mimic could still be in (Mimic Steers Names); only ever a guess. */
+    @Volatile private var shownSteered: List<NamedRoom>? = null
     /** The key of the view [shown] was made for: while it isn't the map's ([lastKey]), the prediction up is the one before. */
     @Volatile private var shownKey = ""
     private var lastKey = ""
@@ -183,7 +185,7 @@ object MapPrediction {
 
     private fun reset() {
         generation.incrementAndGet()
-        shown = null; shownView = null; shownNames = null; shownKey = ""; lastKey = ""
+        shown = null; shownView = null; shownNames = null; shownSteered = null; shownKey = ""; lastKey = ""
         doorsFor = null; doorsCache = emptyList()
         pathDoors.clear()
         startAt = 0L
@@ -256,7 +258,8 @@ object MapPrediction {
         // ADM fills rooms in from the map packets as they come; a read mid-change just waits for the next tick
         val v = try { view() } catch (_: ConcurrentModificationException) { null } ?: return
         val size = engine.value
-        val key = v.key() + "|" + size.name
+        val steer = com.engineerclient.mimic.MimicFinder.steerNames.value && com.engineerclient.mimic.MimicFinder.active
+        val key = v.key() + "|" + size.name + if (steer) "|m${com.engineerclient.mimic.MimicFinder.ruledLocked},${com.engineerclient.mimic.MimicFinder.ruledPlain}" else ""
         if (key == lastKey) return
         lastKey = key
         val gen = generation.incrementAndGet()
@@ -268,7 +271,8 @@ object MapPrediction {
                 if (generation.get() != gen) return@safely
                 // the names from the secret total once the map is known for sure
                 val namer = try { MapPredictor(v) } catch (_: Exception) { null }
-                shown = p; shownView = v; shownKey = key; shownNames = namer?.certainNames(p)
+                val steered = if (steer) try { MapPredictor(v, com.engineerclient.mimic.MimicFinder::nameFactor).certainNames(p) } catch (_: Exception) { null } else null
+                shown = p; shownView = v; shownKey = key; shownNames = namer?.certainNames(p); shownSteered = steered
             }
         }
     }
@@ -294,6 +298,9 @@ object MapPrediction {
 
     private var doorsFor: Prediction? = null
     private var doorsCache: List<com.adm.features.impl.dungeon.map.tile.DungeonDoor> = emptyList()
+
+    /** The prediction for the map as it is now; null while it's being worked out or off. */
+    fun current(): Prediction? = if (on && DungeonMap.enabled && supported() && shownKey == lastKey) shown else null
 
     fun replacesCore(): Boolean = on && DungeonMap.enabled && supported() && shown != null
 
@@ -436,7 +443,7 @@ object MapPrediction {
         val exact = exactNow
         exact.fill(false)
         // (every room, discovered ones nobody has opened too, once the map is known for sure)
-        if (exactRooms.value) for (r in exactGroups(p, shownNames ?: p.namedRooms, dropBits)) {
+        if (exactRooms.value) for (r in exactGroups(p, shownNames ?: p.namedRooms, dropBits, shownSteered)) {
             val tiles = r.tiles
             if (tiles.all { known[it] }) { if (!namedOnMap(tiles[0])) roomText(g, r); continue }
             if (tiles.any { known[it] || exact[it] || it in blood }) continue
@@ -618,10 +625,12 @@ object MapPrediction {
     private var groupsP: Prediction? = null
     private var groupsNames: List<NamedRoom>? = null
     private var groupsDrop = -1
+    private var groupsSteered: List<NamedRoom>? = null
     private var groups: List<ExactRoom> = emptyList()
 
-    private fun exactGroups(p: Prediction, all: List<NamedRoom>, dropBits: Int): List<ExactRoom> {
-        if (p === groupsP && all === groupsNames && dropBits == groupsDrop) return groups
+    private fun exactGroups(p: Prediction, all: List<NamedRoom>, dropBits: Int, steered: List<NamedRoom>?): List<ExactRoom> {
+        if (p === groupsP && all === groupsNames && dropBits == groupsDrop && steered === groupsSteered) return groups
+        val guesses = steered?.groupBy { it.tiles.joinToString(",") }
         val out = ArrayList<ExactRoom>()
         for ((_, names) in all.filter { val c = typeOfPool(it.name.pool); c < 0 || !drop[c] }.groupBy { it.tiles.joinToString(",") }) {
             val tiles = names[0].tiles
@@ -635,11 +644,17 @@ object MapPrediction {
             val secrets = names.map { it.name.secrets }.distinct().singleOrNull()
             val suffix = if (secrets != null && secrets > 0) " 0/$secrets" else ""
             fun lines(name: String) = (name + suffix).trim().split(" ").filter { it.isNotEmpty() }
+            // a name it can't settle: the kind every name that fits has (Miniboss or Mob), and with Mimic Steers Names the likeliest
+            val kind = if (names.any { typeOfPool(it.name.pool) >= 0 }) null else names.map { com.engineerclient.mimic.MimicFinder.clearOf(it.name.name) }.distinct().singleOrNull()
+                ?.let { when (it) { "miniboss" -> "Miniboss"; "mob" -> "Mob"; else -> null } }
+            val guess = guesses?.get(tiles.joinToString(","))?.groupBy { it.name.name }?.mapValues { (_, n) -> n.sumOf { it.chance.toDouble() } }
+                ?.maxByOrNull { it.value }?.takeIf { it.value >= 0.5 }?.key
+            val unsure = listOfNotNull(guess?.let { "$it?" }, kind).joinToString(" ")
             out += ExactRoom(tiles, types, types?.let { lcmOrder(tiles, it) }, bestChance >= SURE,
-                if (bestChance >= SURE) lines(bestName) else emptyList(), lines(""), lines("?"))
+                if (bestChance >= SURE) lines(bestName) else emptyList(), lines(unsure), lines(unsure.ifEmpty { "?" }))
         }
         groups = out
-        groupsP = p; groupsNames = all; groupsDrop = dropBits
+        groupsP = p; groupsNames = all; groupsDrop = dropBits; groupsSteered = steered
         return out
     }
 
@@ -826,7 +841,8 @@ object MapPrediction {
     private fun splitLabel(g: GuiGraphicsExtractor, x: Int, y: Int, s: Split) {
         val l = labels[s] ?: return
         small(g, if (drop[Cls.BLOOD]) l[1] else l[0], x + ROOM / 2, y + 3, -1)
-        small(g, l[2], x + ROOM / 2, y + 8, -1)
+        val mimic = com.engineerclient.mimic.MimicFinder.splitChance(s.tile)
+        small(g, if (mimic != null && mimic >= 0.01) l[2] + " §cM${(mimic * 100).roundToInt()}%" else l[2], x + ROOM / 2, y + 8, -1)
     }
 
     private fun small(g: GuiGraphicsExtractor, text: String, cx: Int, cy: Int, color: Int) {

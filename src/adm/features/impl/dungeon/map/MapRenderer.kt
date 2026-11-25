@@ -75,7 +75,7 @@ fun GuiGraphicsExtractor.renderMap(rooms: Collection<DungeonRoom>, doors: Collec
     drawDoors(doors)
     for (room in rooms) {
         if (!room.isViewable) continue
-        val color = if (room.mapSeen || room.type == RoomType.ENTRANCE) roomTypeColor(room.type) else DungeonMap.pendingRoomColor
+        val color = com.engineerclient.mimic.MimicFinder.roomColor(room) ?: if (room.mapSeen || room.type == RoomType.ENTRANCE) roomTypeColor(room.type) else DungeonMap.pendingRoomColor
         fillRoom(room, color.rgba)
     }
     val shift = MapSizes.shift()

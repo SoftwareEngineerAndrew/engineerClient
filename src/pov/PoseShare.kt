@@ -58,7 +58,7 @@ object PoseShare {
      * over TURN, and taken by nothing else on either (TURN's 0-2 are [TurnLink]'s own, 3 and 4 terminals, 5 and 6 [shareReliable]'s, 9-12 [PoseWire]'s;
      * the relay's 0-5 and 9 its own), below TURN's limit of 16.
      */
-    private val EXTRA_KINDS = setOf(7, 8, 13, 14, 15)
+    private val EXTRA_KINDS = setOf(7, 8, 13, 14, 15, 16)
     /** TURN kinds of [shareReliable]: [seq u16][kind][body], and its ack [seq u16]. */
     private const val R_DATA = 5
     private const val R_ACK = 6

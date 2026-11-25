@@ -161,7 +161,7 @@ object LcmStyle {
     private fun drawMap(g: GuiGraphicsExtractor, rooms: Collection<DungeonRoom>, doors: Collection<DungeonDoor>, hints: Collection<DungeonTile>, example: Boolean) {
         for (room in rooms) {
             if (!room.isViewable) continue
-            val color = if (room.checkmark == MapCheckmark.QUESTION_MARK) (if (room.type == RoomType.BLOOD) darker(BLOOD) else UNOPENED) else roomColor(room.type)
+            val color = com.engineerclient.mimic.MimicFinder.roomColor(room)?.rgba ?: if (room.checkmark == MapCheckmark.QUESTION_MARK) (if (room.type == RoomType.BLOOD) darker(BLOOD) else UNOPENED) else roomColor(room.type)
             if (room.tiles.isEmpty()) g.fillRoom(room, color) else fillTiles(g, room, color)
             if (princeCrowns.value && opened(room) && room.shouldShowName && room.name in princeRooms && !DungeonUtils.princeKilled) drawCrown(g, room)
         }
