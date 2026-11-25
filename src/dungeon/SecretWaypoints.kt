@@ -75,7 +75,7 @@ object SecretWaypoints {
 
     private enum class Kind(val label: String, val tag: String = label) { CHEST("Chest"), ITEM("Item"), ESSENCE("Essence"), BAT("Bat"), KEY("Redstone Key", "Redstone"), LEVER("Lever") }
 
-    private class Spot(val kind: Kind, val pos: BlockPos, val box: AABB, val locked: Boolean = false)
+    private class Spot(val kind: Kind, val pos: BlockPos, val box: AABB)
 
     private val secrets get() = SecretPack.bundled
     @Volatile private var ownPack: RoomPack? = null
@@ -171,7 +171,7 @@ object SecretWaypoints {
         SubscribeWhile.add(this, ::reset) { SecretClicked.enabled && show.value }
     }
 
-    private fun reset() { placed.clear(); byRoom.clear(); shown.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null; lastRoom = null }
+    private fun reset() { placed.clear(); sitesCache.clear(); byRoom.clear(); shown.clear(); spots = emptyList(); collected.clear(); cores.clear(); lastChest = null; lastRoom = null }
 
     private fun active() = DungeonUtils.inClear
 
@@ -210,14 +210,33 @@ object SecretWaypoints {
         return spotsOf(room, pack).filter { it.kind == Kind.CHEST }.map { it.pos }
     }
 
-    class ChestSite(val pos: BlockPos, val locked: Boolean)
+    class ChestSite(val pos: BlockPos, val locked: Boolean, val extra: Boolean)
 
-    /** [room]'s secret chest sites; null while its design or rotation isn't known yet. */
+    private val sitesCache = HashMap<String, List<ChestSite>>()
+    private val blueClay by lazy { net.minecraft.world.level.block.Blocks.DYED_TERRACOTTA.pick(net.minecraft.world.item.DyeColor.BLUE) }
+
+    /** [room]'s secret chest sites; null until its design and rotation are certain (its clay seen where the rotation puts it). */
     fun chestSites(room: DungeonRoom): List<ChestSite>? {
         val pack = roomsPack ?: return null.also { load() }
-        if (room.data?.name == null || Rot.fromWord(room.rotation?.name) == null) return null
-        if (room.shape == RoomShape.OneByOne && room.clayPos == null && room.data?.name != "Fairy") return null
-        return spotsOf(room, pack).filter { it.kind == Kind.CHEST }.map { ChestSite(it.pos, it.locked) }
+        val name = room.data?.name ?: return null
+        val rot = Rot.fromWord(room.rotation?.name) ?: return null
+        val clay = room.clayPos ?: return null
+        val level = EngineerClient.mc.level ?: return null
+        if (name != "Fairy" && (!level.isLoaded(clay) || level.getBlockState(clay).block !== blueClay)) return null
+        val tiles = room.tiles.map { Tile(it.x, it.z) }
+        if (tiles.isEmpty() || tiles.any { it.x !in 0..5 || it.z !in 0..5 }) return null
+        val design = core(room)?.let { pack.designByCore(it) }?.let { pack.design(it.design) } ?: pack.designsByName(name).firstOrNull() ?: return null
+        val key = "${design.id}|$rot|$tiles"
+        sitesCache[key]?.let { return it }
+        val p = try { design.place(rot, tiles) } catch (e: Exception) { return null }
+        val d = secrets.design(design.id) ?: return null
+        val puzzle = room.data?.type == RoomType.PUZZLE
+        val out = d.sites.filter { (it.type == SecretType.CHEST || it.type == SecretType.LOCKED_CHEST) && !(puzzle && it.id.startsWith('x')) }.map {
+            val w = p.toWorld(it.pos.x, it.pos.y, it.pos.z)
+            ChestSite(BlockPos(w.x, w.y, w.z), it.type == SecretType.LOCKED_CHEST, it.id.startsWith('x'))
+        }
+        sitesCache[key] = out
+        return out
     }
 
     val pack: RoomPack? get() = roomsPack ?: null.also { load() }
@@ -279,7 +298,7 @@ object SecretWaypoints {
                 SecretType.BAT -> Kind.BAT
                 SecretType.KEY -> continue
             }
-            out += spot(kind, s.pos, p, s.type == SecretType.LOCKED_CHEST)
+            out += spot(kind, s.pos, p)
         }
         for (l in d.levers) out += spot(Kind.LEVER, l.pos, p)
         d.key?.skulls?.forEach { out += spot(Kind.KEY, it.first, p) }
@@ -291,7 +310,7 @@ object SecretWaypoints {
         (it.type == SecretType.CHEST || it.type == SecretType.LOCKED_CHEST) && it.pos.x == at.x && it.pos.z == at.z && at.y - it.pos.y in 1..2
     }
 
-    private fun spot(kind: Kind, c: Pos, p: Placement, locked: Boolean = false): Spot {
+    private fun spot(kind: Kind, c: Pos, p: Placement): Spot {
         val w = p.toWorld(c.x, c.y, c.z)
         val pos = BlockPos(w.x, w.y, w.z)
         val x = w.x.toDouble(); val y = w.y.toDouble(); val z = w.z.toDouble()
@@ -302,7 +321,7 @@ object SecretWaypoints {
             Kind.ITEM -> AABB(x + 0.25, y, z + 0.25, x + 0.75, y + 0.5, z + 0.75)
             Kind.BAT -> AABB(x + 0.25, y + 0.25, z + 0.25, x + 0.75, y + 0.75, z + 0.75)
         }
-        return Spot(kind, pos, box, locked)
+        return Spot(kind, pos, box)
     }
 
     private fun core(room: DungeonRoom): Int? {

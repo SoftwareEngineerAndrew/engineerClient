@@ -21,17 +21,21 @@ import com.engineerclient.dungeon.SecretWaypoints
 import com.engineerclient.dungeonpack.pack.secrets.SecretPack
 import com.engineerclient.dungeonpack.pack.secrets.SecretType
 import com.engineerclient.mappred.Cls
+import com.engineerclient.mappred.FloorRules
 import com.engineerclient.mappred.MapPrediction
 import com.engineerclient.mappred.MapStats
 import com.engineerclient.mappred.MapView
-import com.engineerclient.mappred.RoomName
 import com.engineerclient.mappred.Shape
 import com.engineerclient.pov.PoseShare
+import com.engineerclient.terminals.TermDoneWarning
+import net.minecraft.client.multiplayer.ClientLevel
 import net.minecraft.core.BlockPos
+import net.minecraft.tags.FluidTags
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.phys.Vec3
 import net.minecraft.world.phys.shapes.CollisionContext
+import net.minecraft.world.phys.shapes.Shapes
 import java.nio.ByteBuffer
 import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
@@ -50,19 +54,22 @@ object MimicFinder {
     private val message = BooleanSetting("Mimic Message", true, desc = "Says the Mimic's room in party chat once it's certain.").withDependency { dropdown.value && enabled.value }
     val steerNames = BooleanSetting("Mimic Steers Names", false, desc = "Exact Last Rooms guesses names with chests the Mimic could still be in.").withDependency { dropdown.value && enabled.value }
 
-    private const val KIND = 16
     private const val PLAIN: Byte = 1
     private const val TRAPPED: Byte = 2
-    private const val OPENED: Byte = 3
     private const val MOB: Byte = 4
+    private const val SENT: Byte = 5
     private const val RANGE = 80.0
+    /** Each sender in line waits this long for the one before (party chat or a linked "sent"). */
+    private const val TURN_TICKS = 30
+    /** Rooms with a trapped chest of their own design. */
+    private val OWN_TRAPPED = setOf("Buttons", "Dueces", "Slime", "Redstone Key")
 
-    /** Chest sites and what was seen there; a found Mimic's spot. */
     private val seen = ConcurrentHashMap<BlockPos, Byte>()
     @Volatile private var found: BlockPos? = null
-    @Volatile private var foundByMe = false
+    @Volatile private var run = 0
     private var mortTick = -1L
-    private var sent = false
+    @Volatile private var sent = false
+    private var certainAt = -1L
     private var ticks = 0
     private var linked: Set<String> = emptySet()
 
@@ -70,23 +77,25 @@ object MimicFinder {
     private var splitOdds: Map<Int, Double> = emptyMap()
     @Volatile var ruledLocked = 0; private set
     @Volatile var ruledPlain = 0; private set
-    @Volatile var totalLocked = 0.0; private set
-    @Volatile var totalPlain = 0.0; private set
+    @Volatile private var totals = doubleArrayOf(0.0, 0.0, 0.0, 0.0)
 
     fun install() {
         for (s in listOf(dropdown, enabled, threshold, message, steerNames)) DungeonMap.registerSetting(s)
-        PoseShare.onExtra(KIND) { sender, b -> EngineerClient.safely("mimic link") { heard(sender, b) } }
         on<LevelEvent.Load> { reset() }
-        on<MessageEvent.Chat> { if (MORT_REGEX.matches(message) && mortTick < 0) mortTick = mc().level?.gameTime ?: 0L }
+        on<MessageEvent.Chat> {
+            if (MORT_REGEX.matches(message) && mortTick < 0) mortTick = mc().level?.gameTime ?: 0L
+            if (message.startsWith("Party > ") && message.contains(": Mimic is in ")) sent = true
+        }
         on<TickEvent.End> { EngineerClient.safely("mimic finder") { tick() } }
     }
 
     private fun mc() = EngineerClient.mc
 
     private fun reset() {
-        seen.clear(); found = null; foundByMe = false; mortTick = -1L; sent = false
+        run++
+        seen.clear(); found = null; mortTick = -1L; sent = false; certainAt = -1L
         roomOdds = IdentityHashMap(); splitOdds = emptyMap(); linked = emptySet()
-        ruledLocked = 0; ruledPlain = 0; totalLocked = 0.0; totalPlain = 0.0
+        ruledLocked = 0; ruledPlain = 0; totals = doubleArrayOf(0.0, 0.0, 0.0, 0.0)
     }
 
     val active: Boolean get() = enabled.value && DungeonUtils.inClear && (DungeonUtils.floor?.floorNumber ?: 0) >= 6 && !DungeonUtils.mimicKilled
@@ -98,8 +107,6 @@ object MimicFinder {
         return if (p * 100 >= threshold.value - 1e-6) DungeonMap.mimicRoomColor else null
     }
 
-    fun chanceOf(room: DungeonRoom): Double? = if (active) roomOdds[room] else null
-
     /** The split behind the unknown tile [tile]'s chance. */
     fun splitChance(tile: Int): Double? = if (active) splitOdds[tile] else null
 
@@ -107,42 +114,42 @@ object MimicFinder {
         if (!active) return
         if (++ticks % 5 != 0) return
         val level = mc().level ?: return
-        // joined mid-run: someone has already opened a room past the entrance
-        if (mortTick < 0) { if (DungeonScan.rooms.any { it.isViewable && it.type != RoomType.ENTRANCE }) mortTick = level.gameTime - 200 else return }
         val player = mc().player ?: return
+        // joined mid-run: someone has already walked into a room past the entrance
+        if (mortTick < 0) { if (DungeonScan.rooms.any { it.walkedInto && it.type != RoomType.ENTRANCE }) mortTick = level.gameTime else return }
         val rooms = DungeonScan.rooms.filter { it.isViewable && it.type != RoomType.TRAP }
         val sites = rooms.associateWith { SecretWaypoints.chestSites(it) }
-        look(level, player.eyePosition, sites, level.gameTime - mortTick)
+        if (level.gameTime - mortTick >= 10) look(level, player.eyePosition, sites)
         val now = PoseShare.linkedNames.toSet()
         if (now != linked) { if ((now - linked).isNotEmpty()) for ((p, s) in seen) share(p, s); linked = now }
-        if (ticks % 10 == 0) work(rooms, sites)
+        if (ticks % 10 == 0) work(level, rooms, sites)
     }
 
-    /** What this player can see of the chest sites now. */
-    private fun look(level: net.minecraft.client.multiplayer.ClientLevel, eye: Vec3, sites: Map<DungeonRoom, List<SecretWaypoints.ChestSite>?>, sinceMort: Long) {
-        if (sinceMort < 10) return
-        for (list in sites.values) for (s in list ?: continue) {
-            val known = seen[s.pos]
-            if (known == TRAPPED || known == OPENED) continue
-            if (eye.distanceToSqr(Vec3.atCenterOf(s.pos)) > RANGE * RANGE || !level.isLoaded(s.pos) || !visible(level, eye, s.pos)) continue
+    /** What this player can see of the chest sites now: a plain chest rules its site out, a trapped chest is the Mimic. */
+    private fun look(level: ClientLevel, eye: Vec3, sites: Map<DungeonRoom, List<SecretWaypoints.ChestSite>?>) {
+        for ((room, list) in sites) for (s in list ?: continue) {
+            if (seen.containsKey(s.pos)) continue
+            if (eye.distanceToSqr(Vec3.atCenterOf(s.pos)) > RANGE * RANGE || !level.isLoaded(s.pos)) continue
             val st = level.getBlockState(s.pos)
             val what = when {
-                st.`is`(Blocks.TRAPPED_CHEST) -> TRAPPED
+                st.`is`(Blocks.TRAPPED_CHEST) -> if (s.extra && room.name in OWN_TRAPPED) continue else TRAPPED
                 st.`is`(Blocks.CHEST) -> PLAIN
-                // the Mimic's chest turns to air when it comes out; a locked chest is there from Mort's line, a plain one only once spawned
-                st.isAir && (s.locked || known == TRAPPED) -> OPENED
                 else -> continue
             }
-            if (known == what) continue
+            if (!visible(level, eye, s.pos)) continue
             mark(s.pos, what, true)
         }
         if (found != null) return
         for (e in level.entitiesForRendering()) {
             val name = e.customName?.string ?: continue
             if (!name.contains("Mimic") || name.contains(" 0❤")) continue
-            val at = e.blockPosition()
-            if (eye.distanceToSqr(e.position()) > RANGE * RANGE || !visible(level, eye, at, e.position().add(0.0, 0.5, 0.0))) continue
-            mark(at, MOB, true)
+            val point = e.position().add(0.0, 0.5, 0.0)
+            if (eye.distanceToSqr(point) > RANGE * RANGE || !ray(level, eye, point, BlockPos.containing(point))) continue
+            // it chases players: only where it stands by a chest site it could have come out of
+            val site = sites.values.asSequence().filterNotNull().flatten().filter { seen[it.pos] != PLAIN }
+                .minByOrNull { Vec3.atCenterOf(it.pos).distanceToSqr(e.position()) }
+                ?.takeIf { Vec3.atCenterOf(it.pos).distanceToSqr(e.position()) <= 16.0 } ?: continue
+            mark(site.pos, MOB, true)
             break
         }
     }
@@ -150,29 +157,32 @@ object MimicFinder {
     private fun mark(pos: BlockPos, what: Byte, mine: Boolean) {
         val p = pos.immutable()
         seen[p] = what
-        if (what != PLAIN && found == null) { found = p; foundByMe = mine }
+        if (what != PLAIN && found == null) found = p
         if (mine) share(p, what)
     }
 
     private fun share(pos: BlockPos, what: Byte) {
-        val b = ByteBuffer.allocate(14)
-        b.put(KIND.toByte()).put(what).putInt(pos.x).putInt(pos.y).putInt(pos.z)
+        val b = ByteBuffer.allocate(15)
+        b.put(TermDoneWarning.KIND.toByte()).put(TermDoneWarning.MIMIC.toByte()).put(what).putInt(pos.x).putInt(pos.y).putInt(pos.z)
         PoseShare.shareReliable(b.array())
     }
 
-    private fun heard(@Suppress("UNUSED_PARAMETER") sender: String, b: ByteBuffer) {
+    /** A linked teammate's frame (after its kind and subtype). */
+    fun heard(b: ByteBuffer) {
         if (b.remaining() != 13) return
         val what = b.get()
-        if (what !in PLAIN..MOB) return
         val pos = BlockPos(b.int, b.int, b.int)
-        val known = seen[pos]
-        if (known == what || (known != null && known != PLAIN)) return
-        mc().execute { mark(pos, what, false) }
+        if (what == SENT) { sent = true; return }
+        if (what != PLAIN && what != TRAPPED && what != MOB || tileOf(pos) == null) return
+        val r = run
+        mc().execute {
+            if (run != r || !active || seen.containsKey(pos)) return@execute
+            mark(pos, what, false)
+        }
     }
 
     /** A clear line from [eye] to [target] (a few points on its block): glass, panes, bars, barriers and the like let it through. */
-    private fun visible(level: Level, eye: Vec3, target: BlockPos, point: Vec3? = null): Boolean {
-        if (point != null) return ray(level, eye, point, target)
+    private fun visible(level: Level, eye: Vec3, target: BlockPos): Boolean {
         val x = target.x.toDouble(); val y = target.y.toDouble(); val z = target.z.toDouble()
         for (p in arrayOf(Vec3(x + .5, y + .5, z + .5), Vec3(x + .15, y + .8, z + .15), Vec3(x + .85, y + .8, z + .85), Vec3(x + .15, y + .8, z + .85), Vec3(x + .85, y + .8, z + .15)))
             if (ray(level, eye, p, target)) return true
@@ -191,9 +201,10 @@ object MimicFinder {
             pos.set(x, y, z)
             if (pos == target) return true
             val st = level.getBlockState(pos)
+            if (st.fluidState.`is`(FluidTags.LAVA)) return false
             if (!st.isAir && !st.`is`(Blocks.BARRIER)) {
-                if (st.canOcclude()) return false
                 val shape = st.getVisualShape(level, pos, CollisionContext.empty())
+                if (shape === Shapes.block()) return false
                 if (!shape.isEmpty && shape.clip(from, to, pos) != null) return false
             }
             if (tx >= 1 && ty >= 1 && tz >= 1) return false
@@ -213,22 +224,20 @@ object MimicFinder {
 
     private fun roomAt(tile: Int): DungeonRoom? = DungeonScan.rooms.firstOrNull { r -> r.tiles.any { it.z * 6 + it.x == tile } }
 
-    private fun work(rooms: List<DungeonRoom>, sites: Map<DungeonRoom, List<SecretWaypoints.ChestSite>?>) {
+    private fun work(level: Level, rooms: List<DungeonRoom>, sites: Map<DungeonRoom, List<SecretWaypoints.ChestSite>?>) {
         val f = found
         if (f != null) {
             val room = tileOf(f)?.let(::roomAt)
             roomOdds = IdentityHashMap<DungeonRoom, Double>().also { m -> room?.let { m[it] = 1.0 } }
             splitOdds = emptyMap()
-            room?.name?.let { announce(it, foundByMe) }
+            room?.name?.let { announce(level, it) }
             return
         }
         val avg = PoolSites.get() ?: return
         val parts = ArrayList<MimicOdds.Part>()
         var n = 0.0; var m = 0.0; var rl = 0; var rp = 0
         var unplaced = false
-        val knownTiles = HashSet<Int>()
         for (room in rooms) {
-            for (t in room.tiles) knownTiles += t.z * 6 + t.x
             val list = sites[room]
             if (list != null) {
                 var ol = 0; var op = 0
@@ -247,6 +256,7 @@ object MimicFinder {
         var unknown = false
         val p = MapPrediction.current()
         if (p != null) for (s in p.splits) {
+            if (roomAt(s.tile)?.isViewable == true) continue
             val l = (0 until Cls.COUNT).sumOf { s.expect[it] * avg.byCls(it, true) }
             val pl = (0 until Cls.COUNT).sumOf { s.expect[it] * avg.byCls(it, false) }
             if (l + pl <= 0.0) continue
@@ -254,8 +264,8 @@ object MimicFinder {
             n += l; m += pl
             parts += MimicOdds.Part(s.tile, l, pl)
         } else {
-            val rules = com.engineerclient.mappred.FloorRules.of(DungeonUtils.floor?.floorNumber ?: 0)
-            val left = (rules?.let { it.w * it.h } ?: 36) - knownTiles.size
+            val known = DungeonScan.rooms.filter { it.isViewable }.flatMap { r -> r.tiles.map { it.z * 6 + it.x } }.toSet()
+            val left = (FloorRules.of(DungeonUtils.floor?.floorNumber ?: 0)?.let { it.w * it.h } ?: 36) - known.size
             if (left > 0) {
                 unknown = true
                 n += left * avg.perTileLocked; m += left * avg.perTilePlain
@@ -265,25 +275,26 @@ object MimicFinder {
         val odds = MimicOdds.odds(parts, n, m)
         roomOdds = IdentityHashMap<DungeonRoom, Double>().also { r -> for ((k, v) in odds) if (k is DungeonRoom) r[k] = v }
         splitOdds = odds.filterKeys { it is Int && it >= 0 }.mapKeys { it.key as Int }
-        ruledLocked = rl; ruledPlain = rp; totalLocked = n; totalPlain = m
+        ruledLocked = rl; ruledPlain = rp; totals = doubleArrayOf(n, m, rl.toDouble(), rp.toDouble())
         if (!unknown && !unplaced) {
-            val left = odds.filterValues { it > 0.0 }.keys
-            val only = left.singleOrNull() as? DungeonRoom
-            if (only != null) only.name?.let { announce(it, null) }
+            val only = odds.filterValues { it > 0.0 }.keys.singleOrNull() as? DungeonRoom
+            only?.name?.let { announce(level, it) }
         }
     }
 
-    /** Sends the message once: the player who saw it, or by elimination the first linked name. */
-    private fun announce(room: String, byMe: Boolean?) {
+    /**
+     * Once certain: the linked players in name order each wait their turn for the message from the one before, so one
+     * says it even when someone has Mimic Message off.
+     */
+    private fun announce(level: Level, room: String) {
         if (sent) return
+        if (certainAt < 0) certainAt = level.gameTime
         val me = mc().user.name.lowercase()
-        val sender = when (byMe) {
-            true -> true
-            false -> false
-            null -> (PoseShare.linkedNames + me).minOrNull() == me
-        }
+        val rank = (PoseShare.linkedNames + me).distinct().sorted().indexOf(me)
+        if (level.gameTime - certainAt < rank * TURN_TICKS || !message.value) return
         sent = true
-        if (sender && message.value) sendCommand("pc Mimic is in $room")
+        sendCommand("pc Mimic is in $room")
+        found?.let { share(it, SENT) } ?: share(BlockPos.ZERO, SENT)
     }
 
     private fun poolOf(room: DungeonRoom): Int? {
@@ -291,7 +302,7 @@ object MimicFinder {
         return when (room.type) {
             RoomType.NORMAL, RoomType.RARE -> {
                 val shape = MapView.shapeOf(tiles, 6) ?: return null
-                if (shape == Shape.ONE) MapStats.POOL_1X1 else shape.ordinal
+                if (shape != Shape.ONE) shape.ordinal else if (room.type == RoomType.RARE && room.data != null) MapStats.POOL_RARE else MapStats.POOL_1X1
             }
             RoomType.PUZZLE -> MapStats.POOL_PUZZLE
             RoomType.CHAMPION -> MapStats.POOL_YELLOW
@@ -302,15 +313,21 @@ object MimicFinder {
         }
     }
 
-    /** For the name guesses: how much a room with [locked] and [plain] chest sites fits the Mimic not being found yet. */
-    fun nameFactor(name: RoomName): Double {
-        if (!steerNames.value || !active || found != null) return 1.0
-        val avg = PoolSites.get() ?: return 1.0
-        val s = avg.byName[name.name] ?: return 1.0
-        val base = MimicOdds.notFound(totalLocked, totalPlain, ruledLocked.toDouble(), ruledPlain.toDouble())
-        if (base <= 0.0) return 1.0
-        return MimicOdds.notFound(totalLocked + s.first, totalPlain + s.second, ruledLocked.toDouble(), ruledPlain.toDouble()) / base
+    /**
+     * For the name guesses, a snapshot: how much each name's chest sites fit the Mimic not being found yet (1 for no
+     * change); null when Mimic Steers Names has nothing to say.
+     */
+    fun nameFactors(): Map<String, Double>? {
+        if (!steerNames.value || !active || found != null) return null
+        val avg = PoolSites.get() ?: return null
+        val (n, m, rl, rp) = totals
+        if (rl + rp <= 0.0) return null
+        val base = MimicOdds.notFound(n, m, rl, rp)
+        if (base <= 0.0) return null
+        return avg.byName.mapValues { (_, s) -> MimicOdds.notFound(n + s.first, m + s.second, rl, rp) / base }
     }
+
+    private operator fun DoubleArray.component4() = this[3]
 
     /** "mob", "miniboss" or "none" for a room name, from the rooms pack. */
     fun clearOf(name: String): String? = SecretWaypoints.pack?.designsByName(name)?.firstOrNull()?.clear
@@ -327,7 +344,6 @@ object MimicFinder {
             val w = big.sumOf { it.seen.toDouble() }.coerceAtLeast(1.0)
             bigLocked = big.sumOf { it.seen * locked[it.pool] } / w
             bigPlain = big.sumOf { it.seen * plain[it.pool] } / w
-            // a map's chests over its 36 tiles, from the share of each pool on the recorded maps
             val maps = MapStats.NAMES.filter { it.pool == MapStats.POOL_ENTRANCE }.sumOf { it.seen }.coerceAtLeast(1)
             perTileLocked = MapStats.NAMES.sumOf { it.seen.toDouble() * (byName[it.name]?.first ?: 0) } / maps / 36
             perTilePlain = MapStats.NAMES.sumOf { it.seen.toDouble() * (byName[it.name]?.second ?: 0) } / maps / 36

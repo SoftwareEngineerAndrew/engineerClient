@@ -24,6 +24,7 @@ import java.nio.ByteBuffer
 object TermDoneWarning {
     const val KIND = 15
     private const val TERMINAL_DONE = 1
+    const val MIMIC = 2
     private val TERMINAL_LINE = Regex("^(\\w{1,16}) activated a terminal! \\(\\d/\\d\\)$")
     private const val GOLDOR_LINE = "[BOSS] Goldor: Who dares trespass into my domain?"
 
@@ -65,7 +66,12 @@ object TermDoneWarning {
     private fun inP3() = DungeonUtils.inBoss && DungeonUtils.getF7Phase() == M7Phases.P3
 
     private fun heard(sender: String, b: ByteBuffer) {
-        if (b.remaining() != 2 || b.get().toInt() != TERMINAL_DONE) return
+        if (!b.hasRemaining()) return
+        when (b.get().toInt()) {
+            MIMIC -> { com.engineerclient.mimic.MimicFinder.heard(b); return }
+            TERMINAL_DONE -> if (b.remaining() != 1) return
+            else -> return
+        }
         val t = b.get().toInt() and 255
         if (t >= stations.size) return
         val name = DungeonUtils.dungeonTeammatesNoSelf.firstOrNull { it.name.equals(sender, ignoreCase = true) }?.name ?: return

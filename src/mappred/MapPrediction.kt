@@ -271,7 +271,8 @@ object MapPrediction {
                 if (generation.get() != gen) return@safely
                 // the names from the secret total once the map is known for sure
                 val namer = try { MapPredictor(v) } catch (_: Exception) { null }
-                val steered = if (steer) try { MapPredictor(v, com.engineerclient.mimic.MimicFinder::nameFactor).certainNames(p) } catch (_: Exception) { null } else null
+                val factors = if (steer) com.engineerclient.mimic.MimicFinder.nameFactors() else null
+                val steered = if (factors != null) try { MapPredictor(v) { factors[it.name] ?: 1.0 }.certainNames(p) } catch (_: Exception) { null } else null
                 shown = p; shownView = v; shownKey = key; shownNames = namer?.certainNames(p); shownSteered = steered
             }
         }
@@ -299,8 +300,8 @@ object MapPrediction {
     private var doorsFor: Prediction? = null
     private var doorsCache: List<com.adm.features.impl.dungeon.map.tile.DungeonDoor> = emptyList()
 
-    /** The prediction for the map as it is now; null while it's being worked out or off. */
-    fun current(): Prediction? = if (on && DungeonMap.enabled && supported() && shownKey == lastKey) shown else null
+    /** The prediction up (the map before's while a new one is worked out); null when off. */
+    fun current(): Prediction? = if (on && DungeonMap.enabled && supported()) shown else null
 
     fun replacesCore(): Boolean = on && DungeonMap.enabled && supported() && shown != null
 
