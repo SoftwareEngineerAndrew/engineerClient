@@ -77,6 +77,21 @@ object TerminalHitboxes {
         return s
     }
 
+    /**
+     * The section whose terminals open now, 0 while terminals don't run. On Hypixel the chat count is backed by the world,
+     * so a missed line or a world reload mid-P3 can't hold it back.
+     */
+    fun liveSection(): Int {
+        val chat = TermInfo.liveSection()
+        if (com.engineerclient.p3sim.P3Sim.localSim) return chat
+        val level = mc.level ?: return 0
+        var doneBound = 0
+        for (i in TERMINALS.indices) if (doneSeen[i]) doneBound = maxOf(doneBound, TERMINALS[i].section)
+        return if (TermInfo.coreOpened || chat == 0 && doneBound == 0) 0 else maxOf(chat, doneBound, doorSection(level))
+    }
+
+    fun sectionOf(i: Int) = TERMINALS[i].section
+
     /** The terminal whose stand [e] is, as an index in [TERMINALS], or -1. */
     fun terminalOf(e: net.minecraft.world.entity.Entity): Int {
         if (e !is net.minecraft.world.entity.decoration.ArmorStand) return -1
@@ -111,7 +126,6 @@ object TerminalHitboxes {
         val level = mc.level ?: return
         val player = mc.player ?: return
         val simStations = if (sim) (com.engineerclient.p3sim.Fight.phase as? com.engineerclient.p3sim.GoldorPhase)?.stations else null
-        var doneBound = 0
         for (i in TERMINALS.indices) {
             val t = TERMINALS[i]
             done[i] = if (sim) simStations?.firstOrNull { it.kind == t.kind && it.section == t.section && it.label == t.label }?.done == true
@@ -127,14 +141,9 @@ object TerminalHitboxes {
                 if (count >= 2 && maxY - minY < 0.1 || active) doneSeen[i] = true
                 doneSeen[i]
             }
-            if (done[i]) doneBound = maxOf(doneBound, t.section)
         }
-        // Only while terminals run (Goldor's first line to the core opening), not over P1, P2 or P4. On Hypixel the chat
-        // count is backed by the world, so a missed line or a world reload mid-P3 can't hold it back.
-        val live = if (sim) TermInfo.liveSection() else {
-            val chat = TermInfo.liveSection()
-            if (TermInfo.coreOpened || chat == 0 && doneBound == 0) 0 else maxOf(chat, doneBound, doorSection(level))
-        }
+        // Only while terminals run (Goldor's first line to the core opening), not over P1, P2 or P4.
+        val live = liveSection()
         if (live == 0) return
         val eye = player.getEyePosition(mc.deltaTracker.getGameTimeDeltaPartialTick(false))
         val reach = player.entityInteractionRange()

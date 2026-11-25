@@ -36,7 +36,8 @@ object InstantGui {
     private fun clicked(entity: Entity) {
         if (!Terminals.enabled || !Terminals.instantGui || P3Sim.localSim || mc.gui.screen() != null) return
         val i = TerminalHitboxes.terminalOf(entity)
-        if (i < 0 || TerminalHitboxes.seenDone(i)) return
+        // Another section's or a done one: Hypixel opens no window for it.
+        if (i < 0 || TerminalHitboxes.seenDone(i) || TerminalHitboxes.sectionOf(i) != TerminalHitboxes.liveSection()) return
         openedAt = System.currentTimeMillis()
         mc.gui.setScreen(WaitScreen())
     }
