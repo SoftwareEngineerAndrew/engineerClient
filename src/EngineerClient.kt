@@ -97,6 +97,7 @@ object EngineerClient : ClientModInitializer {
             com.engineerclient.render.BossBar,
             com.engineerclient.skyblock.Arrows,
             com.engineerclient.skyblock.SearchBar,
+            com.engineerclient.skyblock.PingMenus,
             com.engineerclient.visual.Sounds,
             com.engineerclient.visual.Performance,
             com.engineerclient.visual.BlazeDaggerHUD,
@@ -156,6 +157,7 @@ object EngineerClient : ClientModInitializer {
         safely("devices") { com.engineerclient.devices.Devices.install() }
         safely("clear info") { com.engineerclient.dungeon.ClearInfo.install() }
         safely("item worth") { com.engineerclient.skyblock.ItemWorth.install() }
+        safely("50 ping menus") { com.engineerclient.skyblock.PingMenus.install() }
         safely("pov in leap menu") { com.engineerclient.pov.PovInLeapMenu.install() }
         safely("creeper beams ding") { com.engineerclient.dungeon.CreeperBeamsDing.install() }
         safely("puzzle overlay") { com.engineerclient.misc.PuzzleOverlay.install() }

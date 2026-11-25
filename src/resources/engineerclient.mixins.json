@@ -147,7 +147,10 @@
     "RecipeBookButtonMixin",
     "RecipeBookShownMixin",
     "ContainerBackgroundMixin",
-    "CraftingTextMixin"
+    "CraftingTextMixin",
+    "PingMenusPacketMixin",
+    "PingMenusClickMixin",
+    "PingMenusCloseMixin"
   ],
   "injectors": {
     "defaultRequire": 1
