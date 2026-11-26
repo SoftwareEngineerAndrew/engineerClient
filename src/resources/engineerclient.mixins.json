@@ -119,6 +119,7 @@
     "ScreenTweaksTextShadowMixin",
     "ScreenTweaksObfuscatedMixin",
     "ContainerSlotMixin",
+    "HotbarRarityMixin",
     "SearchBarSlotMixin",
     "CameraRideMixin",
     "RenderCleanupParticleMixin",

@@ -67,6 +67,7 @@ import net.minecraft.world.inventory.Slot
 import net.minecraft.world.item.ItemDisplayContext
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
+import net.minecraft.world.item.component.ItemLore
 import net.minecraft.world.level.material.FogType
 import java.time.LocalTime
 
@@ -99,6 +100,11 @@ object Visibility : Module(
     private val customTime by NumberSetting("Custom Time", 6000, 0..23999, 100, desc = "World time in ticks.").withDependency { screenDropdown && timeChanger && timeMode == Time.CUSTOM }
     private val blackSky by BooleanSetting("Black Sky", true, desc = "Black sky and distant fog instead of blue.").withDependency { screenDropdown }
     private val noGlint by BooleanSetting("No Enchant Glint", true, desc = "No enchantment glint on items, except in terminals.").withDependency { screenDropdown }
+    private enum class RarityShape { SQUARE, CIRCLE }
+    private val rarityBackground by BooleanSetting("Rarity Background", false, desc = "Colors the slot behind SkyBlock items by their rarity.").withDependency { screenDropdown }
+    private val rarityShape by SelectorSetting("Rarity Shape", RarityShape.SQUARE, desc = "A full square or a circle behind the item.").withDependency { screenDropdown && rarityBackground }
+    private val rarityOpacity by NumberSetting("Rarity Opacity", 50, 10..100, 5, desc = "Opacity of the rarity background.", unit = "%").withDependency { screenDropdown && rarityBackground }
+    private val rarityHotbar by BooleanSetting("Rarity In Hotbar", true, desc = "Also draws it behind hotbar items.").withDependency { screenDropdown && rarityBackground }
     private val hideItemNames by BooleanSetting("Hide Item Names", false, desc = "No item name above the hotbar when you switch items.").withDependency { screenDropdown }
     private val itemNameHud by HUD("Item Name HUD", "Moves the name shown when you switch items. Off: it stays above the hotbar.", true, 380, 400, 1f) { example ->
         drawItemName(this, example)
@@ -480,6 +486,30 @@ object Visibility : Module(
         return byInfo[info] ?: KeptAdvance(random, info).also { byInfo[info] = it }
     }
 
+    private val RARITY_CIRCLE = Identifier.fromNamespaceAndPath("engineerclient", "textures/rarity_circle.png")
+
+    // Keyed by the lore component itself: Hypixel sends a changed item as a new stack, so the same lore keeps its answer.
+    private val rarityColors = java.util.IdentityHashMap<ItemLore, Int>()
+
+    private fun rarityColor(stack: ItemStack): Int {
+        val lore = stack.get(DataComponents.LORE) ?: return 0
+        rarityColors[lore]?.let { return it }
+        if (rarityColors.size >= 2048) rarityColors.clear()
+        val rarity = com.adm.utils.getSkyblockRarity(lore.lines().map { it.string })
+        val rgb = rarity?.color?.rgba?.and(0xFFFFFF) ?: 0
+        rarityColors[lore] = rgb
+        return rgb
+    }
+
+    @JvmStatic fun drawRarity(g: GuiGraphicsExtractor, stack: ItemStack, x: Int, y: Int, hotbar: Boolean) {
+        if (!on(RARITY) || stack.isEmpty || hotbar && !rarityHotbar) return
+        val rgb = rarityColor(stack)
+        if (rgb == 0) return
+        val color = (rarityOpacity * 255 / 100) shl 24 or rgb
+        if (rarityShape == RarityShape.CIRCLE) g.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, RARITY_CIRCLE, x, y, 0f, 0f, 16, 16, 16, 16, color)
+        else g.fill(x, y, x + 16, y + 16, color)
+    }
+
     @JvmStatic fun highlightsSlot(slot: Slot): Boolean = !enabled || !noPaneHighlight || !isFillerPane(slot.item)
 
     // Menu fillers are glass panes renamed to nothing.
@@ -739,6 +769,7 @@ object Visibility : Module(
     private const val DEATH_ANIMATION = 1 shl 16
     private const val BLACK_SKY = 1 shl 17
     private const val GLINT = 1 shl 18
+    private const val RARITY = 1 shl 19
 
     private var flags = 0
 
@@ -755,7 +786,7 @@ object Visibility : Module(
                 flag(noNausea, NAUSEA) or flag(fullbright, FULLBRIGHT) or flag(noTextShadow, TEXT_SHADOW) or
                 flag(timeChanger, TIME) or flag(hideEntityFire, ENTITY_FIRE) or flag(disableGlowing, GLOWING) or
                 flag(disableFireOverlay, FIRE_OVERLAY) or flag(hideDeathAnimation, DEATH_ANIMATION) or
-                flag(blackSky, BLACK_SKY) or flag(noGlint, GLINT)
+                flag(blackSky, BLACK_SKY) or flag(noGlint, GLINT) or flag(rarityBackground, RARITY)
         }
     }
 }
