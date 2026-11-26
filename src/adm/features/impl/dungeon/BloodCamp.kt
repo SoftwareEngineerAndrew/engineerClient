@@ -27,7 +27,6 @@ import net.minecraft.world.entity.monster.zombie.Zombie
 import net.minecraft.world.item.Items
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.min
@@ -39,7 +38,7 @@ object BloodCamp : Module(
 ) {
     private val sendMoveTime by BooleanSetting("Move alert", true, desc = "Sends a message & title indicating when the watcher will move.")
     private val moveSound by BooleanSetting("Move Sound", true, desc = "Plays a sound with the move alert.").withDependency { sendMoveTime }
-    private val mageOnly by BooleanSetting("Mage Only", false, desc = "Move alert and HUD only as Mage or in the blood room.")
+    private val mageOnly by BooleanSetting("Mage Only", false, desc = "Move alert and HUDs only as Mage or in the blood room.")
     private val moveTimer by HUD("Move HUD", "Displays the time until the watcher moves.") { example ->
         val ticks = if (example) 10 else moveTicks
         if (ticks <= 0 || !example && !moveForMe) return@HUD 0 to 0
@@ -55,7 +54,6 @@ object BloodCamp : Module(
     private val mboxColor by ColorSetting("Position Color", Colors.MINECRAFT_GREEN, true, desc = "Color for current position box. Set alpha to 0 to disable.").withDependency { bloodAssist && assistDropdown }
     private val boxSize by NumberSetting("Box Size", 1.0, 0.1..1.0, 0.1, desc = "The size of the boxes. Lower values may seem less accurate.").withDependency { bloodAssist && assistDropdown }
     private val drawLine by BooleanSetting("Line", true, desc = "Line between Position box and Spawn box.").withDependency { bloodAssist && assistDropdown }
-    private val drawTime by BooleanSetting("Time Left", true, desc = "Time before the blood mob spawns. Adjust offset depending on accuracy. May be up to ~100ms off.").withDependency { bloodAssist && assistDropdown }
     private val advanced by DropdownSetting("Advanced", desc = "Shows advanced timing settings for the blood camp assist.").withDependency { bloodAssist && assistDropdown }
     private val offset by NumberSetting("Offset", 40, -100..100, desc = "Tick offset to adjust between ticks.").withDependency { advanced && bloodAssist && assistDropdown }
     private val tick by NumberSetting("Tick", 38, 35..41, desc = "Tick to assume spawn. Adjust offset to offset this value to the ms.").withDependency { advanced && bloodAssist && assistDropdown }
@@ -66,7 +64,7 @@ object BloodCamp : Module(
     private val clickCountdown by BooleanSetting("Click Countdown", true, desc = "Above the next mob, time until a click sent now lands as it can be hit.").withDependency { bloodAssist && assistDropdown }
     private val clickHud by HUD("Click Countdown HUD", "The click countdown for the next mob, with how many are due within a second.") { example ->
         if (example) return@HUD textDim(clickHudText(450, 2), 0, 0)
-        if (!bloodAssist || !DungeonUtils.inClear || clickMs == Long.MIN_VALUE) return@HUD 0 to 0
+        if (!bloodAssist || !DungeonUtils.inClear || clickMs == Long.MIN_VALUE || !isMoveForMe()) return@HUD 0 to 0
         textDim(clickHudText(clickMs, clickDue), 0, 0)
     }.withDependency { bloodAssist && assistDropdown }
     private val watcherBar by BooleanSetting("Watcher Bar", true, desc = "Shows the watcher's health.")
@@ -135,17 +133,9 @@ object BloodCamp : Module(
         return moveTextValue
     }
 
-    private val timeText = FormatCache(16) { seconds ->
-        val color = when {
-            seconds > 1.5 -> 'a'
-            seconds in 0.5..1.5 -> '6'
-            seconds in 0.0..0.5 -> 'c'
-            else -> 'b'
-        }
-        "§$color${seconds.toFloat().toFixed()}s"
-    }
+    private val clickText = FormatCache(8) { t -> if (t <= 0) "§a§lGO!" else "§b${t.toInt()}t" }
 
-    private val clickText = FormatCache(8) { ms -> if (ms <= 0) "§a§lGO!" else "§b${String.format(Locale.ROOT, "%.2f", ms / 1000)}s" }
+    private fun ticksLeft(ms: Long) = Math.floorDiv(ms + 49, 50)
 
     private var clickMs = Long.MIN_VALUE
     private var clickDue = 0
@@ -154,10 +144,11 @@ object BloodCamp : Module(
     private var hudText = ""
 
     private fun clickHudText(ms: Long, due: Int): String {
-        if (ms != hudMs || due != hudDue) {
-            hudMs = ms
+        val t = ticksLeft(ms)
+        if (t != hudMs || due != hudDue) {
+            hudMs = t
             hudDue = due
-            val text = clickText(ms.toDouble())
+            val text = clickText(t.toDouble())
             hudText = if (due > 1) "$text §7($due)" else text
         }
         return hudText
@@ -304,7 +295,6 @@ object BloodCamp : Module(
 
                 val label = Vec3(landX, landY + 2.0, landZ)
                 if (drawLine) drawLine(listOf(spawn.at.add(0.0, 2.0, 0.0), label), Colors.MINECRAFT_RED, depth = true)
-                if (drawTime) drawText(timeText(((untilSpawn.toFloat() - offset) / 1000).toDouble()), label, 2f, true)
                 if (untilSpawn > 0) {
                     if (untilSpawn - ping <= 1000) due++
                     if (untilSpawn < nextUntil) {
@@ -317,8 +307,7 @@ object BloodCamp : Module(
             if (nextUntil == Long.MAX_VALUE) return@on
             clickMs = nextUntil - ping
             clickDue = due
-            // Above the Time Left label so the two don't overlap.
-            if (clickCountdown) drawText(clickText(clickMs.toDouble()), clickPosAt(nextX, nextY + 2.7, nextZ), 1.2f, true)
+            if (clickCountdown) drawText(clickText(ticksLeft(clickMs).toDouble()), clickPosAt(nextX, nextY + 2.0, nextZ), 1.2f, true)
         }
     }
 
