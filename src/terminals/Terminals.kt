@@ -27,11 +27,19 @@ object Terminals : Module(
     // ------------------------------------------------------------------ Solver
     private val solverDrop by DropdownSetting("Solver", true, desc = "The terminal solver.")
     val solver by BooleanSetting("Enable Solver", true, desc = "Shows what to click and only lets the right clicks through.").withDependency { solverDrop }
-    val style by SelectorSetting("Solver Style", Style.CUSTOM, desc = "Custom draws its own grid; Vanilla marks the slots in the normal window.").withDependency { solverDrop }
+    val style by SelectorSetting("Solver Style", Style.CUSTOM, desc = "Odin, Noamm and Soshimee draw their own grid; Vanilla marks the slots in the normal window.").withDependency { solverDrop }
     val customSize by NumberSetting("Custom Size", 2f, 1.0..4.0, 0.1, desc = "Size of the custom grid.").withDependency { solverDrop && style == Style.CUSTOM }
     val melodySize by NumberSetting("Melody Size", 1.5f, 1.0..4.0, 0.1, desc = "Size of the custom melody grid.").withDependency { solverDrop && style == Style.CUSTOM }
     val gap by NumberSetting("Slot Gap", 2, 0..8, 1, desc = "Gap between custom grid slots.").withDependency { solverDrop && style == Style.CUSTOM }
     val roundness by NumberSetting("Roundness", 4f, 0.0..12.0, 1.0, desc = "Corner roundness of the custom grid.").withDependency { solverDrop && style == Style.CUSTOM }
+    val noammScale by NumberSetting("Noamm Scale", 1f, 0.1..2.0, 0.01, desc = "Size of the Noamm grid.").withDependency { solverDrop && style == Style.NOAMM }
+    val noammGap by NumberSetting("Noamm Slot Gap", 0f, 0.0..8.0, 0.5, desc = "Gap between Noamm grid slots.").withDependency { solverDrop && style == Style.NOAMM }
+    val noammPadding by NumberSetting("Noamm Padding", 2f, 0.0..12.0, 0.5, desc = "Space around the Noamm grid.").withDependency { solverDrop && style == Style.NOAMM }
+    val noammSlots by SelectorSetting("Noamm Slot Style", NoammSlot.RECT, desc = "How Noamm draws each slot.").withDependency { solverDrop && style == Style.NOAMM }
+    val noammBorder by ColorSetting("Noamm Border", Colors.WHITE, true, desc = "Border around the Noamm grid.").withDependency { solverDrop && style == Style.NOAMM }
+    val noammTitle by ColorSetting("Noamm Title", Colors.WHITE, true, desc = "The terminal's name above the Noamm grid.").withDependency { solverDrop && style == Style.NOAMM }
+    val soshimeeScale by NumberSetting("Soshimee Scale", 1f, 0.5..4.0, 0.1, desc = "Size of the Soshimee grid.").withDependency { solverDrop && style == Style.SOSHIMEE }
+    val soshimeeTitle by BooleanSetting("Soshimee Title", true, desc = "The terminal's name above the Soshimee grid.").withDependency { solverDrop && style == Style.SOSHIMEE }
     val vanillaScale by NumberSetting("Vanilla Scale", 3, 1..6, 1, desc = "GUI scale while a terminal is open (6 is auto).").withDependency { solverDrop && style == Style.VANILLA }
     val hideItems by BooleanSetting("Hide Items", true, desc = "Vanilla: only the slots to click are drawn.").withDependency { solverDrop && style == Style.VANILLA }
     val rubixMode by SelectorSetting("Rubix Mode", RubixMode.FEWEST_CLICKS, desc = "Fewest Clicks and Least Movement mix in right clicks; Least Movement marks the next pane on the shortest mouse path.").withDependency { solverDrop }
@@ -65,6 +73,7 @@ object Terminals : Module(
     val melodyColumn by ColorSetting("Melody Column", Colors.MINECRAFT_DARK_PURPLE, true, desc = "The marks above and below the column to click in.").withDependency { colors() }
     val melodyPointer by ColorSetting("Melody Pointer", Colors.MINECRAFT_GREEN, true, desc = "The moving pane, and the button when it lines up.").withDependency { colors() }
     val melodyBackground by ColorSetting("Melody Background", Colors.gray38, true, desc = "The lanes and the buttons.").withDependency { colors() }
+    val melodyWrong by ColorSetting("Melody Wrong Button", Colors.MINECRAFT_RED, true, desc = "Noamm and Soshimee: the buttons not to press.").withDependency { colors() }
     val melodyFirstBackground by ColorSetting("Melody First Click Background", Colors.gray38, true, desc = "The lanes and the buttons while row 1 slot 1 can be clicked.").withDependency { colors() }
 
     // ------------------------------------------------------------------ Times
@@ -205,7 +214,12 @@ object Terminals : Module(
     fun showsTerminalNumber(slotIndex: Int, solution: List<Int>): Boolean = solution.indexOf(slotIndex) in 0 until numbersShown
 
     enum class Style(private val label: String) {
-        CUSTOM("Custom"), VANILLA("Vanilla");
+        CUSTOM("Odin"), VANILLA("Vanilla"), NOAMM("Noamm"), SOSHIMEE("Soshimee");
+        override fun toString() = label
+    }
+
+    enum class NoammSlot(private val label: String) {
+        RECT("Rect"), BORDERED("Bordered Rect"), BUTTON("Button");
         override fun toString() = label
     }
 

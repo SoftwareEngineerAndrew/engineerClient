@@ -26,7 +26,7 @@ object TermSolver {
     @JvmStatic val overridesGuiScale get() = Terminals.style == Terminals.Style.VANILLA && term != null
     @JvmStatic val termSize get() = if (Terminals.vanillaScale == 6) Options.AUTO_GUI_SCALE else Terminals.vanillaScale
 
-    private fun color(kind: Int): Color? = when (kind) {
+    internal fun color(kind: Int): Color? = when (kind) {
         TerminalHandler.PANE -> Terminals.panesColor
         TerminalHandler.SELECT -> Terminals.selectColor
         TerminalHandler.STARTS_WITH -> Terminals.startsWithColor
@@ -44,7 +44,7 @@ object TermSolver {
         else -> null
     }
 
-    private fun textColor(t: TerminalHandler) = if (t.type == TerminalTypes.NUMBERS) Terminals.numbersText else Terminals.rubixText
+    internal fun textColor(t: TerminalHandler) = if (t.type == TerminalTypes.NUMBERS) Terminals.numbersText else Terminals.rubixText
 
     private class Grid(val x: Float, val y: Float, val scale: Float, val top: Int, val left: Int, val rows: Int, val cols: Int) {
         val step = CELL + Terminals.gap
@@ -83,7 +83,7 @@ object TermSolver {
             (InputConstants.isKeyDown(InputConstants.KEY_LCONTROL) || InputConstants.isKeyDown(InputConstants.KEY_RCONTROL))
     }
 
-    private fun customActive() = Terminals.style == Terminals.Style.CUSTOM && term != null && mc.gui.screen() is AbstractContainerScreen<*>
+    private fun customActive() = Terminals.style != Terminals.Style.VANILLA && term != null && mc.gui.screen() is AbstractContainerScreen<*>
 
     /** The terminal slot under the mouse, in the custom grid or the window; -1 for none. */
     fun slotUnderMouse(screen: AbstractContainerScreen<*>, t: TerminalHandler): Int =
@@ -94,13 +94,14 @@ object TermSolver {
             render = fun ScreenEvent.Render.(): Any {
                 val t = term ?: return false
                 val screen = mc.gui.screen() as? AbstractContainerScreen<*> ?: return false
-                drawCustom(guiGraphics, grid(screen, t), t, mouseX, mouseY)
+                if (Terminals.style == Terminals.Style.CUSTOM) drawCustom(guiGraphics, grid(screen, t), t, mouseX, mouseY)
+                else hovered = TermStyles.draw(guiGraphics, screen, t, mouseX, mouseY)
                 return true
             },
             click = fun ScreenEvent.MouseClick.(): Any {
                 val t = term ?: return false
                 val screen = mc.gui.screen() as? AbstractContainerScreen<*> ?: return false
-                val slot = grid(screen, t).slotAt(click.x(), click.y())
+                val slot = if (Terminals.style == Terminals.Style.CUSTOM) grid(screen, t).slotAt(click.x(), click.y()) else TermStyles.slotAt(screen, t, click.x(), click.y())
                 if (slot >= 0) t.click(slot, mouseButton(click.button()))
                 return true
             },

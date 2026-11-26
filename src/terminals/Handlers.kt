@@ -234,9 +234,12 @@ class StartsWithHandler(private val letter: String) : TerminalHandler(TerminalTy
 
 /** Melody: lanes in rows 1-3 (columns 1-5), a button at column 7 of each, the column to hit marked in rows 0 and 4. */
 class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
-    private var column = -1
-    private var pointer = -1
-    private var button = -1
+    var column = -1
+        private set
+    var pointer = -1
+        private set
+    var button = -1
+        private set
 
     override fun key(item: ItemStack) = 0
     override fun canClickShown(slot: Int, button: Int) = slot == activeButton()
@@ -288,10 +291,10 @@ class MelodyHandler : TerminalHandler(TerminalTypes.MELODY) {
         }
     }
 
-    private companion object {
+    companion object {
         val BUTTONS = listOf(16, 25, 34)
-        const val FIRST_SLOT = 1
-        val MAGENTA_PANE = Items.STAINED_GLASS_PANE.pick(DyeColor.MAGENTA)
-        val LIME_CLAY = Items.DYED_TERRACOTTA.pick(DyeColor.LIME)
+        private const val FIRST_SLOT = 1
+        private val MAGENTA_PANE = Items.STAINED_GLASS_PANE.pick(DyeColor.MAGENTA)
+        private val LIME_CLAY = Items.DYED_TERRACOTTA.pick(DyeColor.LIME)
     }
 }
