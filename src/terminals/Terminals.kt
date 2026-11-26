@@ -39,6 +39,7 @@ object Terminals : Module(
     val numberText by BooleanSetting("Number Text", true, desc = "Numbers: each pane's number on it.").withDependency { solverDrop }
     private val hideNumbers by BooleanSetting("Hide Numbers' Numbers", false, desc = "Numbers: hides the 1-10, leaving only the order colours (/termsim too).").withDependency { solverDrop }
     private val numbersShown by NumberSetting("Show Next Numbers", 0, 0..10, 1, desc = "The next this many panes still show their number (0: none).").withDependency { solverDrop && hideNumbers }
+    val eRightClick by BooleanSetting("E as Right Click", false, desc = "E right clicks instead of Ctrl + Q; E does nothing else in a terminal.").withDependency { solverDrop }
     val clickLimit by BooleanSetting("Click Limit", true, desc = "Hypixel takes 5 terminal clicks per 500 ms; one it would drop isn't sent.").withDependency { solverDrop }
     val instantGui by BooleanSetting("Open GUI Instantly", false, desc = "A blank screen as soon as you click a terminal; the slots fill in as Hypixel sends them.").withDependency { solverDrop }
     val instantStyle by SelectorSetting("Style", InstantGui.Size.SELECT, desc = "Which terminal's size the blank screen takes.").withDependency { solverDrop && instantGui }
@@ -224,5 +225,6 @@ object Terminals : Module(
         TermProgress.install()
         TerminalHitboxes.install()
         InstantGui.install()
+        ERightClick.install()
     }
 }

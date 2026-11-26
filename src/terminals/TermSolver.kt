@@ -14,6 +14,7 @@ import com.adm.utils.ui.widget.CustomGUIImpl
 import net.minecraft.client.Options
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
+import net.minecraft.world.entity.player.Inventory
 
 /** Draws the open terminal's solution and turns your clicks into the terminal's clicks. */
 object TermSolver {
@@ -83,6 +84,10 @@ object TermSolver {
     }
 
     private fun customActive() = Terminals.style == Terminals.Style.CUSTOM && term != null && mc.gui.screen() is AbstractContainerScreen<*>
+
+    /** The terminal slot under the mouse, in the custom grid or the window; -1 for none. */
+    fun slotUnderMouse(screen: AbstractContainerScreen<*>, t: TerminalHandler): Int =
+        if (customActive()) hovered else screen.hoveredSlot?.takeIf { it.container !is Inventory }?.index?.takeIf { it < t.area } ?: -1
 
     fun install() {
         CustomGUIImpl.register(CustomGUIImpl.HandlerSet(::customActive,
