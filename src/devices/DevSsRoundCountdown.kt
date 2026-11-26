@@ -86,7 +86,7 @@ object DevSsRoundCountdown {
     private fun update() {
         if (showStart < 0 || maxOf(lamps, expected) < 2) { sendAt = 0L; return }
         val backAt = maxOf(lastLamp, showStart + 8L * (maxOf(expected, lamps) - 1)) + 18
-        sendAt = (tickArrival(backAt + 1) ?: return) - rtt() * 1_000_000L
+        sendAt = (tickArrival(backAt) ?: return) - rtt() * 1_000_000L
         button = firstLamp
     }
 
