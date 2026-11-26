@@ -128,8 +128,8 @@ object ServerUtils {
             }
 
             var total = 0L
-            for (i in 0 until sampleSize) {
-                total += pingLog.get(i)
+            for (i in 1..sampleSize) {
+                total += pingLog.get(pingLog.size() - i)
             }
 
             averagePing = (total / sampleSize).toInt()

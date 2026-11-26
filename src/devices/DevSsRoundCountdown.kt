@@ -25,6 +25,7 @@ object DevSsRoundCountdown {
     private const val TICK_NS = 50_000_000L
     private const val GO_NS = 1_000_000_000L
     private const val CLOCK_TICKS = 20
+    private const val ANCHOR_TICKS = 3
 
     private var tick = 0L
     private val arrivals = ArrayDeque<Pair<Long, Long>>()
@@ -85,17 +86,32 @@ object DevSsRoundCountdown {
     private fun update() {
         if (showStart < 0 || maxOf(lamps, expected) < 2) { sendAt = 0L; return }
         val backAt = maxOf(lastLamp, showStart + 8L * (maxOf(expected, lamps) - 1)) + 18
-        val anchor = arrivals.minOfOrNull { it.second - it.first * TICK_NS } ?: return
-        sendAt = anchor + (backAt + 1) * TICK_NS - rtt() * 1_000_000L
+        sendAt = (tickArrival(backAt + 1) ?: return) - rtt() * 1_000_000L
         button = firstLamp
     }
 
-    /** The fastest of the last few pings: a spike then shows the click late rather than early. */
+    /**
+     * When tick [at]'s ping should arrive. Ticks run at their measured length, never faster than 50 ms, from the newest few:
+     * an old tick projected at 50 ms runs early whenever the server is behind.
+     */
+    private fun tickArrival(at: Long): Long? {
+        val (newest, newestNs) = arrivals.lastOrNull() ?: return null
+        val (oldest, oldestNs) = arrivals.first()
+        val period = if (newest > oldest) maxOf(TICK_NS, (newestNs - oldestNs) / (newest - oldest)) else TICK_NS
+        var anchor = newestNs
+        for (i in maxOf(0, arrivals.size - ANCHOR_TICKS) until arrivals.size) {
+            val (t, ns) = arrivals[i]
+            anchor = min(anchor, ns + (newest - t) * period)
+        }
+        return anchor + (at - newest) * period
+    }
+
+    /** The fastest of the newest pings: a spike then shows the click late rather than early. */
     private fun rtt(): Long {
         val log = mc.debugOverlay.pingLogger
         val n = min(log.size(), 5)
-        if (n == 0) return ServerUtils.averagePing.toLong()
-        return (0 until n).minOf { log.get(it) }
+        if (n == 0) return ServerUtils.currentPing.toLong()
+        return (1..n).minOf { log.get(log.size() - it) }
     }
 
     @Synchronized private fun reset() {
