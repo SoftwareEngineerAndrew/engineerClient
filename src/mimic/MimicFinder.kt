@@ -7,6 +7,7 @@ import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.TickEvent
+import com.adm.events.core.EventBus
 import com.adm.events.core.on
 import com.adm.features.impl.dungeon.map.DungeonMap
 import com.adm.features.impl.dungeon.map.DungeonScan
@@ -87,6 +88,7 @@ object MimicFinder {
             if (message.startsWith("Party > ") && message.contains(": Mimic is in ")) sent = true
         }
         on<TickEvent.End> { EngineerClient.safely("mimic finder") { tick() } }
+        EventBus.subscribe(this)
     }
 
     private fun mc() = EngineerClient.mc
