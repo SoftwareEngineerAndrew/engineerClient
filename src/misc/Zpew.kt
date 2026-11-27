@@ -77,6 +77,8 @@ object Zpew {
         var cells: String? = null
         var player: DoubleArray? = null
         var sinceTeleport = -1L
+        var own = "-"
+        var block = "-"
     }
 
     private val queue = ZpewQueue<Click>(::land)
@@ -91,6 +93,7 @@ object Zpew {
     private var movePitch = Float.NaN
     /** This tick's block click: null, false (an ordinary block), or true (a block that acts, so no teleport). */
     private var blockClick: Boolean? = null
+    private var clickedBlock = "-"
 
     private val WITHER_BLADES = setOf("NECRON_BLADE", "SCYLLA", "HYPERION", "VALKYRIE", "ASTRAEA")
     private val ACTS = Regex("^(chest|trapped_chest|ender_chest|lever|barrier)$|_button$|_sign$|_fence_gate$|(_head|_skull)$")
@@ -164,7 +167,7 @@ object Zpew {
             val f = mc.gameDirectory.toPath().resolve("config/engineerclient/zpew-misses.txt")
             java.nio.file.Files.createDirectories(f.parent)
             val p = { a: DoubleArray? -> a?.joinToString(",") { it.toString() } ?: "-" }
-            val line = listOf(kind, if (c.ether) "ether" else "blink", c.sneaking, c.distance, p(from), "${c.yaw} ${c.pitch}", p(predicted), p(actual), cells, c.sinceTeleport, p(c.player)).joinToString(TAB)
+            val line = listOf(kind, if (c.ether) "ether" else "blink", c.sneaking, c.distance, p(from), "${c.yaw} ${c.pitch}", p(predicted), p(actual), cells, c.sinceTeleport, p(c.player), c.own, c.block).joinToString(TAB)
             java.nio.file.Files.writeString(f, line + NL, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
             if (kind != "hit") mc.player?.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7Legit Zpew: saved a $kind miss to zpew-misses.txt"))
         } catch (_: Throwable) {}
@@ -297,6 +300,7 @@ object Zpew {
         on<TickEvent.End> {
             if (!live()) return@on
             blockClick = null
+            clickedBlock = "-"
             ticks++
             // A teleport not made 70 ms past the usual answer time isn't coming: the camera goes back to you.
             // ADM's average ping can be stuck at a join-time spike (10 s), so the answers are timed here; a ping spike still waits longer.
@@ -320,12 +324,15 @@ object Zpew {
         onSend<ServerboundUseItemOnPacket> {
             if (!enabled) return@onSend
             val level = mc.level ?: return@onSend
-            blockClick = ACTS.containsMatchIn(BuiltInRegistries.BLOCK.getKey(level.getBlockState(hitResult.blockPos).block).path)
+            clickedBlock = BuiltInRegistries.BLOCK.getKey(level.getBlockState(hitResult.blockPos).block).path
+            blockClick = ACTS.containsMatchIn(clickedBlock)
         }
 
         onSend<ServerboundUseItemPacket> {
             if (!enabled) return@onSend
             val c = click(this) ?: return@onSend
+            c.own = "$yRot $xRot"
+            c.block = clickedBlock
             val p = mc.player ?: return@onSend
             var counts = true
             if (c.witherImpact) {
@@ -351,7 +358,7 @@ object Zpew {
                 if (land(from, c) != null) EtherSound.played(sound)
             }
             queue.click(c, serverTicks.get(), doubleArrayOf(p.x, p.y, p.z), counts, ticks)
-            log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking}${if (c.swimming) " swim" else ""} dist=${c.distance} counts=$counts block=$blockClick player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.adm.utils.ServerUtils.currentPing}")
+            log("CLICK ${if (c.ether) "ether" else if (c.witherImpact) "hype" else "aotv"} yaw=${c.yaw} pitch=${c.pitch} sneak=${c.sneaking}${if (c.swimming) " swim" else ""} dist=${c.distance} counts=$counts block=$blockClick on=${c.block} own=${c.own.replace(' ', ',')} player=${fmt(doubleArrayOf(p.x, p.y, p.z))} ping=${com.adm.utils.ServerUtils.currentPing}")
             sync("click")
         }
         SubscribeWhile.add(this, { reset(); wasEnabled = false }) { enabled }
