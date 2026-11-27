@@ -2,6 +2,7 @@ package com.adm.features.impl.dungeon
 
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.*
+import com.adm.events.BlockClickEvent
 import com.adm.events.LevelEvent
 import com.adm.events.MessageEvent
 import com.adm.events.RenderExtractEvent
@@ -45,17 +46,18 @@ object SecretClicked : Module(
     // Not a data class: each box removes itself, not an equal one from a later run.
     private class Secret(val aabb: AABB, var locked: Boolean = false)
     private val clickedSecretsList = CopyOnWriteArrayList<Secret>()
-    private var lastPlayed = System.currentTimeMillis()
     private var lastInteract: BlockPos? = null
-    private var lastInteractAt = 0L
+    private var chimedThisClick = false
 
     init {
+        on<BlockClickEvent> { chimedThisClick = false }
+
         on<SecretPickupEvent.Interact> {
             secretBox(blockPos)
-            // one click can post this more than once: one chime per block per click
-            val now = System.currentTimeMillis()
-            if (blockPos == lastInteract && now - lastInteractAt < 300) return@on
-            lastInteract = blockPos; lastInteractAt = now
+            lastInteract = blockPos
+            // posted once per hand on one click
+            if (chimedThisClick) return@on
+            chimedThisClick = true
             secretChime()
         }
 
@@ -90,9 +92,8 @@ object SecretClicked : Module(
     }
 
     private fun secretChime() {
-        if (!chime || (DungeonUtils.inBoss && !chimeInBoss) || System.currentTimeMillis() - lastPlayed <= 10) return
+        if (!chime || (DungeonUtils.inBoss && !chimeInBoss)) return
         playSoundSettings(soundSettings())
-        lastPlayed = System.currentTimeMillis()
     }
 
     private fun secretBox(pos: BlockPos) {
