@@ -18,10 +18,6 @@ import com.engineerclient.dungeonpack.pack.layouts.DoorKind
 object DoorModel {
     const val BODY_Y_MIN = DungeonFrame.DOOR_Y_MIN   // 69
     const val BODY_Y_MAX = DungeonFrame.DOOR_Y_MAX   // 72
-    /** The frame top ADM reads (air there = no door). */
-    const val LINTEL_Y = 73
-    /** The floor of the opening. */
-    const val THRESHOLD_Y = 68
     /** Blocks on each side of the centre column (the body is 3 wide and 3 deep). */
     const val HALF = 1
     /** Blocks in one door body: 3 x 4 x 3. */
@@ -42,8 +38,4 @@ object DoorModel {
     fun bodyCells(cx: Int, cz: Int): List<Pos> = buildList(BODY_SIZE) {
         for (y in BODY_Y_MIN..BODY_Y_MAX) for (z in cz - HALF..cz + HALF) for (x in cx - HALF..cx + HALF) add(Pos(x, y, z))
     }
-
-    /** Whether the block ([x], [y], [z]) is inside the body of the door centred on ([cx], [cz]). */
-    fun inBody(cx: Int, cz: Int, x: Int, y: Int, z: Int): Boolean =
-        y in BODY_Y_MIN..BODY_Y_MAX && x in cx - HALF..cx + HALF && z in cz - HALF..cz + HALF
 }

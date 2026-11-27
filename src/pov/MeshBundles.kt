@@ -395,10 +395,8 @@ object PiecePool {
     }
 
     val poolCount get() = pools.size
-    val residentCount get() = resident.size
     /** Bytes the pieces take, and the pools hold. */
     val usedBytes get() = pools.sumOf { it.used.toLong() } * CompactMesh.VERTEX
-    val poolBytes get() = pools.sumOf { it.vertices.toLong() } * CompactMesh.VERTEX
     const val CAP_BYTES = MAX_POOLS.toLong() * POOL_VERTICES * CompactMesh.VERTEX
     /** Pieces being decoded or waiting to go up. */
     val queued get() = inFlight.size

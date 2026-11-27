@@ -43,7 +43,6 @@ class PackReport {
     @Synchronized fun all(): List<Line> = lines.toList()
     @Synchronized fun errors(): List<String> = lines.filter { it.level == Level.ERROR }.map { it.text }
     @Synchronized fun warnings(): List<String> = lines.filter { it.level == Level.WARNING }.map { it.text }
-    @Synchronized fun hasErrors(): Boolean = lines.any { it.level == Level.ERROR }
 }
 
 /** Where the data packs live and what they are called. The jar bundles them; a copy in the packs folder overrides the bundled one, file by file. */

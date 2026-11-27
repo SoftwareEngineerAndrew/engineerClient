@@ -5,7 +5,6 @@ import com.mojang.authlib.GameProfile
 import com.adm.utils.skyblock.dungeon.DungeonClass
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
-import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.entity.decoration.Mannequin
 import net.minecraft.world.item.ItemStack
@@ -486,8 +485,6 @@ object Party {
         if (first in EARLY_DEVICES) return null
         return spotOf(first)
     }
-
-    fun busyAt(st: Station) = bots.any { it.working === st }
 
     /** Everyone (the bots) inside [box]. */
     fun allIn(box: AABB) = !botsOn || bots.all { it.entity == null || box.contains(it.pos) }

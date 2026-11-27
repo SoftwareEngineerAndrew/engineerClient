@@ -45,7 +45,4 @@ object RoomCore {
 
     /** The core of canonical column ([x], [z]) of [volume]. Rotation does not change it: a tile centre maps to a tile centre. */
     fun ofVolume(volume: RoomVolume, x: Int, z: Int): Int = ofStates { y -> if (volume.contains(x, y, z)) volume.stateAt(x, y, z) else null }
-
-    /** The cores of every tile centre of a canonical room of the given tile cells, in the order of [tiles]. */
-    fun ofRoom(volume: RoomVolume, tiles: List<com.engineerclient.dungeonpack.pack.Tile>): List<Int> = tiles.map { ofVolume(volume, 32 * it.x + 15, 32 * it.z + 15) }
 }

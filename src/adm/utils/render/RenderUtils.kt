@@ -14,16 +14,13 @@ import net.minecraft.client.renderer.SubmitNodeCollector
 import net.minecraft.client.renderer.blockentity.BeaconRenderer
 import net.minecraft.client.renderer.rendertype.RenderType
 import net.minecraft.client.renderer.rendertype.RenderTypes
-import net.minecraft.client.renderer.texture.OverlayTexture
 import net.minecraft.core.BlockPos
 import net.minecraft.locale.Language
 import net.minecraft.network.chat.FormattedText
-import net.minecraft.resources.Identifier
 import net.minecraft.util.FormattedCharSequence
 import net.minecraft.util.LightCoordsUtil
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
-import org.joml.Vector3f
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
@@ -56,40 +53,6 @@ private fun RenderExtractEvent.cameraRelativePose(offset: Vec3 = Vec3.ZERO): Pos
     poseStack.pushPose()
     poseStack.translate(offset.x - camera.x, offset.y - camera.y, offset.z - camera.z)
     return poseStack
-}
-
-fun RenderExtractEvent.drawTexturedQuad(
-    texture: Identifier,
-    pos: Vec3,
-    width: Float,
-    height: Float,
-    yaw: Float = 0f,
-    color: Color = Color(255, 255, 255)
-) {
-    val yawRad = Math.toRadians(yaw.toDouble())
-    val rx = cos(yawRad).toFloat()
-    val rz = sin(yawRad).toFloat()
-    val hw = width * 0.5
-    val hh = height * 0.5
-    val rgba = color.rgba
-
-    val poseStack = cameraRelativePose()
-    context.submitNodeCollector().submitCustomGeometry(poseStack, RenderTypes.entityCutoutZOffset(texture)) { pose, buffer ->
-        fun vertex(x: Double, y: Double, z: Double, u: Float, v: Float) {
-            buffer.addVertex(pose, x.toFloat(), y.toFloat(), z.toFloat())
-                .setColor(rgba)
-                .setUv(u, v)
-                .setOverlay(OverlayTexture.NO_OVERLAY)
-                .setUv2(LightCoordsUtil.FULL_BRIGHT, LightCoordsUtil.FULL_BRIGHT)
-                .setNormal(pose, -rz, 0f, rx)
-        }
-
-        vertex(pos.x - rx * hw, pos.y - hh, pos.z - rz * hw, 0f, 1f)
-        vertex(pos.x - rx * hw, pos.y + hh, pos.z - rz * hw, 0f, 0f)
-        vertex(pos.x + rx * hw, pos.y + hh, pos.z + rz * hw, 1f, 0f)
-        vertex(pos.x + rx * hw, pos.y - hh, pos.z + rz * hw, 1f, 1f)
-    }
-    poseStack.popPose()
 }
 
 fun RenderExtractEvent.drawTracer(to: Vec3, color: Color, depth: Boolean, thickness: Float = 3f) {
@@ -468,17 +431,7 @@ object PrimitiveRenderer {
         vertex(minX, maxY, minZ)
     }
 
-    fun renderVector(
-        pose: PoseStack.Pose,
-        buffer: VertexConsumer,
-        start: Vector3f,
-        direction: Vec3,
-        startColor: Int,
-        endColor: Int,
-        thickness: Float
-    ) = segment(pose, buffer, start.x(), start.y(), start.z(), direction.x.toFloat(), direction.y.toFloat(), direction.z.toFloat(), startColor, endColor, thickness)
-
-    /** From (ax, ay, az) to (bx, by, bz), rounded to floats the way [renderVector] with `b - a` would be. */
+    /** From (ax, ay, az) to (bx, by, bz). */
     fun renderSegment(
         pose: PoseStack.Pose,
         buffer: VertexConsumer,

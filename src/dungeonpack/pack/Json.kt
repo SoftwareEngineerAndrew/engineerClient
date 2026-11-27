@@ -58,5 +58,3 @@ internal fun readGzipJson(stream: InputStream): JsonObject =
         JsonParser.parseReader(gz.reader(StandardCharsets.UTF_8)).asObj() ?: error("the top level is not a JSON object")
     }
 
-/** Reads plain UTF-8 JSON (used by tests and by dev tools). */
-internal fun parseJson(text: String): JsonObject = JsonParser.parseString(text).asObj() ?: error("the top level is not a JSON object")

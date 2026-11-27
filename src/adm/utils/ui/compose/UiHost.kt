@@ -103,15 +103,6 @@ class UiHost(content: @Composable () -> Unit) {
     fun scroll(mouseX: Double, mouseY: Double, amount: Double): Boolean =
         ancestry(root.pick(mouseX, mouseY)) { it.onScroll?.invoke(it, amount) == true } != null
 
-    fun hitTest(x: Int, y: Int): Any? {
-        var node = root.pick(x.toDouble(), y.toDouble())
-        while (node != null) {
-            node.tag?.let { return it }
-            node = node.parent
-        }
-        return null
-    }
-
     fun key(event: KeyEvent): Boolean = ancestry(focused) { it.onKey?.invoke(it, event) == true } != null
 
     fun char(event: CharacterEvent): Boolean = ancestry(focused) { it.onChar?.invoke(it, event) == true } != null

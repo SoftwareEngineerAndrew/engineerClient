@@ -5,7 +5,6 @@ import com.engineerclient.dungeonpack.pack.mobs.MobPack
 import com.engineerclient.dungeonpack.pack.rooms.RoomPack
 import com.engineerclient.dungeonpack.pack.runstate.RunStatePack
 import java.nio.file.Path
-import java.util.concurrent.CompletableFuture
 
 /**
  * The data packs of one load (BRIEF decision 7: the packs are public and ship inside the jar; a file of the same name in
@@ -37,27 +36,15 @@ class PackSet(
     /** The plain-English chat lines for the player: what is missing or damaged, plus any loader warning. Empty when everything loaded cleanly. */
     fun userLines(): List<String> = Packs.userLines(this)
 
-    /** One line per pack file saying which copy was used: the jar's, the override folder's, or none. For `/ads dev packs`. */
-    fun originLines(): List<String> = PackFiles.BUNDLED.map { name ->
-        name + ": " + when (source.origin(name)) {
-            PackOrigin.JAR -> "the copy bundled in the jar"
-            PackOrigin.OVERRIDE -> "your copy in $dir (overrides the jar)"
-            null -> "not found"
-        }
-    }
-
     private var pins = 0
     private var retired = false
 
     /**
      * A running dungeon pins the set it was started with: the chunk generator's worker threads read room
      * volumes from it for as long as the run lasts, so a reload (`/ads dev packs`, starting another run) must not close its file
-     * under them. Pair every [pin] with one [unpin].
+     * under them.
      */
     @Synchronized fun pin() { pins++ }
-
-    /** Releases one [pin]; a set that was retired meanwhile is closed when the last pin goes. */
-    @Synchronized fun unpin() { pins--; if (pins <= 0 && retired) close() }
 
     /** [Packs] no longer uses this set: closes it now, or when the last run using it ends. */
     @Synchronized fun retire() { retired = true; if (pins <= 0) close() }
@@ -66,7 +53,7 @@ class PackSet(
 }
 
 /**
- * Loads and holds the packs. Loading reads a few MB, so [loadAsync] is for a run start; [load] blocks. The loaders never
+ * Loads and holds the packs. Loading reads a few MB and [load] blocks. The loaders never
  * throw; [Packs.userLines] turns what they found into chat text. Server and client threads may both read [current].
  *
  * Order per file: the copy in the override folder if there is one (development; logged once), else the copy bundled in the jar,
@@ -107,13 +94,6 @@ object Packs {
         if (old != null && old !== set) old.retire()
         return set
     }
-
-    /** [load] on a worker thread. */
-    fun loadAsync(dir: Path = PackFiles.defaultDir(), bundled: BundledPacks = BundledPacks.JAR, cacheRoot: Path? = null): CompletableFuture<PackSet> =
-        CompletableFuture.supplyAsync { load(dir, bundled, cacheRoot) }
-
-    /** The loaded set, or loads once if nothing has been loaded yet. */
-    fun ensureLoaded(): PackSet = current ?: load()
 
     /** Forgets the current packs and frees their file handles. */
     fun unload() { val c = current; current = null; c?.retire() }

@@ -1,13 +1,9 @@
 package com.engineerclient.p3sim
 
 import net.minecraft.world.entity.EntityTypes
-import com.engineerclient.rotation.P3Sections
 import net.minecraft.core.BlockPos
-import net.minecraft.network.chat.Component
 import net.minecraft.sounds.SoundEvents
-import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.EquipmentSlot
-import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.monster.Giant
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
@@ -908,10 +904,5 @@ class GoldorPhase(val from: Int, val arrived: Boolean = false) : Fight.Phase("P3
         else -> "S$section ${count(section)}/${Station.total(section)}" + (if (!gateDown[section.coerceAtMost(3)] && section <= 3) ", gate up" else "")
     }
 
-    val deathsTaken get() = deaths
     fun gateIsDown(s: Int) = gateDown.getOrElse(s) { true }
-
-    /** n when section [s] started here. */
-    fun sectionStartN(s: Int) = sectionStart[s]
-    fun doorIsOpen(s: Int) = doorOpen.getOrElse(s) { true }
 }

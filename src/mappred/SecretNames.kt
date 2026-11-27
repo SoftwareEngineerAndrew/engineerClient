@@ -99,12 +99,6 @@ class SecretNames @JvmOverloads constructor(used: Set<String>, private val targe
         val BLAZES = setOf("Lower Blaze", "Higher Blaze")
 
         /**
-         * Unnamed rooms the samplers weigh each sample by at most (the last few rooms, where it matters; every arrangement
-         * of a sample's specials is solved, so more costs a lot of time). [MapPredictor.certainNames] has no such limit.
-         */
-        const val MAX_ROOMS = 4
-
-        /**
          * Totals the tab list allows: [found] secrets shown as [percent]% (rounded, to 1 or 2 places).
          * Empty when nothing is found yet.
          */

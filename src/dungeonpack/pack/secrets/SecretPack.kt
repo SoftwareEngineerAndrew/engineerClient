@@ -16,24 +16,19 @@ enum class SecretType(val word: String) {
 
 /**
  * One secret site of a design, canonical frame (y absolute). [pos] is where it really is; [was] the rooms pack's own spot when that is
- * elsewhere (a block baked there must go too). [worldFacing] is a chest's facing in the WORLD for each room rotation (SOUTH WEST NORTH
- * EAST, [com.engineerclient.dungeonpack.pack.Rot.q]): Hypixel turns some with the room and not others (results/secrets-facing.json);
- * [worldRotation] the same for a skull's 0-15 rotation. [radius] is the approach sphere; [lever] the lever that unlocks a locked chest.
+ * elsewhere (a block baked there must go too). [radius] is the approach sphere; [lever] the lever that unlocks a locked chest.
  */
-class SecretSite(
-    val id: String, val type: SecretType, val pos: Pos, val spawn: SecretSpawn, val radius: Double?, val was: Pos?, val lever: Pos?,
-    val worldFacing: List<String>?, val worldRotation: List<Int>?,
-)
+class SecretSite(val id: String, val type: SecretType, val pos: Pos, val spawn: SecretSpawn, val radius: Double?, val was: Pos?, val lever: Pos?)
 
 /** A secret lever: where, and its world block state for each room rotation (Hypixel's levers mostly keep one world facing). */
 class SecretLever(val pos: Pos, val worldStates: List<String>)
 
 /**
  * A Redstone Key room: [site] is the key secret's id; the key skull stands at one of [skulls] (drawn per run) with its world rotations;
- * [socket] is the redstone block it is used on ([placeSocket]: put there at Mort, the capture has air); [head] `top` (a floor head on
+ * [socket] is the redstone block it is used on; [head] `top` (a floor head on
  * the socket) or `face` (a wall head on the clicked face); [cells] are what the use changes, canonical states.
  */
-class KeyRoom(val site: String, val skulls: List<Pair<Pos, List<Int>>>, val socket: Pos, val placeSocket: Boolean, val head: String, val cells: List<Pair<Pos, String>>)
+class KeyRoom(val site: String, val skulls: List<Pair<Pos, List<Int>>>, val socket: Pos, val head: String, val cells: List<Pair<Pos, String>>)
 
 /** A design's secrets: the printed maximum (the action bar's `N/M`), the sites, the levers, the Redstone Key. */
 class DesignSecrets(val max: Int, val sites: List<SecretSite>, val levers: List<SecretLever>, val key: KeyRoom?)
@@ -50,10 +45,6 @@ class SecretPack(
     /** Hypixel's floor stack of each item, as Minecraft's item JSON (the world side decodes it). */
     val stacks: Map<String, JsonObject>,
     val checkEvery: Int,
-    val mimicFloors: Set<String>,
-    /** P(no Mimic) = a / (n + b), n the dungeon's locked chests (results 2). */
-    val mimicA: Double,
-    val mimicB: Double,
 ) {
     fun design(id: String): DesignSecrets? = designs[id]
 
@@ -82,8 +73,7 @@ class SecretPack(
                     o.arr("sites").objects().mapNotNull { s ->
                         val type = SecretType.of(s.str("t")) ?: return@mapNotNull null
                         val spawn = when (s.str("s")) { "s" -> SecretSpawn.START; "d" -> SecretSpawn.DISCOVERY; "u" -> SecretSpawn.USE; else -> SecretSpawn.APPROACH }
-                        SecretSite(s.str("id") ?: "?", type, s.get("p").asPos() ?: return@mapNotNull null, spawn, s.dbl("r"), s.get("was").asPos(), s.get("lever").asPos(),
-                            s.arr("fw")?.strings()?.takeIf { it.size == 4 }, ints(s, "rw"))
+                        SecretSite(s.str("id") ?: "?", type, s.get("p").asPos() ?: return@mapNotNull null, spawn, s.dbl("r"), s.get("was").asPos(), s.get("lever").asPos())
                     },
                     o.arr("levers").objects().mapNotNull { l ->
                         SecretLever(l.get("p").asPos() ?: return@mapNotNull null, l.arr("states").strings().takeIf { it.size == 4 }?.map { it.intern() } ?: return@mapNotNull null)
@@ -93,7 +83,6 @@ class SecretPack(
                             k.str("site") ?: "key",
                             k.arr("skulls").objects().mapNotNull { s -> (s.get("p").asPos() ?: return@mapNotNull null) to (ints(s, "rw") ?: listOf(0, 4, 8, 12)) },
                             k.get("socket").asPos() ?: throw PackFormatException("$id: a key room without a socket"),
-                            k.bool("place") ?: false,
                             k.str("head") ?: "top",
                             k.arr("cells")?.mapNotNull { c ->
                                 val a = c.asArr() ?: return@mapNotNull null
@@ -106,9 +95,7 @@ class SecretPack(
             }.orEmpty()
             val items = root.arr("items")?.mapNotNull { e -> e.asArr()?.takeIf { it.size() == 2 }?.let { (it[0].asStr() ?: return@mapNotNull null) to (it[1].asDoubleOrNull() ?: 0.0) } }.orEmpty()
             val stacks = root.obj("stacks")?.entrySet()?.mapNotNull { (k, v) -> v.asObj()?.let { k to it } }?.toMap().orEmpty()
-            val rules = root.obj("rules")
-            val mimic = rules?.obj("mimic")
-            return SecretPack(designs, items, stacks, rules?.int("checkEvery") ?: 5, mimic?.arr("floors").strings().toSet(), mimic?.dbl("a") ?: 1.31, mimic?.dbl("b") ?: 2.0)
+            return SecretPack(designs, items, stacks, root.obj("rules")?.int("checkEvery") ?: 5)
         }
     }
 }

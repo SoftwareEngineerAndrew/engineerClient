@@ -68,8 +68,6 @@ object TemporaryWaypoints {
         }
     }
 
-    fun addTempWaypoint(name: String = "Waypoint", x: Int, y: Int, z: Int, duration: Long = 60_000) = add(name, x, y, z, duration, false)
-
     private fun addChatWaypoint(name: String, x: Int, y: Int, z: Int, duration: Long) = add(name, x, y, z, duration, true)
 
     private fun add(name: String, x: Int, y: Int, z: Int, duration: Long, chat: Boolean) {

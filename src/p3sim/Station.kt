@@ -3,9 +3,6 @@ package com.engineerclient.p3sim
 import net.minecraft.world.entity.EntityTypes
 import com.engineerclient.EngineerClient
 import net.minecraft.core.BlockPos
-import net.minecraft.network.chat.Component
-import net.minecraft.world.entity.EntityType
-import net.minecraft.world.entity.EntitySpawnReason
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.phys.Vec3
 
@@ -94,10 +91,6 @@ class Station(
         }
     }
 
-    fun clearStands() {
-        top?.discard(); bottom?.discard(); top = null; bottom = null
-    }
-
     fun owns(e: net.minecraft.world.entity.Entity) = e === top || e === bottom
 
     companion object {
@@ -149,17 +142,6 @@ class Station(
  */
 open class SimStand(level: net.minecraft.world.level.Level) : ArmorStand(EntityTypes.ARMOR_STAND, level) {
     override fun travel(travelVector: Vec3) {}
-}
-
-/**
- * A stand that belongs to something the sim rebuilds itself (a mob's tag, a line of talk): never written with its chunk, so an unloaded chunk cannot bring back a stale copy.
- * [trackSquare] > 0 sends it only to players within that many blocks on x and on z (a square, as Hypixel's tracking ranges are).
- */
-class TransientStand(level: net.minecraft.world.level.Level) : SimStand(level) {
-    var trackSquare = 0
-    override fun shouldBeSaved(): Boolean = false
-    override fun broadcastToPlayer(player: net.minecraft.server.level.ServerPlayer): Boolean =
-        (trackSquare <= 0 || (Math.abs(player.x - x) <= trackSquare && Math.abs(player.z - z) <= trackSquare)) && super.broadcastToPlayer(player)
 }
 
 /**

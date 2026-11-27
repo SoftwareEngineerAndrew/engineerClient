@@ -75,9 +75,6 @@ fun String.startsWithOneOf(vararg options: String, ignoreCase: Boolean = false):
 fun Any?.equalsOneOf(vararg options: Any?): Boolean =
     options.any { this == it }
 
-fun String.matchesOneOf(vararg options: Regex): Boolean =
-    options.any { this.matches(it) }
-
 fun logError(throwable: Throwable, context: Any) = logError(throwable, "${context::class.simpleName}")
 
 fun logError(throwable: Throwable, where: String) {

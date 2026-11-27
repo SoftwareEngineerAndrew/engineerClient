@@ -49,12 +49,6 @@ object DungeonUtils {
     inline val cryptCount: Int
         get() = DungeonListener.dungeonStats.crypts
 
-    inline val openRoomCount: Int
-        get() = DungeonListener.dungeonStats.openedRooms
-
-    inline val completedRoomCount: Int
-        get() = DungeonListener.dungeonStats.completedRooms
-
     inline val percentCleared: Int
         get() = DungeonListener.dungeonStats.percentCleared
 

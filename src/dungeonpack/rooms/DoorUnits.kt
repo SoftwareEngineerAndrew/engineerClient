@@ -137,26 +137,6 @@ object DoorUnits {
     private val WOODS = setOf("oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "pale_oak")
     private val NOT_SOURCES = setOf("minecraft:air", "minecraft:cave_air", "minecraft:water", "minecraft:lava")
 
-    /**
-     * The cells Hypixel sends again, unchanged, with each step of a body's fall (barrier, then air), in the same section update: the top
-     * of the opening in the arch planes, dd +-2 x a 14..16 at y 72 (stairs or iron bars by style). DR, 289 doors: every one at both
-     * steps; nothing else round the body is sent, and no shape changes (the bars keep their connection to the fallen body).
-     */
-    fun fallResend(slot: Slot): List<Triple<Int, Int, Int>> = buildList {
-        for (dd in listOf(-2, 2)) for (a in A_MIN + 1..A_MAX - 1) { val (x, z) = cell(slot, dd, a); add(Triple(x, 72, z)) }
-    }
-
-    /**
-     * The cells whose connections vanilla recomputes after the paste (walls, bars, stairs; fire and vines without support go): the unit
-     * and its floor with one cell round them. Every door's box lies inside one chunk (the gap is 7 blocks from a chunk edge).
-     */
-    fun shapeCells(slot: Slot): List<Triple<Int, Int, Int>> = buildList {
-        for (dd in -DD_MAX - 1..DD_MAX + 1) for (a in 12..18) {
-            val (x, z) = cell(slot, dd, a)
-            for (y in 65..74) add(Triple(x, y, z))
-        }
-    }
-
     private const val AIR = "minecraft:air"
     private const val STONE = "minecraft:stone"
 }

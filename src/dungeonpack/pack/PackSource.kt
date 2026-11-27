@@ -43,8 +43,6 @@ class PackSource private constructor(
     /** The packs folder whose files override the bundled ones (null for a source built from nothing). */
     val overrideDir: Path?,
     private val resolved: Map<String, Pair<Path, PackOrigin>>,
-    /** Where the bundled files were unpacked, or null when none had to be. */
-    val cacheDir: Path?,
     /** True when the jar's copies were consulted (so "missing" means missing from the jar too). */
     private val bundledLooked: Boolean = false,
     /** The cache folder the bundled files could not be unpacked into (read-only folder, full disk), or null when unpacking worked or was not needed. */
@@ -64,7 +62,7 @@ class PackSource private constructor(
 
     companion object {
         /** Every file read straight from [dir], as the loaders always did (tests, tools). */
-        fun ofDir(dir: Path): PackSource = PackSource(dir, emptyMap(), null)
+        fun ofDir(dir: Path): PackSource = PackSource(dir, emptyMap())
 
         /**
          * Resolves [names]: a file in [overrideDir] wins; the others come from [bundled], unpacked into a sub-folder of [cacheRoot]
@@ -81,18 +79,17 @@ class PackSource private constructor(
                 if (Files.isRegularFile(p)) found[n] = p to PackOrigin.OVERRIDE
             }
             val need = names.filter { it !in found }
-            var cache: Path? = null
             var failedIn: Path? = null
             if (need.isNotEmpty()) {
                 try {
-                    cache = unpack(bundled, names, need, cacheRoot, report)?.also { dir -> for (n in need) if (Files.isRegularFile(dir.resolve(n))) found[n] = dir.resolve(n) to PackOrigin.JAR }
+                    unpack(bundled, names, need, cacheRoot, report)?.also { dir -> for (n in need) if (Files.isRegularFile(dir.resolve(n))) found[n] = dir.resolve(n) to PackOrigin.JAR }
                 } catch (e: Exception) {
                     // The exception's own message is often only the path (a file-system exception), so the class name says what went wrong.
                     report.error("ADS could not unpack its bundled data packs into $cacheRoot: ${e.javaClass.simpleName}: ${e.message ?: "no details"}. Check that this folder is writable and the disk is not full.")
                     failedIn = cacheRoot
                 }
             }
-            return PackSource(overrideDir, found, cache, bundledLooked = bundled !== BundledPacks.NONE, unpackFailedIn = failedIn)
+            return PackSource(overrideDir, found, bundledLooked = bundled !== BundledPacks.NONE, unpackFailedIn = failedIn)
         }
 
         /** The cache folder holding every file of [need] (null when the bundle has none of them at all). */

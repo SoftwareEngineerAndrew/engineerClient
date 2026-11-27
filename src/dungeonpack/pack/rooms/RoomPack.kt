@@ -98,8 +98,6 @@ class RoomDesign(
     /** `mob`, `miniboss` or `none`: how the room is cleared (the rooms_index `clear`), or null. */
     val clear: String? = null,
 ) {
-    /** How many secrets ADM says the room has (`core.secrets`, or `maxSecrets` in older exports); null when unknown. */
-    val coreSecrets: Int? get() = core?.int("secrets") ?: core?.int("maxSecrets")
 
     /** The Fairy room is never rotated by the world (FORMAT-rooms 4.5). */
     val isFairy: Boolean get() = type == "fairy" || family == "Fairy"
@@ -131,7 +129,6 @@ class RoomPack internal constructor(
     private val report: PackReport,
 ) : java.io.Closeable {
     private val byId: Map<String, RoomDesign> = designs.associateBy { it.id }
-    private val byFamily: Map<String, List<RoomDesign>> = designs.groupBy { it.family }
     private val byName: Map<String, List<RoomDesign>> = designs.groupBy { it.name }
     private val coreIndex: Map<Int, CoreEntry> = cores.associateBy { it.core }
     private val volumes = ConcurrentHashMap<String, RoomVolume>()
@@ -139,20 +136,11 @@ class RoomPack internal constructor(
 
     fun design(id: String): RoomDesign? = byId[id]
 
-    /** Every build of a family (`Entrance` -> Entrance_Open, Entrance_Closed), in pack order. */
-    fun designsOfFamily(family: String): List<RoomDesign> = byFamily[family].orEmpty()
-
     /** Every design with this in-game name (builds share a name). */
     fun designsByName(name: String): List<RoomDesign> = byName[normalise(name)].orEmpty()
 
     /** The design and variant that produce this ADM core, or null (FORMAT-rooms 8.2). */
     fun designByCore(core: Int): CoreEntry? = coreIndex[core]
-
-    /** The family a room name belongs to: through the pack's `aliases`, else the name with spaces as underscores. */
-    fun familyOf(name: String): String {
-        val n = normalise(name)
-        return aliases[n] ?: aliases[name] ?: n.replace(' ', '_')
-    }
 
     fun texture(index: Int): SkullTexture? = textures.getOrNull(index)
 
@@ -280,16 +268,6 @@ class RoomPack internal constructor(
             }
             r.endObject()
             Index(head, designs, skipped)
-        }
-
-        /** Builds the pack from an already parsed index and a blob source (tests, tools). Null when the header is wrong. */
-        fun fromIndex(root: JsonObject, blobs: BlobSource?, report: PackReport = PackReport()): RoomPack? {
-            if (!checkHeader(root, FORMAT, SUPPORTED_VERSION, PackFiles.ROOMS_INDEX, report)) return null
-            val designs = ArrayList<RoomDesign>()
-            for (o in root.arr("designs").objects()) {
-                try { designs += parseDesign(o) } catch (e: Exception) { report.warn("A room design was skipped (${o.str("id") ?: "no id"}): ${e.message}") }
-            }
-            return build(root, designs, blobs, report)
         }
 
         private fun build(root: JsonObject, designs: List<RoomDesign>, blobs: BlobSource?, report: PackReport): RoomPack {

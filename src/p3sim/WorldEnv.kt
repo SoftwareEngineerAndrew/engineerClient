@@ -81,13 +81,5 @@ object WorldEnv {
         return root
     }
 
-    /** The chunks (x, z) that cover a box of blocks from ([minX], [minZ]), [width] blocks east and [depth] blocks south (the boss arena's, say). */
-    fun chunksOf(minX: Int, minZ: Int, width: Int, depth: Int): List<Pair<Int, Int>> {
-        if (width <= 0 || depth <= 0) return emptyList()
-        val out = ArrayList<Pair<Int, Int>>()
-        for (cx in (minX shr 4)..((minX + width - 1) shr 4)) for (cz in (minZ shr 4)..((minZ + depth - 1) shr 4)) out += cx to cz
-        return out
-    }
-
     private val GSON = GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create()
 }

@@ -130,9 +130,6 @@ class LayoutPack internal constructor(
 
     fun layout(id: String): Layout? = byId[id]
 
-    /** The family a room name belongs to (this pack's `aliases`). */
-    fun familyOf(name: String): String? = aliases[name.replace("​", "")]
-
     /** The layouts that pass [filter], in id order. */
     fun pool(filter: (Layout) -> Boolean = DEFAULT_FILTER): List<Layout> = layouts.filter(filter)
 

@@ -8,7 +8,6 @@ import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.features.ModuleManager
 import com.adm.features.impl.dungeon.LeapMenu
 import com.adm.utils.Color
-import com.adm.utils.render.roundedRect
 import com.adm.utils.render.roundedRectOutlined
 import com.adm.utils.render.text
 import com.adm.utils.skyblock.PartyUtils

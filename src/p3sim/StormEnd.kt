@@ -4,7 +4,6 @@ import net.minecraft.world.entity.EntityTypes
 import net.minecraft.core.BlockPos
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.sounds.SoundEvents
-import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.LightningBolt
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.projectile.hurtingprojectile.LargeFireball

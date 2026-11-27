@@ -30,8 +30,5 @@ object P3Sections {
         return 0
     }
 
-    fun isInSection(section: Int, x: Double, y: Double, z: Double): Boolean =
-        section in 1..BOXES.size && sectionAt(x, y, z) == section
-
     private fun within(v: Double, a: Double, b: Double) = v >= minOf(a, b) && v <= maxOf(a, b)
 }

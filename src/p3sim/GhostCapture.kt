@@ -77,8 +77,6 @@ object GhostStore {
     }
 
     @Synchronized fun forget(skill: String, clazz: String) { file(skill, clazz).delete(); cache.remove("$skill/$clazz") }
-
-    @Synchronized fun clearCache() = cache.clear()
 }
 
 /**

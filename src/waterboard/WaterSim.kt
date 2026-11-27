@@ -132,11 +132,6 @@ class WaterSim private constructor(
         }
     }
 
-    /** Ticks with no flips until [t] (or until solved, when [stopWhenSolved]). */
-    fun runTo(t: Int, stopWhenSolved: Boolean = false) {
-        while (time < t) { step(); if (stopWhenSolved && solvedAt != NONE) return }
-    }
-
     /** Water may still move: a scheduled update is waiting, a piston is moving, or the source is in. */
     fun moving(): Boolean = sourceOn || queued != 0 || landing != 0
 

@@ -370,12 +370,6 @@ object ShotPlan {
         return Vec3(-sin(y) * cos(p), -sin(p), cos(y) * cos(p))
     }
 
-    /** [v] turned [deg] degrees of yaw (the way yaw turns: from +z toward -x), its y kept. */
-    fun roty(v: Vec3, deg: Double): Vec3 {
-        val a = Math.toRadians(deg); val c = cos(a); val s = sin(a)
-        return Vec3(v.x * c - v.z * s, v.y, v.x * s + v.z * c)
-    }
-
     /** Bows with Duplex: an extra arrow replaying the main one's tick-2 move 3-4 ticks later. */
     val DUPLEX = setOf(Bows.MOSQUITO, Bows.LAST_BREATH)
 

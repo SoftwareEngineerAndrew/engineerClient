@@ -10,7 +10,6 @@ import com.engineerclient.terminals.TerminalTypes
 import com.engineerclient.terminals.TerminalUtils
 import net.minecraft.client.Minecraft
 import net.minecraft.core.registries.BuiltInRegistries
-import net.minecraft.util.Mth
 import net.minecraft.world.item.DyeColor
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items

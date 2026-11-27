@@ -41,9 +41,6 @@ object LagRuntime {
     private var nextTickField: Field? = null
     private var fieldLooked = false
 
-    /** Whether the server's next-tick time could be reached: without it freezes still happen but vanilla recovers every missed tick. */
-    val canForget: Boolean get() { lookField(); return nextTickField != null }
-
     private fun lookField() {
         if (fieldLooked) return
         fieldLooked = true

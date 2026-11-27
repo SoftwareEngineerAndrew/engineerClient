@@ -6,7 +6,6 @@ import com.adm.AdmMod.mc
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.ColorSetting
-import com.adm.clickgui.settings.impl.DropdownSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.features.impl.dungeon.map.DungeonMap
 import com.adm.features.impl.dungeon.map.DungeonScan

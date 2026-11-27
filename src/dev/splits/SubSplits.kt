@@ -95,10 +95,6 @@ class SubSplitTracker {
         return out
     }
 
-    /** How [split]'s first step started, for Debug. */
-    fun startSource(split: String): String? =
-        steps.indices.firstOrNull { steps[it].split == split && starts[it] != null }?.let { sources[it] }
-
     /** Whether any split has steps yet - the HUDs fall back to chat events until it does. */
     fun started(): Boolean = current >= 0
 

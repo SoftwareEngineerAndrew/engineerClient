@@ -1,6 +1,5 @@
 package com.adm.utils
 
-import net.minecraft.world.level.ChunkPos
 
 /**
  * Immutable IVec2 (x and z) packed into a long.
@@ -53,10 +52,6 @@ value class IVec2 private constructor(val data: Long) {
     override fun toString(): String {
         return "IVec2(x=$x, z=$z)"
     }
-}
-
-fun ChunkPos.toIVec2(): IVec2 {
-    return IVec2(x, z)
 }
 
 val IVec2.sortKey: Int get() = x * 1000 + z

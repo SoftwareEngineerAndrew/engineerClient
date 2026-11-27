@@ -85,8 +85,8 @@ class LagParams(
  * a few long ones), their clustering, and the partial recovery. Call [nextTick] once per server tick that runs.
  *
  * How the loss is hit exactly: the size mix and the recovery curve are fixed by the data, so the average lost ticks per freeze is a
- * known number `e`; the freezes then arrive at the rate `lossPerMinute / e` per minute. (The data's own table, taken as it stands,
- * would give about [naturalLossPerMinute] a minute; a preset is that table run faster or slower, not a different shape.)
+ * known number `e`; the freezes then arrive at the rate `lossPerMinute / e` per minute. (A preset is the data's table run faster or
+ * slower, not a different shape.)
  * Clustering (a freeze is more likely to be followed by another within 5 s than chance says) applies to the freezes of
  * [CLUSTER_FROM_MS] or more, the ones whose chance rate the measured 16.7 % corresponds to; the many short ones arrive independently.
  * Gaps under 100 ms, the tick-to-tick jitter of a healthy server, are not simulated.
@@ -123,9 +123,6 @@ class LagGenerator(val params: LagParams, val lossPerMinute: Double, private val
         meanLost = if (totalPerHour > 0) lost / totalPerHour else 0.0
         meanMissed = if (totalPerHour > 0) missed / totalPerHour else 0.0
     }
-
-    /** What the data's table would lose per minute with no scaling. */
-    val naturalLossPerMinute: Double = totalPerHour * meanLost / 60.0
 
     /** Freezes per minute at this preset. */
     val freezesPerMinute: Double = if (meanLost > 0) lossPerMinute / meanLost else 0.0

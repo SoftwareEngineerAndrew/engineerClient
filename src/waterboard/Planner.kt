@@ -418,12 +418,6 @@ class Planner(private val spacing: Spacing = Spacing(), private val hold: Int = 
         }
     }
 
-    /** [objective]'s cost of [flips] on trials the search never sees (comparing plans found by different searches). */
-    fun checkCost(base: WaterSim, flips: List<Flip>, objective: Objective, trials: Int = TABLE_CHECK, horizon: Int = 700): Double {
-        val t0 = base.time + 1
-        return Evaluator(base, t0, horizon, spacing, null, hold, objective, if (objective.trials) trials else 1, seedBase = 0x0c4ec4L).cost(normalize(flips, t0))
-    }
-
     /** How a plan holds up: share of trials that solve, and the median and 90th-percentile solve tick of those that do. */
     data class Robustness(val solveRate: Double, val median: Int, val p90: Int)
 

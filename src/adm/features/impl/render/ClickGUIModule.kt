@@ -1,8 +1,6 @@
 package com.adm.features.impl.render
 
-import com.google.gson.annotations.SerializedName
 import com.mojang.blaze3d.platform.InputConstants
-import com.adm.AdmMod
 import com.adm.clickgui.ClickGUI
 import com.adm.clickgui.HudManager
 import com.adm.clickgui.settings.AlwaysActive
@@ -11,17 +9,9 @@ import com.adm.events.*
 import com.adm.events.core.on
 import com.adm.features.Category
 import com.adm.features.Module
-import com.adm.features.ModuleManager
 import com.adm.features.impl.dungeon.map.DungeonMap
 import com.adm.utils.*
-import com.adm.utils.network.WebUtils.fetchJson
-import com.adm.utils.network.WebUtils.postData
 import com.adm.utils.skyblock.LocationUtils
-import kotlinx.coroutines.launch
-import net.minecraft.network.chat.ClickEvent
-import net.minecraft.network.chat.Component
-import net.minecraft.network.chat.HoverEvent
-import java.net.URI
 
 @AlwaysActive
 object ClickGUIModule : Module(

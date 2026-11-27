@@ -7,10 +7,8 @@ import com.google.gson.JsonParser
 import com.google.gson.JsonElement
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
-import com.adm.clickgui.settings.impl.ActionSetting
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.ColorSetting
-import com.adm.clickgui.settings.impl.KeybindSetting
 import com.adm.clickgui.settings.impl.NumberSetting
 import com.adm.clickgui.settings.impl.SelectorSetting
 import com.adm.clickgui.settings.impl.StringSetting
@@ -56,7 +54,6 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
-import com.mojang.blaze3d.platform.InputConstants
 import java.io.File
 import java.util.IdentityHashMap
 
@@ -99,14 +96,6 @@ object BrWaypoints2 : Module(
     }
 
     @Volatile var wandUser: WandUser? = null
-
-    /** Makes the item in your hand the wand, for a [wandUser]. */
-    fun makeWand() {
-        val held = mc.player?.mainHandItem
-        if (held == null || held.isEmpty) return EngineerClient.msg("§cHold the item you want as the wand first.")
-        wand = identity(held)
-        EngineerClient.msg("§aWand set: §f${held.hoverName.string}")
-    }
 
     private enum class Killers { DUO, TRIO, QUAD }
     private enum class MyRole { ALL_BOXES, DOOR, ROLE_1, ROLE_2, ROLE_3, ROLE_4 }
@@ -778,18 +767,6 @@ object BrWaypoints2 : Module(
     @JvmStatic
     fun onScroll(y: Double): Boolean = y != 0.0 && wandUser?.onMove(if (y > 0) +1 else -1) == true
 
-    /** A thin slab lying on one face of a box, to show which face is selected. */
-    internal fun faceSlab(bb: AABB, face: Face): AABB {
-        val e = 0.02
-        return when (face) {
-            Face.EAST -> AABB(bb.maxX - e, bb.minY, bb.minZ, bb.maxX + e, bb.maxY, bb.maxZ)
-            Face.WEST -> AABB(bb.minX - e, bb.minY, bb.minZ, bb.minX + e, bb.maxY, bb.maxZ)
-            Face.SOUTH -> AABB(bb.minX, bb.minY, bb.maxZ - e, bb.maxX, bb.maxY, bb.maxZ + e)
-            Face.NORTH -> AABB(bb.minX, bb.minY, bb.minZ - e, bb.maxX, bb.maxY, bb.minZ + e)
-            Face.UP -> AABB(bb.minX, bb.maxY - e, bb.minZ, bb.maxX, bb.maxY + e, bb.maxZ)
-        }
-    }
-
     // --- rooms and saving ------------------------------------------------------------------------
 
     /** The map room a world position is in: tiles are 32 blocks apart, the first centred at -185. */
@@ -974,9 +951,6 @@ object BrWaypoints2 : Module(
     }
     private const val SITE_MAX_SIZE = 64
     private const val SITE_MAX_BOXES = 5000
-
-    /** Whether the wand is in hand, for a [wandUser], which shares it. */
-    internal fun wandInHand(): Boolean = wand.isNotEmpty() && identity(mc.player?.mainHandItem ?: return false) == wand
 
     /**
      * What makes an item this item: a Skyblock item's own uuid when it has one (that exact item),

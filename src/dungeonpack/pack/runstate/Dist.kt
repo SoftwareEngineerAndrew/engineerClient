@@ -19,9 +19,6 @@ class Dist(
         require(pct.size == q.size && q.isNotEmpty()) { "a distribution needs as many values as percents" }
     }
 
-    /** A distribution with fewer than 8 samples is advisory only: prefer the parent table (class -> type -> global). */
-    val advisory: Boolean get() = n < 8
-
     /** The median (the value at 50 percent), interpolated if 50 is not one of the points. */
     val median: Double get() = at(50.0)
 

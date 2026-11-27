@@ -42,33 +42,19 @@ class RoomRun(
 /**
  * FORMAT-runstate 6.4: the one chest whose opening finishes a trap room. A trap room has no mob to kill; its check mark turns white a few
  * ticks after this chest is opened. [secret] is the rooms-pack secret id and [cell] its canonical (x, y, z) in the design's own frame
- * (turn it with the room's placement); [afterOpen] is the measured gap from the first open to the white mark (0 to 5 ticks, median 2).
+ * (turn it with the room's placement).
  */
-class ChestClear(val room: String, val secret: String?, val cell: Pos?, val afterOpen: Dist?, val visits: Int)
+class ChestClear(val room: String, val secret: String?, val cell: Pos?, val visits: Int)
 
 /** FORMAT-runstate 4: door and key rules and tick constants. */
 class DoorRules(
-    val volumeW: Int, val volumeH: Int, val volumeD: Int, val volumeY0: Int,
     /** Ticks a door stays barrier before all 36 blocks turn to air (14). */
     val barrierTicks: Int,
     val barrierTicksQ: DoubleArray,
     /** Null when unmeasured: use `START_LEAD_TICKS` (20). */
     val startLeadTicks: Int?,
-    val entranceFallAfterStart1: Dist?,
     val freeFairyDoorWithinTicks: Int,
-    val witherPerLayoutCounts: Map<Int, Int>,
-    val paidKeysPerRunCounts: Map<Int, Int>,
-    val keyObtainToUse: Dist?,
-    val pickupInstantFrac: Double,
-    val pickupDelayed: Dist?,
     val autoCollectTicks: Int,
-    val standWitherY: Double, val standBloodY: Double,
-    val standNameWither: String, val standNameBlood: String,
-    val standLifetime: Dist?,
-    val noKeyChat: String,
-    val noKeySoundId: String, val noKeySoundVolume: Double, val noKeySoundPitch: Double,
-    val bloodKeyAfterStart: Dist?,
-    val bloodDoorAfterKey: Dist?,
     val raw: JsonObject,
 )
 
@@ -105,26 +91,8 @@ class ScoreModel(
     val endScreen: String?,
     val maxSecretPoints: Double,
     val secretsPctDecimals: Int,
-    /** `table[c]` for `c` completed tiles (37 entries, c = 0..36), deaths 0 with secrets and bonus removed. */
-    val roomsTable: DoubleArray,
-    val roomsInterp: String?,
-    val roomsRounding: String?,
-    val deathsFormula: String?,
-    /**
-     * Points per unsolved puzzle, as the pack writes it: NEGATIVE when fitted (-9.04; the canonical value is -10). Null = not
-     * fitted; the score module then uses `UNMEASURED_PUZZLE_PENALTY` (10 points, subtracted).
-     */
-    val puzzlePenaltyPerUnsolved: Double?,
-    val cryptWeight: Double, val cryptCap: Int,
-    val mimicWeight: Double, val princeWeight: Double, val batWeight: Double,
-    val bonusWeightsFitted: Boolean,
-    /** Speed term as `[seconds, points]` pairs, piecewise linear. */
-    val speedPointsSec: List<Pair<Double, Double>>,
-    val speedFitted: Boolean,
     val constant: Double,
     val raw: JsonObject,
-    /** The fitted weight on the secrets term (0.991 in the built pack; 1.0 when the pack has none). */
-    val secretWeight: Double = 1.0,
     /** `S` is recomputed at `T0 + clockOriginTicksAfterT0 + periodTicks * k` for k >= 1 (the built pack: 20, so the first value shows at T0 + 220). */
     val clockOriginTicksAfterT0: Int = 0,
     /** The pack's own statement of the exact formula (read it before writing the score function), or null. */
@@ -134,18 +102,15 @@ class ScoreModel(
 /** FORMAT-runstate 9.2: per-class roles for the bots' ClearPlans. */
 class ClassRole(
     val roomsOwnedMean: Double, val puzzlesOwnedMean: Double, val doorOpenerFrac: Double,
-    val distanceBlocks: Dist?, val movingSpeedBpt: Double?,
+    val movingSpeedBpt: Double?,
 )
 
 class ClassRoles(val n: Int, val classes: Map<String, ClassRole>, val ownedRoomsSortedMean: DoubleArray, val standingFrac: Double?, val firstEntrantTopLeaderFrac: Double?, val raw: JsonObject)
 
 /** FORMAT-runstate 10.1: how many puzzles a layout has and which ones can occur. */
-class PuzzleOdds(val countOddsN: Int, val counts: Map<Int, Int>, val pool: List<PuzzleEntry>, val raw: JsonObject) {
+class PuzzleOdds(val counts: Map<Int, Int>, val pool: List<PuzzleEntry>, val raw: JsonObject) {
     class PuzzleEntry(val code: String, val rooms: List<String>, val mapShare: Double, val exclusivePair: Boolean)
 }
-
-/** FORMAT-runstate 11.2: a SkyBlock stat preset. */
-class SbStatPreset(val id: String, val label: String, val floor: Int, val maxHp: Int, val defense: Int, val maxMana: Int, val speed: Int, val vitality: Int?)
 
 /** FORMAT-runstate 11.3. */
 class DamageRules(val trapPctOfMaxHp: Double, val defenseFormula: String?, val raw: JsonObject)
@@ -156,12 +121,8 @@ class LagTier(val good: Double, val typical: Double, val bad: Double, val mean: 
 class LagModel(
     val typicalLossPerMin: Double,
     val tiers: Map<String, LagTier>,
-    val runLevelMedian: Double?, val runLevelSigma: Double?, val runLevelP10: Double?, val runLevelP90: Double?,
-    /** `[gapMs, perHour]`: freezes at least this long per hour. */
-    val freezeExceedPerHour: List<Pair<Double, Double>>,
-    val tickIntervalMsPct: DoubleArray, val tickIntervalMsQ: DoubleArray,
+    val tickIntervalMsQ: DoubleArray,
     val recoverFracWithin5s: Double?, val burstRateTicksPerSec: Double?,
-    val rttMedianMs: Double?,
     val raw: JsonObject,
 )
 
@@ -186,7 +147,6 @@ class RunStatePack internal constructor(
     val puzzleSolve: Map<String, Dist>,
     val puzzles: PuzzleOdds?,
     val chatFormats: List<String>,
-    val sbStatPresets: List<SbStatPreset>,
     val damage: DamageRules?,
     val lag: LagModel?,
     val constants: List<NamedConstant>,
@@ -198,9 +158,6 @@ class RunStatePack internal constructor(
 ) {
     /** The tables for a room (in-game name, spaces; U+200B stripped); null when the pack has none. */
     fun room(name: String): RoomRun? = rooms[name.replace("​", "")]
-
-    /** The chest that finishes the trap room [name], or null (not a trap room, or the pack has no rule for it). */
-    fun chestClear(name: String): ChestClear? = chestClears[name.replace("\u200b", "")]
 
     fun constant(name: String): NamedConstant? = constants.firstOrNull { it.name == name }
 
@@ -254,10 +211,6 @@ class RunStatePack internal constructor(
             val puzzleSolve = timing?.obj("puzzleSolve")?.entrySet()?.mapNotNull { (k, v) -> Dist.parse(v, pct)?.let { k to it } }?.toMap().orEmpty()
             val puzzles = section("puzzles") { parsePuzzles(it) }
             val chatFormats = root.arr("chatFormats").strings()
-            val sbPresets = root.obj("sbStats")?.arr("presets").objects().map { p ->
-                SbStatPreset(p.str("id") ?: "?", p.str("label") ?: (p.str("id") ?: "?"), p.int("floor") ?: 7, p.int("maxHp") ?: 0, p.int("defense") ?: 0,
-                    p.int("maxMana") ?: 0, p.int("speed") ?: 0, p.int("vitality"))
-            }
             val damage = section("damage") { DamageRules(it.dbl("trapPctOfMaxHp") ?: 0.15, it.str("defenseFormula"), it) }
             val lag = section("lag") { parseLag(it) }
             val chestClears = section("chestClears", required = false) { parseChestClears(it, pct) }.orEmpty()
@@ -266,7 +219,7 @@ class RunStatePack internal constructor(
             }
             for (p in problems) report.warn("Run-state tables: $p. The feature that needs it uses its built-in defaults.")
             return RunStatePack(root.int("version") ?: 1, pct, rooms, doors, splits, checkStates, counters, score, roomTypeDur, classRoles, puzzleSolve, puzzles,
-                chatFormats, sbPresets, damage, lag, constants, problems, root, chestClears)
+                chatFormats, damage, lag, constants, problems, root, chestClears)
         }
 
         private fun primitive(e: com.google.gson.JsonElement?): Any? {
@@ -297,22 +250,15 @@ class RunStatePack internal constructor(
                 val r = v.asObj() ?: return@mapNotNull null
                 val c = r.arr("cell").doubles()
                 val key = name.replace("\u200b", "")
-                key to ChestClear(key, r.str("secret"), if (c.size == 3) Pos(c[0].toInt(), c[1].toInt(), c[2].toInt()) else null, Dist.parse(r.get("afterOpenTicks"), pct), r.int("visitsWithWhite") ?: 0)
+                key to ChestClear(key, r.str("secret"), if (c.size == 3) Pos(c[0].toInt(), c[1].toInt(), c[2].toInt()) else null, r.int("visitsWithWhite") ?: 0)
             }.toMap()
 
         private fun parseDoors(o: JsonObject, pct: DoubleArray): DoorRules {
-            val vol = o.obj("volume"); val fall = o.obj("fall"); val ent = o.obj("entrance"); val pick = o.obj("pickup"); val stand = o.obj("stand")
-            val nk = o.obj("noKeyMessage"); val snd = nk?.obj("sound"); val blood = o.obj("blood")
+            val fall = o.obj("fall"); val ent = o.obj("entrance")
             return DoorRules(
-                vol?.int("w") ?: 3, vol?.int("h") ?: 4, vol?.int("d") ?: 3, vol?.int("y0") ?: 69,
                 fall?.int("barrierTicks") ?: 14, fall?.arr("barrierTicksQ").doubles(),
-                ent?.int("startLeadTicks"), Dist.parse(ent?.get("fallAfterStart1Ticks"), pct), ent?.int("freeFairyDoorWithinTicks") ?: 2,
-                intMap(o.obj("witherPerLayout")?.obj("counts")), intMap(o.obj("paidKeysPerRun")?.obj("counts")),
-                Dist.parse(o.get("keyObtainToUseTicks"), pct), pick?.dbl("instantFrac") ?: 0.63, Dist.parse(pick?.get("delayedTicks"), pct), pick?.int("autoCollectTicks") ?: 200,
-                stand?.dbl("witherY") ?: 68.531, stand?.dbl("bloodY") ?: 67.531, stand?.str("nameWither") ?: "§8Wither Key", stand?.str("nameBlood") ?: "§cBlood Key",
-                Dist.parse(stand?.get("lifetimeTicks"), pct),
-                nk?.str("chat") ?: "You do not have the key for this door!", snd?.str("id") ?: "entity.enderman.teleport", snd?.dbl("vol") ?: 8.0, snd?.dbl("pitch") ?: 0.0,
-                Dist.parse(blood?.get("keyAfterStartTicks"), pct), Dist.parse(blood?.get("doorAfterKeyTicks"), pct), o,
+                ent?.int("startLeadTicks"), ent?.int("freeFairyDoorWithinTicks") ?: 2,
+                o.obj("pickup")?.int("autoCollectTicks") ?: 200, o,
             )
         }
 
@@ -330,18 +276,11 @@ class RunStatePack internal constructor(
 
         private fun parseScore(o: JsonObject): ScoreModel {
             val terms = o.obj("terms")
-            val secret = terms?.obj("secret"); val rooms = terms?.obj("rooms"); val bonus = terms?.obj("bonus"); val speed = terms?.obj("speed")
+            val secret = terms?.obj("secret")
             return ScoreModel(
                 o.int("periodTicks") ?: 200, o.int("firstUpdateTick") ?: 200, o.str("endScreen"),
                 secret?.dbl("maxSecretPoints") ?: 40.0, secret?.int("secretsPctDecimals") ?: 1,
-                rooms?.arr("table").doubles(), rooms?.str("interp"), rooms?.str("rounding"),
-                terms?.obj("deaths")?.str("perDeathFormula"), terms?.obj("puzzles")?.dbl("perUnsolved"),
-                bonus?.obj("crypts")?.dbl("w") ?: 1.0, bonus?.obj("crypts")?.int("cap") ?: 5,
-                bonus?.obj("mimic")?.dbl("w") ?: 2.0, bonus?.obj("prince")?.dbl("w") ?: 1.0, bonus?.obj("bat")?.dbl("w") ?: 1.0,
-                bonus?.bool("weightsFitted") ?: false,
-                speed?.arr("pointsSec")?.mapNotNull { p -> val a = p.asArr(); if (a != null && a.size() >= 2) (a[0].asDoubleOrNull() ?: return@mapNotNull null) to (a[1].asDoubleOrNull() ?: return@mapNotNull null) else null }.orEmpty(),
-                speed?.bool("fitted") ?: false, terms?.dbl("constant") ?: 0.0, o,
-                secret?.dbl("weight") ?: 1.0, o.int("clockOriginTicksAfterT0") ?: 0, o.str("evaluation"),
+                terms?.dbl("constant") ?: 0.0, o, o.int("clockOriginTicksAfterT0") ?: 0, o.str("evaluation"),
             )
         }
 
@@ -350,14 +289,14 @@ class RunStatePack internal constructor(
             for (c in listOf("HEALER", "MAGE", "BERSERK", "ARCHER", "TANK")) {
                 val r = o.obj(c) ?: continue
                 classes[c] = ClassRole(r.dbl("roomsOwnedMean") ?: 0.0, r.dbl("puzzlesOwnedMean") ?: 0.0, r.dbl("doorOpenerFrac") ?: 0.0,
-                    Dist.parse(r.get("distanceBlocksQ"), pct), r.dbl("movingSpeedBpt"))
+                    r.dbl("movingSpeedBpt"))
             }
             return ClassRoles(o.int("n") ?: 0, classes, o.arr("ownedRoomsSortedMean").doubles(), o.dbl("standingFrac"), o.dbl("firstEntrantTopLeaderFrac"), o)
         }
 
         private fun parsePuzzles(o: JsonObject): PuzzleOdds {
             val odds = o.obj("countOdds")
-            return PuzzleOdds(odds?.int("n") ?: 0, intMap(odds?.obj("counts")),
+            return PuzzleOdds(intMap(odds?.obj("counts")),
                 o.arr("pool").objects().mapNotNull { p ->
                     PuzzleOdds.PuzzleEntry(p.str("code") ?: return@mapNotNull null, p.arr("rooms").strings(), p.dbl("mapShare") ?: 0.0, p.bool("exclusivePair") ?: false)
                 }, o)
@@ -368,12 +307,10 @@ class RunStatePack internal constructor(
                 val t = v.asObj() ?: return@mapNotNull null
                 k to LagTier(t.dbl("good") ?: 0.0, t.dbl("typical") ?: 0.0, t.dbl("bad") ?: 0.0, t.dbl("mean"), t.dbl("slotOver200"), t.dbl("slotMultiplier"))
             }?.toMap().orEmpty()
-            val run = o.obj("runLevelModel"); val fr = o.obj("freezes"); val tick = fr?.obj("tickIntervalMsQ"); val catchup = fr?.obj("catchup")
+            val fr = o.obj("freezes"); val catchup = fr?.obj("catchup")
             return LagModel(
-                o.dbl("typicalLossPerMin") ?: 30.3, tiers, run?.dbl("median"), run?.dbl("sigma"), run?.dbl("p10"), run?.dbl("p90"),
-                fr?.arr("exceedPerHour").objects().mapNotNull { e -> (e.dbl("gapMs") ?: return@mapNotNull null) to (e.dbl("perHour") ?: return@mapNotNull null) },
-                tick?.arr("pct").doubles(), tick?.arr("q").doubles(), catchup?.dbl("recoverFracWithin5s"), catchup?.dbl("burstRateTicksPerSec"),
-                o.obj("rttMs")?.dbl("median"), o,
+                o.dbl("typicalLossPerMin") ?: 30.3, tiers,
+                fr?.obj("tickIntervalMsQ")?.arr("q").doubles(), catchup?.dbl("recoverFracWithin5s"), catchup?.dbl("burstRateTicksPerSec"), o,
             )
         }
     }

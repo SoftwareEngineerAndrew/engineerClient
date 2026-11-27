@@ -1,10 +1,8 @@
 package com.adm.features.impl.render
 
-import com.google.gson.annotations.SerializedName
 import com.mojang.authlib.GameProfile
 import com.mojang.blaze3d.vertex.PoseStack
 import com.adm.AdmMod
-import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.clickgui.settings.impl.*
 import com.adm.features.Module
 import com.adm.utils.network.WebUtils.fetchJson

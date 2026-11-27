@@ -28,7 +28,7 @@ class RoomInstance(val design: RoomDesign, val volume: RoomVolume, val placement
  *  - every connected slot gets one door unit, its floor and its body ([DoorUnits]).
  *
  * Pure, so it is tested without a world: the result is a list of [Edit]s in the order they apply. The neighbour shape updates that follow
- * the paste need a world and are done by the chunk writer over [DoorUnits.shapeCells].
+ * the paste need a world and are done by the chunk writer.
  *
  * ESTIMATED: 185 sides never recorded without a door use `closedEstimated` (about 70 percent of their unit cells right when the rule is
  * checked on recorded sides); 8 designs never recorded use their base volume.

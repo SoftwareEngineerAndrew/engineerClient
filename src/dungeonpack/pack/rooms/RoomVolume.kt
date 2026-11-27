@@ -31,14 +31,6 @@ class RoomVolume(val w: Int, val d: Int, val h: Int, val y0: Int, val palette: L
 
     fun isAir(x: Int, y: Int, z: Int): Boolean = paletteIndexAt(x, y, z) == 0 || palette[paletteIndexAt(x, y, z)] == AIR
 
-    /** How many cells are not air. */
-    fun nonAirCount(): Int {
-        val air = BooleanArray(palette.size) { palette[it] == AIR }
-        var n = 0
-        for (c in cells) if (!air[c.toInt() and 0xFFFF]) n++
-        return n
-    }
-
     /** A copy with [patch] applied (FORMAT-rooms 5.2). Cells the patch sets to `minecraft:air` are cleared. */
     fun withPatch(patch: RoomPatch): RoomVolume {
         if (patch.w != w || patch.d != d || patch.h != h || patch.y0 != y0) {
@@ -200,11 +192,3 @@ class FileBlobSource(path: java.nio.file.Path) : BlobSource {
     override fun close() = file.close()
 }
 
-class BytesBlobSource(private val bytes: ByteArray) : BlobSource {
-    override val size: Long get() = bytes.size.toLong()
-    override fun read(off: Long, len: Int): ByteArray {
-        if (off < 0 || len < 0 || off + len > bytes.size) throw PackFormatException("blob $off+$len is outside the data (${bytes.size} bytes)")
-        return bytes.copyOfRange(off.toInt(), (off + len).toInt())
-    }
-    override fun close() {}
-}

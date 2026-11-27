@@ -1,7 +1,6 @@
 package com.engineerclient.p3sim
 
 import net.minecraft.world.entity.EntityTypes
-import com.engineerclient.index
 import com.engineerclient.EngineerClient
 import com.google.gson.JsonParser
 import net.minecraft.core.BlockPos
@@ -10,7 +9,6 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.LightningBolt
 import net.minecraft.world.entity.item.PrimedTnt
 import net.minecraft.world.entity.projectile.hurtingprojectile.LargeFireball

@@ -54,7 +54,6 @@ class MobArchetype(
     val modifierWeights: Map<String, Double>?,
     val seen: Map<String, Int>,
 ) {
-    fun hpFor(floor: String): Long? = hp[floor]
 }
 
 /** FORMAT-mobs 3.6: a name prefix word ("" = none) with its weight, HP factor and colours. `weight` null for a floor = reuse F7. */
@@ -124,9 +123,6 @@ class PlayerDamageTable(
     /** Floor key -> archetype id -> table; overrides the pooled table when present (n >= 30 only). */
     val meleeByArchetype: Map<String, Map<String, HitQuantiles>>,
     val projectile: Map<String, HitQuantiles>,
-    /** Traps hit for exactly this percent of max HP, true damage (15.0). */
-    val trapPercent: Double,
-    val trapKinds: List<String>,
 )
 
 /** The loaded mob tables. */
@@ -140,14 +136,12 @@ class MobPack internal constructor(
     val playerDamage: PlayerDamageTable?,
     val gaps: List<String>,
 ) {
-    private val byArchetypeId = archetypes.associateBy { it.id }
     private val byArchetypeName = archetypes.associateBy { it.name }
     private val byRoomName = rooms.associateBy { it.name }
     private val byNormRoomName = rooms.associateBy { norm(it.name) }
     private val byRoomAlias: Map<String, RoomMobs> = buildMap { for (r in rooms) for (a in r.aliases) putIfAbsent(a.replace("\u200B", ""), r) }
 
     fun archetype(index: Int): MobArchetype? = archetypes.getOrNull(index)
-    fun archetypeById(id: String): MobArchetype? = byArchetypeId[id]
     fun byName(name: String): MobArchetype? = byArchetypeName[name]
 
     /**
@@ -162,10 +156,6 @@ class MobPack internal constructor(
         aliasOf?.invoke(n)?.let { a -> byRoomName[a]?.let { return it }; byRoomAlias[a]?.let { return it }; byNormRoomName[norm(a)]?.let { return it } }
         return byNormRoomName[norm(n)]
     }
-
-    fun modifier(id: String): MobModifier? = modifiers.firstOrNull { it.id == id }
-    fun hpScaleFor(floor: String): HpScaleTable? = hpScale[floor]
-    fun minibossesOf(room: String): List<Miniboss> = minibosses.filter { it.room == room }
 
     companion object {
         const val FORMAT = "ads-mobs"
@@ -296,8 +286,7 @@ class MobPack internal constructor(
                 v.asObj()?.let { fl -> k to fl.entrySet().mapNotNull { (id, t) -> hit(t.asObj())?.let { id to it } }.toMap() }
             }?.toMap().orEmpty()
             val projectile = o.obj("projectile")?.entrySet()?.mapNotNull { (k, v) -> hit(v.asObj())?.let { k to it } }?.toMap().orEmpty()
-            val trap = o.obj("trap")
-            return PlayerDamageTable(o.str("unit"), o.int("immunityTicks") ?: 10, melee, byArch, projectile, trap?.dbl("percent") ?: 15.0, trap?.arr("kinds").strings())
+            return PlayerDamageTable(o.str("unit"), o.int("immunityTicks") ?: 10, melee, byArch, projectile)
         }
     }
 }

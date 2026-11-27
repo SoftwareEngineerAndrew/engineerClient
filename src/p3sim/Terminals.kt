@@ -477,9 +477,6 @@ object Terminals {
         for (p in Sim.players()) if (p !== except && (p.containerMenu as? TerminalMenu)?.station === station) p.closeContainer()
     }
 
-    /** Is the player in [station]'s terminal right now. */
-    fun inUse(station: Station) = open.any { it.station === station }
-
     // ------------------------------------------------------------------ item pools (Hypixel's, 1.8 names)
 
     class Colour(val title: String, val items: List<Pair<String, String>>)

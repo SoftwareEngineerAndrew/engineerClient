@@ -40,8 +40,6 @@ object DungeonScan {
     val viewableDoors = CopyOnWriteArrayList<Pair<DungeonDoor, Color>>()
     val pathHints = CopyOnWriteArrayList<DungeonTile>()
 
-    val directions = arrayOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)
-
     private val coresFile = File(AdmMod.configFile, "room-cores.json")
     val roomCores: MutableMap<String, MutableList<Map<Int, List<String>>>> by lazy {
         runCatching {

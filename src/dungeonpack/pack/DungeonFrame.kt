@@ -5,7 +5,7 @@ package com.engineerclient.dungeonpack.pack
  * The 6x6 room grid starts at x,z = -200 and each tile is a 32-block pitch; a room covers 31 blocks of it and the 1-block
  * column between two tiles is where doors stand. +x is east, +z is south, y is absolute (0..255). Pure functions.
  *
- * Time and ticks are not here; see `Run`. The boss arena lives at positive coordinates (x, z >= [ARENA_MIN]).
+ * Time and ticks are not here; see `Run`. The boss arena lives at positive coordinates.
  */
 object DungeonFrame {
     /** x and z of tile (0, 0)'s min corner. */
@@ -22,9 +22,6 @@ object DungeonFrame {
     /** The last block of the dungeon box (tile 5's last block): the box is x,z in `[ORIGIN, DUNGEON_MAX]`. */
     const val DUNGEON_MAX = ORIGIN + PITCH * (TILES - 1) + TILE_SIZE - 1   // -10
 
-    /** The boss arena starts here in both x and z; the arena's extension is clipped to this (it must not touch tile (5,5)). */
-    const val ARENA_MIN = -8
-
     /** Doors are 3 wide, 4 tall (y 69..72, frame top y73), 3 deep around the door spot (FORMAT-layouts 2). */
     const val DOOR_Y_MIN = 69
     const val DOOR_Y_MAX = 72
@@ -34,9 +31,6 @@ object DungeonFrame {
 
     /** Centre column (x or z) of tile index [t]: `-185 + 32 t`. This is the column ADM hashes to name a room. */
     fun tileCentre(t: Int): Int = tileMin(t) + 15
-
-    /** The tile index (0..5) a world coordinate falls in, clipped to the grid; the gap column belongs to the lower tile. */
-    fun tileIndex(v: Double): Int = Math.floorDiv(Math.floor(v).toInt() - ORIGIN, PITCH).coerceIn(0, TILES - 1)
 
     /** The tile index of a world coordinate, or null outside the grid or in a gap column (a door, not a room). */
     fun roomTileIndexOrNull(v: Double): Int? {
@@ -52,9 +46,6 @@ object DungeonFrame {
         val tz = roomTileIndexOrNull(z) ?: return null
         return Tile(tx, tz)
     }
-
-    /** True when the column is inside the dungeon box `[ORIGIN, DUNGEON_MAX]` in both axes. */
-    fun inDungeonBox(x: Int, z: Int): Boolean = x in ORIGIN..DUNGEON_MAX && z in ORIGIN..DUNGEON_MAX
 
     /**
      * World (x, z) of the centre of a door slot. `axis 'E'` joins `(tx, tz)` and `(tx+1, tz)` (tx 0..4); `axis 'S'` joins

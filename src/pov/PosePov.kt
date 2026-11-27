@@ -13,7 +13,6 @@ import com.mojang.renderpearl.api.pipeline.PrimitiveTopology
 import com.mojang.renderpearl.api.textures.FilterMode
 import com.adm.clickgui.settings.impl.BooleanSetting
 import com.adm.clickgui.settings.impl.NumberSetting
-import com.adm.clickgui.settings.RenderableSetting.Companion.withDependency
 import com.adm.events.LevelEvent
 import com.adm.events.ScreenEvent
 import com.adm.events.core.EventPriority
@@ -36,11 +35,9 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.PlayerFaceExtractor
 import net.minecraft.client.gui.render.TextureSetup
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.client.renderer.Projection
 import net.minecraft.client.renderer.ProjectionMatrixBuffer
 import net.minecraft.client.renderer.RenderPipelines
-import net.minecraft.client.renderer.rendertype.RenderTypes
 import net.minecraft.client.renderer.entity.state.AvatarRenderState
 import net.minecraft.client.model.player.PlayerModel
 import net.minecraft.client.model.geom.ModelLayers
@@ -56,11 +53,9 @@ import net.minecraft.client.renderer.state.gui.BlitRenderState
 import net.minecraft.core.SectionPos
 import net.minecraft.util.Mth
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket
-import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSwingAnimationPacket
-import net.minecraft.network.protocol.game.ClientboundSetTimePacket
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket
 import net.minecraft.resources.Identifier
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
@@ -169,7 +164,6 @@ object PosePov : Module(
     /** Each view's projection, written once per frame (one buffer each: the blocks pass binds all four). */
     private val viewProjections by lazy { Array(FEEDS) { ProjectionMatrixBuffer("pov previews $it") } }
     private val projection = Projection()
-    private val projectionBuffer by lazy { ProjectionMatrixBuffer("pov previews") }
     private val view = Matrix4f()
     private val skyColor = Vector4f(((SKY shr 16) and 255) / 255f, ((SKY shr 8) and 255) / 255f, (SKY and 255) / 255f, 1f)
 

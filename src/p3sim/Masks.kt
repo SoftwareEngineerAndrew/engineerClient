@@ -291,17 +291,6 @@ object Masks {
         Sim.sound(SoundEvents.GENERIC_HURT, 1f, 0.889f, null, net.minecraft.sounds.SoundSource.NEUTRAL)
     }
 
-    /**
-     * Brings the ghost [p] back where it floats, for the dungeon run's timer or a reviver: the chat line for everyone, then the
-     * inventory and armour back. [by] is the reviver's name (yourself when nobody was near).
-     */
-    fun reviveGhost(p: ServerPlayer, by: String?, byColour: String = "§b") {
-        if (!ghost) return
-        reviveGen++
-        endGhost(p)
-        Sim.everyone { Sim.chat("§a ❣ §r§b${p.gameProfile.name}§r§a was revived by §r$byColour${by ?: p.gameProfile.name}§r§a!") }
-    }
-
     /** [by]: the killer named in the death line, or null for the plain "You died". */
     fun hit(p: ServerPlayer, by: String?, goldor: (() -> Unit)? = null) {
         // [goldor]: Goldor's line and its quiet wither.ambient, which come after the death/proc chat and sounds.
@@ -331,9 +320,6 @@ object Masks {
         savedArmor?.forEach { (slot, st) -> p.setItemSlot(slot, st) }
         savedArmor = null
     }
-
-    private fun ghostItem(base: net.minecraft.world.item.Item, name: String, count: Int = 1) =
-        ItemStack(base, count).also { it.set(DataComponents.CUSTOM_NAME, Component.literal(name).withStyle { s -> s.withItalic(false) }) }
 
     private fun becomeGhost(p: ServerPlayer, reviveIn: Int? = null) {
         ghost = true

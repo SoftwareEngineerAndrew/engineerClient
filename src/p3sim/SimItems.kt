@@ -3,8 +3,6 @@ package com.engineerclient.p3sim
 import com.engineerclient.EngineerClient
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.p3sim.ClearItems
-import com.engineerclient.p3sim.ImplosionRules
-import com.engineerclient.p3sim.SimPearl
 import com.google.common.collect.ImmutableMultimap
 import com.mojang.authlib.GameProfile
 import com.mojang.authlib.properties.Property
@@ -321,7 +319,6 @@ object SimItems {
 
 §eClick to open!
 """)
-        val INFINITE_SPIRIT_LEAP_NAME = u("§5Infinileap")
         val INFINITE_SPIRIT_LEAP = lines("""
 §c§l⦾ §6Ability: Spirit Leap  §e§lRIGHT CLICK
 §7Allows you to teleport to any teammate! Grants
@@ -1010,10 +1007,6 @@ object SimItems {
 
     // ------------------------------------------------------------------ the clear's kit
 
-    /** The Spirit Sceptre as the clear's hotbar carries it (fragged, the Heroic one): its click is [sceptre]. */
-    val SPIRIT_SCEPTRE get() = item(Items.PAPER, SCEPTRE, "§6 Heroic Spirit Sceptre §6✪✪✪✪✪", listOf(
-        "§6Ability: Guided Bat §e§lRIGHT CLICK", "§7Shoots a guided spirit bat, following", "§7your aim and exploding on what it hits.",
-        "", "§6§lLEGENDARY DUNGEON SWORD"), glint = true).also { hy(it, "island_relevant/dungeons/spirit_sceptre_fragged", "legendary") }
     /** Its SkyBlock id: the Spirit Sceptre is BAT_WAND inside (packdisabler draws it by that id, an allium). */
     const val SCEPTRE = "STARRED_BAT_WAND"
 
@@ -1350,28 +1343,6 @@ object SimItems {
         return InteractionResult.SUCCESS
     }
 
-    /**
-     * A pearl in the clear, thrown as Hypixel's are: the `entity.arrow.shoot` sound at your feet instead of vanilla's throw sound, 1.5 blocks a
-     * tick, and one pearl used up per throw (recorded: the stack's count drops by one in the slot update that follows, 133 of 135 throws;
-     * the end of [use] sends the slot). The pearl itself is a [SimPearl].
-     */
-    private fun throwPearl(p: ServerPlayer) {
-        val level = p.level() as? ServerLevel ?: return
-        val held = p.mainHandItem
-        if (held.isEmpty) return
-        Sim.sound(SoundEvents.ARROW_SHOOT, ClearItems.PEARL_VOLUME, ClearItems.pearlPitch(Random.nextFloat()), p.position(), net.minecraft.sounds.SoundSource.NEUTRAL)
-        // A replay's pearl lands where and when the recording's did (its spread is random on Hypixel too): this one only flies.
-        val recorded = replayPearl?.invoke(p)
-        net.minecraft.world.entity.projectile.Projectile.spawnProjectileFromRotation(
-            net.minecraft.world.entity.projectile.Projectile.ProjectileFactory<SimPearl> { l, o, s -> SimPearl(l, o, s).also { it.addTag(Sim.TAG); it.scripted = recorded != null } },
-            level, held, p, 0f, ClearItems.PEARL_SPEED, ClearItems.PEARL_SPREAD)
-        if (recorded != null) Fight.later(maxOf(1, recorded.first), "replay pearl") { if (!p.isRemoved) SimPearl.land(p, recorded.second) }
-        if (!p.isCreative) held.shrink(1)
-    }
-
-    /** Set by a replay: for a pearl [ServerPlayer] throws now, the ticks until the recording's landed and where it put them; null for ADS's own. */
-    @Volatile var replayPearl: ((ServerPlayer) -> Pair<Int, Vec3>?)? = null
-
     /** Sends the held slot back as the server has it (an item the client used in its own prediction has one fewer there than the server's). */
     private fun resyncHeld(p: ServerPlayer) {
         p.connection.send(net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket(0, p.inventoryMenu.incrementStateId(), 36 + p.inventory.selectedSlot, p.mainHandItem.copy()))
@@ -1440,12 +1411,6 @@ object SimItems {
 
     /** The item a block click just fired and its server tick: the client's use_item for it in that tick or the next is skipped. */
     private var blockFired: Pair<String, Int>? by perPlayer { null }
-
-    /**
-     * A click another module took on a block (a dungeon door): the client's use_item that follows it does nothing, as Hypixel's does
-     * nothing with it (DR: 55 of 60 clicks a tick before your own door line, a use_item with each, no teleport and no line).
-     */
-    fun swallowFollowUp(p: ServerPlayer) { Sim.asPlayer(p) { idOf(p.mainHandItem)?.let { blockFired = it to Fight.serverTick } } }
 
     /** The server tick of each terminal's last accepted click (same-tick dedupe). */
     private val termClickTick: java.util.WeakHashMap<Station, Int> by perPlayer { java.util.WeakHashMap() }
@@ -1640,9 +1605,6 @@ object SimItems {
 
     /** Set by a replay: told why an etherwarp did not warp (for its report). */
     @Volatile var etherwarpRefused: ((String) -> Unit)? = null
-
-    /** Set by a replay: whether the Hyperion click being handled, made inside an entity it also clicked, cast without its teleport. */
-    @Volatile var replayStill: (() -> Boolean)? = null
 
     private fun hypeReady(): Boolean {
         val now = Fight.serverTick
@@ -2256,9 +2218,6 @@ object SimItems {
         val regen = Math.round(P3Sim.breakerRegen * 20).toInt()
         brokenBy.values().forEach { l -> l.removeAll { if (now - it.at >= regen || now >= it.restoreAt) { restore(it); true } else false } }
     }
-
-    /** The Dungeonbreaker gains charges (+5 for each secret found); the current player's. */
-    fun addBreakerCharges(n: Int) { charges = (charges + n).coerceAtMost(MAX_CHARGES) }
 
     private fun tickBreaker() {
         val now = Fight.serverTick

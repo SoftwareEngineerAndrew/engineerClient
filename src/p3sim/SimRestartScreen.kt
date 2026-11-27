@@ -708,7 +708,6 @@ class SimRestartScreen : Screen(Component.literal(P3Sim.FULL_NAME)) {
         const val SEC_W = 24
         const val JOB_W = 40
         const val LEAP_W = 90
-        const val SPOT_W = 92
         const val MIN_SPEED = 100
         const val MAX_SPEED = 750
 

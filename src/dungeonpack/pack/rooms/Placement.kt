@@ -1,6 +1,5 @@
 package com.engineerclient.dungeonpack.pack.rooms
 
-import com.engineerclient.dungeonpack.pack.DungeonFrame
 import com.engineerclient.dungeonpack.pack.Rot
 import com.engineerclient.dungeonpack.pack.Tile
 
@@ -63,20 +62,6 @@ class Placement private constructor(
             Rot.EAST -> (w - 1 - pz) to px
         }
     }
-
-    /**
-     * Whether world column ([wx], [wz]) belongs to this room: it lies in one of the room's tiles, or in the 1-block gap column or row between two of
-     * them. The box of an L room also covers the corner that is a neighbour's, which this says is not the room's (a resync must not clear it).
-     */
-    fun ownsColumn(wx: Int, wz: Int): Boolean {
-        fun axis(v: Int): List<Int> {
-            val t = Math.floorDiv(v - DungeonFrame.ORIGIN, DungeonFrame.PITCH)
-            return if (v - DungeonFrame.tileMin(t) == DungeonFrame.TILE_SIZE) listOf(t, t + 1) else listOf(t)
-        }
-        return axis(wx).all { tx -> axis(wz).all { tz -> Tile(tx, tz) in tileSet } }
-    }
-
-    private val tileSet: Set<Tile> = worldTiles.toSet()
 
     /** The world tile that canonical tile cell (ix, iz) lands on (FORMAT-rooms 4.3). */
     fun worldTileOf(ix: Int, iz: Int): Tile = placeTile(rot, ix, iz, nx, nz, tx0, tz0)

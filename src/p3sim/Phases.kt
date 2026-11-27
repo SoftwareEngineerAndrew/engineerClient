@@ -7,7 +7,6 @@ import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal
 import net.minecraft.world.entity.boss.wither.WitherBoss
 import net.minecraft.world.entity.decoration.ArmorStand

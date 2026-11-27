@@ -126,11 +126,6 @@ object SpecialColumn {
         return left
     }
 
-    fun colorGuessForUnknown(tileX: Int): Array<Color> {
-        val code = guessCode(tileX == column)
-        return Array(guessCount(code)) { kindColor(guessKind(code, it)) }
-    }
-
     internal fun guessCount(code: Int): Int = code ushr 6
 
     internal fun guessKind(code: Int, i: Int): Int = (code ushr (i * 2)) and 3

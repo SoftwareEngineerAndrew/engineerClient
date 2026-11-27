@@ -120,8 +120,6 @@ class DungeonRoom(var type: RoomType, initialPosition: IVec2, var data: RoomData
         return false
     }
 
-    fun getRealPosition(x: Int = topLeft.x, z: Int = topLeft.z) = x * 32 - 185 to z * 32 - 185
-
     fun getRelativeCoords(pos: BlockPos): BlockPos {
         val clay = clayPos ?: return BlockPos.ZERO
         val rot = rotation ?: return BlockPos.ZERO
