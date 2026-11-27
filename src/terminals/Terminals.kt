@@ -52,6 +52,10 @@ object Terminals : Module(
     val clickLimit by BooleanSetting("Click Limit", true, desc = "Hypixel takes 5 terminal clicks per 500 ms; one it would drop isn't sent.").withDependency { solverDrop }
     val instantGui by BooleanSetting("Open GUI Instantly", false, desc = "A blank screen as soon as you click a terminal; the slots fill in as Hypixel sends them.").withDependency { solverDrop }
     val instantStyle by SelectorSetting("Style", InstantGui.Size.SELECT, desc = "Which terminal's size the blank screen takes.").withDependency { solverDrop && instantGui }
+    private val instantOffS1 by StringSetting("Off in S1", "", 16, desc = "Section 1 terminals it skips, like 2 or 1,3.", placeholder = "none").withDependency { solverDrop && instantGui }
+    private val instantOffS2 by StringSetting("Off in S2", "", 16, desc = "Section 2 terminals it skips, like 2 or 1,3.", placeholder = "none").withDependency { solverDrop && instantGui }
+    private val instantOffS3 by StringSetting("Off in S3", "", 16, desc = "Section 3 terminals it skips, like 2 or 1,3.", placeholder = "none").withDependency { solverDrop && instantGui }
+    private val instantOffS4 by StringSetting("Off in S4", "", 16, desc = "Section 4 terminals it skips, like 2 or 1,3.", placeholder = "none").withDependency { solverDrop && instantGui }
     val resyncTimeout by NumberSetting("Resync Timeout", 0, 0..1000, 25, desc = "A click Hypixel hasn't answered after this long is undone (0: from your ping).", unit = "ms").withDependency { solverDrop }
 
     private val colorsDrop by DropdownSetting("Solver Colors", false, desc = "Solver colors.").withDependency { solverDrop }
@@ -145,6 +149,12 @@ object Terminals : Module(
     private val doneWarningHud by HUD("Done Warning", "The terminal done warning text.", true, 400, 170, 2f) { TermDoneWarning.draw(this, it) }
     val doneWarningSound by BooleanSetting("Done Warning Sound", true, desc = "A sound with the warning.").withDependency { doneDrop }
     val doneSound = createSoundSettings("Done Sound", "block.note_block.pling") { doneDrop && doneWarningSound }
+
+    /** Whether Open GUI Instantly is set to skip terminal [n] of [section]. */
+    fun instantSkips(section: Int, n: Int): Boolean {
+        val list = when (section) { 1 -> instantOffS1; 2 -> instantOffS2; 3 -> instantOffS3; 4 -> instantOffS4; else -> return false }
+        return list.split(',', ' ').any { it.trim().removePrefix("T").removePrefix("t").toIntOrNull() == n }
+    }
 
     fun donePick(section: Int) = when (section) { 1 -> doneS1; 2 -> doneS2; 3 -> doneS3; 4 -> doneS4; else -> TermDoneWarning.Pick.Off }
 

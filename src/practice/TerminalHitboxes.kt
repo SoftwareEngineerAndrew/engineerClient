@@ -91,6 +91,7 @@ object TerminalHitboxes {
     }
 
     fun sectionOf(i: Int) = TERMINALS[i].section
+    fun numberOf(i: Int) = TERMINALS[i].label.removePrefix("T").toInt()
 
     /** The terminal whose stand [e] is, as an index in [TERMINALS], or -1. */
     fun terminalOf(e: net.minecraft.world.entity.Entity): Int {

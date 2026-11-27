@@ -38,6 +38,7 @@ object InstantGui {
         val i = TerminalHitboxes.terminalOf(entity)
         // Another section's or a done one: Hypixel opens no window for it.
         if (i < 0 || TerminalHitboxes.seenDone(i) || TerminalHitboxes.sectionOf(i) != TerminalHitboxes.liveSection()) return
+        if (Terminals.instantSkips(TerminalHitboxes.sectionOf(i), TerminalHitboxes.numberOf(i))) return
         openedAt = System.currentTimeMillis()
         mc.gui.setScreen(WaitScreen())
     }
