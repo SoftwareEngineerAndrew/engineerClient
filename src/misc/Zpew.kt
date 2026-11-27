@@ -51,7 +51,7 @@ object Zpew {
     private val startMs = System.currentTimeMillis()
 
     private fun log(line: String) {
-        if (!debug) return
+        if (!debug || !com.engineerclient.adr.ADR.onHypixel()) return
         val text = "${System.currentTimeMillis() - startMs} t=$ticks st=${serverTicks.get()} $line\n"
         val path = mc.gameDirectory.toPath().resolve("config/engineerclient/zpew-debug.log")
         DiskWrites.write {
@@ -160,7 +160,8 @@ object Zpew {
      * the last teleport, and where you were (from is the chain's start).
      */
     private fun miss(kind: String, c: Click, predicted: DoubleArray?, actual: DoubleArray?) {
-        if (!capture) return
+        // other servers' teleports aren't Hypixel's, so their misses would mislead the law
+        if (!capture || !com.engineerclient.adr.ADR.onHypixel()) return
         val from = c.from ?: return
         val cells = c.cells ?: return
         try {
