@@ -57,11 +57,24 @@ object Zpew {
         DiskWrites.write {
             try {
                 val w = logOut ?: path.let {
-                    java.nio.file.Files.createDirectories(it.parent)
+                    fresh(it)
                     java.nio.file.Files.newBufferedWriter(it, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
                 }.also { logOut = it }
                 w.write(text); w.flush()
             } catch (_: Throwable) {}
+        }
+    }
+
+    private val started = java.util.Collections.synchronizedSet(HashSet<java.nio.file.Path>())
+
+    /** Each launch starts the file over; the last launch's is kept beside it as .old. */
+    private fun fresh(path: java.nio.file.Path) {
+        if (!started.add(path)) return
+        java.nio.file.Files.createDirectories(path.parent)
+        if (java.nio.file.Files.exists(path)) {
+            val name = path.fileName.toString()
+            val old = path.resolveSibling(name.substringBeforeLast('.') + ".old." + name.substringAfterLast('.'))
+            java.nio.file.Files.move(path, old, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
         }
     }
 
@@ -166,7 +179,7 @@ object Zpew {
         val cells = c.cells ?: return
         try {
             val f = mc.gameDirectory.toPath().resolve("config/engineerclient/zpew-misses.txt")
-            java.nio.file.Files.createDirectories(f.parent)
+            fresh(f)
             val p = { a: DoubleArray? -> a?.joinToString(",") { it.toString() } ?: "-" }
             val line = listOf(kind, if (c.ether) "ether" else "blink", c.sneaking, c.distance, p(from), "${c.yaw} ${c.pitch}", p(predicted), p(actual), cells, c.sinceTeleport, p(c.player), c.own, c.block).joinToString(TAB)
             java.nio.file.Files.writeString(f, line + NL, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND)
