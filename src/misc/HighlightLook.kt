@@ -121,8 +121,11 @@ object HighlightLook {
         return box
     }
 
+    /** Decoys are fake players like the starred ones: "Decoy #id". */
+    private fun isDecoy(p: Player) = p.name.string.startsWith("Decoy #")
+
     private fun under(tag: Entity, m: Entity?): Boolean =
-        m is LivingEntity && m !is ArmorStand && m.isAlive && (m !is Player || m !== mc.player && DungeonUtils.dungeonTeammates.none { it.name == m.name.string }) && abs(m.x - tag.x) < 1.5 && abs(m.z - tag.z) < 1.5 && tag.y - m.y in -1.0..4.5
+        m is LivingEntity && m !is ArmorStand && m.isAlive && (m !is Player || m !== mc.player && !isDecoy(m) && DungeonUtils.dungeonTeammates.none { it.name == m.name.string }) && abs(m.x - tag.x) < 1.5 && abs(m.z - tag.z) < 1.5 && tag.y - m.y in -1.0..4.5
 
     private fun mobUnder(level: ClientLevel, tag: ArmorStand, offset: Int): Entity? {
         level.getEntity(tag.id - offset)?.takeIf { under(tag, it) }?.let { return it }
@@ -135,7 +138,7 @@ object HighlightLook {
     /** A mob just spawned on a known starred spot: boxed now, before its tag. */
     private fun seed(e: Entity) {
         if (e !is LivingEntity || e is ArmorStand || e.id in found || !DungeonUtils.inClear) return
-        if (e is Player && e.uuid.version() != 2) return
+        if (e is Player && (e.uuid.version() != 2 || isDecoy(e))) return
         val arch = MobSpawnSpots.near(e.blockX, e.blockY, e.blockZ) ?: return
         val kind = when {
             arch.cls == "miniboss" -> Kind.MINI
