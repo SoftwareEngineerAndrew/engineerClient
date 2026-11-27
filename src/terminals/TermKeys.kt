@@ -3,8 +3,8 @@ package com.engineerclient.terminals
 import com.engineerclient.EngineerClient.mc
 import com.engineerclient.terminals.TerminalHandler.Companion.RIGHT
 import com.mojang.blaze3d.platform.InputConstants
-import com.adm.events.GuiEvent
 import com.adm.events.ScreenEvent
+import com.adm.events.TickEvent
 import com.adm.events.core.SubscribeWhile
 import com.adm.events.core.on
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
@@ -32,7 +32,9 @@ object TermKeys {
         }
 
         // Held keys repeat their press: one counts until the key is let go.
-        on<GuiEvent.Render> { if (held.isNotEmpty()) held.removeIf { !InputConstants.isKeyDown(it) } }
+        on<ScreenEvent.KeyRelease> { held.remove(input.key()) }
+        // A key let go with no screen open sends no release.
+        on<TickEvent.End> { if (held.isNotEmpty()) held.removeIf { !InputConstants.isKeyDown(it) } }
 
         SubscribeWhile.add(this) { Terminals.enabled && (Terminals.eRightClick || Terminals.oneClickPerPress) }
     }

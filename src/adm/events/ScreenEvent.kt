@@ -16,5 +16,7 @@ abstract class ScreenEvent(val screen: Screen) : CancellableEvent() {
 
     class KeyPress(screen: Screen, val input: KeyEvent) : ScreenEvent(screen)
 
+    class KeyRelease(screen: Screen, val input: KeyEvent) : ScreenEvent(screen)
+
     class Render(screen: Screen, val guiGraphics: GuiGraphicsExtractor, val mouseX: Int, val mouseY: Int) : ScreenEvent(screen)
 }

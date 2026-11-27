@@ -107,8 +107,9 @@ object TermSolver {
             },
             key = fun ScreenEvent.KeyPress.(): Any {
                 if (!mc.options.keyDrop.matches(input) && mc.options.keyHotbarSlots.none { it.matches(input) }) return false
-                // Ctrl + drop is a right click, as Ctrl + Q throws the whole stack.
-                term?.takeIf { hovered >= 0 }?.click(hovered, if (mc.options.keyDrop.matches(input) && input.hasControlDownWithQuirk()) RIGHT else LEFT)
+                // Ctrl + drop is a right click, as Ctrl + Q throws the whole stack; E takes that over when it's on.
+                val ctrl = !Terminals.eRightClick && mc.options.keyDrop.matches(input) && input.hasControlDownWithQuirk()
+                term?.takeIf { hovered >= 0 }?.click(hovered, if (ctrl) RIGHT else LEFT)
                 return true
             },
         ))
@@ -133,7 +134,7 @@ object TermSolver {
         on<GuiEvent.SlotClick> {
             val t = term ?: return@on
             if (Terminals.style != Terminals.Style.VANILLA) return@on
-            t.click(slotIndex, if (ctrlDrop()) RIGHT else mouseButton(button))
+            t.click(slotIndex, if (ctrlDrop()) (if (Terminals.eRightClick) LEFT else RIGHT) else mouseButton(button))
             cancel()
         }
 

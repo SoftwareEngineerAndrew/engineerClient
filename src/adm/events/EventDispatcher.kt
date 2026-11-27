@@ -45,6 +45,9 @@ object EventDispatcher {
             ScreenKeyboardEvents.allowKeyPress(screen).register { screen, event ->
                 !ScreenEvent.KeyPress(screen, event).postAndCatch()
             }
+            ScreenKeyboardEvents.allowKeyRelease(screen).register { screen, event ->
+                !ScreenEvent.KeyRelease(screen, event).postAndCatch()
+            }
         }
 
         ClientEntityEvents.ENTITY_LOAD.register { entity, _ -> EntityEvent.Add(entity).postAndCatch() }

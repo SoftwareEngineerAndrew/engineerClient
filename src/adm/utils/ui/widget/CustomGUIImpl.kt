@@ -30,7 +30,7 @@ object CustomGUIImpl {
             if (runHandlers(this) { it.release }) cancel()
         }
 
-        on<ScreenEvent.KeyPress> (EventPriority.HIGHEST) {
+        on<ScreenEvent.KeyPress> (EventPriority.HIGHEST, ignoreCancelled = true) {
             if (runHandlers(this) { it.key }) cancel()
         }
     }
