@@ -15,6 +15,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.ButtonBlock
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.phys.Vec3
 import java.util.Locale
@@ -36,6 +37,8 @@ object DevSsRoundCountdown {
     private var firstLamp: BlockPos? = null
     @Volatile private var sendAt = 0L
     @Volatile private var button: BlockPos? = null
+    /** The show took the buttons away and they haven't come back yet. */
+    private var buttonsGone = false
 
     fun install() {
         on<LevelEvent.Load> { reset() }
@@ -71,11 +74,19 @@ object DevSsRoundCountdown {
     }
 
     @Synchronized private fun block(pos: BlockPos, state: BlockState) {
+        // A skip's overlapping shows bring the buttons back on the first one's timer: they're clickable now.
+        if (pos.x == 110 && pos.y in 120..123 && pos.z in 92..95 && state.block is ButtonBlock) {
+            if (buttonsGone && showStart >= 0 && tick > showStart) {
+                buttonsGone = false
+                if (sendAt != 0L) sendAt = minOf(sendAt, System.nanoTime())
+            }
+            return
+        }
         if (pos.x != 111 || pos.y !in 120..123 || pos.z !in 92..95 || state.block != Blocks.SEA_LANTERN || tick == lastLamp) return
         if (tick - lastLamp > 8) {
             // Rounds go up by one; after a fail it is round 1 again, which the end of the show corrects.
             expected = if (showStart >= 0 && lamps < 4) lamps + 1 else 1
-            showStart = tick; lamps = 0; firstLamp = pos.immutable()
+            showStart = tick; lamps = 0; firstLamp = pos.immutable(); buttonsGone = true
         }
         lamps++
         lastLamp = tick
@@ -84,6 +95,7 @@ object DevSsRoundCountdown {
 
     /** The buttons come back 18 after the last lamp; sent a round trip early, a click lands then. */
     private fun update() {
+        if (!buttonsGone && showStart >= 0) return
         if (showStart < 0 || maxOf(lamps, expected) < 2) { sendAt = 0L; return }
         val backAt = maxOf(lastLamp, showStart + 8L * (maxOf(expected, lamps) - 1)) + 18
         sendAt = (tickArrival(backAt) ?: return) - rtt() * 1_000_000L
@@ -116,6 +128,6 @@ object DevSsRoundCountdown {
 
     @Synchronized private fun reset() {
         arrivals.clear(); showStart = -1L; lastLamp = -100L; lamps = 0; expected = 0
-        firstLamp = null; button = null; sendAt = 0L
+        firstLamp = null; button = null; sendAt = 0L; buttonsGone = false
     }
 }
